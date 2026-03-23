@@ -1,5 +1,7 @@
 "use client";
 
+/* Hydration: localStorage / sessionStorage after mount (avoids SSR/client mismatch). */
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "./sidebar";
 import SettingsDialog from "./settings-dialog";

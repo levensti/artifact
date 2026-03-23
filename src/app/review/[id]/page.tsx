@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import ChatPanel from "@/components/chat-panel";
 import SelectionPopover from "@/components/selection-popover";
-import { getReview, type PaperReview } from "@/lib/reviews";
+import { getReview } from "@/lib/reviews";
 import { arxivPdfUrl } from "@/lib/utils";
 
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
@@ -23,7 +23,10 @@ const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
 export default function ReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [review, setReview] = useState<PaperReview | null>(null);
+  const review = useMemo(
+    () => getReview(params.id),
+    [params.id],
+  );
   const [paperText, setPaperText] = useState("");
   const [selectedText, setSelectedText] = useState<string | null>(null);
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
@@ -32,12 +35,9 @@ export default function ReviewPage() {
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    const r = getReview(params.id);
-    if (!r) {
+    if (!getReview(params.id)) {
       router.push("/");
-      return;
     }
-    setReview(r);
   }, [params.id, router]);
 
   const handleTextSelected = useCallback((text: string, rect: DOMRect) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Plus,
@@ -22,6 +22,20 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NewReviewDialog from "./new-review-dialog";
 
+function subscribeReviews(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
+  return () => window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
+}
+
+function reviewsSnapshot() {
+  return JSON.stringify(getReviews());
+}
+
+function reviewsServerSnapshot() {
+  return "[]";
+}
+
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
@@ -33,27 +47,24 @@ export default function Sidebar({
   onToggle,
   onOpenSettings,
 }: SidebarProps) {
-  const [reviews, setReviews] = useState<PaperReview[]>([]);
+  const reviewsJson = useSyncExternalStore(
+    subscribeReviews,
+    reviewsSnapshot,
+    reviewsServerSnapshot,
+  );
+  const reviews = useMemo(
+    () => JSON.parse(reviewsJson) as PaperReview[],
+    [reviewsJson],
+  );
   const [showNewReview, setShowNewReview] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
-  const refreshReviews = useCallback(() => {
-    setReviews(getReviews());
-  }, []);
-
-  useEffect(() => {
-    refreshReviews();
-    window.addEventListener(REVIEWS_UPDATED_EVENT, refreshReviews);
-    return () =>
-      window.removeEventListener(REVIEWS_UPDATED_EVENT, refreshReviews);
-  }, [refreshReviews]);
-
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     deleteReview(id);
-    refreshReviews();
+    window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
     if (pathname === `/review/${id}`) {
       router.push("/");
     }
@@ -61,7 +72,6 @@ export default function Sidebar({
 
   const handleReviewCreated = (reviewId: string) => {
     setShowNewReview(false);
-    refreshReviews();
     router.push(`/review/${reviewId}`);
   };
 
