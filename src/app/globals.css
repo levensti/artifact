@@ -1,0 +1,169 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Option A: Neutral Slate
+ * Warm dark grays, muted blue accent, soft whites.
+ * Professional, familiar — like Linear or Vercel dashboard.
+ */
+
+:root {
+  --radius: 0.5rem;
+
+  /* Surfaces */
+  --background: #111113;
+  --foreground: #ededef;
+  --card: #18181b;
+  --card-foreground: #ededef;
+  --popover: #18181b;
+  --popover-foreground: #ededef;
+
+  /* Brand */
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+
+  /* Muted / secondary surfaces */
+  --secondary: #1f1f23;
+  --secondary-foreground: #b0b0b8;
+  --muted: #1f1f23;
+  --muted-foreground: #71717a;
+  --accent: #1f1f23;
+  --accent-foreground: #b0b0b8;
+
+  /* Semantic */
+  --destructive: #dc2626;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #3b82f6;
+
+  /* Sidebar */
+  --sidebar: #141416;
+  --sidebar-foreground: #b0b0b8;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1f1f23;
+  --sidebar-accent-foreground: #ededef;
+  --sidebar-border: #27272a;
+  --sidebar-ring: #3b82f6;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
+}
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.06); border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.12); }
+
+/* PDF viewer text selection */
+.react-pdf__Page__textContent {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+.react-pdf__Page__textContent span {
+  opacity: 0.15 !important;
+}
+.react-pdf__Page__textContent span::selection {
+  background: rgba(59, 130, 246, 0.3) !important;
+  opacity: 1 !important;
+}
+
+/* Chat markdown */
+.chat-markdown h1, .chat-markdown h2, .chat-markdown h3 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+.chat-markdown h1 { font-size: 1.15rem; }
+.chat-markdown h2 { font-size: 1.05rem; }
+.chat-markdown h3 { font-size: 0.95rem; }
+.chat-markdown p { margin-bottom: 0.625em; line-height: 1.75; }
+.chat-markdown ul, .chat-markdown ol { margin-bottom: 0.625em; padding-left: 1.25em; }
+.chat-markdown ul { list-style-type: disc; }
+.chat-markdown ol { list-style-type: decimal; }
+.chat-markdown li { margin-bottom: 0.2em; line-height: 1.7; }
+.chat-markdown code {
+  background: var(--secondary);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: var(--font-mono), monospace;
+  color: color-mix(in srgb, var(--primary) 70%, white);
+}
+.chat-markdown pre {
+  background: var(--secondary);
+  padding: 0.875em 1em;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  margin-bottom: 0.625em;
+  border: 1px solid var(--border);
+}
+.chat-markdown pre code { background: none; padding: 0; color: var(--secondary-foreground); }
+.chat-markdown blockquote {
+  border-left: 2px solid var(--primary);
+  padding-left: 0.875em;
+  color: var(--muted-foreground);
+  margin-bottom: 0.625em;
+}
+.chat-markdown strong { font-weight: 600; color: var(--foreground); }
+.chat-markdown a {
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+  transition: border-color 0.15s;
+}
+.chat-markdown a:hover { border-bottom-color: var(--primary); }
+
+/* Sidebar transition */
+.transition-sidebar {
+  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
+  html { @apply font-sans; }
+}
