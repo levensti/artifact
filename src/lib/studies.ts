@@ -45,14 +45,6 @@ export function createStudy(arxivId: string, title: string): Study {
   return study;
 }
 
-export function updateStudy(id: string, updates: Partial<Pick<Study, "title" | "updatedAt">>): void {
-  const studies = getStudies();
-  const idx = studies.findIndex((s) => s.id === id);
-  if (idx === -1) return;
-  studies[idx] = { ...studies[idx], ...updates, updatedAt: new Date().toISOString() };
-  localStorage.setItem(STUDIES_KEY, JSON.stringify(studies));
-}
-
 export function deleteStudy(id: string): void {
   const studies = getStudies().filter((s) => s.id !== id);
   localStorage.setItem(STUDIES_KEY, JSON.stringify(studies));

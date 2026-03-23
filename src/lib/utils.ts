@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function extractArxivId(url: string): string | null {
-  const match = url.match(/arxiv\.org\/(?:abs|pdf)\/(\d+\.\d+)/);
+  const match = url.match(/arxiv\.org\/(?:abs|pdf)\/(\d+\.\d+)(?:v\d+)?/);
   return match ? match[1] : null;
 }
 

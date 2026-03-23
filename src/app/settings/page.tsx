@@ -95,6 +95,7 @@ function ProviderCard({ provider, placeholder, docsUrl }: ProviderCardProps) {
               className="pl-9 pr-9 font-mono text-xs"
             />
             <button
+              type="button"
               onClick={() => setVisible(!visible)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               aria-label={visible ? "Hide key" : "Show key"}

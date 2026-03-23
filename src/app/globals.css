@@ -51,7 +51,7 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -131,7 +131,7 @@
   border-radius: 4px;
   font-size: 0.85em;
   font-family: var(--font-mono), monospace;
-  color: #93c5fd;
+  color: color-mix(in srgb, var(--primary) 70%, white);
 }
 .chat-markdown pre {
   background: var(--secondary);

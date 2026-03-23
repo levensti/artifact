@@ -182,6 +182,7 @@ export default function ChatPanel({
             className="size-7 text-muted-foreground"
             onClick={clearChat}
             title="Clear chat"
+            aria-label="Clear chat"
           >
             <Trash2 size={13} />
           </Button>
@@ -264,6 +265,7 @@ export default function ChatPanel({
             className="size-8 m-1 text-muted-foreground hover:text-primary"
             onClick={sendMessage}
             disabled={!input.trim() || isStreaming}
+            aria-label={isStreaming ? "Sending..." : "Send message"}
           >
             {isStreaming ? (
               <Loader2 className="animate-spin" size={15} />

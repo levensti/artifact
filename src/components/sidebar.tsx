@@ -148,13 +148,16 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {group.items.map((study) => {
                   const isActive = pathname === `/study/${study.id}`;
                   return (
-                    <button
+                    <div
                       key={study.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => router.push(`/study/${study.id}`)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") router.push(`/study/${study.id}`); }}
                       onMouseEnter={() => setHoveredId(study.id)}
                       onMouseLeave={() => setHoveredId(null)}
                       className={cn(
-                        "group w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors",
+                        "group w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors cursor-pointer",
                         isActive
                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
@@ -173,7 +176,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                           <Trash2 size={11} />
                         </button>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
