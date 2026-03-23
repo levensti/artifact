@@ -1,4 +1,4 @@
-export type Provider = "anthropic" | "openai";
+export type Provider = "anthropic" | "openai" | "openrouter";
 
 export interface Model {
   id: string;
@@ -40,3 +40,17 @@ export const MODELS: Model[] = [
   },
 ];
 
+export const PROVIDER_META: Record<Provider, { label: string; description: string }> = {
+  anthropic: {
+    label: "Anthropic",
+    description: "Claude models — excellent for nuanced reasoning and long-context analysis",
+  },
+  openai: {
+    label: "OpenAI",
+    description: "GPT and o-series models — strong general-purpose and reasoning capabilities",
+  },
+  openrouter: {
+    label: "OpenRouter",
+    description: "Unified gateway to 200+ models — access any provider through a single API key",
+  },
+};

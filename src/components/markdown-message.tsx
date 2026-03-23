@@ -1,10 +1,10 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 interface MarkdownMessageProps {
   content: string;
@@ -15,7 +15,7 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
     <div className="chat-markdown">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeSanitize, rehypeKatex]}
+        rehypePlugins={[rehypeKatex]}
       >
         {content}
       </ReactMarkdown>

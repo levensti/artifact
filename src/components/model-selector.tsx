@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check } from "lucide-react";
-import { MODELS, type Model } from "@/lib/models";
+import { MODELS, PROVIDER_META, type Model } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {
@@ -28,14 +28,14 @@ export default function ModelSelector({ selected, onSelect }: ModelSelectorProps
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-bg-tertiary hover:bg-border-light text-text-secondary transition-colors"
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium bg-bg-secondary border border-border hover:border-border-light text-text-muted hover:text-text-secondary transition-all"
       >
         {selected.label}
-        <ChevronDown size={12} className={cn("transition-transform", open && "rotate-180")} />
+        <ChevronDown size={10} className={cn("transition-transform", open && "rotate-180")} />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-border bg-bg-secondary shadow-xl z-50 py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+        <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-border-light bg-bg-elevated shadow-[var(--shadow-lg)] z-50 py-1 overflow-hidden">
           {MODELS.map((model) => (
             <button
               key={model.id}
@@ -44,18 +44,18 @@ export default function ModelSelector({ selected, onSelect }: ModelSelectorProps
                 setOpen(false);
               }}
               className={cn(
-                "w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-bg-tertiary transition-colors",
+                "w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-bg-hover transition-colors",
                 selected.id === model.id
                   ? "text-accent"
                   : "text-text-secondary",
               )}
             >
-              <span>
-                {model.label}
-                <span className="text-text-muted ml-1.5">
-                  ({model.provider === "anthropic" ? "Anthropic" : "OpenAI"})
+              <div className="flex flex-col items-start">
+                <span className="font-medium">{model.label}</span>
+                <span className="text-[10px] text-text-muted">
+                  {PROVIDER_META[model.provider].label}
                 </span>
-              </span>
+              </div>
               {selected.id === model.id && <Check size={12} />}
             </button>
           ))}

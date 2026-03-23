@@ -8,7 +8,7 @@ interface ChatMessage {
 interface ChatRequest {
   messages: ChatMessage[];
   model: string;
-  provider: "anthropic" | "openai";
+  provider: "anthropic" | "openai" | "openrouter";
   apiKey: string;
   paperContext?: string;
 }
@@ -32,7 +32,7 @@ function jsonError(message: string, status: number) {
   });
 }
 
-const VALID_PROVIDERS = new Set(["anthropic", "openai"]);
+const VALID_PROVIDERS = new Set(["anthropic", "openai", "openrouter"]);
 
 export async function POST(req: NextRequest) {
   let body: ChatRequest;
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!VALID_PROVIDERS.has(provider)) {
-    return jsonError("Invalid provider. Must be 'anthropic' or 'openai'.", 400);
+    return jsonError("Invalid provider. Must be 'anthropic', 'openai', or 'openrouter'.", 400);
   }
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -64,7 +64,12 @@ export async function POST(req: NextRequest) {
     if (provider === "anthropic") {
       return await streamAnthropic(messages, model, apiKey, paperContext);
     } else {
-      return await streamOpenAI(messages, model, apiKey, paperContext);
+      // OpenAI and OpenRouter use the same API format
+      const baseUrl =
+        provider === "openrouter"
+          ? "https://openrouter.ai/api/v1/chat/completions"
+          : "https://api.openai.com/v1/chat/completions";
+      return await streamOpenAICompatible(messages, model, apiKey, paperContext, baseUrl, provider);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -113,49 +118,11 @@ async function streamAnthropic(
     return jsonError(errorMessage, response.status);
   }
 
-  // Transform Anthropic SSE stream to simple text stream
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
+  if (!response.body) {
+    return jsonError("No response body from Anthropic", 502);
+  }
 
-  const readable = new ReadableStream({
-    async start(controller) {
-      const reader = response.body!.getReader();
-      let buffer = "";
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
-
-            try {
-              const event = JSON.parse(data);
-              if (
-                event.type === "content_block_delta" &&
-                event.delta?.type === "text_delta"
-              ) {
-                controller.enqueue(encoder.encode(event.delta.text));
-              }
-            } catch {
-              // skip malformed events
-            }
-          }
-        }
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(readable, {
+  return new Response(transformSSEStream(response.body, parseAnthropicDelta), {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Transfer-Encoding": "chunked",
@@ -163,22 +130,32 @@ async function streamAnthropic(
   });
 }
 
-async function streamOpenAI(
+async function streamOpenAICompatible(
   messages: ChatMessage[],
   model: string,
   apiKey: string,
-  paperContext?: string,
+  paperContext: string | undefined,
+  baseUrl: string,
+  provider: string,
 ) {
   const systemContent = paperContext
     ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
     : SYSTEM_PROMPT;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  // OpenRouter requires HTTP-Referer for attribution
+  if (provider === "openrouter") {
+    headers["HTTP-Referer"] = "https://paper-copilot.dev";
+    headers["X-Title"] = "Paper Copilot";
+  }
+
+  const response = await fetch(baseUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages: [
@@ -191,7 +168,8 @@ async function streamOpenAI(
 
   if (!response.ok) {
     const errorText = await response.text();
-    let errorMessage = `OpenAI API error: ${response.status}`;
+    const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+    let errorMessage = `${providerLabel} API error: ${response.status}`;
     try {
       const parsed = JSON.parse(errorText);
       errorMessage = parsed.error?.message || errorMessage;
@@ -201,12 +179,29 @@ async function streamOpenAI(
     return jsonError(errorMessage, response.status);
   }
 
+  if (!response.body) {
+    return jsonError(`No response body from ${provider}`, 502);
+  }
+
+  return new Response(transformSSEStream(response.body, parseOpenAIDelta), {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+    },
+  });
+}
+
+// Shared SSE stream transformer
+function transformSSEStream(
+  body: ReadableStream<Uint8Array>,
+  parseDelta: (data: string) => string | null,
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
-  const readable = new ReadableStream({
+  return new ReadableStream({
     async start(controller) {
-      const reader = response.body!.getReader();
+      const reader = body.getReader();
       let buffer = "";
 
       try {
@@ -223,27 +218,39 @@ async function streamOpenAI(
             const data = line.slice(6).trim();
             if (data === "[DONE]") continue;
 
-            try {
-              const event = JSON.parse(data);
-              const content = event.choices?.[0]?.delta?.content;
-              if (content) {
-                controller.enqueue(encoder.encode(content));
-              }
-            } catch {
-              // skip malformed events
+            const text = parseDelta(data);
+            if (text) {
+              controller.enqueue(encoder.encode(text));
             }
           }
         }
+      } catch (err) {
+        controller.error(err);
       } finally {
         controller.close();
       }
     },
   });
+}
 
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-    },
-  });
+function parseAnthropicDelta(data: string): string | null {
+  try {
+    const event = JSON.parse(data);
+    if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+      return event.delta.text;
+    }
+  } catch {
+    // skip malformed events
+  }
+  return null;
+}
+
+function parseOpenAIDelta(data: string): string | null {
+  try {
+    const event = JSON.parse(data);
+    return event.choices?.[0]?.delta?.content || null;
+  } catch {
+    // skip malformed events
+  }
+  return null;
 }

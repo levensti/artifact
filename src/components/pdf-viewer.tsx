@@ -130,45 +130,45 @@ export default function PdfViewer({
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-secondary shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary shrink-0">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => currentPage > 1 && goToPage(currentPage - 1)}
             disabled={currentPage <= 1}
-            className="p-1.5 rounded-md hover:bg-bg-tertiary disabled:opacity-30 transition-colors"
+            className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-20 transition-colors"
             aria-label="Previous page"
           >
-            <ChevronUp size={16} />
+            <ChevronUp size={14} />
           </button>
-          <span className="text-sm text-text-secondary tabular-nums min-w-[80px] text-center">
+          <span className="text-xs text-text-muted tabular-nums min-w-[64px] text-center font-medium">
             {currentPage} / {numPages || "—"}
           </span>
           <button
             onClick={() => currentPage < numPages && goToPage(currentPage + 1)}
             disabled={currentPage >= numPages}
-            className="p-1.5 rounded-md hover:bg-bg-tertiary disabled:opacity-30 transition-colors"
+            className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-20 transition-colors"
             aria-label="Next page"
           >
-            <ChevronDown size={16} />
+            <ChevronDown size={14} />
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setScale((s) => Math.max(0.5, s - 0.2))}
-            className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
+            className="p-1.5 rounded-md hover:bg-bg-hover transition-colors"
             aria-label="Zoom out"
           >
-            <ZoomOut size={16} />
+            <ZoomOut size={14} />
           </button>
-          <span className="text-sm text-text-secondary tabular-nums min-w-[44px] text-center">
+          <span className="text-xs text-text-muted tabular-nums min-w-[36px] text-center font-medium">
             {Math.round(scale * 100)}%
           </span>
           <button
             onClick={() => setScale((s) => Math.min(3, s + 0.2))}
-            className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
+            className="p-1.5 rounded-md hover:bg-bg-hover transition-colors"
             aria-label="Zoom in"
           >
-            <ZoomIn size={16} />
+            <ZoomIn size={14} />
           </button>
         </div>
       </div>

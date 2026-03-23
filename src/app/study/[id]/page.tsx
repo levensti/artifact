@@ -1,26 +1,34 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Settings, Sparkles, GripVertical } from "lucide-react";
+import { GripVertical } from "lucide-react";
+import DashboardLayout from "@/components/dashboard-layout";
 import PdfViewer from "@/components/pdf-viewer";
 import ChatPanel from "@/components/chat-panel";
 import SelectionPopover from "@/components/selection-popover";
-import SettingsModal from "@/components/settings-modal";
+import { getStudy, type Study } from "@/lib/studies";
 import { arxivPdfUrl } from "@/lib/utils";
 
-export default function PaperPage() {
+export default function StudyPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const pdfUrl = arxivPdfUrl(params.id);
-
+  const [study, setStudy] = useState<Study | null>(null);
   const [paperText, setPaperText] = useState("");
   const [selectedText, setSelectedText] = useState<string | null>(null);
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
   const [pendingSelection, setPendingSelection] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [panelWidth, setPanelWidth] = useState(420);
+  const [panelWidth, setPanelWidth] = useState(440);
   const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    const s = getStudy(params.id);
+    if (!s) {
+      router.push("/");
+      return;
+    }
+    setStudy(s);
+  }, [params.id, router]);
 
   const handleTextSelected = useCallback((text: string, rect: DOMRect) => {
     setSelectedText(text);
@@ -48,7 +56,7 @@ export default function PaperPage() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = window.innerWidth - e.clientX;
-      setPanelWidth(Math.max(320, Math.min(800, newWidth)));
+      setPanelWidth(Math.max(340, Math.min(800, newWidth)));
     };
 
     const handleMouseUp = () => {
@@ -63,39 +71,23 @@ export default function PaperPage() {
     document.addEventListener("mouseup", handleMouseUp);
   }, []);
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Top bar */}
-      <nav className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-secondary shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/")}
-            className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-accent" />
-            <span className="text-sm font-medium">Paper Copilot</span>
-          </div>
-          <span className="text-text-muted text-xs">
-            arxiv:{params.id}
-          </span>
+  if (!study) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-full text-text-muted text-sm">
+          Loading...
         </div>
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-        >
-          <Settings size={16} />
-        </button>
-      </nav>
+      </DashboardLayout>
+    );
+  }
 
-      {/* Split view */}
-      <div className="flex flex-1 overflow-hidden">
+  return (
+    <DashboardLayout>
+      <div className="flex h-full overflow-hidden">
         {/* PDF Viewer */}
         <div className="flex-1 min-w-0 overflow-hidden">
           <PdfViewer
-            url={pdfUrl}
+            url={arxivPdfUrl(study.arxivId)}
             onTextExtracted={setPaperText}
             onTextSelected={handleTextSelected}
             onSelectionCleared={handleSelectionCleared}
@@ -105,9 +97,11 @@ export default function PaperPage() {
         {/* Resize handle */}
         <div
           onMouseDown={handleMouseDown}
-          className={`w-1 cursor-col-resize flex items-center justify-center hover:bg-accent/30 transition-colors shrink-0 ${isDragging ? "bg-accent/30" : "bg-border"}`}
+          className={`relative w-px cursor-col-resize flex items-center justify-center transition-colors shrink-0 ${isDragging ? "bg-accent/40" : "bg-border hover:bg-border-light"}`}
         >
-          <GripVertical size={12} className="text-text-muted" />
+          <div className="absolute p-0.5 rounded bg-bg-elevated border border-border opacity-0 hover:opacity-100 transition-opacity">
+            <GripVertical size={10} className="text-text-muted" />
+          </div>
         </div>
 
         {/* Chat Panel */}
@@ -116,10 +110,10 @@ export default function PaperPage() {
           style={{ width: `${panelWidth}px` }}
         >
           <ChatPanel
+            studyId={study.id}
             paperContext={paperText}
             pendingSelection={pendingSelection}
             onSelectionConsumed={() => setPendingSelection(null)}
-            onOpenSettings={() => setSettingsOpen(true)}
           />
         </div>
       </div>
@@ -128,11 +122,6 @@ export default function PaperPage() {
       {selectedText && selectionRect && (
         <SelectionPopover rect={selectionRect} onAsk={handleAskAboutSelection} />
       )}
-
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
-    </div>
+    </DashboardLayout>
   );
 }

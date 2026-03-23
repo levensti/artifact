@@ -13,7 +13,7 @@ export default function SelectionPopover({ rect, onAsk }: SelectionPopoverProps)
 
   return (
     <div
-      className="fixed z-50 animate-in fade-in slide-in-from-bottom-1 duration-150"
+      className="fixed z-50"
       style={{
         top: `${top}px`,
         left: `${left}px`,
@@ -22,9 +22,9 @@ export default function SelectionPopover({ rect, onAsk }: SelectionPopoverProps)
     >
       <button
         onClick={onAsk}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent text-white text-sm font-medium shadow-lg hover:bg-accent-hover transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium shadow-[var(--shadow-lg)] hover:bg-accent-hover transition-colors border border-white/10"
       >
-        <MessageSquarePlus size={14} />
+        <MessageSquarePlus size={12} />
         Ask about this
       </button>
     </div>
