@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
+import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, Loader2, FileWarning } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -26,6 +27,7 @@ export default function PdfViewer({
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.2);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const proxyUrl = `/api/pdf?url=${encodeURIComponent(url)}`;
 
@@ -53,9 +55,6 @@ export default function PdfViewer({
     (result: { numPages: number }) => {
       setNumPages(result.numPages);
       setLoading(false);
-
-      // Access the underlying PDF document for text extraction
-      // react-pdf exposes the pdfjs document proxy on the result
       const pdfProxy = result as unknown as PDFDocumentProxy;
       if (typeof pdfProxy.getPage === "function") {
         extractText(pdfProxy);
@@ -64,7 +63,6 @@ export default function PdfViewer({
     [extractText],
   );
 
-  // Handle text selection in the PDF
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -72,8 +70,8 @@ export default function PdfViewer({
     const handleMouseUp = () => {
       const selection = window.getSelection();
       const text = selection?.toString().trim();
-      if (text && text.length > 0 && selection!.rangeCount > 0) {
-        const range = selection!.getRangeAt(0);
+      if (selection && text && text.length > 0 && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         onTextSelected(text, rect);
       } else {
@@ -85,13 +83,11 @@ export default function PdfViewer({
     return () => container.removeEventListener("mouseup", handleMouseUp);
   }, [onTextSelected, onSelectionCleared]);
 
-  // Track visible page on scroll (throttled with rAF)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     let rafId: number | null = null;
-
     const handleScroll = () => {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
@@ -108,7 +104,6 @@ export default function PdfViewer({
             closestPage = parseInt(el.getAttribute("data-page-number") || "1");
           }
         });
-
         setCurrentPage(closestPage);
       });
     };
@@ -128,62 +123,80 @@ export default function PdfViewer({
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary">
+    <div className="flex flex-col h-full bg-background">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary shrink-0">
-        <div className="flex items-center gap-1">
-          <button
+      <div className="flex items-center justify-between px-2 h-12 border-b border-border shrink-0">
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
             onClick={() => currentPage > 1 && goToPage(currentPage - 1)}
             disabled={currentPage <= 1}
-            className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-20 transition-colors"
-            aria-label="Previous page"
+            title="Previous page"
           >
             <ChevronUp size={14} />
-          </button>
-          <span className="text-xs text-text-muted tabular-nums min-w-[64px] text-center font-medium">
+          </Button>
+          <span className="text-xs text-muted-foreground tabular-nums min-w-[56px] text-center font-medium">
             {currentPage} / {numPages || "—"}
           </span>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
             onClick={() => currentPage < numPages && goToPage(currentPage + 1)}
             disabled={currentPage >= numPages}
-            className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-20 transition-colors"
-            aria-label="Next page"
+            title="Next page"
           >
             <ChevronDown size={14} />
-          </button>
+          </Button>
         </div>
-        <div className="flex items-center gap-1">
-          <button
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
             onClick={() => setScale((s) => Math.max(0.5, s - 0.2))}
-            className="p-1.5 rounded-md hover:bg-bg-hover transition-colors"
-            aria-label="Zoom out"
+            title="Zoom out"
           >
             <ZoomOut size={14} />
-          </button>
-          <span className="text-xs text-text-muted tabular-nums min-w-[36px] text-center font-medium">
+          </Button>
+          <span className="text-xs text-muted-foreground tabular-nums min-w-[36px] text-center font-medium">
             {Math.round(scale * 100)}%
           </span>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
             onClick={() => setScale((s) => Math.min(3, s + 0.2))}
-            className="p-1.5 rounded-md hover:bg-bg-hover transition-colors"
-            aria-label="Zoom in"
+            title="Zoom in"
           >
             <ZoomIn size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* PDF content */}
       <div ref={containerRef} className="flex-1 overflow-auto">
-        {loading && (
+        {loading && !loadError && (
           <div className="flex items-center justify-center h-full">
-            <Loader2 className="animate-spin text-accent" size={32} />
+            <Loader2 className="animate-spin text-primary" size={28} />
+          </div>
+        )}
+        {loadError && (
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-8">
+            <FileWarning className="text-destructive" size={28} />
+            <p className="text-sm text-muted-foreground">{loadError}</p>
           </div>
         )}
         <Document
           file={proxyUrl}
           onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={(err) => console.error("PDF load error:", err)}
+          onLoadError={(err) => {
+            console.error("PDF load error:", err);
+            setLoading(false);
+            setLoadError("Failed to load PDF. Check that the arXiv URL is valid.");
+          }}
           loading={null}
           className="flex flex-col items-center gap-2 py-4"
         >
@@ -192,7 +205,7 @@ export default function PdfViewer({
               key={i + 1}
               pageNumber={i + 1}
               scale={scale}
-              className="shadow-lg"
+              className="shadow-md"
               loading={null}
             />
           ))}

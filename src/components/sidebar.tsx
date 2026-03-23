@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Plus,
@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { getStudies, deleteStudy, type Study } from "@/lib/studies";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import NewStudyDialog from "./new-study-dialog";
 
 interface SidebarProps {
@@ -33,7 +35,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   useEffect(() => {
     refreshStudies();
-    // Listen for storage events from other components
     window.addEventListener("studies-updated", refreshStudies);
     return () => window.removeEventListener("studies-updated", refreshStudies);
   }, [refreshStudies]);
@@ -53,136 +54,145 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     router.push(`/study/${studyId}`);
   };
 
-  // Group studies by date
-  const today = new Date();
-  const todayStr = today.toDateString();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toDateString();
+  // Group studies by date (using ISO date strings for locale-independence)
+  const grouped = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0];
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split("T")[0];
 
-  const grouped: { label: string; items: Study[] }[] = [];
-  const todayItems: Study[] = [];
-  const yesterdayItems: Study[] = [];
-  const thisWeekItems: Study[] = [];
-  const olderItems: Study[] = [];
+    const buckets: Record<string, Study[]> = {
+      today: [],
+      yesterday: [],
+      week: [],
+      older: [],
+    };
 
-  for (const s of studies) {
-    const d = new Date(s.createdAt).toDateString();
-    if (d === todayStr) todayItems.push(s);
-    else if (d === yesterdayStr) yesterdayItems.push(s);
-    else {
-      const daysDiff = Math.floor((today.getTime() - new Date(s.createdAt).getTime()) / 86400000);
-      if (daysDiff < 7) thisWeekItems.push(s);
-      else olderItems.push(s);
+    for (const s of studies) {
+      const d = new Date(s.createdAt).toISOString().split("T")[0];
+      if (d === todayStr) buckets.today.push(s);
+      else if (d === yesterdayStr) buckets.yesterday.push(s);
+      else {
+        const daysDiff = Math.floor(
+          (today.getTime() - new Date(s.createdAt).getTime()) / 86400000,
+        );
+        if (daysDiff < 7) buckets.week.push(s);
+        else buckets.older.push(s);
+      }
     }
-  }
 
-  if (todayItems.length) grouped.push({ label: "Today", items: todayItems });
-  if (yesterdayItems.length) grouped.push({ label: "Yesterday", items: yesterdayItems });
-  if (thisWeekItems.length) grouped.push({ label: "This week", items: thisWeekItems });
-  if (olderItems.length) grouped.push({ label: "Older", items: olderItems });
+    const result: { label: string; items: Study[] }[] = [];
+    if (buckets.today.length) result.push({ label: "Today", items: buckets.today });
+    if (buckets.yesterday.length) result.push({ label: "Yesterday", items: buckets.yesterday });
+    if (buckets.week.length) result.push({ label: "This week", items: buckets.week });
+    if (buckets.older.length) result.push({ label: "Older", items: buckets.older });
+    return result;
+  }, [studies]);
 
   return (
     <>
       <aside
         className={cn(
-          "flex flex-col h-full bg-bg-secondary border-r border-border transition-sidebar shrink-0 overflow-hidden",
-          collapsed ? "w-0 border-r-0" : "w-64",
+          "flex flex-col h-full bg-sidebar border-r border-sidebar-border transition-sidebar shrink-0 overflow-hidden",
+          collapsed ? "w-0 border-r-0" : "w-[260px]",
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-3 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-accent-muted flex items-center justify-center shrink-0">
-              <BookOpen size={14} className="text-accent" />
+        <div className="flex items-center justify-between px-3 h-12 shrink-0 border-b border-sidebar-border">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="size-6 rounded-md bg-primary/15 flex items-center justify-center shrink-0">
+              <BookOpen size={12} className="text-primary" />
             </div>
-            <span className="text-sm font-semibold truncate tracking-tight">
+            <span className="text-[13px] font-semibold tracking-tight text-foreground truncate">
               Paper Copilot
             </span>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground"
             onClick={onToggle}
-            className="p-1.5 rounded-md hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors shrink-0"
-            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
           >
-            <PanelLeftClose size={16} />
-          </button>
+            <PanelLeftClose size={14} />
+          </Button>
         </div>
 
-        {/* New Study Button */}
-        <div className="px-3 mb-2 shrink-0">
-          <button
+        {/* New Study */}
+        <div className="px-3 pt-3 pb-1 shrink-0">
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-2 h-8 text-[13px] font-normal text-muted-foreground"
             onClick={() => setShowNewStudy(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border-light hover:border-accent/30 hover:bg-accent-subtle text-sm text-text-secondary hover:text-text-primary transition-all"
           >
             <Plus size={14} />
             New study
-          </button>
+          </Button>
         </div>
 
         {/* Studies List */}
-        <div className="flex-1 overflow-auto px-2 pb-2">
+        <ScrollArea className="flex-1 px-2 py-2">
           {grouped.length === 0 && (
-            <div className="px-3 py-8 text-center">
-              <FileText size={20} className="mx-auto text-text-muted mb-2 opacity-50" />
-              <p className="text-xs text-text-muted">No studies yet</p>
-              <p className="text-xs text-text-muted mt-0.5">
-                Create one to get started
-              </p>
+            <div className="px-3 py-10 text-center">
+              <FileText size={18} className="mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-xs text-muted-foreground">No studies yet</p>
             </div>
           )}
           {grouped.map((group) => (
-            <div key={group.label} className="mb-3">
-              <p className="px-2 py-1.5 text-[11px] font-medium text-text-muted uppercase tracking-wider">
+            <div key={group.label} className="mb-4">
+              <p className="px-2 pb-1.5 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-widest">
                 {group.label}
               </p>
-              {group.items.map((study) => {
-                const isActive = pathname === `/study/${study.id}`;
-                return (
-                  <button
-                    key={study.id}
-                    onClick={() => router.push(`/study/${study.id}`)}
-                    onMouseEnter={() => setHoveredId(study.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                    className={cn(
-                      "group w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors text-sm",
-                      isActive
-                        ? "bg-bg-active text-text-primary"
-                        : "text-text-secondary hover:bg-bg-hover hover:text-text-primary",
-                    )}
-                  >
-                    <FileText size={14} className="shrink-0 opacity-50" />
-                    <span className="truncate flex-1 text-[13px]">
-                      {study.title}
-                    </span>
-                    {(hoveredId === study.id || isActive) && (
-                      <button
-                        onClick={(e) => handleDelete(e, study.id)}
-                        className="p-0.5 rounded hover:bg-danger-muted hover:text-danger text-text-muted transition-colors shrink-0"
-                        aria-label="Delete study"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </button>
-                );
-              })}
+              <div className="space-y-0.5">
+                {group.items.map((study) => {
+                  const isActive = pathname === `/study/${study.id}`;
+                  return (
+                    <button
+                      key={study.id}
+                      onClick={() => router.push(`/study/${study.id}`)}
+                      onMouseEnter={() => setHoveredId(study.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                      className={cn(
+                        "group w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                      )}
+                    >
+                      <FileText size={13} className="shrink-0 opacity-40" />
+                      <span className="truncate flex-1 text-[13px]">
+                        {study.title}
+                      </span>
+                      {(hoveredId === study.id || isActive) && (
+                        <button
+                          onClick={(e) => handleDelete(e, study.id)}
+                          className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors shrink-0"
+                          aria-label="Delete study"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
-        </div>
+        </ScrollArea>
 
         {/* Footer */}
-        <div className="px-3 py-3 border-t border-border shrink-0">
+        <div className="px-3 py-2 border-t border-sidebar-border shrink-0">
           <button
             onClick={() => router.push("/settings")}
             className={cn(
-              "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors",
+              "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors",
               pathname === "/settings"
-                ? "bg-bg-active text-text-primary"
-                : "text-text-secondary hover:bg-bg-hover hover:text-text-primary",
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
             )}
           >
-            <Settings size={14} />
+            <Settings size={13} />
             Settings
           </button>
         </div>
@@ -190,13 +200,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Collapsed toggle */}
       {collapsed && (
-        <button
+        <Button
+          variant="outline"
+          size="icon"
+          className="fixed top-2 left-2 z-40 size-8"
           onClick={onToggle}
-          className="fixed top-3 left-3 z-40 p-2 rounded-lg bg-bg-secondary border border-border hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"
-          aria-label="Expand sidebar"
+          title="Expand sidebar"
         >
-          <PanelLeft size={16} />
-        </button>
+          <PanelLeft size={14} />
+        </Button>
       )}
 
       <NewStudyDialog

@@ -1,15 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Loader2, Trash2, Sparkles } from "lucide-react";
+import { Send, Loader2, Trash2, MessageSquare } from "lucide-react";
 import { MODELS, type Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
-import {
-  getMessages,
-  saveMessages,
-  type ChatMessage,
-} from "@/lib/studies";
+import { getMessages, saveMessages, type ChatMessage } from "@/lib/studies";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import ModelSelector from "./model-selector";
 import MarkdownMessage from "./markdown-message";
 
@@ -34,12 +32,10 @@ export default function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load persisted messages
   useEffect(() => {
     setMessages(getMessages(studyId));
   }, [studyId]);
 
-  // Persist messages on change (skip during streaming to avoid thrashing)
   useEffect(() => {
     if (!isStreaming && messages.length > 0) {
       saveMessages(studyId, messages);
@@ -54,7 +50,6 @@ export default function ChatPanel({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Handle incoming selection from PDF
   useEffect(() => {
     if (pendingSelection) {
       setInput(
@@ -67,7 +62,6 @@ export default function ChatPanel({
     }
   }, [pendingSelection, onSelectionConsumed]);
 
-  // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -81,8 +75,10 @@ export default function ChatPanel({
 
     const apiKey = getApiKey(selectedModel.provider);
     if (!apiKey) {
-      const providerName = selectedModel.provider === "anthropic" ? "Anthropic" : selectedModel.provider === "openai" ? "OpenAI" : "OpenRouter";
-      setError(`No ${providerName} API key found. Add it in Settings.`);
+      const name =
+        selectedModel.provider === "anthropic" ? "Anthropic" :
+        selectedModel.provider === "openai" ? "OpenAI" : "OpenRouter";
+      setError(`No ${name} API key found. Add it in Settings.`);
       return;
     }
 
@@ -172,90 +168,87 @@ export default function ChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary">
+    <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
-          <Sparkles size={14} className="text-accent" />
-          <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-            Copilot
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <ModelSelector
-            selected={selectedModel}
-            onSelect={setSelectedModel}
-          />
-          <button
+      <div className="flex items-center justify-between px-3 h-12 border-b border-border shrink-0">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          Copilot
+        </span>
+        <div className="flex items-center gap-1">
+          <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground"
             onClick={clearChat}
-            className="p-1.5 rounded-md hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"
             title="Clear chat"
-            aria-label="Clear chat"
           >
             <Trash2 size={13} />
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-auto px-4 py-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center gap-4 px-4">
-            <div className="w-10 h-10 rounded-xl bg-accent-muted flex items-center justify-center">
-              <Sparkles className="text-accent" size={18} />
+      <ScrollArea className="flex-1">
+        <div className="px-4 py-4 space-y-4">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+              <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <MessageSquare className="text-primary" size={18} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Ready to help</p>
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
+                  Ask questions about this paper, or select text in the PDF and
+                  click &quot;Ask about this&quot;
+                </p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Ready to help</p>
-              <p className="text-xs text-text-muted leading-relaxed max-w-[240px]">
-                Ask questions about this paper, or select text in the PDF and
-                click &quot;Ask about this&quot;
-              </p>
-            </div>
-          </div>
-        )}
+          )}
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={cn(
-              "max-w-full",
-              msg.role === "user" ? "flex justify-end" : "",
-            )}
-          >
+          {messages.map((msg) => (
             <div
+              key={msg.id}
               className={cn(
-                "rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed",
-                msg.role === "user"
-                  ? "bg-accent/90 text-white max-w-[85%]"
-                  : "bg-bg-secondary border border-border text-text-primary max-w-full",
+                "max-w-full",
+                msg.role === "user" ? "flex justify-end" : "",
               )}
             >
-              {msg.role === "assistant" && msg.content === "" && isStreaming ? (
-                <div className="flex items-center gap-2 py-1">
-                  <Loader2 className="animate-spin text-text-muted" size={14} />
-                  <span className="text-xs text-text-muted">Thinking...</span>
-                </div>
-              ) : msg.role === "assistant" ? (
-                <MarkdownMessage content={msg.content} />
-              ) : (
-                <div className="whitespace-pre-wrap">{msg.content}</div>
-              )}
+              <div
+                className={cn(
+                  "rounded-lg px-3.5 py-2.5 text-[13px] leading-relaxed",
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground max-w-[85%]"
+                    : "bg-card border border-border text-card-foreground max-w-full",
+                )}
+              >
+                {msg.role === "assistant" && msg.content === "" && isStreaming ? (
+                  <div className="flex items-center gap-2 py-0.5">
+                    <Loader2 className="animate-spin text-muted-foreground" size={13} />
+                    <span className="text-xs text-muted-foreground">Thinking...</span>
+                  </div>
+                ) : msg.role === "assistant" ? (
+                  <MarkdownMessage content={msg.content} />
+                ) : (
+                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
 
-      {/* Error banner */}
+      {/* Error */}
       {error && (
-        <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-danger-muted border border-danger/20 text-danger text-xs">
+        <div className="mx-3 mb-2 px-3 py-2 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
           {error}
         </div>
       )}
 
       {/* Input */}
       <div className="p-3 border-t border-border shrink-0">
-        <div className="flex items-end gap-2 bg-bg-secondary rounded-xl border border-border focus-within:border-border-focus focus-within:ring-1 focus-within:ring-border-focus transition-all">
+        <div className="flex items-end gap-2 bg-card rounded-lg border border-border focus-within:ring-1 focus-within:ring-ring transition-shadow">
           <textarea
             ref={textareaRef}
             value={input}
@@ -263,22 +256,23 @@ export default function ChatPanel({
             onKeyDown={handleKeyDown}
             placeholder="Ask about the paper..."
             rows={1}
-            className="flex-1 bg-transparent px-3.5 py-3 text-[13px] resize-none focus:outline-none text-text-primary placeholder:text-text-muted"
+            className="flex-1 bg-transparent px-3 py-2.5 text-[13px] resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
           />
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 m-1 text-muted-foreground hover:text-primary"
             onClick={sendMessage}
             disabled={!input.trim() || isStreaming}
-            className="p-2.5 text-text-muted hover:text-accent disabled:opacity-20 transition-colors"
-            aria-label="Send message"
           >
             {isStreaming ? (
-              <Loader2 className="animate-spin" size={16} />
+              <Loader2 className="animate-spin" size={15} />
             ) : (
-              <Send size={16} />
+              <Send size={15} />
             )}
-          </button>
+          </Button>
         </div>
-        <p className="text-[10px] text-text-muted mt-1.5 text-center">
+        <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-center">
           {selectedModel.label} · Shift+Enter for new line
         </p>
       </div>

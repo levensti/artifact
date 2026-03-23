@@ -74,7 +74,7 @@ export default function StudyPage() {
   if (!study) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-full text-text-muted text-sm">
+        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
           Loading...
         </div>
       </DashboardLayout>
@@ -97,16 +97,16 @@ export default function StudyPage() {
         {/* Resize handle */}
         <div
           onMouseDown={handleMouseDown}
-          className={`relative w-px cursor-col-resize flex items-center justify-center transition-colors shrink-0 ${isDragging ? "bg-accent/40" : "bg-border hover:bg-border-light"}`}
+          className={`relative w-[3px] cursor-col-resize flex items-center justify-center shrink-0 transition-colors ${isDragging ? "bg-primary/40" : "bg-border hover:bg-primary/20"}`}
         >
-          <div className="absolute p-0.5 rounded bg-bg-elevated border border-border opacity-0 hover:opacity-100 transition-opacity">
-            <GripVertical size={10} className="text-text-muted" />
+          <div className="absolute p-0.5 rounded bg-card border border-border opacity-0 hover:opacity-100 transition-opacity">
+            <GripVertical size={10} className="text-muted-foreground" />
           </div>
         </div>
 
         {/* Chat Panel */}
         <div
-          className="shrink-0 overflow-hidden"
+          className="shrink-0 overflow-hidden border-l border-border"
           style={{ width: `${panelWidth}px` }}
         >
           <ChatPanel

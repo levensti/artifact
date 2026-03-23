@@ -19,7 +19,16 @@ export async function GET(req: NextRequest) {
   try {
     const response = await fetch(url, {
       headers: { "User-Agent": "PaperCopilot/1.0" },
+      redirect: "follow",
     });
+
+    // Verify the final URL after redirects is still an arxiv domain
+    if (response.url && !allowed.test(response.url)) {
+      return NextResponse.json(
+        { error: "Redirected to non-arxiv URL" },
+        { status: 403 },
+      );
+    }
 
     if (!response.ok) {
       return NextResponse.json(

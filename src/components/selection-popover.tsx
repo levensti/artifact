@@ -1,6 +1,7 @@
 "use client";
 
 import { MessageSquarePlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface SelectionPopoverProps {
   rect: DOMRect;
@@ -13,20 +14,17 @@ export default function SelectionPopover({ rect, onAsk }: SelectionPopoverProps)
 
   return (
     <div
-      className="fixed z-50"
+      className="fixed z-50 animate-in fade-in slide-in-from-bottom-1 duration-150"
       style={{
         top: `${top}px`,
         left: `${left}px`,
         transform: "translateX(-50%)",
       }}
     >
-      <button
-        onClick={onAsk}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium shadow-[var(--shadow-lg)] hover:bg-accent-hover transition-colors border border-white/10"
-      >
+      <Button size="sm" onClick={onAsk} className="gap-1.5 shadow-lg text-xs h-7">
         <MessageSquarePlus size={12} />
         Ask about this
-      </button>
+      </Button>
     </div>
   );
 }

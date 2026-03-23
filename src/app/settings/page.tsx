@@ -1,18 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Eye,
-  EyeOff,
-  Check,
-  ExternalLink,
-  Key,
-  Shield,
-} from "lucide-react";
+import { Eye, EyeOff, Check, ExternalLink, Key, Shield } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { getApiKey, setApiKey, clearApiKey } from "@/lib/keys";
 import { PROVIDER_META, type Provider } from "@/lib/models";
-import { cn } from "@/lib/utils";
 
 interface ProviderCardProps {
   provider: Provider;
@@ -52,20 +48,20 @@ function ProviderCard({ provider, placeholder, docsUrl }: ProviderCardProps) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-bg-secondary p-5 space-y-4">
+    <div className="rounded-lg border border-border bg-card p-5 space-y-4">
       {/* Provider Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">{meta.label}</h3>
             {hasKey && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-success-muted text-success text-[10px] font-medium">
-                <div className="w-1 h-1 rounded-full bg-success" />
+              <Badge variant="outline" className="text-[10px] font-medium text-emerald-500 border-emerald-500/30 gap-1 py-0 h-5">
+                <div className="size-1 rounded-full bg-emerald-500" />
                 Connected
-              </span>
+              </Badge>
             )}
           </div>
-          <p className="text-xs text-text-muted leading-relaxed max-w-sm">
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-sm">
             {meta.description}
           </p>
         </div>
@@ -73,7 +69,7 @@ function ProviderCard({ provider, placeholder, docsUrl }: ProviderCardProps) {
           href={docsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-muted hover:text-text-secondary hover:bg-bg-hover transition-colors"
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           Get API key
           <ExternalLink size={10} />
@@ -82,55 +78,52 @@ function ProviderCard({ provider, placeholder, docsUrl }: ProviderCardProps) {
 
       {/* Key Input */}
       <div className="space-y-2">
-        <label className="text-xs font-medium text-text-secondary">
+        <label className="text-xs font-medium text-muted-foreground">
           API Key
         </label>
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <Key
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+              size={13}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
-            <input
+            <Input
               type={visible ? "text" : "password"}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={placeholder}
-              className="w-full bg-bg-primary border border-border rounded-lg pl-9 pr-10 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus transition-all font-mono"
+              className="pl-9 pr-9 font-mono text-xs"
             />
             <button
               onClick={() => setVisible(!visible)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               aria-label={visible ? "Hide key" : "Show key"}
             >
-              {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+              {visible ? <EyeOff size={13} /> : <Eye size={13} />}
             </button>
           </div>
-          <button
+          <Button
             onClick={handleSave}
             disabled={!value.trim()}
-            className={cn(
-              "px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 shrink-0",
-              saved
-                ? "bg-success-muted text-success"
-                : "bg-accent hover:bg-accent-hover text-white disabled:opacity-30 disabled:cursor-not-allowed",
-            )}
+            variant={saved ? "outline" : "default"}
+            size="sm"
+            className={saved ? "text-emerald-500 border-emerald-500/30 gap-1" : "gap-1"}
           >
-            {saved ? <Check size={14} /> : null}
+            {saved && <Check size={13} />}
             {saved ? "Saved" : "Save"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Clear */}
       {hasKey && (
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-text-muted">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-muted-foreground/60">
             Key stored in browser localStorage
           </span>
           <button
             onClick={handleClear}
-            className="text-xs text-text-muted hover:text-danger transition-colors"
+            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
           >
             Remove key
           </button>
@@ -144,39 +137,41 @@ export default function SettingsPage() {
   return (
     <DashboardLayout>
       <div className="h-full overflow-auto">
-        <div className="max-w-2xl mx-auto px-6 py-10">
+        <div className="max-w-2xl mx-auto px-8 py-10">
           {/* Page Header */}
           <div className="space-y-1 mb-8">
             <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
-            <p className="text-sm text-text-muted">
+            <p className="text-sm text-muted-foreground">
               Manage your API keys and preferences
             </p>
           </div>
 
+          <Separator className="mb-8" />
+
           {/* API Keys Section */}
-          <section className="space-y-5">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-accent-muted flex items-center justify-center">
-                <Key size={14} className="text-accent" />
+          <section className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Key size={14} className="text-primary" />
               </div>
               <div>
                 <h2 className="text-sm font-semibold">API Keys</h2>
-                <p className="text-xs text-text-muted">
+                <p className="text-xs text-muted-foreground">
                   Connect your AI provider accounts to use Paper Copilot
                 </p>
               </div>
             </div>
 
             {/* Security Notice */}
-            <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-accent-subtle border border-accent-muted">
-              <Shield size={14} className="text-accent mt-0.5 shrink-0" />
-              <div className="text-xs text-text-secondary leading-relaxed">
-                <strong className="text-text-primary">How keys are handled.</strong>{" "}
+            <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-primary/5 border border-primary/10">
+              <Shield size={13} className="text-primary mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                <strong className="text-foreground">How keys are handled.</strong>{" "}
                 API keys are stored in your browser&apos;s localStorage. When you
                 chat, keys are sent through this app&apos;s server-side proxy to
                 call providers. Self-host this application for full control over
                 key handling.
-              </div>
+              </p>
             </div>
 
             {/* Provider Cards */}

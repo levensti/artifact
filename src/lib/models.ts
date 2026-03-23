@@ -38,6 +38,24 @@ export const MODELS: Model[] = [
     provider: "openai",
     modelId: "o3-mini",
   },
+  {
+    id: "or-deepseek-r1",
+    label: "DeepSeek R1",
+    provider: "openrouter",
+    modelId: "deepseek/deepseek-r1",
+  },
+  {
+    id: "or-gemini-2.5-pro",
+    label: "Gemini 2.5 Pro",
+    provider: "openrouter",
+    modelId: "google/gemini-2.5-pro-preview",
+  },
+  {
+    id: "or-llama-4-maverick",
+    label: "Llama 4 Maverick",
+    provider: "openrouter",
+    modelId: "meta-llama/llama-4-maverick",
+  },
 ];
 
 export const PROVIDER_META: Record<Provider, { label: string; description: string }> = {
