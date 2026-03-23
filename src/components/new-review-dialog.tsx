@@ -12,16 +12,20 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createStudy } from "@/lib/studies";
+import { createReview, REVIEWS_UPDATED_EVENT } from "@/lib/reviews";
 import { extractArxivId } from "@/lib/utils";
 
-interface NewStudyDialogProps {
+interface NewReviewDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreated: (studyId: string) => void;
+  onCreated: (reviewId: string) => void;
 }
 
-export default function NewStudyDialog({ open, onClose, onCreated }: NewStudyDialogProps) {
+export default function NewReviewDialog({
+  open,
+  onClose,
+  onCreated,
+}: NewReviewDialogProps) {
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -33,22 +37,24 @@ export default function NewStudyDialog({ open, onClose, onCreated }: NewStudyDia
     setError(null);
 
     if (!url.trim()) {
-      setError("Please enter an Arxiv URL");
+      setError("Please enter an arXiv URL");
       return;
     }
 
     if (!arxivId) {
-      setError("Please enter a valid Arxiv URL (e.g., https://arxiv.org/abs/2602.00277)");
+      setError(
+        "Enter a valid arXiv URL (e.g. https://arxiv.org/abs/2602.00277)",
+      );
       return;
     }
 
-    const studyTitle = title.trim() || `Paper ${arxivId}`;
-    const study = createStudy(arxivId, studyTitle);
-    window.dispatchEvent(new Event("studies-updated"));
+    const reviewTitle = title.trim() || `arXiv:${arxivId}`;
+    const review = createReview(arxivId, reviewTitle);
+    window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
 
     setUrl("");
     setTitle("");
-    onCreated(study.id);
+    onCreated(review.id);
   };
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -64,9 +70,10 @@ export default function NewStudyDialog({ open, onClose, onCreated }: NewStudyDia
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New study session</DialogTitle>
+          <DialogTitle>New paper review</DialogTitle>
           <DialogDescription>
-            Paste an Arxiv URL to start reading a paper with your AI copilot.
+            Paste an arXiv link. We&apos;ll save the PDF and your Q&amp;A so you can
+            pick up where you left off anytime.
           </DialogDescription>
         </DialogHeader>
 
@@ -74,7 +81,7 @@ export default function NewStudyDialog({ open, onClose, onCreated }: NewStudyDia
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Arxiv URL
+                arXiv URL
               </label>
               <Input
                 value={url}
@@ -86,8 +93,8 @@ export default function NewStudyDialog({ open, onClose, onCreated }: NewStudyDia
                 autoFocus
               />
               {arxivId && (
-                <p className="text-xs text-emerald-500">
-                  Detected: arxiv:{arxivId}
+                <p className="text-xs text-primary font-medium">
+                  Detected: {arxivId}
                 </p>
               )}
               {error && <p className="text-xs text-destructive">{error}</p>}
@@ -95,13 +102,13 @@ export default function NewStudyDialog({ open, onClose, onCreated }: NewStudyDia
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Title{" "}
+                Display name{" "}
                 <span className="font-normal opacity-60">(optional)</span>
               </label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Give this study a name..."
+                placeholder="e.g. Attention Is All You Need"
               />
             </div>
           </div>
@@ -111,7 +118,7 @@ export default function NewStudyDialog({ open, onClose, onCreated }: NewStudyDia
               Cancel
             </Button>
             <Button type="submit" disabled={!url.trim()}>
-              Create study
+              Start review
               <ArrowRight size={14} />
             </Button>
           </DialogFooter>

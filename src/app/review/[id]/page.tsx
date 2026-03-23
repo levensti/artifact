@@ -1,19 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
-import PdfViewer from "@/components/pdf-viewer";
 import ChatPanel from "@/components/chat-panel";
 import SelectionPopover from "@/components/selection-popover";
-import { getStudy, type Study } from "@/lib/studies";
+import { getReview, type PaperReview } from "@/lib/reviews";
 import { arxivPdfUrl } from "@/lib/utils";
 
-export default function StudyPage() {
+const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-[var(--reader-mat)] text-muted-foreground text-sm">
+      <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+      Loading PDF viewer…
+    </div>
+  ),
+});
+
+export default function ReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [study, setStudy] = useState<Study | null>(null);
+  const [review, setReview] = useState<PaperReview | null>(null);
   const [paperText, setPaperText] = useState("");
   const [selectedText, setSelectedText] = useState<string | null>(null);
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
@@ -22,12 +32,12 @@ export default function StudyPage() {
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    const s = getStudy(params.id);
-    if (!s) {
+    const r = getReview(params.id);
+    if (!r) {
       router.push("/");
       return;
     }
-    setStudy(s);
+    setReview(r);
   }, [params.id, router]);
 
   const handleTextSelected = useCallback((text: string, rect: DOMRect) => {
@@ -71,11 +81,11 @@ export default function StudyPage() {
     document.addEventListener("mouseup", handleMouseUp);
   }, []);
 
-  if (!study) {
+  if (!review) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-          Loading...
+          Loading…
         </div>
       </DashboardLayout>
     );
@@ -84,33 +94,30 @@ export default function StudyPage() {
   return (
     <DashboardLayout>
       <div className="flex h-full overflow-hidden">
-        {/* PDF Viewer */}
-        <div className="flex-1 min-w-0 overflow-hidden">
+        <div className="flex-1 min-w-0 overflow-hidden bg-[var(--reader-mat)]">
           <PdfViewer
-            url={arxivPdfUrl(study.arxivId)}
+            url={arxivPdfUrl(review.arxivId)}
             onTextExtracted={setPaperText}
             onTextSelected={handleTextSelected}
             onSelectionCleared={handleSelectionCleared}
           />
         </div>
 
-        {/* Resize handle */}
         <div
           onMouseDown={handleMouseDown}
-          className={`relative w-[3px] cursor-col-resize flex items-center justify-center shrink-0 transition-colors ${isDragging ? "bg-primary/40" : "bg-border hover:bg-primary/20"}`}
+          className={`relative w-1 cursor-col-resize flex items-center justify-center shrink-0 transition-colors ${isDragging ? "bg-primary/30" : "bg-border/80 hover:bg-muted-foreground/25"}`}
         >
-          <div className="absolute p-0.5 rounded bg-card border border-border opacity-0 hover:opacity-100 transition-opacity">
+          <div className="absolute p-0.5 rounded-md bg-card border border-border/90 opacity-0 hover:opacity-100 transition-opacity shadow-sm">
             <GripVertical size={10} className="text-muted-foreground" />
           </div>
         </div>
 
-        {/* Chat Panel */}
         <div
-          className="shrink-0 overflow-hidden border-l border-border"
+          className="shrink-0 overflow-hidden border-l border-border/80 bg-background"
           style={{ width: `${panelWidth}px` }}
         >
           <ChatPanel
-            studyId={study.id}
+            reviewId={review.id}
             paperContext={paperText}
             pendingSelection={pendingSelection}
             onSelectionConsumed={() => setPendingSelection(null)}
@@ -118,7 +125,6 @@ export default function StudyPage() {
         </div>
       </div>
 
-      {/* Selection popover */}
       {selectedText && selectionRect && (
         <SelectionPopover rect={selectionRect} onAsk={handleAskAboutSelection} />
       )}

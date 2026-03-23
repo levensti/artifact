@@ -4,55 +4,50 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Option A: Neutral Slate
- * Warm dark grays, muted blue accent, soft whites.
- * Professional, familiar — like Linear or Vercel dashboard.
- */
+/* White pastel base + single accent (--primary emerald). */
 
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  /* Surfaces */
-  --background: #111113;
-  --foreground: #ededef;
-  --card: #18181b;
-  --card-foreground: #ededef;
-  --popover: #18181b;
-  --popover-foreground: #ededef;
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
 
-  /* Brand */
-  --primary: #3b82f6;
+  --primary: #059669;
   --primary-foreground: #ffffff;
+  --primary-muted: color-mix(in srgb, var(--primary) 82%, var(--foreground));
 
-  /* Muted / secondary surfaces */
-  --secondary: #1f1f23;
-  --secondary-foreground: #b0b0b8;
-  --muted: #1f1f23;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #27272a;
+  --muted: #f4f4f5;
   --muted-foreground: #71717a;
-  --accent: #1f1f23;
-  --accent-foreground: #b0b0b8;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
 
-  /* Semantic */
   --destructive: #dc2626;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #3b82f6;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #059669;
 
-  /* Sidebar */
-  --sidebar: #141416;
-  --sidebar-foreground: #b0b0b8;
-  --sidebar-primary: #3b82f6;
+  --reader-mat: #f3f4f6;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #52525b;
+  --sidebar-primary: #059669;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1f1f23;
-  --sidebar-accent-foreground: #ededef;
-  --sidebar-border: #27272a;
-  --sidebar-ring: #3b82f6;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #059669;
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  --font-reading: var(--font-source-serif), "Georgia", ui-serif, serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -86,64 +81,77 @@
   --radius-2xl: calc(var(--radius) * 1.8);
 }
 
-/* Scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent;
 }
-*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.06); border-radius: 3px; }
-*::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.12); }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--foreground) 15%, transparent);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--foreground) 28%, transparent);
+}
 
-/* PDF viewer text selection */
 .react-pdf__Page__textContent {
   user-select: text !important;
   -webkit-user-select: text !important;
 }
 .react-pdf__Page__textContent span {
-  opacity: 0.15 !important;
+  opacity: 0.12 !important;
 }
-.react-pdf__Page__textContent span::selection {
-  background: rgba(59, 130, 246, 0.3) !important;
+.react-pdf__Page__textContent span::selection,
+.react-pdf__Page__textContent span::-moz-selection {
+  /* Strong enough to read on white PDF; still clearly “selected” */
+  background: color-mix(in srgb, var(--primary) 62%, white) !important;
+  color: var(--foreground) !important;
   opacity: 1 !important;
 }
 
-/* Chat markdown */
+.chat-markdown {
+  font-family: var(--font-reading);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
 .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 {
+  font-family: var(--font-sans);
   font-weight: 600;
   margin-top: 1em;
   margin-bottom: 0.5em;
   color: var(--foreground);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
-.chat-markdown h1 { font-size: 1.15rem; }
-.chat-markdown h2 { font-size: 1.05rem; }
-.chat-markdown h3 { font-size: 0.95rem; }
-.chat-markdown p { margin-bottom: 0.625em; line-height: 1.75; }
+.chat-markdown h1 { font-size: 1.0625rem; }
+.chat-markdown h2 { font-size: 0.9875rem; }
+.chat-markdown h3 { font-size: 0.9375rem; }
+.chat-markdown p { margin-bottom: 0.625em; }
 .chat-markdown ul, .chat-markdown ol { margin-bottom: 0.625em; padding-left: 1.25em; }
 .chat-markdown ul { list-style-type: disc; }
 .chat-markdown ol { list-style-type: decimal; }
-.chat-markdown li { margin-bottom: 0.2em; line-height: 1.7; }
+.chat-markdown li { margin-bottom: 0.2em; }
 .chat-markdown code {
-  background: var(--secondary);
-  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  background: var(--muted);
+  padding: 0.12em 0.4em;
   border-radius: 4px;
-  font-size: 0.85em;
-  font-family: var(--font-mono), monospace;
-  color: color-mix(in srgb, var(--primary) 70%, white);
+  font-size: 0.84em;
+  color: color-mix(in srgb, var(--primary) 72%, var(--foreground));
 }
 .chat-markdown pre {
+  font-family: var(--font-mono);
   background: var(--secondary);
   padding: 0.875em 1em;
   border-radius: var(--radius);
   overflow-x: auto;
   margin-bottom: 0.625em;
   border: 1px solid var(--border);
+  font-size: 0.8125rem;
 }
 .chat-markdown pre code { background: none; padding: 0; color: var(--secondary-foreground); }
 .chat-markdown blockquote {
-  border-left: 2px solid var(--primary);
+  border-left: 2px solid color-mix(in srgb, var(--primary) 50%, transparent);
   padding-left: 0.875em;
   color: var(--muted-foreground);
   margin-bottom: 0.625em;
@@ -152,18 +160,20 @@
 .chat-markdown a {
   color: var(--primary);
   text-decoration: none;
-  border-bottom: 1px solid rgba(59, 130, 246, 0.3);
-  transition: border-color 0.15s;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 38%, transparent);
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
-.chat-markdown a:hover { border-bottom-color: var(--primary); }
+.chat-markdown a:hover {
+  color: color-mix(in srgb, var(--primary) 88%, black);
+  border-bottom-color: color-mix(in srgb, var(--primary) 58%, transparent);
+}
 
-/* Sidebar transition */
 .transition-sidebar {
-  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @layer base {
   * { @apply border-border outline-ring/50; }
-  body { @apply bg-background text-foreground; }
+  body { @apply bg-background text-foreground antialiased; }
   html { @apply font-sans; }
 }

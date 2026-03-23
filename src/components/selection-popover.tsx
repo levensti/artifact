@@ -21,7 +21,7 @@ export default function SelectionPopover({ rect, onAsk }: SelectionPopoverProps)
         transform: "translateX(-50%)",
       }}
     >
-      <Button size="sm" onClick={onAsk} className="gap-1.5 shadow-lg text-xs h-7">
+      <Button size="sm" onClick={onAsk} className="gap-1.5 shadow-md shadow-stone-900/15 text-xs h-8 rounded-lg px-3">
         <MessageSquarePlus size={12} />
         Ask about this
       </Button>

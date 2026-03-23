@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, Loader2, Trash2, MessageSquare } from "lucide-react";
 import { MODELS, type Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
-import { getMessages, saveMessages, type ChatMessage } from "@/lib/studies";
+import { getMessages, saveMessages, type ChatMessage } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,14 +12,14 @@ import ModelSelector from "./model-selector";
 import MarkdownMessage from "./markdown-message";
 
 interface ChatPanelProps {
-  studyId: string;
+  reviewId: string;
   paperContext: string;
   pendingSelection: string | null;
   onSelectionConsumed: () => void;
 }
 
 export default function ChatPanel({
-  studyId,
+  reviewId,
   paperContext,
   pendingSelection,
   onSelectionConsumed,
@@ -33,14 +33,14 @@ export default function ChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    setMessages(getMessages(studyId));
-  }, [studyId]);
+    setMessages(getMessages(reviewId));
+  }, [reviewId]);
 
   useEffect(() => {
     if (!isStreaming && messages.length > 0) {
-      saveMessages(studyId, messages);
+      saveMessages(reviewId, messages);
     }
-  }, [messages, isStreaming, studyId]);
+  }, [messages, isStreaming, reviewId]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -164,15 +164,15 @@ export default function ChatPanel({
 
   const clearChat = () => {
     setMessages([]);
-    saveMessages(studyId, []);
+    saveMessages(reviewId, []);
   };
 
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 h-12 border-b border-border shrink-0">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Copilot
+      <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
+        <span className="text-sm font-medium text-muted-foreground">
+          Q&amp;A
         </span>
         <div className="flex items-center gap-1">
           <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
@@ -191,17 +191,19 @@ export default function ChatPanel({
 
       {/* Messages */}
       <ScrollArea className="flex-1">
-        <div className="px-4 py-4 space-y-4">
+        <div className="px-4 py-5 space-y-5">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
-              <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <MessageSquare className="text-primary" size={18} />
+            <div className="flex flex-col items-center justify-center py-24 text-center gap-4 px-2">
+              <div className="size-11 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/10 flex items-center justify-center">
+                <MessageSquare className="text-primary" size={20} strokeWidth={1.75} />
               </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Ready to help</p>
-                <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
-                  Ask questions about this paper, or select text in the PDF and
-                  click &quot;Ask about this&quot;
+              <div className="space-y-2 max-w-[260px]">
+                <p className="text-sm font-semibold tracking-tight text-foreground">
+                  Your review thread
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Questions and answers are saved with this paper so you can
+                  revisit them later. Select text in the PDF or type below.
                 </p>
               </div>
             </div>
@@ -217,16 +219,16 @@ export default function ChatPanel({
             >
               <div
                 className={cn(
-                  "rounded-lg px-3.5 py-2.5 text-[13px] leading-relaxed",
+                  "rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
                   msg.role === "user"
-                    ? "bg-primary text-primary-foreground max-w-[85%]"
-                    : "bg-card border border-border text-card-foreground max-w-full",
+                    ? "bg-secondary text-foreground max-w-[88%] border border-border border-l-[3px] border-l-primary/45 shadow-sm"
+                    : "bg-card border border-border/80 text-card-foreground max-w-full shadow-sm",
                 )}
               >
                 {msg.role === "assistant" && msg.content === "" && isStreaming ? (
-                  <div className="flex items-center gap-2 py-0.5">
-                    <Loader2 className="animate-spin text-muted-foreground" size={13} />
-                    <span className="text-xs text-muted-foreground">Thinking...</span>
+                  <div className="flex items-center gap-2 py-0.5 font-sans">
+                    <Loader2 className="animate-spin text-muted-foreground" size={14} />
+                    <span className="text-sm text-muted-foreground">Thinking…</span>
                   </div>
                 ) : msg.role === "assistant" ? (
                   <MarkdownMessage content={msg.content} />
@@ -242,14 +244,14 @@ export default function ChatPanel({
 
       {/* Error */}
       {error && (
-        <div className="mx-3 mb-2 px-3 py-2 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+        <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug">
           {error}
         </div>
       )}
 
       {/* Input */}
-      <div className="p-3 border-t border-border shrink-0">
-        <div className="flex items-end gap-2 bg-card rounded-lg border border-border focus-within:ring-1 focus-within:ring-ring transition-shadow">
+      <div className="p-3 border-t border-border shrink-0 bg-muted/20">
+        <div className="flex items-end gap-2 bg-card rounded-xl border border-border/90 focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-ring/25 transition-[box-shadow,border-color] duration-200">
           <textarea
             ref={textareaRef}
             value={input}
@@ -257,7 +259,7 @@ export default function ChatPanel({
             onKeyDown={handleKeyDown}
             placeholder="Ask about the paper..."
             rows={1}
-            className="flex-1 bg-transparent px-3 py-2.5 text-[13px] resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent px-3 py-2.5 text-sm resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
           />
           <Button
             variant="ghost"
@@ -274,7 +276,7 @@ export default function ChatPanel({
             )}
           </Button>
         </div>
-        <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-center">
+        <p className="text-xs text-muted-foreground/70 mt-2 text-center">
           {selectedModel.label} · Shift+Enter for new line
         </p>
       </div>
