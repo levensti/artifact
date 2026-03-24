@@ -3,52 +3,49 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Amber & Walnut Palette Preview</title>
+<title>Graphite & Dust — Palette Preview</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, sans-serif; background: #FEFCE8; color: #422006; padding: 2rem; }
+  body { font-family: system-ui, sans-serif; background: #f0ebe8; color: #28262b; padding: 2rem; }
   h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .swatch { border-radius: 10px; overflow: hidden; border: 1px solid #E5DDD0; }
+  .swatch { border-radius: 10px; overflow: hidden; border: 1px solid #d5ccc7; }
   .swatch-color { height: 80px; }
-  .swatch-label { background: #FFFEF5; padding: 0.5rem 0.75rem; font-size: 0.8rem; }
+  .swatch-label { background: #f5f1ef; padding: 0.5rem 0.75rem; font-size: 0.8rem; }
   .swatch-label strong { display: block; font-size: 0.85rem; margin-bottom: 2px; }
-  .swatch-label code { color: #92400E; }
+  .swatch-label code { color: #a9a29c; }
 
-  .demo-card { background: #FFFEF5; border: 1px solid #E5DDD0; border-radius: 10px; padding: 1.5rem; max-width: 480px; margin-bottom: 1.5rem; }
+  .demo-card { background: #f5f1ef; border: 1px solid #d5ccc7; border-radius: 10px; padding: 1.5rem; max-width: 480px; margin-bottom: 1.5rem; }
   .demo-card h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
-  .demo-card p { color: #92400E; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1rem; }
-  .btn-primary { background: #B45309; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 8px; font-size: 0.875rem; cursor: pointer; }
-  .btn-secondary { background: #FEF3C7; color: #78350F; border: 1px solid #E5DDD0; padding: 0.5rem 1.25rem; border-radius: 8px; font-size: 0.875rem; cursor: pointer; margin-left: 0.5rem; }
-  .badge { display: inline-block; background: #FDE68A; color: #422006; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; margin-right: 0.5rem; }
+  .demo-card p { color: #a9a29c; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1rem; }
+  .btn-primary { background: #333333; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 8px; font-size: 0.875rem; cursor: pointer; font-weight: 600; }
+  .btn-secondary { background: #e8e3df; color: #28262b; border: 1px solid #d5ccc7; padding: 0.5rem 1.25rem; border-radius: 8px; font-size: 0.875rem; cursor: pointer; margin-left: 0.5rem; }
+  .badge { display: inline-block; background: #d5ccc7; color: #28262b; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; margin-right: 0.5rem; }
 
-  .sidebar-demo { background: #FFFEF5; border: 1px solid #E5DDD0; border-radius: 10px; padding: 1rem; max-width: 240px; display: inline-block; vertical-align: top; margin-right: 1.5rem; margin-bottom: 1.5rem; }
-  .sidebar-demo .item { padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; color: #78350F; margin-bottom: 2px; cursor: pointer; }
-  .sidebar-demo .item.active { background: #FEF3C7; color: #422006; font-weight: 600; }
-  .sidebar-demo .item:hover:not(.active) { background: #FEF3C740; }
-  .sidebar-demo h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #92400E; padding: 0.5rem 0.75rem; }
+  .sidebar-demo { background: #f5f1ef; border: 1px solid #d5ccc7; border-radius: 10px; padding: 1rem; max-width: 240px; display: inline-block; vertical-align: top; margin-right: 1.5rem; margin-bottom: 1.5rem; }
+  .sidebar-demo .item { padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; color: #28262b; margin-bottom: 2px; cursor: pointer; }
+  .sidebar-demo .item.active { background: #e8e3df; color: #28262b; font-weight: 600; }
+  .sidebar-demo .item:hover:not(.active) { background: #e8e3df40; }
+  .sidebar-demo h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a9a29c; padding: 0.5rem 0.75rem; }
 
   .input-demo { margin-bottom: 1.5rem; max-width: 480px; }
-  .input-demo input { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #E5DDD0; border-radius: 8px; background: #FFFEF5; color: #422006; font-size: 0.875rem; outline: none; }
-  .input-demo input:focus { border-color: #B45309; box-shadow: 0 0 0 2px #B4530930; }
+  .input-demo input { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d5ccc7; border-radius: 8px; background: #f5f1ef; color: #28262b; font-size: 0.875rem; outline: none; }
+  .input-demo input:focus { border-color: #333333; box-shadow: 0 0 0 2px #33333330; }
   .input-demo label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem; }
 </style>
 </head>
 <body>
 
-<h1>Amber & Walnut — Palette Preview</h1>
+<h1>Graphite & Dust — Palette Preview</h1>
 
 <div class="grid">
-  <div class="swatch"><div class="swatch-color" style="background:#B45309"></div><div class="swatch-label"><strong>Primary</strong><code>#B45309</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#FEFCE8"></div><div class="swatch-label"><strong>Background</strong><code>#FEFCE8</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#FFFEF5"></div><div class="swatch-label"><strong>Card</strong><code>#FFFEF5</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#FEF3C7"></div><div class="swatch-label"><strong>Secondary / Muted</strong><code>#FEF3C7</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#FDE68A"></div><div class="swatch-label"><strong>Accent</strong><code>#FDE68A</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#422006"></div><div class="swatch-label"><strong>Foreground</strong><code>#422006</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#78350F"></div><div class="swatch-label"><strong>Secondary FG</strong><code>#78350F</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#92400E"></div><div class="swatch-label"><strong>Muted FG</strong><code>#92400E</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#E5DDD0"></div><div class="swatch-label"><strong>Border</strong><code>#E5DDD0</code></div></div>
-  <div class="swatch"><div class="swatch-color" style="background:#FDF6E3"></div><div class="swatch-label"><strong>Reader Mat</strong><code>#FDF6E3</code></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#333333"></div><div class="swatch-label"><strong>Graphite</strong><code>#333333</code></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#28262b"></div><div class="swatch-label"><strong>Shadow Grey</strong><code>#28262b</code></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#a9a29c"></div><div class="swatch-label"><strong>Silver</strong><code>#a9a29c</code></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#d5ccc7"></div><div class="swatch-label"><strong>Dust Grey</strong><code>#d5ccc7</code></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#e8e3df"></div><div class="swatch-label"><strong>Secondary (derived)</strong><code>#e8e3df</code></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#f0ebe8"></div><div class="swatch-label"><strong>Background (derived)</strong><code>#f0ebe8</code></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#f5f1ef"></div><div class="swatch-label"><strong>Card (derived)</strong><code>#f5f1ef</code></div></div>
 </div>
 
 <h1 style="font-size:1.1rem; margin-bottom:1rem;">Component Examples</h1>
@@ -74,7 +71,7 @@
         <span class="badge">ML</span>
       </div>
       <h2>Attention Is All You Need</h2>
-      <p>A sample card showing how text, badges, and buttons look with the Amber & Walnut palette.</p>
+      <p>A sample card showing how text, badges, and buttons look with the Graphite & Dust palette.</p>
       <button class="btn-primary">Open Paper</button>
       <button class="btn-secondary">Save for Later</button>
     </div>

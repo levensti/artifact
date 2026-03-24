@@ -4,50 +4,50 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Warm palette — Amber & Walnut */
+/* Warm palette — Graphite & Dust */
 
 :root {
   --radius: 0.625rem;
 
-  --background: #FEFCE8;
-  --foreground: #422006;
-  --card: #FFFEF5;
-  --card-foreground: #422006;
-  --popover: #FFFEF5;
-  --popover-foreground: #422006;
+  --background: #f0ebe8;       /* light warm gray (derived) */
+  --foreground: #28262b;       /* shadow grey */
+  --card: #f5f1ef;             /* lighter warm gray (derived) */
+  --card-foreground: #28262b;
+  --popover: #f5f1ef;
+  --popover-foreground: #28262b;
 
-  --primary: #B45309;
+  --primary: #333333;          /* graphite */
   --primary-foreground: #ffffff;
   --primary-muted: color-mix(in srgb, var(--primary) 82%, var(--foreground));
 
-  --secondary: #FEF3C7;
-  --secondary-foreground: #78350F;
-  --muted: #FEF3C7;
-  --muted-foreground: #92400E;
-  --accent: #FDE68A;
-  --accent-foreground: #422006;
+  --secondary: #e8e3df;        /* mid warm gray (derived) */
+  --secondary-foreground: #28262b;
+  --muted: #e8e3df;
+  --muted-foreground: #a9a29c; /* silver */
+  --accent: #d5ccc7;           /* dust grey */
+  --accent-foreground: #28262b;
 
   --destructive: #dc2626;
-  --border: #E5DDD0;
-  --input: #E5DDD0;
-  --ring: #B45309;
+  --border: #d5ccc7;           /* dust grey */
+  --input: #d5ccc7;
+  --ring: #333333;             /* graphite */
 
-  --reader-mat: #FDF6E3;
+  --reader-mat: #f0ebe8;
 
-  --sidebar: #FFFEF5;
-  --sidebar-foreground: #78350F;
-  --sidebar-primary: #B45309;
+  --sidebar: #f5f1ef;
+  --sidebar-foreground: #28262b;
+  --sidebar-primary: #333333;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #FEF3C7;
-  --sidebar-accent-foreground: #422006;
-  --sidebar-border: #E5DDD0;
-  --sidebar-ring: #B45309;
+  --sidebar-accent: #e8e3df;
+  --sidebar-accent-foreground: #28262b;
+  --sidebar-border: #d5ccc7;
+  --sidebar-ring: #333333;
 }
 
 @theme inline {
-  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
-  --font-reading: var(--font-source-serif), "Georgia", ui-serif, serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-reading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
