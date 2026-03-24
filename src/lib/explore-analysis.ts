@@ -374,8 +374,31 @@ Return **only** a JSON array (no markdown):
     }
   }
 
+  // If no relationships survived filtering, return a minimal graph (just the current paper).
+  // The user still gets their prerequisites; related papers may appear on re-analysis.
   if (classifications.length === 0) {
-    throw new Error("No relevant relationships were parsed from model output. Try again.");
+    const graph: GraphData = {
+      nodes: [
+        {
+          id: arxivId,
+          title: paperTitle,
+          authors: [],
+          abstract: "The paper currently being reviewed.",
+          arxivId,
+          publishedDate: new Date().toISOString(),
+          categories: [],
+          isCurrent: true,
+        },
+      ],
+      edges: [],
+      keywords: localKeywords,
+      generatedAt: new Date().toISOString(),
+      modelUsed: model.label,
+      anchorReviewId: reviewId,
+    };
+    saveGraphData(reviewId, graph);
+    mergeSessionGraphIntoGlobal(reviewId, graph);
+    return { prerequisites, graph };
   }
 
   const currentNode: GraphNode = {

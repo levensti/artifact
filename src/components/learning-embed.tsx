@@ -189,10 +189,10 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
             <h4 className="text-sm font-semibold text-foreground">Related works</h4>
             {hasMap && (
               <Link
-                href={`/discover?reviewId=${encodeURIComponent(reviewId)}`}
+                href="/discover"
                 className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
               >
-                Open in Discovery
+                Knowledge Graph
                 <ExternalLink className="size-3 opacity-70" />
               </Link>
             )}
