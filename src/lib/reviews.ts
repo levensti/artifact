@@ -1,8 +1,17 @@
+import type { ArxivSearchResult } from "@/lib/explore";
+
+/** Structured content rendered under an assistant message (maps, search hits). */
+export type ChatAssistantBlock =
+  | { type: "learning_embed"; reviewId: string }
+  | { type: "arxiv_hits"; query: string; results: ArxivSearchResult[] };
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  /** Rich panels for learning / literature actions (assistant only). */
+  blocks?: ChatAssistantBlock[];
 }
 
 /** A saved paper review session: PDF + replayable Q&A. */
@@ -19,6 +28,11 @@ const LEGACY_STUDIES_KEY = "paper-copilot-studies";
 const MESSAGES_KEY_PREFIX = "paper-copilot-messages-";
 
 export const REVIEWS_UPDATED_EVENT = "paper-copilot-reviews-updated";
+
+function notifyReviewsUpdated() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
+}
 
 function migrateLegacyIfNeeded(): void {
   if (typeof window === "undefined") return;
@@ -54,7 +68,18 @@ export function createReview(arxivId: string, title: string): PaperReview {
   const list = getReviews();
   list.unshift(review);
   localStorage.setItem(REVIEWS_KEY, JSON.stringify(list));
+  notifyReviewsUpdated();
   return review;
+}
+
+export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
+  return getReviews().find((r) => r.arxivId === arxivId);
+}
+
+export function createOrGetReview(arxivId: string, title: string): PaperReview {
+  const existing = getReviewByArxivId(arxivId);
+  if (existing) return existing;
+  return createReview(arxivId, title);
 }
 
 export function getMessages(reviewId: string): ChatMessage[] {

@@ -1,13 +1,15 @@
 "use client";
 
-import { ExternalLink, Plus } from "lucide-react";
+import { ExternalLink, MessageSquare, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { GraphEdge, GraphNode } from "@/lib/explore";
 
 interface GraphDetailPanelProps {
   node: GraphNode | null;
-  edge: GraphEdge | null;
-  onAddToReadingList: (node: GraphNode) => void;
+  /** All edges incident to `node` (ordered by importance if available) */
+  incidentEdges: GraphEdge[];
+  onStartReview: (node: GraphNode) => void;
+  onDiscussInChat?: (node: GraphNode) => void;
 }
 
 function formatDate(iso: string) {
@@ -23,8 +25,9 @@ function formatDate(iso: string) {
 
 export default function GraphDetailPanel({
   node,
-  edge,
-  onAddToReadingList,
+  incidentEdges,
+  onStartReview,
+  onDiscussInChat,
 }: GraphDetailPanelProps) {
   if (!node) {
     return (
@@ -45,12 +48,22 @@ export default function GraphDetailPanel({
         <p className="text-xs text-muted-foreground">{formatDate(node.publishedDate)}</p>
       </div>
 
-      {edge && (
-        <div className="rounded-sm border border-border/80 bg-muted/30 p-2">
-          <p className="text-xs font-medium text-foreground capitalize">
-            {edge.relationship.replaceAll("-", " ")}
+      {incidentEdges.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {incidentEdges.length === 1 ? "Relationship" : "Relationships"}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">{edge.reasoning}</p>
+          {incidentEdges.map((e, i) => (
+            <div
+              key={`${e.source}-${e.target}-${e.relationship}-${i}`}
+              className="rounded-sm border border-border/80 bg-muted/30 p-2"
+            >
+              <p className="text-xs font-medium text-foreground capitalize">
+                {e.relationship.replaceAll("-", " ")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">{e.reasoning}</p>
+            </div>
+          ))}
         </div>
       )}
 
@@ -68,15 +81,26 @@ export default function GraphDetailPanel({
             <ExternalLink className="ml-1.5 size-3.5" />
           </Button>
         </a>
-        {!node.isCurrent && (
+        {!node.isCurrent && node.arxivId && (
           <Button
             size="sm"
             variant="secondary"
             className="h-8 text-xs"
-            onClick={() => onAddToReadingList(node)}
+            onClick={() => onStartReview(node)}
           >
-            Add to reading list
+            Open review
             <Plus className="ml-1.5 size-3.5" />
+          </Button>
+        )}
+        {onDiscussInChat && !node.isCurrent && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => onDiscussInChat(node)}
+          >
+            <MessageSquare className="mr-1.5 size-3.5" />
+            Discuss
           </Button>
         )}
       </div>

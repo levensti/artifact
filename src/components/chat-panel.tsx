@@ -7,40 +7,113 @@ import {
   useRef,
   useState,
 } from "react";
-import { Send, Loader2, MessageSquare } from "lucide-react";
+import { Loader2, MessageSquare, Send } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
-import { getMessages, saveMessages, type ChatMessage } from "@/lib/reviews";
+import {
+  getMessages,
+  saveMessages,
+  type ChatAssistantBlock,
+  type ChatMessage,
+} from "@/lib/reviews";
+import { buildLearningContextSummary } from "@/lib/learning-context";
+import { stripLearningMapSentinel } from "@/lib/learning-sentinel";
+import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
+import type { ArxivSearchResult } from "@/lib/explore";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import ModelSelector from "./model-selector";
 import MarkdownMessage from "./markdown-message";
 import { useSettingsOpener } from "./settings-opener-context";
+import LearningEmbed from "./learning-embed";
 
 interface ChatPanelProps {
   reviewId: string;
+  arxivId: string;
+  paperTitle: string;
   paperContext: string;
   pendingSelection: string | null;
   onSelectionConsumed: () => void;
   hideHeader?: boolean;
+  /** Pre-filled prompt from cross-feature interactions (prerequisites, graph) */
+  externalPrompt?: string | null;
+  onExternalPromptConsumed?: () => void;
+  /** Lifted model state — when provided, ChatPanel uses these instead of internal state */
+  selectedModel?: Model | null;
+  onModelChange?: (model: Model | null) => void;
+}
+
+function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearchResult[] }) {
+  return (
+    <div className="mt-3 rounded-md border border-border bg-muted/15 p-3 space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        arXiv ({results.length} results) · <span className="text-foreground/80">{query}</span>
+      </p>
+      <ul className="space-y-2 max-h-[240px] overflow-y-auto">
+        {results.slice(0, 12).map((r) => (
+          <li key={r.arxivId} className="text-xs border border-border/60 rounded-md p-2 bg-background/80">
+            <a
+              href={`https://arxiv.org/abs/${r.arxivId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary hover:underline leading-snug block"
+            >
+              {r.title}
+            </a>
+            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{r.abstract}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function renderAssistantBlocks(blocks: ChatAssistantBlock[], ctx: { reviewId: string; arxivId: string; paperTitle: string; paperContext: string; selectedModel: Model | null }) {
+  return blocks.map((block, i) => {
+    if (block.type === "learning_embed") {
+      return (
+        <LearningEmbed
+          key={`${block.reviewId}-${i}`}
+          reviewId={block.reviewId}
+          arxivId={ctx.arxivId}
+          paperTitle={ctx.paperTitle}
+          paperContext={ctx.paperContext}
+          selectedModel={ctx.selectedModel}
+        />
+      );
+    }
+    return <ArxivHitsBlock key={i} query={block.query} results={block.results} />;
+  });
 }
 
 export default function ChatPanel({
   reviewId,
+  arxivId,
+  paperTitle,
   paperContext,
   pendingSelection,
   onSelectionConsumed,
   hideHeader,
+  externalPrompt,
+  onExternalPromptConsumed,
+  selectedModel: externalModel,
+  onModelChange,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
+  const [internalModel, setInternalModel] = useState<Model | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [keysVersion, setKeysVersion] = useState(0);
+  const [learningProgress, setLearningProgress] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const learningAbortRef = useRef<AbortController | null>(null);
+
+  // Use lifted model state if provided, otherwise use internal state
+  const selectedModel = externalModel !== undefined ? externalModel : internalModel;
+  const setSelectedModel = onModelChange ?? setInternalModel;
 
   useEffect(() => {
     setMessages(getMessages(reviewId));
@@ -62,7 +135,6 @@ export default function ChatPanel({
   const hasKeyForModel =
     selectedModel != null && !!getApiKey(selectedModel.provider);
 
-  /** Only pin to bottom if the user is already near the end (so they can scroll up while streaming). */
   useLayoutEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
@@ -71,7 +143,7 @@ export default function ChatPanel({
     if (dist <= thresholdPx) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, learningProgress]);
 
   useEffect(() => {
     if (pendingSelection) {
@@ -85,6 +157,15 @@ export default function ChatPanel({
     }
   }, [pendingSelection, onSelectionConsumed]);
 
+  // Handle external prompt from context zone (prerequisites "Ask about this", graph "Discuss")
+  useEffect(() => {
+    if (externalPrompt) {
+      setInput(externalPrompt);
+      onExternalPromptConsumed?.();
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  }, [externalPrompt, onExternalPromptConsumed]);
+
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -92,9 +173,10 @@ export default function ChatPanel({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
   }, [input]);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
-    if (!text || isStreaming || !selectedModel) return;
+  const submitChat = useCallback(
+    async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || isStreaming || learningProgress || !selectedModel) return;
 
     const apiKey = getApiKey(selectedModel.provider);
     if (!apiKey) {
@@ -116,15 +198,17 @@ export default function ChatPanel({
     };
 
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setInput("");
     setIsStreaming(true);
+
+    const historyForApi = [...messages, userMsg];
+    const learningCtx = buildLearningContextSummary(reviewId);
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, userMsg].map((m) => ({
+          messages: historyForApi.map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -132,6 +216,7 @@ export default function ChatPanel({
           provider: selectedModel.provider,
           apiKey,
           paperContext,
+          ...(learningCtx ? { learningContext: learningCtx } : {}),
         }),
       });
 
@@ -146,16 +231,77 @@ export default function ChatPanel({
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let streamed = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
+        streamed += chunk;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m,
           ),
         );
+      }
+
+      const { text: withoutSentinel, shouldRunLearningMap } =
+        stripLearningMapSentinel(streamed);
+      if (withoutSentinel !== streamed) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsg.id ? { ...m, content: withoutSentinel } : m,
+          ),
+        );
+      }
+
+      // When sentinel fires, run analysis and update context zone (no inline embed for new messages)
+      if (
+        shouldRunLearningMap &&
+        paperContext.trim() &&
+        selectedModel &&
+        hasKeyForModel
+      ) {
+        const apiKeyRun = getApiKey(selectedModel.provider);
+        if (apiKeyRun) {
+          learningAbortRef.current?.abort();
+          const controller = new AbortController();
+          learningAbortRef.current = controller;
+          setLearningProgress("Building learning map…");
+          try {
+            await runPaperExploreAnalysis({
+              reviewId,
+              arxivId,
+              paperTitle,
+              paperContext,
+              model: selectedModel,
+              apiKey: apiKeyRun,
+              signal: controller.signal,
+              onProgress: setLearningProgress,
+            });
+            // Instead of inline LearningEmbed, add a simple text message pointing to context zone
+            const followup: ChatMessage = {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content:
+                "I've updated the **Pre-reading** tab with recommended topics and related papers. You can mark items as read, generate study guides, and ask me about any topic.",
+              timestamp: new Date().toISOString(),
+            };
+            setMessages((prev) => [...prev, followup]);
+          } catch (runErr) {
+            if (runErr instanceof Error && runErr.name === "AbortError") {
+              /* ignore */
+            } else {
+              const msg =
+                runErr instanceof Error
+                  ? runErr.message
+                  : "Could not build learning map.";
+              setError(msg);
+            }
+          } finally {
+            setLearningProgress(null);
+          }
+        }
       }
     } catch (err) {
       const message =
@@ -169,12 +315,31 @@ export default function ChatPanel({
     } finally {
       setIsStreaming(false);
     }
-  }, [input, isStreaming, selectedModel, messages, paperContext]);
+  },
+    [
+      isStreaming,
+      learningProgress,
+      selectedModel,
+      messages,
+      paperContext,
+      reviewId,
+      arxivId,
+      paperTitle,
+      hasKeyForModel,
+    ],
+  );
+
+  const sendMessage = useCallback(async () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput("");
+    await submitChat(text);
+  }, [input, submitChat]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      void sendMessage();
     }
   };
 
@@ -183,9 +348,16 @@ export default function ChatPanel({
     else openSettings();
   };
 
+  const blockCtx = {
+    reviewId,
+    arxivId,
+    paperTitle,
+    paperContext,
+    selectedModel,
+  };
+
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
-      {/* Header */}
       {!hideHeader && (
         <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
           <span className="text-sm font-medium text-muted-foreground">
@@ -195,34 +367,41 @@ export default function ChatPanel({
         </div>
       )}
       {hideHeader && (
-        <div className="flex items-center justify-end px-3 py-2 border-b border-border shrink-0">
+        <div className="flex items-center justify-end px-3 py-1.5 shrink-0">
           <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
         </div>
       )}
 
-      {/* Messages — flex-1 + min-h-0 so this region scrolls instead of clipping */}
       <div
         ref={scrollAreaRef}
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
       >
         <div className="px-4 py-5 space-y-5">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-24 text-center gap-4 px-2">
-              <div className="size-11 rounded-md border border-border bg-muted/40 flex items-center justify-center">
+            <div className="flex flex-col items-center justify-center py-10 text-center gap-3 px-2">
+              <div className="size-10 rounded-md border border-border bg-muted/40 flex items-center justify-center">
                 <MessageSquare
                   className="text-muted-foreground"
-                  size={20}
+                  size={18}
                   strokeWidth={1.75}
                 />
               </div>
-              <div className="space-y-2 max-w-[260px]">
+              <div className="space-y-1.5 max-w-[min(100%,300px)]">
                 <p className="text-sm font-semibold tracking-tight text-foreground">
-                  Review thread
+                  Ask about this paper
                 </p>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Messages are saved with this paper. Select text in the PDF or
-                  type a question below.
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Questions, explanations, or deeper dives — ask anything about the paper.
                 </p>
+                {!selectedModel ? (
+                  <p className="text-[11px] text-muted-foreground/90 pt-1">
+                    Select a model to get started.
+                  </p>
+                ) : !hasKeyForModel ? (
+                  <p className="text-[11px] text-muted-foreground/90 pt-1">
+                    Add your API key in Settings to send messages.
+                  </p>
+                ) : null}
               </div>
             </div>
           )}
@@ -256,7 +435,17 @@ export default function ChatPanel({
                     </span>
                   </div>
                 ) : msg.role === "assistant" ? (
-                  <MarkdownMessage content={msg.content} />
+                  <>
+                    {msg.content ? (
+                      <MarkdownMessage
+                        content={stripLearningMapSentinel(msg.content).text}
+                      />
+                    ) : null}
+                    {/* Backward compat: render old learning_embed blocks inline */}
+                    {msg.blocks && msg.blocks.length > 0
+                      ? renderAssistantBlocks(msg.blocks, blockCtx)
+                      : null}
+                  </>
                 ) : (
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                 )}
@@ -265,6 +454,13 @@ export default function ChatPanel({
           ))}
         </div>
       </div>
+
+      {learningProgress ? (
+        <div className="mx-3 mb-1 flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+          <Loader2 className="size-3.5 animate-spin shrink-0" />
+          <span>{learningProgress}</span>
+        </div>
+      ) : null}
 
       {selectedModel && !hasKeyForModel && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-md border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -284,7 +480,6 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug space-y-2">
           <p>{error}</p>
@@ -300,7 +495,6 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* Input */}
       <div className="p-3 border-t border-border shrink-0 bg-muted/20">
         <div className="flex items-end gap-2 bg-card rounded-md border border-border focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-ring/40 transition-[box-shadow,border-color] duration-200">
           <textarea
@@ -308,7 +502,7 @@ export default function ChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about the paper"
+            placeholder="Ask about the paper…"
             rows={1}
             className="flex-1 bg-transparent px-3 py-2.5 text-sm resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
           />
@@ -317,7 +511,9 @@ export default function ChatPanel({
             size="icon"
             className="size-8 m-1 text-muted-foreground hover:text-primary"
             onClick={sendMessage}
-            disabled={!selectedModel || !input.trim() || isStreaming}
+            disabled={
+              !selectedModel || !input.trim() || isStreaming || !!learningProgress
+            }
             aria-label={
               !selectedModel
                 ? "Select a model to send"
@@ -333,10 +529,10 @@ export default function ChatPanel({
             )}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground/70 mt-2 text-center">
+        <p className="text-xs text-muted-foreground/70 mt-1.5 text-center leading-snug px-1">
           {selectedModel
-            ? `${selectedModel.label} · Shift+Enter for new line`
-            : "Select a model · Shift+Enter for new line"}
+            ? `${selectedModel.label} · Shift+Enter new line`
+            : "Select a model · Shift+Enter new line"}
         </p>
       </div>
     </div>
