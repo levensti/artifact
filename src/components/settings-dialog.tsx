@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { getApiKey, setApiKey, clearApiKey } from "@/lib/keys";
 import { PROVIDER_META, type Provider } from "@/lib/models";
 
@@ -177,9 +176,9 @@ export default function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="sm:max-w-lg max-h-[min(560px,85vh)] p-0 gap-0 flex flex-col overflow-hidden"
+        className="flex max-h-[min(560px,85vh)] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
       >
-        <DialogHeader className="px-4 pt-4 pb-3 border-b border-border/70 shrink-0 text-left">
+        <DialogHeader className="shrink-0 border-b border-border/70 px-4 pt-4 pb-3 text-left">
           <div className="flex items-center gap-2.5">
             <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
               <Key size={16} className="text-primary" />
@@ -194,11 +193,11 @@ export default function SettingsDialog({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 max-h-[min(420px,60vh)]">
-          <div className="px-4 py-3 space-y-3">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="space-y-3 px-4 py-3">
             <div className="flex items-start gap-2.5 rounded-lg border border-border/80 bg-muted/30 px-3 py-2.5">
-              <Shield size={14} className="text-muted-foreground mt-0.5 shrink-0" />
-              <p className="text-xs text-muted-foreground leading-relaxed">
+              <Shield size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+              <p className="text-xs leading-relaxed text-muted-foreground">
                 Values are stored in localStorage on this device. Self-host the
                 app if you need full control over where traffic goes.
               </p>
@@ -220,7 +219,7 @@ export default function SettingsDialog({
               docsUrl="https://openrouter.ai/keys"
             />
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
