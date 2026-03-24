@@ -4,9 +4,12 @@ import { cn } from "@/lib/utils";
 import type { Annotation } from "@/lib/annotations";
 import ChatPanel from "./chat-panel";
 import AnnotationList from "./annotation-list";
+import ExplorePanel from "./explore-panel";
 
 interface RightPanelProps {
   reviewId: string;
+  arxivId: string;
+  paperTitle: string;
   paperContext: string;
   pendingSelection: string | null;
   onSelectionConsumed: () => void;
@@ -16,12 +19,14 @@ interface RightPanelProps {
   onAnnotationsChanged: () => void;
   onHighlightClick: (pageNumber: number) => void;
   onAnnotationHover: (annotationId: string | null) => void;
-  activeTab: "qa" | "notes";
-  onTabChange: (tab: "qa" | "notes") => void;
+  activeTab: "qa" | "notes" | "explore";
+  onTabChange: (tab: "qa" | "notes" | "explore") => void;
 }
 
 export default function RightPanel({
   reviewId,
+  arxivId,
+  paperTitle,
   paperContext,
   pendingSelection,
   onSelectionConsumed,
@@ -55,6 +60,12 @@ export default function RightPanel({
             </span>
           )}
         </TabButton>
+        <TabButton
+          active={activeTab === "explore"}
+          onClick={() => onTabChange("explore")}
+        >
+          Explore
+        </TabButton>
       </div>
 
       {/* Tab content */}
@@ -67,7 +78,7 @@ export default function RightPanel({
             onSelectionConsumed={onSelectionConsumed}
             hideHeader
           />
-        ) : (
+        ) : activeTab === "notes" ? (
           <AnnotationList
             reviewId={reviewId}
             annotations={annotations}
@@ -76,6 +87,13 @@ export default function RightPanel({
             onAnnotationsChanged={onAnnotationsChanged}
             onHighlightClick={onHighlightClick}
             onAnnotationHover={onAnnotationHover}
+          />
+        ) : (
+          <ExplorePanel
+            reviewId={reviewId}
+            arxivId={arxivId}
+            paperTitle={paperTitle}
+            paperContext={paperContext}
           />
         )}
       </div>

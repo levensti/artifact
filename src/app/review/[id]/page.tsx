@@ -47,7 +47,7 @@ export default function ReviewPage() {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
   const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
-  const [rightTab, setRightTab] = useState<"qa" | "notes">("qa");
+  const [rightTab, setRightTab] = useState<"qa" | "notes" | "explore">("qa");
   const [tooltip, setTooltip] = useState<{ annotationId: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -195,6 +195,8 @@ export default function ReviewPage() {
         >
           <RightPanel
             reviewId={review.id}
+            arxivId={review.arxivId}
+            paperTitle={review.title}
             paperContext={paperText}
             pendingSelection={pendingSelection}
             onSelectionConsumed={() => setPendingSelection(null)}
