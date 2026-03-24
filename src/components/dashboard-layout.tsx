@@ -2,8 +2,9 @@
 
 /* Hydration: localStorage / sessionStorage after mount (avoids SSR/client mismatch). */
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import type { Provider } from "@/lib/models";
+import { cn } from "@/lib/utils";
 import Sidebar from "./sidebar";
 import SettingsDialog from "./settings-dialog";
 import { SettingsOpenerProvider } from "./settings-opener-context";
@@ -59,11 +60,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <SettingsOpenerProvider openSettings={openSettings}>
       <div className="flex h-full overflow-hidden">
-        <Sidebar
-          collapsed={collapsed}
-          onToggle={toggle}
-          onOpenSettings={() => openSettings()}
-        />
+        <Suspense
+          fallback={
+            <aside
+              className={cn(
+                "flex flex-col h-full bg-sidebar border-r border-sidebar-border shrink-0 overflow-hidden",
+                collapsed ? "w-0 border-r-0" : "w-[260px]",
+              )}
+              aria-hidden
+            />
+          }
+        >
+          <Sidebar
+            collapsed={collapsed}
+            onToggle={toggle}
+            onOpenSettings={() => openSettings()}
+          />
+        </Suspense>
         <main className="flex-1 min-w-0 overflow-hidden">{children}</main>
         <SettingsDialog
           open={settingsOpen}

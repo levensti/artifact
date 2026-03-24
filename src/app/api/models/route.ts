@@ -51,9 +51,9 @@ async function fetchOpenAIModels(apiKey: string): Promise<ModelOption[]> {
   return models
     .map((m: { id?: string }) => m.id)
     .filter((id: unknown): id is string => typeof id === "string")
-    .filter((id) => id.includes("gpt") || id.startsWith("o"))
-    .sort((a, b) => a.localeCompare(b))
-    .map((id) => ({ id, label: id }));
+    .filter((id: string) => id.includes("gpt") || id.startsWith("o"))
+    .sort((a: string, b: string) => a.localeCompare(b))
+    .map((id: string) => ({ id, label: id }));
 }
 
 async function fetchAnthropicModels(apiKey: string): Promise<ModelOption[]> {
@@ -72,7 +72,7 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelOption[]> {
       label: m.display_name || m.id || "",
     }))
     .filter((m: ModelOption) => !!m.id)
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .sort((a: ModelOption, b: ModelOption) => a.label.localeCompare(b.label));
 }
 
 async function fetchOpenRouterModels(apiKey: string): Promise<ModelOption[]> {
@@ -92,5 +92,5 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ModelOption[]> {
       label: m.name || m.id || "",
     }))
     .filter((m: ModelOption) => !!m.id)
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .sort((a: ModelOption, b: ModelOption) => a.label.localeCompare(b.label));
 }

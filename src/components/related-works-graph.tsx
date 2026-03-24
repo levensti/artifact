@@ -7,6 +7,7 @@ import {
   forceLink,
   forceManyBody,
   forceSimulation,
+  type SimulationNodeDatum,
 } from "d3-force";
 import { Expand, Minimize2 } from "lucide-react";
 import type { GraphData, GraphEdge, GraphNode, RelationshipType } from "@/lib/explore";
@@ -18,6 +19,9 @@ import { createOrGetReview } from "@/lib/reviews";
 import { useRouter } from "next/navigation";
 
 type PositionedNode = GraphNode & { x: number; y: number };
+
+/** d3-force requires node data to extend SimulationNodeDatum */
+type SimNode = GraphNode & SimulationNodeDatum;
 
 const EDGE_COLORS: Record<RelationshipType, string> = {
   "builds-upon": "#7c6d66",
@@ -41,22 +45,22 @@ function quadBezierMid(
 }
 
 function buildLayout(graph: GraphData, width: number, height: number) {
-  const layoutNodes = graph.nodes.map((n) => ({ ...n }));
+  const layoutNodes: SimNode[] = graph.nodes.map((n) => ({ ...n }));
   const links = graph.edges.map((e) => ({ ...e }));
   const hasAnchor = layoutNodes.some((n) => n.isCurrent);
 
-  const sim = forceSimulation(layoutNodes as Array<{ id: string } & GraphNode>)
+  const sim = forceSimulation(layoutNodes)
     .force(
       "link",
-      forceLink(links)
+      forceLink<SimNode, GraphEdge>(links)
         .id((d) => d.id)
         .distance(() => (hasAnchor ? 88 : 64)),
     )
-    .force("charge", forceManyBody().strength(hasAnchor ? -260 : -320))
-    .force("center", forceCenter(width / 2, height / 2))
+    .force("charge", forceManyBody<SimNode>().strength(hasAnchor ? -260 : -320))
+    .force("center", forceCenter<SimNode>(width / 2, height / 2))
     .force(
       "collide",
-      forceCollide<GraphNode>().radius((d) => (hasAnchor && d.isCurrent ? 44 : hasAnchor ? 22 : 24)),
+      forceCollide<SimNode>().radius((d) => (hasAnchor && d.isCurrent ? 44 : hasAnchor ? 22 : 24)),
     )
     .stop();
 
