@@ -10,7 +10,7 @@ export interface Model {
   modelId: string;
 }
 
-export const MODELS: Model[] = [
+export const FALLBACK_MODELS: Model[] = [
   {
     id: "claude-sonnet-4",
     label: "Claude Sonnet 4",
@@ -85,6 +85,6 @@ export const PROVIDER_META: Record<
 export function modelsGroupedByProvider(): { provider: Provider; models: Model[] }[] {
   return PROVIDER_ORDER.map((provider) => ({
     provider,
-    models: MODELS.filter((m) => m.provider === provider),
+    models: FALLBACK_MODELS.filter((m) => m.provider === provider),
   }));
 }
