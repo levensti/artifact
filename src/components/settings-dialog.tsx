@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Eye, EyeOff, Check, ExternalLink, Key, Shield } from "lucide-react";
 import {
   Dialog,
@@ -24,18 +24,10 @@ interface ProviderRowProps {
 
 function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
   const meta = PROVIDER_META[provider];
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(() => getApiKey(provider) ?? "");
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [hasKey, setHasKey] = useState(false);
-
-  useEffect(() => {
-    const existing = getApiKey(provider);
-    if (existing) {
-      setValue(existing);
-      setHasKey(true);
-    }
-  }, [provider]);
+  const [hasKey, setHasKey] = useState(() => !!getApiKey(provider));
 
   const handleSave = () => {
     const trimmed = value.trim();
