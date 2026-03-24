@@ -6,13 +6,15 @@ import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel from "@/components/right-panel";
+import type { RightTab } from "@/components/right-panel";
 import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
 import { getReview } from "@/lib/reviews";
 import { getAnnotations, addAnnotation } from "@/lib/annotations";
 import { arxivPdfUrl } from "@/lib/utils";
+import { useAnalysis } from "@/hooks/use-auto-analysis";
+import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
-import type { Annotation } from "@/lib/annotations";
 
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
   ssr: false,
@@ -42,13 +44,26 @@ export default function ReviewPage() {
   const [pendingSelection, setPendingSelection] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(440);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
+  const [rightTab, setRightTab] = useState<RightTab>("assistant");
 
   // Annotation state
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotationVersion, setAnnotationVersion] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const annotations = useMemo(() => (review ? getAnnotations(review.id) : []), [review, annotationVersion]);
+  const refreshAnnotations = useCallback(() => setAnnotationVersion((v) => v + 1), []);
   const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
   const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
-  const [rightTab, setRightTab] = useState<"qa" | "notes" | "explore">("qa");
   const [tooltip, setTooltip] = useState<{ annotationId: string; x: number; y: number } | null>(null);
+
+  // Paper analysis (explicitly triggered, not automatic)
+  const analysis = useAnalysis({
+    reviewId: review?.id ?? "",
+    arxivId: review?.arxivId ?? "",
+    paperTitle: review?.title ?? "",
+    paperContext: paperText,
+    selectedModel,
+  });
 
   useEffect(() => {
     if (!clientReady) return;
@@ -56,18 +71,6 @@ export default function ReviewPage() {
       router.push("/");
     }
   }, [clientReady, params.id, router]);
-
-  useEffect(() => {
-    if (review) {
-      setAnnotations(getAnnotations(review.id));
-    }
-  }, [review]);
-
-  const refreshAnnotations = useCallback(() => {
-    if (review) {
-      setAnnotations(getAnnotations(review.id));
-    }
-  }, [review]);
 
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
     setSelectionInfo(info);
@@ -82,7 +85,7 @@ export default function ReviewPage() {
     if (selectionInfo) {
       setPendingSelection(selectionInfo.text);
       setSelectionInfo(null);
-      setRightTab("qa");
+      setRightTab("assistant");
       window.getSelection()?.removeAllRanges();
     }
   }, [selectionInfo]);
@@ -96,15 +99,14 @@ export default function ReviewPage() {
         note: "",
         thread: [],
       });
-      setAnnotations(getAnnotations(review.id));
+      refreshAnnotations();
       setActiveAnnotationId(ann.id);
       setRightTab("notes");
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
     }
-  }, [selectionInfo, review]);
+  }, [selectionInfo, review, refreshAnnotations]);
 
-  // Click highlight on PDF → show tooltip
   const handleAnnotationClick = useCallback(
     (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => {
       setTooltip({ annotationId, x: info.highlightRight, y: info.clickY });
@@ -135,7 +137,8 @@ export default function ReviewPage() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = window.innerWidth - e.clientX;
-      setPanelWidth(Math.max(340, Math.min(800, newWidth)));
+      const minWidth = rightTab === "assistant" ? 380 : 340;
+      setPanelWidth(Math.max(minWidth, Math.min(980, newWidth)));
     };
 
     const handleMouseUp = () => {
@@ -148,7 +151,7 @@ export default function ReviewPage() {
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, []);
+  }, [rightTab]);
 
   const tooltipAnnotation = tooltip
     ? annotations.find((a) => a.id === tooltip.annotationId) ?? null
@@ -206,8 +209,20 @@ export default function ReviewPage() {
             onAnnotationsChanged={refreshAnnotations}
             onHighlightClick={handleHighlightClick}
             onAnnotationHover={setHoveredAnnotationId}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+            analysisStatus={analysis.status}
+            analysisProgress={analysis.progress}
+            analysisError={analysis.error}
+            canRunAnalysis={analysis.canRun}
+            onTriggerAnalysis={analysis.trigger}
             activeTab={rightTab}
-            onTabChange={setRightTab}
+            onTabChange={(tab) => {
+              setRightTab(tab);
+              if (tab === "assistant") {
+                setPanelWidth((prev) => Math.max(prev, 420));
+              }
+            }}
           />
         </div>
       </div>

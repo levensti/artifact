@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Plus,
   FileText,
@@ -9,6 +9,10 @@ import {
   PanelLeftClose,
   PanelLeft,
   BookOpen,
+  Compass,
+  Brain,
+  Home,
+  Share2,
 } from "lucide-react";
 import {
   getReviews,
@@ -57,6 +61,7 @@ export default function Sidebar({
   const [showNewReview, setShowNewReview] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const handleReviewCreated = (reviewId: string) => {
     setShowNewReview(false);
@@ -142,6 +147,37 @@ export default function Sidebar({
         </div>
 
         <ScrollArea className="flex-1 px-2 py-2">
+          <div className="mb-4 space-y-0.5">
+            <NavItem
+              label="Home"
+              icon={<Home size={13} className="shrink-0 opacity-50" />}
+              active={pathname === "/"}
+              onClick={() => router.push("/")}
+            />
+            <NavItem
+              label="Discover"
+              icon={<Compass size={13} className="shrink-0 opacity-50" />}
+              active={
+                pathname === "/discover" &&
+                searchParams.get("tab") !== "knowledge" &&
+                searchParams.get("tab") !== "library"
+              }
+              onClick={() => router.push("/discover")}
+            />
+            <NavItem
+              label="Knowledge map"
+              icon={<Share2 size={13} className="shrink-0 opacity-50" />}
+              active={pathname === "/discover" && searchParams.get("tab") === "knowledge"}
+              onClick={() => router.push("/discover?tab=knowledge")}
+            />
+            <NavItem
+              label="Prerequisite Library"
+              icon={<Brain size={13} className="shrink-0 opacity-50" />}
+              active={pathname === "/discover" && searchParams.get("tab") === "library"}
+              onClick={() => router.push("/discover?tab=library")}
+            />
+          </div>
+
           {grouped.length === 0 && (
             <div className="px-3 py-10 text-center">
               <FileText
@@ -221,5 +257,33 @@ export default function Sidebar({
         onCreated={handleReviewCreated}
       />
     </>
+  );
+}
+
+function NavItem({
+  label,
+  icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-sm transition-colors duration-150",
+        active
+          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+      )}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
   );
 }

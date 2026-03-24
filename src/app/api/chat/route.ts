@@ -11,6 +11,8 @@ interface ChatRequest {
   provider: "anthropic" | "openai" | "openrouter";
   apiKey: string;
   paperContext?: string;
+  /** Optional summary of prerequisites / related-work progress for this review */
+  learningContext?: string;
 }
 
 const SYSTEM_PROMPT = `You are Paper Copilot, an expert AI research assistant helping a researcher understand an academic paper. You have deep expertise across machine learning, computer science, mathematics, statistics, and related fields.
@@ -23,7 +25,17 @@ Your role:
 - Be concise but thorough — researchers value density of insight over verbosity
 - Use LaTeX notation for math when appropriate (wrapped in $ or $$)
 
-When the user selects text from the paper and asks about it, focus your answer on that specific passage while drawing on the full paper context as needed.`;
+When the user selects text from the paper and asks about it, focus your answer on that specific passage while drawing on the full paper context as needed.
+
+Pre-reading map (hidden UI): There is a "Pre-reading" panel in the sidebar where users can trigger analysis. When the user asks about recommended reading, background topics, or a reading roadmap for this paper—and a structured checklist would genuinely help—finish with friendly advice, then on its **own final line** output exactly this token (nothing else on that line, no markdown fence):
+[[paper-copilot:learning-map]]
+The client will run an automated pipeline (find recommended pre-reading topics, derive arXiv keywords, fetch candidates, classify relationships) and update the Pre-reading panel. Omit the token for pure explanations, narrow factual answers, or when <learning_state> already covers what they asked unless they clearly want a fresh analysis. If the paper context is empty, do not emit the token—say they should wait for PDF text. Never claim you personally searched arXiv; the app pipeline does retrieval. When <learning_state> is present, use it faithfully; do not invent checklist items or graph nodes. Note: these are *recommendations*, not hard prerequisites—frame them as "helpful to read" rather than "required".`;
+
+function learningSection(learningContext: string | undefined): string {
+  const t = learningContext?.trim();
+  if (!t) return "";
+  return `\n\n<learning_state>\n${t}\n</learning_state>`;
+}
 
 function jsonError(message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
@@ -42,7 +54,7 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const { messages, model, provider, apiKey, paperContext } = body;
+  const { messages, model, provider, apiKey, paperContext, learningContext } = body;
 
   if (!apiKey || typeof apiKey !== "string") {
     return jsonError("API key is required. Please add your key in Settings.", 401);
@@ -62,14 +74,22 @@ export async function POST(req: NextRequest) {
 
   try {
     if (provider === "anthropic") {
-      return await streamAnthropic(messages, model, apiKey, paperContext);
+      return await streamAnthropic(messages, model, apiKey, paperContext, learningContext);
     } else {
       // OpenAI and OpenRouter use the same API format
       const baseUrl =
         provider === "openrouter"
           ? "https://openrouter.ai/api/v1/chat/completions"
           : "https://api.openai.com/v1/chat/completions";
-      return await streamOpenAICompatible(messages, model, apiKey, paperContext, baseUrl, provider);
+      return await streamOpenAICompatible(
+        messages,
+        model,
+        apiKey,
+        paperContext,
+        baseUrl,
+        provider,
+        learningContext,
+      );
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -82,10 +102,12 @@ async function streamAnthropic(
   model: string,
   apiKey: string,
   paperContext?: string,
+  learningContext?: string,
 ) {
+  const learn = learningSection(learningContext);
   const systemContent = paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
-    : SYSTEM_PROMPT;
+    ? `${SYSTEM_PROMPT}${learn}\n\n<paper>\n${paperContext}\n</paper>`
+    : `${SYSTEM_PROMPT}${learn}`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -137,10 +159,12 @@ async function streamOpenAICompatible(
   paperContext: string | undefined,
   baseUrl: string,
   provider: string,
+  learningContext?: string,
 ) {
+  const learn = learningSection(learningContext);
   const systemContent = paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
-    : SYSTEM_PROMPT;
+    ? `${SYSTEM_PROMPT}${learn}\n\n<paper>\n${paperContext}\n</paper>`
+    : `${SYSTEM_PROMPT}${learn}`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

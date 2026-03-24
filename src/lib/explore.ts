@@ -14,6 +14,8 @@ export interface Prerequisite {
   description: string;
   difficulty: "foundational" | "intermediate" | "advanced";
   explanation?: string;
+  /** ISO timestamp when the user marked this prerequisite as addressed */
+  completedAt?: string;
 }
 
 export interface PrerequisitesData {
@@ -29,6 +31,16 @@ export type RelationshipType =
   | "prerequisite"
   | "contrasts-with"
   | "surveys";
+
+/** Short labels for graph edges / legend */
+export const RELATIONSHIP_SHORT_LABEL: Record<RelationshipType, string> = {
+  prerequisite: "Prereq",
+  "builds-upon": "Builds on",
+  extends: "Follow-on",
+  "similar-approach": "Similar",
+  "contrasts-with": "Contrasts",
+  surveys: "Survey",
+};
 
 export interface GraphNode {
   id: string;
@@ -54,6 +66,102 @@ export interface GraphData {
   keywords: string[];
   generatedAt: string;
   modelUsed: string;
+  /** Review session that produced this map (for merged graph provenance) */
+  anchorReviewId?: string;
+}
+
+/** Cross-review merged literature graph (nodes keyed by arXiv id). */
+export interface GlobalGraphData {
+  nodes: GraphNode[];
+  edges: Array<
+    GraphEdge & {
+      sourceReviewIds: string[];
+    }
+  >;
+  updatedAt: string;
+}
+
+const GLOBAL_GRAPH_KEY = "paper-copilot-knowledge-graph";
+
+function edgeKeyDirected(e: GraphEdge): string {
+  return `${e.source}→${e.target}:${e.relationship}`;
+}
+
+/** Merge a session graph into the persistent knowledge map (all Explore sessions). */
+export function mergeSessionGraphIntoGlobal(anchorReviewId: string, graph: GraphData): void {
+  if (typeof window === "undefined") return;
+  const existing =
+    safeRead<GlobalGraphData>(GLOBAL_GRAPH_KEY) ??
+    ({
+      nodes: [],
+      edges: [],
+      updatedAt: new Date().toISOString(),
+    } satisfies GlobalGraphData);
+
+  const nodeByArxiv = new Map<string, GraphNode>();
+  for (const n of existing.nodes) {
+    nodeByArxiv.set(n.arxivId, { ...n, id: n.arxivId, isCurrent: false });
+  }
+
+  for (const n of graph.nodes) {
+    const merged: GraphNode = {
+      ...n,
+      id: n.arxivId,
+      isCurrent: false,
+    };
+    const prev = nodeByArxiv.get(n.arxivId);
+    if (
+      !prev ||
+      (merged.abstract?.length ?? 0) > (prev.abstract?.length ?? 0) ||
+      (merged.title?.length ?? 0) > (prev.title?.length ?? 0)
+    ) {
+      nodeByArxiv.set(n.arxivId, merged);
+    }
+  }
+
+  const edgeMap = new Map<string, GlobalGraphData["edges"][number]>();
+  for (const e of existing.edges) {
+    edgeMap.set(edgeKeyDirected(e), e);
+  }
+
+  for (const e of graph.edges) {
+    const k = edgeKeyDirected(e);
+    const prev = edgeMap.get(k);
+    if (!prev) {
+      edgeMap.set(k, { ...e, sourceReviewIds: [anchorReviewId] });
+    } else if (!prev.sourceReviewIds.includes(anchorReviewId)) {
+      edgeMap.set(k, {
+        ...prev,
+        reasoning: prev.reasoning.length >= e.reasoning.length ? prev.reasoning : e.reasoning,
+        sourceReviewIds: [...prev.sourceReviewIds, anchorReviewId],
+      });
+    }
+  }
+
+  const next: GlobalGraphData = {
+    nodes: [...nodeByArxiv.values()],
+    edges: [...edgeMap.values()],
+    updatedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(GLOBAL_GRAPH_KEY, JSON.stringify(next));
+  notifyExploreUpdated();
+}
+
+export function getGlobalGraphData(): GlobalGraphData | null {
+  return safeRead<GlobalGraphData>(GLOBAL_GRAPH_KEY);
+}
+
+export function globalGraphToGraphData(): GraphData | null {
+  const g = getGlobalGraphData();
+  if (!g || g.nodes.length === 0) return null;
+  return {
+    nodes: g.nodes,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    edges: g.edges.map(({ sourceReviewIds, ...e }) => e),
+    keywords: [],
+    generatedAt: g.updatedAt,
+    modelUsed: "merged",
+  };
 }
 
 export interface ArxivSearchResult {
@@ -116,5 +224,11 @@ export function clearExploreData(reviewId: string): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(`${PREREQ_KEY_PREFIX}${reviewId}`);
   localStorage.removeItem(`${GRAPH_KEY_PREFIX}${reviewId}`);
+  notifyExploreUpdated();
+}
+
+export function clearGlobalKnowledgeGraph(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(GLOBAL_GRAPH_KEY);
   notifyExploreUpdated();
 }
