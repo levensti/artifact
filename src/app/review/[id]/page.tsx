@@ -5,10 +5,14 @@ import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
-import ChatPanel from "@/components/chat-panel";
+import RightPanel from "@/components/right-panel";
 import SelectionPopover from "@/components/selection-popover";
+import NoteTooltip from "@/components/note-tooltip";
 import { getReview } from "@/lib/reviews";
+import { getAnnotations, addAnnotation } from "@/lib/annotations";
 import { arxivPdfUrl } from "@/lib/utils";
+import type { TextSelectionInfo } from "@/components/pdf-viewer";
+import type { Annotation } from "@/lib/annotations";
 
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
   ssr: false,
@@ -23,12 +27,9 @@ const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
 export default function ReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  /** Avoid hydration mismatch: localStorage is empty on the server. */
   const [clientReady, setClientReady] = useState(false);
   useEffect(() => {
-    queueMicrotask(() => {
-      setClientReady(true);
-    });
+    queueMicrotask(() => setClientReady(true));
   }, []);
 
   const review = useMemo(() => {
@@ -37,11 +38,17 @@ export default function ReviewPage() {
   }, [clientReady, params.id]);
 
   const [paperText, setPaperText] = useState("");
-  const [selectedText, setSelectedText] = useState<string | null>(null);
-  const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
+  const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(null);
   const [pendingSelection, setPendingSelection] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(440);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Annotation state
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
+  const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
+  const [rightTab, setRightTab] = useState<"qa" | "notes">("qa");
+  const [tooltip, setTooltip] = useState<{ annotationId: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!clientReady) return;
@@ -50,24 +57,76 @@ export default function ReviewPage() {
     }
   }, [clientReady, params.id, router]);
 
-  const handleTextSelected = useCallback((text: string, rect: DOMRect) => {
-    setSelectedText(text);
-    setSelectionRect(rect);
+  useEffect(() => {
+    if (review) {
+      setAnnotations(getAnnotations(review.id));
+    }
+  }, [review]);
+
+  const refreshAnnotations = useCallback(() => {
+    if (review) {
+      setAnnotations(getAnnotations(review.id));
+    }
+  }, [review]);
+
+  const handleTextSelected = useCallback((info: TextSelectionInfo) => {
+    setSelectionInfo(info);
+    setTooltip(null);
   }, []);
 
   const handleSelectionCleared = useCallback(() => {
-    setSelectedText(null);
-    setSelectionRect(null);
+    setSelectionInfo(null);
   }, []);
 
   const handleAskAboutSelection = useCallback(() => {
-    if (selectedText) {
-      setPendingSelection(selectedText);
-      setSelectedText(null);
-      setSelectionRect(null);
+    if (selectionInfo) {
+      setPendingSelection(selectionInfo.text);
+      setSelectionInfo(null);
+      setRightTab("qa");
       window.getSelection()?.removeAllRanges();
     }
-  }, [selectedText]);
+  }, [selectionInfo]);
+
+  const handleAnnotateSelection = useCallback(() => {
+    if (selectionInfo && review) {
+      const ann = addAnnotation(review.id, {
+        pageNumber: selectionInfo.pageNumber,
+        highlightText: selectionInfo.text,
+        anchorRects: selectionInfo.anchorRects,
+        note: "",
+        thread: [],
+      });
+      setAnnotations(getAnnotations(review.id));
+      setActiveAnnotationId(ann.id);
+      setRightTab("notes");
+      setSelectionInfo(null);
+      window.getSelection()?.removeAllRanges();
+    }
+  }, [selectionInfo, review]);
+
+  // Click highlight on PDF → show tooltip
+  const handleAnnotationClick = useCallback(
+    (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => {
+      setTooltip({ annotationId, x: info.highlightRight, y: info.clickY });
+      setHoveredAnnotationId(annotationId);
+    },
+    [],
+  );
+
+  const handleTooltipOpenInNotes = useCallback(() => {
+    if (tooltip) {
+      setActiveAnnotationId(tooltip.annotationId);
+      setRightTab("notes");
+      setTooltip(null);
+    }
+  }, [tooltip]);
+
+  const handleHighlightClick = useCallback((pageNumber: number) => {
+    const container = document.querySelector("[data-pdf-container]");
+    if (!container) return;
+    const target = container.querySelector(`[data-page-number="${pageNumber}"]`);
+    target?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   const handleMouseDown = useCallback(() => {
     setIsDragging(true);
@@ -91,6 +150,10 @@ export default function ReviewPage() {
     document.addEventListener("mouseup", handleMouseUp);
   }, []);
 
+  const tooltipAnnotation = tooltip
+    ? annotations.find((a) => a.id === tooltip.annotationId) ?? null
+    : null;
+
   if (!clientReady || !review) {
     return (
       <DashboardLayout>
@@ -110,6 +173,10 @@ export default function ReviewPage() {
             onTextExtracted={setPaperText}
             onTextSelected={handleTextSelected}
             onSelectionCleared={handleSelectionCleared}
+            annotations={annotations}
+            activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
+            hoveredAnnotationId={hoveredAnnotationId}
+            onAnnotationClick={handleAnnotationClick}
           />
         </div>
 
@@ -126,17 +193,41 @@ export default function ReviewPage() {
           className="flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background"
           style={{ width: `${panelWidth}px` }}
         >
-          <ChatPanel
+          <RightPanel
             reviewId={review.id}
             paperContext={paperText}
             pendingSelection={pendingSelection}
             onSelectionConsumed={() => setPendingSelection(null)}
+            annotations={annotations}
+            activeAnnotationId={activeAnnotationId}
+            hoveredAnnotationId={hoveredAnnotationId}
+            onAnnotationsChanged={refreshAnnotations}
+            onHighlightClick={handleHighlightClick}
+            onAnnotationHover={setHoveredAnnotationId}
+            activeTab={rightTab}
+            onTabChange={setRightTab}
           />
         </div>
       </div>
 
-      {selectedText && selectionRect && (
-        <SelectionPopover rect={selectionRect} onAsk={handleAskAboutSelection} />
+      {selectionInfo && (
+        <SelectionPopover
+          rect={selectionInfo.rect}
+          onAsk={handleAskAboutSelection}
+          onAnnotate={handleAnnotateSelection}
+        />
+      )}
+
+      {tooltipAnnotation && tooltip && (
+        <NoteTooltip
+          annotation={tooltipAnnotation}
+          position={{ x: tooltip.x, y: tooltip.y }}
+          onClose={() => {
+            setTooltip(null);
+            setHoveredAnnotationId(null);
+          }}
+          onOpenInNotes={handleTooltipOpenInNotes}
+        />
       )}
     </DashboardLayout>
   );

@@ -1,14 +1,15 @@
 "use client";
 
-import { MessageSquarePlus } from "lucide-react";
+import { MessageSquarePlus, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface SelectionPopoverProps {
   rect: DOMRect;
   onAsk: () => void;
+  onAnnotate: () => void;
 }
 
-export default function SelectionPopover({ rect, onAsk }: SelectionPopoverProps) {
+export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionPopoverProps) {
   const left = rect.left + rect.width / 2;
   const top = Math.min(rect.bottom + 8, window.innerHeight - 50);
 
@@ -21,10 +22,27 @@ export default function SelectionPopover({ rect, onAsk }: SelectionPopoverProps)
         transform: "translateX(-50%)",
       }}
     >
-      <Button size="sm" onClick={onAsk} className="gap-1.5 shadow-md shadow-stone-900/15 text-xs h-8 rounded-lg px-3">
-        <MessageSquarePlus size={12} />
-        Ask about this
-      </Button>
+      <div className="flex items-center gap-1 bg-card border border-border rounded-lg shadow-md shadow-stone-900/15 p-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onAsk}
+          className="gap-1.5 text-xs h-7 rounded-md px-2.5"
+        >
+          <MessageSquarePlus size={12} />
+          Ask AI
+        </Button>
+        <div className="w-px h-4 bg-border" />
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onAnnotate}
+          className="gap-1.5 text-xs h-7 rounded-md px-2.5"
+        >
+          <StickyNote size={12} />
+          Add note
+        </Button>
+      </div>
     </div>
   );
 }

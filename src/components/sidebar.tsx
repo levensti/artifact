@@ -110,7 +110,7 @@ export default function Sidebar({
           collapsed ? "w-0 border-r-0" : "w-[260px]",
         )}
       >
-        <div className="flex items-center justify-between px-3 h-[52px] shrink-0 border-b border-sidebar-border">
+        <div className="flex items-center justify-between px-3 h-12 shrink-0 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="size-7 rounded-lg bg-primary/12 ring-1 ring-primary/10 flex items-center justify-center shrink-0">
               <BookOpen size={14} className="text-primary" strokeWidth={1.75} />
@@ -119,26 +119,26 @@ export default function Sidebar({
               Paper Copilot
             </span>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 text-muted-foreground"
-            onClick={onToggle}
-            title="Collapse sidebar"
-          >
-            <PanelLeftClose size={14} />
-          </Button>
-        </div>
-
-        <div className="px-3 pt-3 pb-1 shrink-0">
-          <Button
-            variant="outline"
-            className="w-full justify-start gap-2 h-9 text-sm font-normal text-muted-foreground hover:text-foreground"
-            onClick={() => setShowNewReview(true)}
-          >
-            <Plus size={14} />
-            New review
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground"
+              onClick={() => setShowNewReview(true)}
+              title="New review"
+            >
+              <Plus size={14} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground"
+              onClick={onToggle}
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose size={14} />
+            </Button>
+          </div>
         </div>
 
         <ScrollArea className="flex-1 px-2 py-2">

@@ -7,14 +7,26 @@ import "react-pdf/dist/Page/TextLayer.css";
 import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, Loader2, FileWarning } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { Annotation } from "@/lib/annotations";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+export interface TextSelectionInfo {
+  text: string;
+  rect: DOMRect;
+  pageNumber: number;
+  anchorRects: { x: number; y: number; w: number; h: number }[];
+}
 
 interface PdfViewerProps {
   url: string;
   onTextExtracted: (text: string) => void;
-  onTextSelected: (text: string, rect: DOMRect) => void;
+  onTextSelected: (info: TextSelectionInfo) => void;
   onSelectionCleared: () => void;
+  annotations?: Annotation[];
+  activeAnnotationId?: string | null;
+  hoveredAnnotationId?: string | null;
+  onAnnotationClick?: (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => void;
 }
 
 export default function PdfViewer({
@@ -22,6 +34,10 @@ export default function PdfViewer({
   onTextExtracted,
   onTextSelected,
   onSelectionCleared,
+  annotations = [],
+  activeAnnotationId,
+  hoveredAnnotationId,
+  onAnnotationClick,
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -67,21 +83,76 @@ export default function PdfViewer({
     const container = containerRef.current;
     if (!container) return;
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       const selection = window.getSelection();
       const text = selection?.toString().trim();
       if (selection && text && text.length > 0 && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
-        onTextSelected(text, rect);
+
+        // Find the page element containing the selection
+        let node: Node | null = range.startContainer;
+        let pageEl: Element | null = null;
+        while (node) {
+          if (node instanceof Element) {
+            const pn = node.closest("[data-page-number]");
+            if (pn) { pageEl = pn; break; }
+          }
+          node = node.parentNode;
+        }
+        const pageNumber = pageEl ? parseInt(pageEl.getAttribute("data-page-number") || "1") : 1;
+
+        // Compute normalized rects relative to the page element
+        const anchorRects: { x: number; y: number; w: number; h: number }[] = [];
+        if (pageEl) {
+          const pageRect = pageEl.getBoundingClientRect();
+          const rects = range.getClientRects();
+          for (let i = 0; i < rects.length; i++) {
+            const r = rects[i];
+            anchorRects.push({
+              x: (r.left - pageRect.left) / pageRect.width,
+              y: (r.top - pageRect.top) / pageRect.height,
+              w: r.width / pageRect.width,
+              h: r.height / pageRect.height,
+            });
+          }
+        }
+
+        onTextSelected({ text, rect, pageNumber, anchorRects });
       } else {
         onSelectionCleared();
+
+        // Check if the click landed on an annotation highlight
+        if (onAnnotationClick) {
+          const target = e.target as Element;
+          const pageEl = target.closest("[data-page-number]");
+          if (pageEl) {
+            const pageRect = pageEl.getBoundingClientRect();
+            const nx = (e.clientX - pageRect.left) / pageRect.width;
+            const ny = (e.clientY - pageRect.top) / pageRect.height;
+            const pageNum = parseInt(pageEl.getAttribute("data-page-number") || "0");
+
+            for (const ann of annotations) {
+              if (ann.pageNumber !== pageNum) continue;
+              for (const r of ann.anchorRects) {
+                if (nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h) {
+                  onAnnotationClick(ann.id, {
+                    clickY: e.clientY,
+                    highlightRight: pageRect.left + (r.x + r.w) * pageRect.width,
+                    pageRight: pageRect.right,
+                  });
+                  return;
+                }
+              }
+            }
+          }
+        }
       }
     };
 
     container.addEventListener("mouseup", handleMouseUp);
     return () => container.removeEventListener("mouseup", handleMouseUp);
-  }, [onTextSelected, onSelectionCleared]);
+  }, [onTextSelected, onSelectionCleared, annotations, onAnnotationClick]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -177,7 +248,7 @@ export default function PdfViewer({
       </div>
 
       {/* PDF content */}
-      <div ref={containerRef} className="flex-1 overflow-auto">
+      <div ref={containerRef} data-pdf-container className="flex-1 overflow-auto">
         {loading && !loadError && (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="animate-spin text-primary" size={28} />
@@ -200,15 +271,39 @@ export default function PdfViewer({
           loading={null}
           className="flex flex-col items-center gap-2 py-4"
         >
-          {Array.from({ length: numPages }, (_, i) => (
-            <Page
-              key={i + 1}
-              pageNumber={i + 1}
-              scale={scale}
-              className="shadow-md"
-              loading={null}
-            />
-          ))}
+          {Array.from({ length: numPages }, (_, i) => {
+            const pageNum = i + 1;
+            const pageAnnotations = annotations.filter((a) => a.pageNumber === pageNum);
+            return (
+              <div key={pageNum} className="relative">
+                <Page
+                  pageNumber={pageNum}
+                  scale={scale}
+                  className="shadow-md"
+                  loading={null}
+                />
+                {pageAnnotations.map((ann) => {
+                  const isActive = ann.id === activeAnnotationId;
+                  const isHovered = ann.id === hoveredAnnotationId;
+                  const opacity = isActive ? 32 : isHovered ? 25 : 14;
+                  return ann.anchorRects.map((r, ri) => (
+                    <div
+                      key={`hl-${ann.id}-${ri}`}
+                      className="absolute pointer-events-none transition-[background-color] duration-150"
+                      style={{
+                        left: `${r.x * 100}%`,
+                        top: `${r.y * 100}%`,
+                        width: `${r.w * 100}%`,
+                        height: `${r.h * 100}%`,
+                        backgroundColor: `color-mix(in srgb, var(--primary) ${opacity}%, transparent)`,
+                        zIndex: 1,
+                      }}
+                    />
+                  ));
+                })}
+              </div>
+            );
+          })}
         </Document>
       </div>
     </div>
