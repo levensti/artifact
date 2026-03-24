@@ -123,7 +123,7 @@ export default function ReviewPage() {
         </div>
 
         <div
-          className="shrink-0 overflow-hidden border-l border-border/80 bg-background"
+          className="flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background"
           style={{ width: `${panelWidth}px` }}
         >
           <ChatPanel

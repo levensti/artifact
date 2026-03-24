@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,12 +27,12 @@ export default function NewReviewDialog({
   onCreated,
 }: NewReviewDialogProps) {
   const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const arxivId = extractArxivId(url);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -48,20 +48,38 @@ export default function NewReviewDialog({
       return;
     }
 
-    const reviewTitle = title.trim() || `arXiv:${arxivId}`;
-    const review = createReview(arxivId, reviewTitle);
-    window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
+    setLoading(true);
+    try {
+      let paperTitle = `arXiv:${arxivId}`;
+      try {
+        const res = await fetch(
+          `/api/arxiv-metadata?id=${encodeURIComponent(arxivId)}`,
+        );
+        if (res.ok) {
+          const data: { title?: string | null } = await res.json();
+          if (typeof data.title === "string" && data.title.trim()) {
+            paperTitle = data.title.trim();
+          }
+        }
+      } catch {
+        /* keep fallback */
+      }
 
-    setUrl("");
-    setTitle("");
-    onCreated(review.id);
+      const review = createReview(arxivId, paperTitle);
+      window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
+
+      setUrl("");
+      onCreated(review.id);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setUrl("");
-      setTitle("");
       setError(null);
+      setLoading(false);
       onClose();
     }
   };
@@ -72,8 +90,8 @@ export default function NewReviewDialog({
         <DialogHeader>
           <DialogTitle>New paper review</DialogTitle>
           <DialogDescription>
-            Paste an arXiv URL. The review is stored locally with the PDF link
-            and your Q&amp;A thread.
+            Paste an arXiv URL. The sidebar title is taken from the paper&apos;s
+            arXiv entry when available.
           </DialogDescription>
         </DialogHeader>
 
@@ -91,6 +109,7 @@ export default function NewReviewDialog({
                 }}
                 placeholder="https://arxiv.org/abs/2602.00277"
                 autoFocus
+                disabled={loading}
               />
               {arxivId && (
                 <p className="text-xs text-primary font-medium">
@@ -99,27 +118,29 @@ export default function NewReviewDialog({
               )}
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                Display name{" "}
-                <span className="font-normal opacity-60">(optional)</span>
-              </label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Attention Is All You Need"
-              />
-            </div>
           </div>
 
           <DialogFooter className="pt-2">
-            <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => handleOpenChange(false)}
+              disabled={loading}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={!url.trim()}>
-              Start review
-              <ArrowRight size={14} />
+            <Button type="submit" disabled={!url.trim() || loading}>
+              {loading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Fetching paper…
+                </>
+              ) : (
+                <>
+                  Start review
+                  <ArrowRight size={14} />
+                </>
+              )}
             </Button>
           </DialogFooter>
         </form>

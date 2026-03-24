@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Send, Loader2, MessageSquare } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import { getMessages, saveMessages, type ChatMessage } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import ModelSelector from "./model-selector";
 import MarkdownMessage from "./markdown-message";
 import { useSettingsOpener } from "./settings-opener-context";
@@ -32,7 +31,7 @@ export default function ChatPanel({
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [keysVersion, setKeysVersion] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -55,13 +54,16 @@ export default function ChatPanel({
   const hasKeyForModel =
     selectedModel != null && !!getApiKey(selectedModel.provider);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+  /** Only pin to bottom if the user is already near the end (so they can scroll up while streaming). */
+  useLayoutEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const thresholdPx = 120;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (dist <= thresholdPx) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (pendingSelection) {
@@ -177,7 +179,7 @@ export default function ChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full min-h-0 bg-background">
       {/* Header */}
       <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
         <span className="text-sm font-medium text-muted-foreground">
@@ -186,8 +188,11 @@ export default function ChatPanel({
         <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
       </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1">
+      {/* Messages — flex-1 + min-h-0 so this region scrolls instead of clipping */}
+      <div
+        ref={scrollAreaRef}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+      >
         <div className="px-4 py-5 space-y-5">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-24 text-center gap-4 px-2">
@@ -239,9 +244,8 @@ export default function ChatPanel({
               </div>
             </div>
           ))}
-          <div ref={messagesEndRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       {selectedModel && !hasKeyForModel && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
