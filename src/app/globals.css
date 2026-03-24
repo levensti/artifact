@@ -4,44 +4,44 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* White pastel base + single accent (--primary emerald). */
+/* Warm palette — Amber & Walnut */
 
 :root {
   --radius: 0.625rem;
 
-  --background: #fafafa;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --popover: #ffffff;
-  --popover-foreground: #18181b;
+  --background: #FEFCE8;
+  --foreground: #422006;
+  --card: #FFFEF5;
+  --card-foreground: #422006;
+  --popover: #FFFEF5;
+  --popover-foreground: #422006;
 
-  --primary: #059669;
+  --primary: #B45309;
   --primary-foreground: #ffffff;
   --primary-muted: color-mix(in srgb, var(--primary) 82%, var(--foreground));
 
-  --secondary: #f4f4f5;
-  --secondary-foreground: #27272a;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
-  --accent-foreground: #18181b;
+  --secondary: #FEF3C7;
+  --secondary-foreground: #78350F;
+  --muted: #FEF3C7;
+  --muted-foreground: #92400E;
+  --accent: #FDE68A;
+  --accent-foreground: #422006;
 
   --destructive: #dc2626;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
-  --ring: #059669;
+  --border: #E5DDD0;
+  --input: #E5DDD0;
+  --ring: #B45309;
 
-  --reader-mat: #f3f4f6;
+  --reader-mat: #FDF6E3;
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #52525b;
-  --sidebar-primary: #059669;
+  --sidebar: #FFFEF5;
+  --sidebar-foreground: #78350F;
+  --sidebar-primary: #B45309;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f4f4f5;
-  --sidebar-accent-foreground: #18181b;
-  --sidebar-border: #e4e4e7;
-  --sidebar-ring: #059669;
+  --sidebar-accent: #FEF3C7;
+  --sidebar-accent-foreground: #422006;
+  --sidebar-border: #E5DDD0;
+  --sidebar-ring: #B45309;
 }
 
 @theme inline {
