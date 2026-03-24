@@ -88,7 +88,7 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={placeholder}
-            className="pl-8 pr-9 font-mono text-xs h-9"
+            className="pl-8 pr-9 text-xs h-9"
           />
           <button
             type="button"
