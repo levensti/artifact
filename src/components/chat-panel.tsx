@@ -196,7 +196,7 @@ export default function ChatPanel({
         <div className="px-4 py-5 space-y-5">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-24 text-center gap-4 px-2">
-              <div className="size-11 rounded-xl border border-border bg-muted/40 flex items-center justify-center">
+              <div className="size-11 rounded-md border border-border bg-muted/40 flex items-center justify-center">
                 <MessageSquare
                   className="text-muted-foreground"
                   size={20}
@@ -225,10 +225,10 @@ export default function ChatPanel({
             >
               <div
                 className={cn(
-                  "rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
+                  "rounded-md px-3 py-2.5 text-sm leading-relaxed",
                   msg.role === "user"
-                    ? "bg-secondary text-foreground max-w-[88%] border border-border border-l-[3px] border-l-primary/45 shadow-sm"
-                    : "bg-card border border-border/80 text-card-foreground max-w-full shadow-sm",
+                    ? "bg-secondary text-foreground max-w-[88%] border border-border border-l-2 border-l-primary/50"
+                    : "bg-card border border-border text-card-foreground max-w-full",
                 )}
               >
                 {msg.role === "assistant" && msg.content === "" && isStreaming ? (
@@ -248,7 +248,7 @@ export default function ChatPanel({
       </div>
 
       {selectedModel && !hasKeyForModel && (
-        <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-3 mb-2 px-3 py-2.5 rounded-md border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span>
             {PROVIDER_META[selectedModel.provider].keyHint} required to send
             messages.
@@ -267,7 +267,7 @@ export default function ChatPanel({
 
       {/* Error */}
       {error && (
-        <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug space-y-2">
+        <div className="mx-3 mb-2 px-3 py-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug space-y-2">
           <p>{error}</p>
           <Button
             type="button"
@@ -283,7 +283,7 @@ export default function ChatPanel({
 
       {/* Input */}
       <div className="p-3 border-t border-border shrink-0 bg-muted/20">
-        <div className="flex items-end gap-2 bg-card rounded-xl border border-border/90 focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-ring/25 transition-[box-shadow,border-color] duration-200">
+        <div className="flex items-end gap-2 bg-card rounded-md border border-border focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-ring/40 transition-[box-shadow,border-color] duration-200">
           <textarea
             ref={textareaRef}
             value={input}
