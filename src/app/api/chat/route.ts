@@ -15,7 +15,7 @@ interface ChatRequest {
   learningContext?: string;
 }
 
-const SYSTEM_PROMPT = `You are Paper Copilot, an expert AI research assistant helping a researcher understand an academic paper. You have deep expertise across machine learning, computer science, mathematics, statistics, and related fields.
+const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. You have deep expertise across machine learning, computer science, mathematics, statistics, and related fields.
 
 Your role:
 - Explain concepts clearly and precisely, adjusting depth to the question
@@ -54,14 +54,21 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const { messages, model, provider, apiKey, paperContext, learningContext } = body;
+  const { messages, model, provider, apiKey, paperContext, learningContext } =
+    body;
 
   if (!apiKey || typeof apiKey !== "string") {
-    return jsonError("API key is required. Please add your key in Settings.", 401);
+    return jsonError(
+      "API key is required. Please add your key in Settings.",
+      401,
+    );
   }
 
   if (!VALID_PROVIDERS.has(provider)) {
-    return jsonError("Invalid provider. Must be 'anthropic', 'openai', or 'openrouter'.", 400);
+    return jsonError(
+      "Invalid provider. Must be 'anthropic', 'openai', or 'openrouter'.",
+      400,
+    );
   }
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -74,7 +81,13 @@ export async function POST(req: NextRequest) {
 
   try {
     if (provider === "anthropic") {
-      return await streamAnthropic(messages, model, apiKey, paperContext, learningContext);
+      return await streamAnthropic(
+        messages,
+        model,
+        apiKey,
+        paperContext,
+        learningContext,
+      );
     } else {
       // OpenAI and OpenRouter use the same API format
       const baseUrl =
@@ -174,7 +187,7 @@ async function streamOpenAICompatible(
   // OpenRouter requires HTTP-Referer for attribution
   if (provider === "openrouter") {
     headers["HTTP-Referer"] = "https://paper-copilot.dev";
-    headers["X-Title"] = "Paper Copilot";
+    headers["X-Title"] = "Artifact";
   }
 
   const response = await fetch(baseUrl, {
@@ -260,7 +273,10 @@ function transformSSEStream(
 function parseAnthropicDelta(data: string): string | null {
   try {
     const event = JSON.parse(data);
-    if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+    if (
+      event.type === "content_block_delta" &&
+      event.delta?.type === "text_delta"
+    ) {
       return event.delta.text;
     }
   } catch {

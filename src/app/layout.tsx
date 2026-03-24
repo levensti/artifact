@@ -3,7 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Paper Copilot",
+  title: "Artifact",
   description:
     "Read arXiv PDFs with full-text Q&A per paper. Your keys and chat history stay in the browser.",
 };
@@ -14,10 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${GeistSans.variable} h-full`}
-    >
+    <html lang="en" className={`${GeistSans.variable} h-full`}>
       <body className="h-full overflow-hidden">{children}</body>
     </html>
   );

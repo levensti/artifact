@@ -1,4 +1,4 @@
-# Paper Copilot
+# Artifact
 
 AI-powered research paper reading companion. Open Arxiv papers, pair with an AI copilot to understand them — select text, ask questions, get instant explanations.
 

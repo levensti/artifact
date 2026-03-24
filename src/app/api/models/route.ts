@@ -79,8 +79,8 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ModelOption[]> {
   const response = await fetch("https://openrouter.ai/api/v1/models", {
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://paper-copilot.dev",
-      "X-Title": "Paper Copilot",
+      "HTTP-Referer": "https://artifactml.com",
+      "X-Title": "Artifact",
     },
   });
   if (!response.ok) throw new Error(`OpenRouter API error: ${response.status}`);

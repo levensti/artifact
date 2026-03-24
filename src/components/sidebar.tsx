@@ -8,7 +8,7 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
-  BookOpen,
+  ScrollText,
   Home,
   Network,
 } from "lucide-react";
@@ -115,10 +115,10 @@ export default function Sidebar({
         <div className="flex items-center justify-between px-3 h-12 shrink-0 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="size-7 rounded-lg bg-primary/12 ring-1 ring-primary/10 flex items-center justify-center shrink-0">
-              <BookOpen size={14} className="text-primary" strokeWidth={1.75} />
+              <ScrollText size={14} className="text-primary" strokeWidth={1.75} />
             </div>
             <span className="text-sm font-semibold tracking-tight text-foreground truncate">
-              Paper Copilot
+              Artifact
             </span>
           </div>
           <div className="flex items-center gap-0.5">

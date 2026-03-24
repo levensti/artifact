@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import type { ExploreProvider, GenerateRequest } from "@/lib/explore";
 
-const SYSTEM_PROMPT = `You are Paper Copilot, an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
+const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
 
 When asked to output JSON:
 - Return valid JSON only
@@ -28,11 +28,17 @@ export async function POST(req: NextRequest) {
   const { model, provider, apiKey, prompt, paperContext } = body;
 
   if (!apiKey || typeof apiKey !== "string") {
-    return jsonError("API key is required. Please add your key in Settings.", 401);
+    return jsonError(
+      "API key is required. Please add your key in Settings.",
+      401,
+    );
   }
 
   if (!VALID_PROVIDERS.has(provider)) {
-    return jsonError("Invalid provider. Must be 'anthropic', 'openai', or 'openrouter'.", 400);
+    return jsonError(
+      "Invalid provider. Must be 'anthropic', 'openai', or 'openrouter'.",
+      400,
+    );
   }
 
   if (!model || typeof model !== "string") {
@@ -42,7 +48,10 @@ export async function POST(req: NextRequest) {
   if (!prompt || typeof prompt !== "string") {
     return jsonError("Prompt is required.", 400);
   }
-  if (prompt.length > 50_000 || (paperContext && paperContext.length > 500_000)) {
+  if (
+    prompt.length > 50_000 ||
+    (paperContext && paperContext.length > 500_000)
+  ) {
     return jsonError("Request payload too large.", 413);
   }
 
@@ -50,7 +59,13 @@ export async function POST(req: NextRequest) {
     const content =
       provider === "anthropic"
         ? await generateAnthropic(model, apiKey, prompt, paperContext)
-        : await generateOpenAICompatible(model, apiKey, prompt, paperContext, provider);
+        : await generateOpenAICompatible(
+            model,
+            apiKey,
+            prompt,
+            paperContext,
+            provider,
+          );
 
     return new Response(JSON.stringify({ content }), {
       headers: { "Content-Type": "application/json" },

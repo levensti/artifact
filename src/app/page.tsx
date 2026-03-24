@@ -20,7 +20,7 @@ export default function Home() {
           </div>
           <div className="space-y-3">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              Paper Copilot
+              Artifact
             </h1>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
               Open an arXiv PDF, ask questions with the full text in context,
