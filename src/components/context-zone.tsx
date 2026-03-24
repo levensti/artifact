@@ -69,6 +69,7 @@ export default function ContextZone({
 
   useEffect(() => {
     if (flash) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- flash animation trigger from prop
       setFlashActive(true);
       const t = setTimeout(() => setFlashActive(false), 1200);
       return () => clearTimeout(t);

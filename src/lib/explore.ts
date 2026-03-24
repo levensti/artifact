@@ -156,7 +156,8 @@ export function globalGraphToGraphData(): GraphData | null {
   if (!g || g.nodes.length === 0) return null;
   return {
     nodes: g.nodes,
-    edges: g.edges.map(({ sourceReviewIds: _, ...e }) => e),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    edges: g.edges.map(({ sourceReviewIds, ...e }) => e),
     keywords: [],
     generatedAt: g.updatedAt,
     modelUsed: "merged",

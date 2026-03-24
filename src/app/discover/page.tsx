@@ -99,7 +99,7 @@ export default function DiscoverPage() {
         graph: getGraphData(review.id),
       }))
       .filter((item): item is { review: PaperReview; graph: GraphData } => item.graph != null);
-  }, [reviews, mergedGraphJson]);
+  }, [reviews]);
 
   const selectedGraph = useMemo(() => {
     if (selectedReviewId != null) {

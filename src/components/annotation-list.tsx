@@ -109,6 +109,7 @@ function AnnotationCard({
   const noteTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing prop to local editable state
     setNote(annotation.note);
   }, [annotation.note]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, Circle, ExternalLink, MessageSquare, Sparkles } from "lucide-react";
+import { BookOpen, Check, Circle, MessageSquare, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Prerequisite } from "@/lib/explore";
 

@@ -15,7 +15,6 @@ import { arxivPdfUrl } from "@/lib/utils";
 import { useAnalysis } from "@/hooks/use-auto-analysis";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
-import type { Annotation } from "@/lib/annotations";
 
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
   ssr: false,
@@ -49,7 +48,10 @@ export default function ReviewPage() {
   const [rightTab, setRightTab] = useState<RightTab>("assistant");
 
   // Annotation state
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotationVersion, setAnnotationVersion] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const annotations = useMemo(() => (review ? getAnnotations(review.id) : []), [review, annotationVersion]);
+  const refreshAnnotations = useCallback(() => setAnnotationVersion((v) => v + 1), []);
   const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
   const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ annotationId: string; x: number; y: number } | null>(null);
@@ -69,18 +71,6 @@ export default function ReviewPage() {
       router.push("/");
     }
   }, [clientReady, params.id, router]);
-
-  useEffect(() => {
-    if (review) {
-      setAnnotations(getAnnotations(review.id));
-    }
-  }, [review]);
-
-  const refreshAnnotations = useCallback(() => {
-    if (review) {
-      setAnnotations(getAnnotations(review.id));
-    }
-  }, [review]);
 
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
     setSelectionInfo(info);
@@ -109,13 +99,13 @@ export default function ReviewPage() {
         note: "",
         thread: [],
       });
-      setAnnotations(getAnnotations(review.id));
+      refreshAnnotations();
       setActiveAnnotationId(ann.id);
       setRightTab("notes");
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
     }
-  }, [selectionInfo, review]);
+  }, [selectionInfo, review, refreshAnnotations]);
 
   const handleAnnotationClick = useCallback(
     (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => {
