@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Send, Loader2, MessageSquare } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
@@ -16,6 +22,7 @@ interface ChatPanelProps {
   paperContext: string;
   pendingSelection: string | null;
   onSelectionConsumed: () => void;
+  hideHeader?: boolean;
 }
 
 export default function ChatPanel({
@@ -23,6 +30,7 @@ export default function ChatPanel({
   paperContext,
   pendingSelection,
   onSelectionConsumed,
+  hideHeader,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -145,19 +153,16 @@ export default function ChatPanel({
         const chunk = decoder.decode(value, { stream: true });
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMsg.id
-              ? { ...m, content: m.content + chunk }
-              : m,
+            m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m,
           ),
         );
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
+      const message =
+        err instanceof Error ? err.message : "Something went wrong";
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantMsg.id
-            ? { ...m, content: `Error: ${message}` }
-            : m,
+          m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
         ),
       );
       setError(message);
@@ -181,12 +186,19 @@ export default function ChatPanel({
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
-        <span className="text-sm font-medium text-muted-foreground">
-          Q&amp;A
-        </span>
-        <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
+          <span className="text-sm font-medium text-muted-foreground">
+            Assistant
+          </span>
+          <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
+        </div>
+      )}
+      {hideHeader && (
+        <div className="flex items-center justify-end px-3 py-2 border-b border-border shrink-0">
+          <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
+        </div>
+      )}
 
       {/* Messages — flex-1 + min-h-0 so this region scrolls instead of clipping */}
       <div
@@ -231,10 +243,17 @@ export default function ChatPanel({
                     : "bg-card border border-border text-card-foreground max-w-full",
                 )}
               >
-                {msg.role === "assistant" && msg.content === "" && isStreaming ? (
+                {msg.role === "assistant" &&
+                msg.content === "" &&
+                isStreaming ? (
                   <div className="flex items-center gap-2 py-0.5 font-sans">
-                    <Loader2 className="animate-spin text-muted-foreground" size={14} />
-                    <span className="text-sm text-muted-foreground">Generating…</span>
+                    <Loader2
+                      className="animate-spin text-muted-foreground"
+                      size={14}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      Generating…
+                    </span>
                   </div>
                 ) : msg.role === "assistant" ? (
                   <MarkdownMessage content={msg.content} />
