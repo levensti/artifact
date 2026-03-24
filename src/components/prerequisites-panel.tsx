@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Loader2, Settings, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Compass } from "lucide-react";
 import type { Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
 import type { Prerequisite } from "@/lib/explore";
@@ -54,10 +54,8 @@ interface PrerequisitesPanelProps {
   onAskAbout?: (topic: string) => void;
   analysisStatus: AnalysisStatus;
   analysisProgress: string | null;
-  analysisError: string | null;
   canRunAnalysis: boolean;
   onTriggerAnalysis: () => boolean;
-  onOpenSettings: () => void;
 }
 
 export default function PrerequisitesPanel({
@@ -69,10 +67,8 @@ export default function PrerequisitesPanel({
   onAskAbout,
   analysisStatus,
   analysisProgress,
-  analysisError,
   canRunAnalysis,
   onTriggerAnalysis,
-  onOpenSettings,
 }: PrerequisitesPanelProps) {
   const { prerequisites: prereqData } = useExploreData(reviewId);
   const [loadingTopicId, setLoadingTopicId] = useState<string | null>(null);
@@ -151,74 +147,28 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
     [prereqData, reviewId],
   );
 
-  // Empty state: show CTA to analyze or configure
+  // Empty state — analysis trigger lives in the banner above the tabs
   if (!prereqData || prereqData.prerequisites.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-6 text-center gap-3 px-4">
+      <div className="flex flex-col items-center justify-center py-10 text-center gap-3 px-4">
         {analysisStatus === "running" ? (
           <>
-            <Loader2 className="size-8 text-primary animate-spin" />
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px]">
-              {analysisProgress ?? "Analyzing paper…"}
+            <Loader2 className="size-7 text-primary animate-spin" />
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-[260px]">
+              {analysisProgress ?? "Analyzing paper\u2026"}
             </p>
           </>
         ) : (
           <>
-            <Sparkles className="size-8 text-muted-foreground/40" />
-            <div className="space-y-2 max-w-[280px]">
-              <p className="text-sm font-medium text-foreground">
-                Recommended pre-reading
+            <Compass className="size-7 text-muted-foreground/30" />
+            <div className="space-y-1.5 max-w-[260px]">
+              <p className="text-sm font-medium text-foreground/75">
+                Nothing here yet
               </p>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Analyze this paper to find topics and papers worth reading beforehand, and build a checklist to track your progress.
+                Use <span className="font-medium text-foreground/65">Analyze</span> above
+                to discover prerequisites and related works for this paper.
               </p>
-
-              {analysisError && (
-                <p className="text-xs text-destructive leading-relaxed">
-                  {analysisError}
-                </p>
-              )}
-
-              {!selectedModel ? (
-                <div className="space-y-2 pt-1">
-                  <p className="text-[11px] text-muted-foreground">
-                    Select a model and add an API key to get started.
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs"
-                    onClick={onOpenSettings}
-                  >
-                    <Settings className="size-3.5 mr-1.5" />
-                    Open settings
-                  </Button>
-                </div>
-              ) : !canRunAnalysis ? (
-                <div className="space-y-2 pt-1">
-                  <p className="text-[11px] text-muted-foreground">
-                    Add an API key for {selectedModel.label} to run analysis.
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs"
-                    onClick={onOpenSettings}
-                  >
-                    <Settings className="size-3.5 mr-1.5" />
-                    Add API key
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  className="h-8 text-xs mt-1"
-                  onClick={onTriggerAnalysis}
-                >
-                  <Sparkles className="size-3.5 mr-1.5" />
-                  Analyze paper
-                </Button>
-              )}
             </div>
           </>
         )}

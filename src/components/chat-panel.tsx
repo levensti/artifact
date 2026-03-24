@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, MessageSquare, Send } from "lucide-react";
+import { Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import {
@@ -19,7 +19,14 @@ import {
 import { buildLearningContextSummary } from "@/lib/learning-context";
 import { stripLearningMapSentinel } from "@/lib/learning-sentinel";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
-import type { ArxivSearchResult } from "@/lib/explore";
+import {
+  getGraphData,
+  getPrerequisites,
+  RELATIONSHIP_SHORT_LABEL,
+  type ArxivSearchResult,
+  type RelationshipType,
+} from "@/lib/explore";
+import type { AnalysisStatus } from "@/hooks/use-auto-analysis";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import ModelSelector from "./model-selector";
@@ -41,6 +48,9 @@ interface ChatPanelProps {
   /** Lifted model state — when provided, ChatPanel uses these instead of internal state */
   selectedModel?: Model | null;
   onModelChange?: (model: Model | null) => void;
+  /** Banner-triggered analysis state — shown as live progress in the chat */
+  analysisStatus?: AnalysisStatus;
+  analysisProgress?: string | null;
 }
 
 function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearchResult[] }) {
@@ -98,6 +108,8 @@ export default function ChatPanel({
   onExternalPromptConsumed,
   selectedModel: externalModel,
   onModelChange,
+  analysisStatus,
+  analysisProgress,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -135,6 +147,29 @@ export default function ChatPanel({
   const hasKeyForModel =
     selectedModel != null && !!getApiKey(selectedModel.provider);
 
+  // Inject a summary message when banner-triggered analysis completes
+  const prevAnalysisStatus = useRef(analysisStatus);
+  useEffect(() => {
+    if (
+      prevAnalysisStatus.current === "running" &&
+      analysisStatus === "done"
+    ) {
+      const summary = buildAnalysisSummary(reviewId);
+      const summaryMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: summary,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, summaryMsg]);
+    }
+    prevAnalysisStatus.current = analysisStatus;
+  }, [analysisStatus, reviewId]);
+
+  // Banner-triggered analysis is happening (not the sentinel-triggered one)
+  const bannerAnalysisRunning =
+    analysisStatus === "running" && !learningProgress;
+
   useLayoutEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
@@ -143,7 +178,7 @@ export default function ChatPanel({
     if (dist <= thresholdPx) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, learningProgress]);
+  }, [messages, learningProgress, analysisProgress]);
 
   useEffect(() => {
     if (pendingSelection) {
@@ -279,12 +314,10 @@ export default function ChatPanel({
               signal: controller.signal,
               onProgress: setLearningProgress,
             });
-            // Instead of inline LearningEmbed, add a simple text message pointing to context zone
             const followup: ChatMessage = {
               id: crypto.randomUUID(),
               role: "assistant",
-              content:
-                "I've updated the **Pre-reading** tab with recommended topics and related papers. You can mark items as read, generate study guides, and ask me about any topic.",
+              content: buildAnalysisSummary(reviewId),
               timestamp: new Date().toISOString(),
             };
             setMessages((prev) => [...prev, followup]);
@@ -452,15 +485,18 @@ export default function ChatPanel({
               </div>
             </div>
           ))}
+
+          {/* Banner-triggered analysis: live progress card */}
+          {bannerAnalysisRunning && (
+            <AnalysisProgressCard progress={analysisProgress ?? null} />
+          )}
+
+          {/* Sentinel-triggered analysis: live progress card */}
+          {learningProgress && !bannerAnalysisRunning && (
+            <AnalysisProgressCard progress={learningProgress} />
+          )}
         </div>
       </div>
-
-      {learningProgress ? (
-        <div className="mx-3 mb-1 flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-          <Loader2 className="size-3.5 animate-spin shrink-0" />
-          <span>{learningProgress}</span>
-        </div>
-      ) : null}
 
       {selectedModel && !hasKeyForModel && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-md border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -537,4 +573,93 @@ export default function ChatPanel({
       </div>
     </div>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Analysis progress card (shown in chat during analysis)             */
+/* ------------------------------------------------------------------ */
+
+function AnalysisProgressCard({ progress }: { progress: string | null }) {
+  return (
+    <div className="max-w-full" style={{ animation: "fadeIn 200ms ease-out" }}>
+      <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed bg-card border border-border text-card-foreground max-w-full">
+        <div className="flex items-start gap-2.5">
+          <div className="size-6 rounded-md bg-primary/8 border border-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+            <Sparkles className="size-3 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-xs font-medium text-foreground">
+              Analyzing paper
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex gap-[3px]">
+                <span className="size-[5px] rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms", animationDuration: "1.2s" }} />
+                <span className="size-[5px] rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms", animationDuration: "1.2s" }} />
+                <span className="size-[5px] rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms", animationDuration: "1.2s" }} />
+              </span>
+              <p className="text-xs text-muted-foreground truncate">
+                {progress ?? "Starting analysis\u2026"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Build a human-readable summary after analysis completes            */
+/* ------------------------------------------------------------------ */
+
+function buildAnalysisSummary(reviewId: string): string {
+  const graph = getGraphData(reviewId);
+  const prereqs = getPrerequisites(reviewId);
+
+  const relatedCount = graph ? Math.max(0, graph.nodes.length - 1) : 0;
+  const prereqCount = prereqs?.prerequisites.length ?? 0;
+
+  // Count by relationship type
+  const typeCounts = new Map<RelationshipType, number>();
+  for (const edge of graph?.edges ?? []) {
+    typeCounts.set(
+      edge.relationship,
+      (typeCounts.get(edge.relationship) ?? 0) + 1,
+    );
+  }
+
+  let summary: string;
+
+  if (relatedCount === 0 && prereqCount === 0) {
+    summary =
+      "I wasn't able to find related papers or prerequisites for this paper. You can try re-analyzing with a different model.";
+    return summary;
+  }
+
+  const parts: string[] = [];
+  if (prereqCount > 0)
+    parts.push(
+      `**${prereqCount} prerequisite${prereqCount !== 1 ? "s" : ""}**`,
+    );
+  if (relatedCount > 0)
+    parts.push(
+      `**${relatedCount} related paper${relatedCount !== 1 ? "s" : ""}**`,
+    );
+
+  summary = `I analyzed this paper and found ${parts.join(" and ")}`;
+
+  if (typeCounts.size > 0) {
+    summary += ":\n\n";
+    for (const [type, count] of typeCounts) {
+      const label = RELATIONSHIP_SHORT_LABEL[type] ?? type;
+      summary += `- ${count} ${label.toLowerCase()}\n`;
+    }
+  } else {
+    summary += ".\n\n";
+  }
+
+  summary +=
+    "\nCheck the **Explore** tab for your prerequisite checklist. These papers have been added to your [Knowledge Graph](/discover).";
+
+  return summary;
 }

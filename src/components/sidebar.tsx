@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Plus,
   FileText,
@@ -9,10 +9,8 @@ import {
   PanelLeftClose,
   PanelLeft,
   BookOpen,
-  Compass,
-  Brain,
   Home,
-  Share2,
+  Network,
 } from "lucide-react";
 import {
   getReviews,
@@ -61,7 +59,6 @@ export default function Sidebar({
   const [showNewReview, setShowNewReview] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const handleReviewCreated = (reviewId: string) => {
     setShowNewReview(false);
@@ -155,26 +152,10 @@ export default function Sidebar({
               onClick={() => router.push("/")}
             />
             <NavItem
-              label="Discover"
-              icon={<Compass size={13} className="shrink-0 opacity-50" />}
-              active={
-                pathname === "/discover" &&
-                searchParams.get("tab") !== "knowledge" &&
-                searchParams.get("tab") !== "library"
-              }
+              label="Knowledge Graph"
+              icon={<Network size={13} className="shrink-0 opacity-50" />}
+              active={pathname === "/discover"}
               onClick={() => router.push("/discover")}
-            />
-            <NavItem
-              label="Knowledge map"
-              icon={<Share2 size={13} className="shrink-0 opacity-50" />}
-              active={pathname === "/discover" && searchParams.get("tab") === "knowledge"}
-              onClick={() => router.push("/discover?tab=knowledge")}
-            />
-            <NavItem
-              label="Prerequisite Library"
-              icon={<Brain size={13} className="shrink-0 opacity-50" />}
-              active={pathname === "/discover" && searchParams.get("tab") === "library"}
-              onClick={() => router.push("/discover?tab=library")}
             />
           </div>
 
