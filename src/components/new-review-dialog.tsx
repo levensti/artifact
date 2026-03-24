@@ -72,8 +72,8 @@ export default function NewReviewDialog({
         <DialogHeader>
           <DialogTitle>New paper review</DialogTitle>
           <DialogDescription>
-            Paste an arXiv link. We&apos;ll save the PDF and your Q&amp;A so you can
-            pick up where you left off anytime.
+            Paste an arXiv URL. The review is stored locally with the PDF link
+            and your Q&amp;A thread.
           </DialogDescription>
         </DialogHeader>
 

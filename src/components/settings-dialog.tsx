@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff, Check, ExternalLink, Key, Shield } from "lucide-react";
 import {
   Dialog,
@@ -46,7 +46,10 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
   };
 
   return (
-    <div className="rounded-xl border border-border/80 bg-card/80 p-3.5 space-y-3">
+    <div
+      data-settings-provider={provider}
+      className="rounded-xl border border-border/80 bg-card/80 p-3.5 space-y-3 transition-shadow duration-300"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -54,10 +57,9 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
             {hasKey && (
               <Badge
                 variant="outline"
-                className="text-[10px] font-medium text-primary border-primary/30 gap-1 py-0 h-5"
+                className="text-[10px] font-medium text-muted-foreground border-border gap-1 py-0 h-5"
               >
-                <span className="size-1 rounded-full bg-primary" />
-                Connected
+                Key saved
               </Badge>
             )}
           </div>
@@ -71,7 +73,7 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
           rel="noopener noreferrer"
           className="shrink-0 flex items-center gap-1 text-xs text-primary/90 hover:text-primary transition-colors"
         >
-          Keys
+          Get a key
           <ExternalLink size={10} />
         </a>
       </div>
@@ -133,9 +135,44 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  focusProvider: Provider | null;
 }
 
-export default function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+const FOCUS_RING_CLASS = "ring-2 ring-primary/35 shadow-sm";
+
+export default function SettingsDialog({
+  open,
+  onOpenChange,
+  focusProvider,
+}: SettingsDialogProps) {
+  useEffect(() => {
+    if (!open || !focusProvider) return;
+
+    const el = document.querySelector<HTMLElement>(
+      `[data-settings-provider="${focusProvider}"]`,
+    );
+    if (!el) return;
+
+    const scroll = () => {
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      el.classList.add(...FOCUS_RING_CLASS.split(" "));
+    };
+
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(scroll);
+    });
+
+    const removeRing = window.setTimeout(() => {
+      el.classList.remove(...FOCUS_RING_CLASS.split(" "));
+    }, 2400);
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      window.clearTimeout(removeRing);
+      el.classList.remove(...FOCUS_RING_CLASS.split(" "));
+    };
+  }, [open, focusProvider]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -150,7 +187,8 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
             <div>
               <DialogTitle>API keys</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
-                Bring your own keys — nothing is stored on our servers except in transit to the provider.
+                Keys stay in your browser. Requests use this app&apos;s server
+                only to reach Anthropic, OpenAI, or OpenRouter.
               </DialogDescription>
             </div>
           </div>
@@ -158,12 +196,11 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
 
         <ScrollArea className="flex-1 min-h-0 max-h-[min(420px,60vh)]">
           <div className="px-4 py-3 space-y-3">
-            <div className="flex items-start gap-2.5 rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5">
-              <Shield size={14} className="text-primary mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2.5 rounded-lg border border-border/80 bg-muted/30 px-3 py-2.5">
+              <Shield size={14} className="text-muted-foreground mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground leading-relaxed">
-                <span className="font-medium text-foreground">Privacy.</span> Keys live in
-                your browser (localStorage). Chat requests go through this app&apos;s server
-                to call Anthropic / OpenAI / OpenRouter. Self-host for full control.
+                Values are stored in localStorage on this device. Self-host the
+                app if you need full control over where traffic goes.
               </p>
             </div>
 

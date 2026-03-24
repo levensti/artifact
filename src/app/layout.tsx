@@ -24,7 +24,7 @@ const sourceSerif = Source_Serif_4({
 export const metadata: Metadata = {
   title: "Paper Copilot",
   description:
-    "Review arXiv papers with context-aware Q&A — saved per paper, replay anytime.",
+    "Read arXiv PDFs with full-text Q&A per paper. Your keys and chat history stay in the browser.",
 };
 
 export default function RootLayout({

@@ -23,10 +23,19 @@ const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
 export default function ReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const review = useMemo(
-    () => getReview(params.id),
-    [params.id],
-  );
+  /** Avoid hydration mismatch: localStorage is empty on the server. */
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => {
+    queueMicrotask(() => {
+      setClientReady(true);
+    });
+  }, []);
+
+  const review = useMemo(() => {
+    if (!clientReady) return undefined;
+    return getReview(params.id);
+  }, [clientReady, params.id]);
+
   const [paperText, setPaperText] = useState("");
   const [selectedText, setSelectedText] = useState<string | null>(null);
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
@@ -35,10 +44,11 @@ export default function ReviewPage() {
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
+    if (!clientReady) return;
     if (!getReview(params.id)) {
       router.push("/");
     }
-  }, [params.id, router]);
+  }, [clientReady, params.id, router]);
 
   const handleTextSelected = useCallback((text: string, rect: DOMRect) => {
     setSelectedText(text);
@@ -81,7 +91,7 @@ export default function ReviewPage() {
     document.addEventListener("mouseup", handleMouseUp);
   }, []);
 
-  if (!review) {
+  if (!clientReady || !review) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">

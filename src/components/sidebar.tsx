@@ -6,14 +6,12 @@ import {
   Plus,
   FileText,
   Settings,
-  Trash2,
   PanelLeftClose,
   PanelLeft,
   BookOpen,
 } from "lucide-react";
 import {
   getReviews,
-  deleteReview,
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
@@ -57,18 +55,8 @@ export default function Sidebar({
     [reviewsJson],
   );
   const [showNewReview, setShowNewReview] = useState(false);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
-
-  const handleDelete = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    deleteReview(id);
-    window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
-    if (pathname === `/review/${id}`) {
-      router.push("/");
-    }
-  };
 
   const handleReviewCreated = (reviewId: string) => {
     setShowNewReview(false);
@@ -184,10 +172,8 @@ export default function Sidebar({
                         if (e.key === "Enter" || e.key === " ")
                           router.push(`/review/${review.id}`);
                       }}
-                      onMouseEnter={() => setHoveredId(review.id)}
-                      onMouseLeave={() => setHoveredId(null)}
                       className={cn(
-                        "group w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors duration-150 cursor-pointer",
+                        "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors duration-150 cursor-pointer",
                         isActive
                           ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
@@ -197,16 +183,6 @@ export default function Sidebar({
                       <span className="truncate flex-1 text-sm">
                         {review.title}
                       </span>
-                      {(hoveredId === review.id || isActive) && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleDelete(e, review.id)}
-                          className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors shrink-0"
-                          aria-label="Delete review"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      )}
                     </div>
                   );
                 })}

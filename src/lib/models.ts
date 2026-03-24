@@ -1,5 +1,8 @@
 export type Provider = "anthropic" | "openai" | "openrouter";
 
+/** Stable order for settings UI and model dropdown groups. */
+export const PROVIDER_ORDER: Provider[] = ["anthropic", "openai", "openrouter"];
+
 export interface Model {
   id: string;
   label: string;
@@ -58,17 +61,30 @@ export const MODELS: Model[] = [
   },
 ];
 
-export const PROVIDER_META: Record<Provider, { label: string; description: string }> = {
+export const PROVIDER_META: Record<
+  Provider,
+  { label: string; description: string; keyHint: string }
+> = {
   anthropic: {
     label: "Anthropic",
-    description: "Claude models — excellent for nuanced reasoning and long-context analysis",
+    description: "Claude models. Uses an Anthropic API key.",
+    keyHint: "Anthropic API key",
   },
   openai: {
     label: "OpenAI",
-    description: "GPT and o-series models — strong general-purpose and reasoning capabilities",
+    description: "OpenAI Chat Completions models. Uses an OpenAI API key.",
+    keyHint: "OpenAI API key",
   },
   openrouter: {
     label: "OpenRouter",
-    description: "Unified gateway to 200+ models — access any provider through a single API key",
+    description: "Third-party models via OpenRouter. Uses an OpenRouter API key.",
+    keyHint: "OpenRouter API key",
   },
 };
+
+export function modelsGroupedByProvider(): { provider: Provider; models: Model[] }[] {
+  return PROVIDER_ORDER.map((provider) => ({
+    provider,
+    models: MODELS.filter((m) => m.provider === provider),
+  }));
+}

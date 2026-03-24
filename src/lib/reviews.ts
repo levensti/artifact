@@ -57,12 +57,6 @@ export function createReview(arxivId: string, title: string): PaperReview {
   return review;
 }
 
-export function deleteReview(id: string): void {
-  const list = getReviews().filter((r) => r.id !== id);
-  localStorage.setItem(REVIEWS_KEY, JSON.stringify(list));
-  localStorage.removeItem(`${MESSAGES_KEY_PREFIX}${id}`);
-}
-
 export function getMessages(reviewId: string): ChatMessage[] {
   if (typeof window === "undefined") return [];
   const raw = localStorage.getItem(`${MESSAGES_KEY_PREFIX}${reviewId}`);

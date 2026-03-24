@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Loader2, Trash2, MessageSquare } from "lucide-react";
-import { MODELS, type Model } from "@/lib/models";
-import { getApiKey } from "@/lib/keys";
+import { Send, Loader2, MessageSquare } from "lucide-react";
+import { PROVIDER_META, type Model } from "@/lib/models";
+import { getApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import { getMessages, saveMessages, type ChatMessage } from "@/lib/reviews";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ModelSelector from "./model-selector";
 import MarkdownMessage from "./markdown-message";
+import { useSettingsOpener } from "./settings-opener-context";
 
 interface ChatPanelProps {
   reviewId: string;
@@ -24,11 +25,13 @@ export default function ChatPanel({
   pendingSelection,
   onSelectionConsumed,
 }: ChatPanelProps) {
+  const { openSettings } = useSettingsOpener();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<Model>(MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [keysVersion, setKeysVersion] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -37,10 +40,20 @@ export default function ChatPanel({
   }, [reviewId]);
 
   useEffect(() => {
+    const onKeys = () => setKeysVersion((v) => v + 1);
+    window.addEventListener(KEYS_UPDATED_EVENT, onKeys);
+    return () => window.removeEventListener(KEYS_UPDATED_EVENT, onKeys);
+  }, []);
+
+  useEffect(() => {
     if (!isStreaming && messages.length > 0) {
       saveMessages(reviewId, messages);
     }
   }, [messages, isStreaming, reviewId]);
+
+  void keysVersion;
+  const hasKeyForModel =
+    selectedModel != null && !!getApiKey(selectedModel.provider);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -71,14 +84,10 @@ export default function ChatPanel({
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreaming || !selectedModel) return;
 
     const apiKey = getApiKey(selectedModel.provider);
     if (!apiKey) {
-      const name =
-        selectedModel.provider === "anthropic" ? "Anthropic" :
-        selectedModel.provider === "openai" ? "OpenAI" : "OpenRouter";
-      setError(`No ${name} API key found. Add it in Settings.`);
       return;
     }
 
@@ -162,9 +171,9 @@ export default function ChatPanel({
     }
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    saveMessages(reviewId, []);
+  const openKeysForChat = () => {
+    if (selectedModel) openSettings({ provider: selectedModel.provider });
+    else openSettings();
   };
 
   return (
@@ -174,19 +183,7 @@ export default function ChatPanel({
         <span className="text-sm font-medium text-muted-foreground">
           Q&amp;A
         </span>
-        <div className="flex items-center gap-1">
-          <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 text-muted-foreground"
-            onClick={clearChat}
-            title="Clear chat"
-            aria-label="Clear chat"
-          >
-            <Trash2 size={13} />
-          </Button>
-        </div>
+        <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
       </div>
 
       {/* Messages */}
@@ -194,16 +191,20 @@ export default function ChatPanel({
         <div className="px-4 py-5 space-y-5">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-24 text-center gap-4 px-2">
-              <div className="size-11 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/10 flex items-center justify-center">
-                <MessageSquare className="text-primary" size={20} strokeWidth={1.75} />
+              <div className="size-11 rounded-xl border border-border bg-muted/40 flex items-center justify-center">
+                <MessageSquare
+                  className="text-muted-foreground"
+                  size={20}
+                  strokeWidth={1.75}
+                />
               </div>
               <div className="space-y-2 max-w-[260px]">
                 <p className="text-sm font-semibold tracking-tight text-foreground">
-                  Your review thread
+                  Review thread
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Questions and answers are saved with this paper so you can
-                  revisit them later. Select text in the PDF or type below.
+                  Messages are saved with this paper. Select text in the PDF or
+                  type a question below.
                 </p>
               </div>
             </div>
@@ -228,7 +229,7 @@ export default function ChatPanel({
                 {msg.role === "assistant" && msg.content === "" && isStreaming ? (
                   <div className="flex items-center gap-2 py-0.5 font-sans">
                     <Loader2 className="animate-spin text-muted-foreground" size={14} />
-                    <span className="text-sm text-muted-foreground">Thinking…</span>
+                    <span className="text-sm text-muted-foreground">Generating…</span>
                   </div>
                 ) : msg.role === "assistant" ? (
                   <MarkdownMessage content={msg.content} />
@@ -242,10 +243,37 @@ export default function ChatPanel({
         </div>
       </ScrollArea>
 
+      {selectedModel && !hasKeyForModel && (
+        <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            {PROVIDER_META[selectedModel.provider].keyHint} required to send
+            messages.
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="shrink-0 h-8"
+            onClick={openKeysForChat}
+          >
+            Add API key
+          </Button>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
-        <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug">
-          {error}
+        <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug space-y-2">
+          <p>{error}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={openKeysForChat}
+          >
+            Open API keys
+          </Button>
         </div>
       )}
 
@@ -257,7 +285,7 @@ export default function ChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about the paper..."
+            placeholder="Ask about the paper"
             rows={1}
             className="flex-1 bg-transparent px-3 py-2.5 text-sm resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
           />
@@ -266,8 +294,14 @@ export default function ChatPanel({
             size="icon"
             className="size-8 m-1 text-muted-foreground hover:text-primary"
             onClick={sendMessage}
-            disabled={!input.trim() || isStreaming}
-            aria-label={isStreaming ? "Sending..." : "Send message"}
+            disabled={!selectedModel || !input.trim() || isStreaming}
+            aria-label={
+              !selectedModel
+                ? "Select a model to send"
+                : isStreaming
+                  ? "Sending..."
+                  : "Send message"
+            }
           >
             {isStreaming ? (
               <Loader2 className="animate-spin" size={15} />
@@ -277,7 +311,9 @@ export default function ChatPanel({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground/70 mt-2 text-center">
-          {selectedModel.label} · Shift+Enter for new line
+          {selectedModel
+            ? `${selectedModel.label} · Shift+Enter for new line`
+            : "Select a model · Shift+Enter for new line"}
         </p>
       </div>
     </div>
