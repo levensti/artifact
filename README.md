@@ -4,9 +4,7 @@ An arXiv reader that helps you understand papers and remember how they connect. 
 
 Your keys, your browser, your data. Nothing is stored on a server.
 
-![Paper review — PDF with AI assistant](docs/paper-review.png)
-
-![Knowledge graph — related papers mapped across sessions](docs/knowledge-graph.png)
+![Paper review — PDF with AI assistant](docs/paper-copilot.png)
 
 ## Quick start
 
@@ -25,7 +23,9 @@ Open [localhost:3000](http://localhost:3000), add an API key in Settings, paste 
 
 3. **Analyze** — Click Analyze once per paper. The assistant identifies prerequisites, searches arXiv for related work, classifies each result by relationship type (prerequisite, builds-upon, similar approach, contrasts-with, follow-on, survey), and maps everything into a graph.
 
-4. **Build your graph** — Every analyzed paper feeds into a single knowledge graph. Come back after ten papers and you have a map of your research area — what you've read, how it connects, and what to read next.
+4. **Build your knowledge graph** — Every analyzed paper feeds into a single knowledge graph. Come back after ten papers and you have a map of your research area — what you've read, how it connects, and what to read next.
+
+![Knowledge graph — related papers mapped across sessions](docs/knowledge-graph.png)
 
 ## Features
 
