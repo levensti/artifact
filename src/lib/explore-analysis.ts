@@ -161,7 +161,11 @@ export async function runPaperExploreAnalysis(
 
   const report = (s: string) => onProgress?.(s);
 
-  report("Finding recommended pre-reading…");
+  // --- Phase 1 & 2: Run prerequisites + keyword extraction in parallel ---
+  // These are independent LLM calls that both only need paper context,
+  // so parallelizing saves one full round-trip (~3-8s).
+  report("Identifying prerequisites & search keywords…");
+
   const prereqPrompt = `You are helping a researcher decide what to read before (or alongside) a paper. The full paper text is in your context.
 
 Task: List 5–8 **recommended pre-reading topics** — concepts, techniques, or papers that would help the reader follow the core contributions (methods, assumptions, notation). These are suggestions, not hard requirements — for foundational papers some readers may already know these topics.
@@ -174,9 +178,29 @@ Rules:
 
 Return **only** valid JSON (no markdown fences, no commentary):
 {"prerequisites":[{"topic":"…","description":"…","difficulty":"foundational|intermediate|advanced"}]}`;
-  const prereqRaw = await generateStructured(model, apiKey, prereqPrompt, paperContext, signal, {
-    jsonOnly: true,
-  });
+
+  const keywordPrompt = `You will generate search phrases for arXiv (full paper text is in your context).
+
+Output 5–8 short **search phrases** (not full boolean queries). Each phrase:
+- 2–6 words, concrete technical vocabulary from *this* paper (method names, task, architecture, dataset domain).
+- Vary specificity: mix precise terms with alternative names (synonyms, abbreviations).
+- Avoid redundant near-duplicates; avoid useless generics ("neural networks", "deep learning") unless paired with a specific mechanism.
+- Do NOT include AND/OR/quotes or field tags; the app will wrap them for arXiv.
+
+Return **only** a JSON string array, e.g.:
+["fault tolerant data parallelism", "ring allreduce distributed training"]
+
+No markdown, no extra keys.`;
+
+  // Keyword extraction works fine with a truncated paper context (saves tokens)
+  const keywordPaperContext = truncateForPrompt(paperContext, 30_000);
+
+  const [prereqRaw, keywordRaw] = await Promise.all([
+    generateStructured(model, apiKey, prereqPrompt, paperContext, signal, { jsonOnly: true }),
+    generateStructured(model, apiKey, keywordPrompt, keywordPaperContext, signal, { jsonOnly: true }),
+  ]);
+
+  // --- Parse prerequisites ---
   const parsedPrereqRaw = parseJson<{ prerequisites?: unknown; items?: unknown }>(
     prereqRaw,
     {},
@@ -222,22 +246,7 @@ Return **only** valid JSON (no markdown fences, no commentary):
   }
   savePrerequisites(reviewId, prerequisites);
 
-  report("Extracting search keywords…");
-  const keywordPrompt = `You will generate search phrases for arXiv (full paper text is in your context).
-
-Output 5–8 short **search phrases** (not full boolean queries). Each phrase:
-- 2–6 words, concrete technical vocabulary from *this* paper (method names, task, architecture, dataset domain).
-- Vary specificity: mix precise terms with alternative names (synonyms, abbreviations).
-- Avoid redundant near-duplicates; avoid useless generics ("neural networks", "deep learning") unless paired with a specific mechanism.
-- Do NOT include AND/OR/quotes or field tags; the app will wrap them for arXiv.
-
-Return **only** a JSON string array, e.g.:
-["fault tolerant data parallelism", "ring allreduce distributed training"]
-
-No markdown, no extra keys.`;
-  const keywordRaw = await generateStructured(model, apiKey, keywordPrompt, paperContext, signal, {
-    jsonOnly: true,
-  });
+  // --- Parse keywords ---
   const parsedKeywords = parseJson<string[] | { queries?: string[] }>(keywordRaw, []);
   const rawList = Array.isArray(parsedKeywords)
     ? parsedKeywords
@@ -249,21 +258,47 @@ No markdown, no extra keys.`;
     throw new Error("Could not parse search keywords from model output. Try again or switch model.");
   }
 
+  // --- Phase 3: Search arXiv with parallel batched queries for better coverage ---
   report("Searching arXiv…");
-  const query =
-    localKeywords.length > 0
-      ? localKeywords.map((k) => `all:${k}`).join(" OR ")
-      : `all:${paperTitle}`;
-  const arxivRes = await fetch(
-    `/api/arxiv-search?query=${encodeURIComponent(query)}&max_results=24`,
-    { signal },
-  );
-  if (!arxivRes.ok) {
-    const data = await arxivRes.json();
-    throw new Error(data.error || "Failed to query arXiv.");
+
+  // Split keywords into batches and query in parallel for better coverage
+  // and lower latency than a single monolithic OR query.
+  const keywordBatches: string[][] = [];
+  const BATCH_SIZE = 3;
+  for (let i = 0; i < localKeywords.length; i += BATCH_SIZE) {
+    keywordBatches.push(localKeywords.slice(i, i + BATCH_SIZE));
   }
-  const arxivData = (await arxivRes.json()) as { results: ArxivSearchResult[] };
-  const localCandidates = arxivData.results
+
+  const resultsPerBatch = Math.min(12, Math.ceil(24 / keywordBatches.length));
+  const batchFetches = keywordBatches.map((batch) => {
+    const query = batch.map((k) => `all:${k}`).join(" OR ");
+    return fetch(
+      `/api/arxiv-search?query=${encodeURIComponent(query)}&max_results=${resultsPerBatch}`,
+      { signal },
+    ).then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to query arXiv.");
+      }
+      return ((await res.json()) as { results: ArxivSearchResult[] }).results;
+    });
+  });
+
+  const batchResults = await Promise.all(batchFetches);
+
+  // Deduplicate results across batches by arxivId
+  const seenArxiv = new Set<string>();
+  const allResults: ArxivSearchResult[] = [];
+  for (const batch of batchResults) {
+    for (const r of batch) {
+      if (r.arxivId && !seenArxiv.has(r.arxivId)) {
+        seenArxiv.add(r.arxivId);
+        allResults.push(r);
+      }
+    }
+  }
+
+  const localCandidates = allResults
     .filter((c) => c.arxivId !== arxivId)
     .slice(0, 18);
 
