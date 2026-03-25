@@ -187,7 +187,7 @@ export default function SettingsDialog({
               <DialogTitle>API keys</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
                 Keys stay in your browser. Requests use this app&apos;s server
-                only to reach Anthropic, OpenAI, or OpenRouter.
+                only to reach Anthropic, OpenAI, xAI, or OpenRouter.
               </DialogDescription>
             </div>
           </div>
@@ -212,6 +212,11 @@ export default function SettingsDialog({
               provider="openai"
               placeholder="sk-proj-..."
               docsUrl="https://platform.openai.com/api-keys"
+            />
+            <ProviderRow
+              provider="xai"
+              placeholder="xai-..."
+              docsUrl="https://console.x.ai/"
             />
             <ProviderRow
               provider="openrouter"

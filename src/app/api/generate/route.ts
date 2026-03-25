@@ -1,5 +1,14 @@
 import { NextRequest } from "next/server";
-import type { ExploreProvider, GenerateRequest } from "@/lib/explore";
+import {
+  invalidApiProviderMessage,
+  isProvider,
+  openAiCompatibleChatCompletionsUrl,
+  OPENROUTER_APP_TITLE,
+  OPENROUTER_HTTP_REFERER,
+  providerApiErrorLabel,
+  type OpenAiCompatibleProvider,
+} from "@/lib/ai-providers";
+import type { GenerateRequest } from "@/lib/explore";
 
 const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
 
@@ -14,8 +23,6 @@ function jsonError(message: string, status: number) {
     headers: { "Content-Type": "application/json" },
   });
 }
-
-const VALID_PROVIDERS = new Set(["anthropic", "openai", "openrouter"]);
 
 export async function POST(req: NextRequest) {
   let body: GenerateRequest;
@@ -34,11 +41,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!VALID_PROVIDERS.has(provider)) {
-    return jsonError(
-      "Invalid provider. Must be 'anthropic', 'openai', or 'openrouter'.",
-      400,
-    );
+  if (!isProvider(provider)) {
+    return jsonError(invalidApiProviderMessage(), 400);
   }
 
   if (!model || typeof model !== "string") {
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
             apiKey,
             prompt,
             paperContext,
-            provider,
+            provider as OpenAiCompatibleProvider,
           );
 
     return new Response(JSON.stringify({ content }), {
@@ -115,12 +119,9 @@ async function generateOpenAICompatible(
   apiKey: string,
   prompt: string,
   paperContext: string | undefined,
-  provider: ExploreProvider,
+  provider: OpenAiCompatibleProvider,
 ): Promise<string> {
-  const baseUrl =
-    provider === "openrouter"
-      ? "https://openrouter.ai/api/v1/chat/completions"
-      : "https://api.openai.com/v1/chat/completions";
+  const baseUrl = openAiCompatibleChatCompletionsUrl(provider);
 
   const systemContent = paperContext
     ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
@@ -132,8 +133,8 @@ async function generateOpenAICompatible(
   };
 
   if (provider === "openrouter") {
-    headers["HTTP-Referer"] = "https://paper-copilot.dev";
-    headers["X-Title"] = "Paper Copilot";
+    headers["HTTP-Referer"] = OPENROUTER_HTTP_REFERER;
+    headers["X-Title"] = OPENROUTER_APP_TITLE;
   }
 
   const response = await fetch(baseUrl, {
@@ -150,8 +151,7 @@ async function generateOpenAICompatible(
   });
 
   if (!response.ok) {
-    const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
-    throw await parseError(response, providerLabel);
+    throw await parseError(response, providerApiErrorLabel(provider));
   }
 
   const data = await response.json();

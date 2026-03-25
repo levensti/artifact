@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
-import { getApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
+import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import {
   getMessages,
   saveMessages,
@@ -144,6 +144,7 @@ export default function ChatPanel({
   }, [messages, isStreaming, reviewId]);
 
   void keysVersion;
+  const hasSavedKeys = hasAnySavedApiKey();
   const hasKeyForModel =
     selectedModel != null && !!getApiKey(selectedModel.provider);
 
@@ -426,13 +427,20 @@ export default function ChatPanel({
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Questions, explanations, or deeper dives — ask anything about the paper.
                 </p>
-                {!selectedModel ? (
+                {!hasSavedKeys ? (
                   <p className="text-[11px] text-muted-foreground/90 pt-1">
-                    Select a model to get started.
+                    Open Settings and save at least one provider API key. Models
+                    appear only after a key is stored.
+                  </p>
+                ) : !selectedModel ? (
+                  <p className="text-[11px] text-muted-foreground/90 pt-1">
+                    Choose a model from the menu above (loaded from providers
+                    you&apos;ve added keys for).
                   </p>
                 ) : !hasKeyForModel ? (
                   <p className="text-[11px] text-muted-foreground/90 pt-1">
-                    Add your API key in Settings to send messages.
+                    This model&apos;s API key was removed — pick another model
+                    or add the key again in Settings.
                   </p>
                 ) : null}
               </div>
@@ -552,7 +560,9 @@ export default function ChatPanel({
             }
             aria-label={
               !selectedModel
-                ? "Select a model to send"
+                ? hasSavedKeys
+                  ? "Choose a model to send"
+                  : "Add an API key in Settings to send"
                 : isStreaming
                   ? "Sending..."
                   : "Send message"
@@ -568,7 +578,9 @@ export default function ChatPanel({
         <p className="text-xs text-muted-foreground/70 mt-1.5 text-center leading-snug px-1">
           {selectedModel
             ? `${selectedModel.label} · Shift+Enter new line`
-            : "Select a model · Shift+Enter new line"}
+            : hasSavedKeys
+              ? "Choose a model above · Shift+Enter new line"
+              : "Add an API key in Settings first · Shift+Enter new line"}
         </p>
       </div>
     </div>

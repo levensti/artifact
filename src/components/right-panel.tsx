@@ -299,7 +299,8 @@ function AnalysisBanner({
               Analyze this paper
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Select a model and add an API key to discover related works.
+              Add API keys in Settings, then choose a model from the chat header
+              — models load per provider only after its key is saved.
             </p>
           </div>
           <Button

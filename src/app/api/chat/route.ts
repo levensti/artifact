@@ -1,4 +1,14 @@
 import { NextRequest } from "next/server";
+import type { Provider } from "@/lib/models";
+import {
+  invalidApiProviderMessage,
+  isProvider,
+  openAiCompatibleChatCompletionsUrl,
+  OPENROUTER_APP_TITLE,
+  OPENROUTER_HTTP_REFERER,
+  providerApiErrorLabel,
+  type OpenAiCompatibleProvider,
+} from "@/lib/ai-providers";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -8,7 +18,7 @@ interface ChatMessage {
 interface ChatRequest {
   messages: ChatMessage[];
   model: string;
-  provider: "anthropic" | "openai" | "openrouter";
+  provider: Provider;
   apiKey: string;
   paperContext?: string;
   /** Optional summary of prerequisites / related-work progress for this review */
@@ -44,8 +54,6 @@ function jsonError(message: string, status: number) {
   });
 }
 
-const VALID_PROVIDERS = new Set(["anthropic", "openai", "openrouter"]);
-
 export async function POST(req: NextRequest) {
   let body: ChatRequest;
   try {
@@ -64,11 +72,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!VALID_PROVIDERS.has(provider)) {
-    return jsonError(
-      "Invalid provider. Must be 'anthropic', 'openai', or 'openrouter'.",
-      400,
-    );
+  if (!isProvider(provider)) {
+    return jsonError(invalidApiProviderMessage(), 400);
   }
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -89,18 +94,14 @@ export async function POST(req: NextRequest) {
         learningContext,
       );
     } else {
-      // OpenAI and OpenRouter use the same API format
-      const baseUrl =
-        provider === "openrouter"
-          ? "https://openrouter.ai/api/v1/chat/completions"
-          : "https://api.openai.com/v1/chat/completions";
+      const openAiProvider = provider as OpenAiCompatibleProvider;
       return await streamOpenAICompatible(
         messages,
         model,
         apiKey,
         paperContext,
-        baseUrl,
-        provider,
+        openAiCompatibleChatCompletionsUrl(openAiProvider),
+        openAiProvider,
         learningContext,
       );
     }
@@ -171,7 +172,7 @@ async function streamOpenAICompatible(
   apiKey: string,
   paperContext: string | undefined,
   baseUrl: string,
-  provider: string,
+  provider: OpenAiCompatibleProvider,
   learningContext?: string,
 ) {
   const learn = learningSection(learningContext);
@@ -184,10 +185,9 @@ async function streamOpenAICompatible(
     Authorization: `Bearer ${apiKey}`,
   };
 
-  // OpenRouter requires HTTP-Referer for attribution
   if (provider === "openrouter") {
-    headers["HTTP-Referer"] = "https://paper-copilot.dev";
-    headers["X-Title"] = "Artifact";
+    headers["HTTP-Referer"] = OPENROUTER_HTTP_REFERER;
+    headers["X-Title"] = OPENROUTER_APP_TITLE;
   }
 
   const response = await fetch(baseUrl, {
@@ -205,7 +205,7 @@ async function streamOpenAICompatible(
 
   if (!response.ok) {
     const errorText = await response.text();
-    const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+    const providerLabel = providerApiErrorLabel(provider);
     let errorMessage = `${providerLabel} API error: ${response.status}`;
     try {
       const parsed = JSON.parse(errorText);
@@ -217,7 +217,10 @@ async function streamOpenAICompatible(
   }
 
   if (!response.body) {
-    return jsonError(`No response body from ${provider}`, 502);
+    return jsonError(
+      `No response body from ${providerApiErrorLabel(provider)}`,
+      502,
+    );
   }
 
   return new Response(transformSSEStream(response.body, parseOpenAIDelta), {
