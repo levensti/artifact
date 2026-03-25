@@ -10,14 +10,24 @@ export function buildLearningContextSummary(reviewId: string): string {
     parts.push(
       `Pre-reading: ${done}/${p.prerequisites.length} marked as read.`,
     );
-    parts.push(
-      `Topics: ${p.prerequisites.map((x) => x.topic).join("; ")}`,
-    );
+    // Include difficulty and completion status per topic so the assistant
+    // can tailor explanations to the reader's current level.
+    const topicDetails = p.prerequisites.map((x) => {
+      const status = x.completedAt ? "✓" : "○";
+      return `${status} ${x.topic} (${x.difficulty})`;
+    });
+    parts.push(`Topics:\n${topicDetails.join("\n")}`);
   }
   if (g?.nodes?.length) {
-    parts.push(
-      `Related-works map for this review: ${g.nodes.length} papers (${g.edges.length} typed links).`,
+    const edgeSummaries = g.edges.slice(0, 6).map(
+      (e) => `  ${e.relationship}: ${g.nodes.find((n) => n.id === e.target)?.title ?? e.target}`,
     );
+    parts.push(
+      `Related-works map: ${g.nodes.length} papers, ${g.edges.length} links.`,
+    );
+    if (edgeSummaries.length > 0) {
+      parts.push(`Key connections:\n${edgeSummaries.join("\n")}`);
+    }
   }
   return parts.join("\n");
 }
