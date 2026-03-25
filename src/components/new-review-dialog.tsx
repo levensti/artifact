@@ -86,41 +86,33 @@ export default function NewReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>New paper review</DialogTitle>
+          <DialogTitle>New review</DialogTitle>
           <DialogDescription>
-            Paste an arXiv URL. The sidebar title is taken from the paper&apos;s
-            arXiv entry when available.
+            Paste a link to any arXiv paper.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                arXiv URL
-              </label>
-              <Input
-                value={url}
-                onChange={(e) => {
-                  setUrl(e.target.value);
-                  setError(null);
-                }}
-                placeholder="https://arxiv.org/abs/2602.00277"
-                autoFocus
-                disabled={loading}
-              />
-              {arxivId && (
-                <p className="text-xs text-primary font-medium">
-                  Detected: {arxivId}
-                </p>
-              )}
-              {error && <p className="text-xs text-destructive">{error}</p>}
-            </div>
-          </div>
+        <form onSubmit={handleSubmit} className="mt-2">
+          <Input
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setError(null);
+            }}
+            placeholder="https://arxiv.org/abs/2602.00277"
+            autoFocus
+            disabled={loading}
+          />
+          {arxivId && (
+            <p className="text-xs text-primary font-medium mt-2">
+              {arxivId}
+            </p>
+          )}
+          {error && <p className="text-xs text-destructive mt-2">{error}</p>}
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="mt-5">
             <Button
               type="button"
               variant="ghost"
@@ -133,7 +125,7 @@ export default function NewReviewDialog({
               {loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  Fetching paper…
+                  Loading…
                 </>
               ) : (
                 <>

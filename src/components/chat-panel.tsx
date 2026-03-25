@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
+import { Loader2, Send, Sparkles } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import {
@@ -19,13 +19,7 @@ import {
 import { buildLearningContextSummary } from "@/lib/learning-context";
 import { stripLearningMapSentinel } from "@/lib/learning-sentinel";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
-import {
-  getGraphData,
-  getPrerequisites,
-  RELATIONSHIP_SHORT_LABEL,
-  type ArxivSearchResult,
-  type RelationshipType,
-} from "@/lib/explore";
+import { type ArxivSearchResult } from "@/lib/explore";
 import type { AnalysisStatus } from "@/hooks/use-auto-analysis";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,9 +42,12 @@ interface ChatPanelProps {
   /** Lifted model state — when provided, ChatPanel uses these instead of internal state */
   selectedModel?: Model | null;
   onModelChange?: (model: Model | null) => void;
-  /** Banner-triggered analysis state — shown as live progress in the chat */
+  /** Analysis state — shown as live progress and preset in the chat */
   analysisStatus?: AnalysisStatus;
   analysisProgress?: string | null;
+  analysisError?: string | null;
+  canRunAnalysis?: boolean;
+  onTriggerAnalysis?: () => boolean;
 }
 
 function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearchResult[] }) {
@@ -110,6 +107,9 @@ export default function ChatPanel({
   onModelChange,
   analysisStatus,
   analysisProgress,
+  analysisError,
+  canRunAnalysis,
+  onTriggerAnalysis,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -148,27 +148,34 @@ export default function ChatPanel({
   const hasKeyForModel =
     selectedModel != null && !!getApiKey(selectedModel.provider);
 
-  // Inject a summary message when banner-triggered analysis completes
+  // Inject rich inline results when externally-triggered analysis completes
   const prevAnalysisStatus = useRef(analysisStatus);
+  const prevReviewIdRef = useRef(reviewId);
   useEffect(() => {
+    // Reset ref on review switch to avoid spurious injection
+    if (prevReviewIdRef.current !== reviewId) {
+      prevAnalysisStatus.current = analysisStatus;
+      prevReviewIdRef.current = reviewId;
+      return;
+    }
     if (
       prevAnalysisStatus.current === "running" &&
       analysisStatus === "done"
     ) {
-      const summary = buildAnalysisSummary(reviewId);
-      const summaryMsg: ChatMessage = {
+      const resultMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: summary,
+        content: "",
         timestamp: new Date().toISOString(),
+        blocks: [{ type: "learning_embed", reviewId }],
       };
-      setMessages((prev) => [...prev, summaryMsg]);
+      setMessages((prev) => [...prev, resultMsg]);
     }
     prevAnalysisStatus.current = analysisStatus;
   }, [analysisStatus, reviewId]);
 
-  // Banner-triggered analysis is happening (not the sentinel-triggered one)
-  const bannerAnalysisRunning =
+  // External analysis is running (not the sentinel-triggered one)
+  const externalAnalysisRunning =
     analysisStatus === "running" && !learningProgress;
 
   useLayoutEffect(() => {
@@ -274,9 +281,10 @@ export default function ChatPanel({
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         streamed += chunk;
+        const snapshot = streamed;
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m,
+            m.id === assistantMsg.id ? { ...m, content: snapshot } : m,
           ),
         );
       }
@@ -318,8 +326,9 @@ export default function ChatPanel({
             const followup: ChatMessage = {
               id: crypto.randomUUID(),
               role: "assistant",
-              content: buildAnalysisSummary(reviewId),
+              content: "",
               timestamp: new Date().toISOString(),
+              blocks: [{ type: "learning_embed", reviewId }],
             };
             setMessages((prev) => [...prev, followup]);
           } catch (runErr) {
@@ -400,11 +409,6 @@ export default function ChatPanel({
           <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
         </div>
       )}
-      {hideHeader && (
-        <div className="flex items-center justify-end px-3 py-1.5 shrink-0">
-          <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />
-        </div>
-      )}
 
       <div
         ref={scrollAreaRef}
@@ -412,95 +416,78 @@ export default function ChatPanel({
       >
         <div className="px-4 py-5 space-y-5">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-10 text-center gap-3 px-2">
-              <div className="size-10 rounded-md border border-border bg-muted/40 flex items-center justify-center">
-                <MessageSquare
-                  className="text-muted-foreground"
-                  size={18}
-                  strokeWidth={1.75}
-                />
-              </div>
-              <div className="space-y-1.5 max-w-[min(100%,300px)]">
-                <p className="text-sm font-semibold tracking-tight text-foreground">
-                  Ask about this paper
-                </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Questions, explanations, or deeper dives — ask anything about the paper.
-                </p>
-                {!hasSavedKeys ? (
-                  <p className="text-[11px] text-muted-foreground/90 pt-1">
-                    Open Settings and save at least one provider API key. Models
-                    appear only after a key is stored.
-                  </p>
-                ) : !selectedModel ? (
-                  <p className="text-[11px] text-muted-foreground/90 pt-1">
-                    Choose a model from the menu above (loaded from providers
-                    you&apos;ve added keys for).
-                  </p>
-                ) : !hasKeyForModel ? (
-                  <p className="text-[11px] text-muted-foreground/90 pt-1">
-                    This model&apos;s API key was removed — pick another model
-                    or add the key again in Settings.
-                  </p>
-                ) : null}
-              </div>
+            <div className="flex flex-col items-center justify-center h-full min-h-[120px] text-center px-4">
+              <p className="text-sm text-muted-foreground">
+                Ask anything about this paper.
+              </p>
             </div>
           )}
 
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn(
-                "max-w-full",
-                msg.role === "user" ? "flex justify-end" : "",
-              )}
-            >
+          {messages.map((msg) => {
+            const hasBlocks = msg.blocks && msg.blocks.length > 0;
+            const blockOnly = hasBlocks && !msg.content;
+
+            return (
               <div
+                key={msg.id}
                 className={cn(
-                  "rounded-md px-3 py-2.5 text-sm leading-relaxed",
-                  msg.role === "user"
-                    ? "bg-secondary text-foreground max-w-[88%] border border-border border-l-2 border-l-primary/50"
-                    : "bg-card border border-border text-card-foreground max-w-full",
+                  "max-w-full",
+                  msg.role === "user" ? "flex justify-end" : "",
                 )}
               >
-                {msg.role === "assistant" &&
-                msg.content === "" &&
-                isStreaming ? (
-                  <div className="flex items-center gap-2 py-0.5 font-sans">
-                    <Loader2
-                      className="animate-spin text-muted-foreground"
-                      size={14}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      Generating…
-                    </span>
+                {/* Block-only messages (e.g. learning_embed) render without card wrapper */}
+                {msg.role === "assistant" && blockOnly && !isStreaming ? (
+                  <div className="max-w-full">
+                    {renderAssistantBlocks(msg.blocks!, blockCtx)}
                   </div>
-                ) : msg.role === "assistant" ? (
-                  <>
-                    {msg.content ? (
-                      <MarkdownMessage
-                        content={stripLearningMapSentinel(msg.content).text}
-                      />
-                    ) : null}
-                    {/* Backward compat: render old learning_embed blocks inline */}
-                    {msg.blocks && msg.blocks.length > 0
-                      ? renderAssistantBlocks(msg.blocks, blockCtx)
-                      : null}
-                  </>
                 ) : (
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  <div
+                    className={cn(
+                      "rounded-md px-3 py-2.5 text-sm leading-relaxed",
+                      msg.role === "user"
+                        ? "bg-secondary text-foreground max-w-[88%] border border-border border-l-2 border-l-primary/50"
+                        : "bg-card border border-border text-card-foreground max-w-full",
+                    )}
+                  >
+                    {msg.role === "assistant" &&
+                    msg.content === "" &&
+                    isStreaming ? (
+                      <div className="flex items-center gap-2 py-0.5 font-sans">
+                        <Loader2
+                          className="animate-spin text-muted-foreground"
+                          size={14}
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          Generating…
+                        </span>
+                      </div>
+                    ) : msg.role === "assistant" ? (
+                      <>
+                        {msg.content ? (
+                          <MarkdownMessage
+                            content={stripLearningMapSentinel(msg.content).text}
+                          />
+                        ) : null}
+                        {hasBlocks
+                          ? renderAssistantBlocks(msg.blocks!, blockCtx)
+                          : null}
+                      </>
+                    ) : (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
-          {/* Banner-triggered analysis: live progress card */}
-          {bannerAnalysisRunning && (
+          {/* External analysis (e.g. Explore tab re-analyze): live progress card */}
+          {externalAnalysisRunning && (
             <AnalysisProgressCard progress={analysisProgress ?? null} />
           )}
 
           {/* Sentinel-triggered analysis: live progress card */}
-          {learningProgress && !bannerAnalysisRunning && (
+          {learningProgress && !externalAnalysisRunning && (
             <AnalysisProgressCard progress={learningProgress} />
           )}
         </div>
@@ -535,6 +522,49 @@ export default function ChatPanel({
             onClick={openKeysForChat}
           >
             Open API keys
+          </Button>
+        </div>
+      )}
+
+      {/* Suggestion chips — above input */}
+      {analysisStatus === "idle" && (
+        <div className="flex items-center gap-2 px-3 py-3 shrink-0 flex-wrap border-t border-border/50">
+          {[
+            { label: "Prerequisites", message: "What concepts and background should I understand before reading this paper?" },
+            { label: "Related papers", message: "Find related papers and map the research landscape around this work." },
+          ].map((chip) => (
+            <button
+              key={chip.label}
+              type="button"
+              disabled={!selectedModel || !hasKeyForModel || isStreaming || !!learningProgress}
+              onClick={() => void submitChat(chip.message)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors",
+                selectedModel && hasKeyForModel
+                  ? "border-border bg-card hover:bg-accent text-foreground cursor-pointer"
+                  : "border-border/50 bg-muted/30 text-muted-foreground cursor-not-allowed",
+              )}
+            >
+              <Sparkles className="size-3" />
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {analysisStatus === "error" && onTriggerAnalysis && (
+        <div className="mx-3 mt-2 px-3 py-2 rounded-md border border-destructive/20 bg-destructive/[0.04] shrink-0 flex items-center justify-between gap-2">
+          <p className="text-xs text-destructive/90 truncate">
+            {analysisError ?? "Analysis failed"}
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px] text-destructive hover:text-destructive shrink-0"
+            onClick={onTriggerAnalysis}
+            disabled={!canRunAnalysis}
+          >
+            Retry
           </Button>
         </div>
       )}
@@ -620,58 +650,3 @@ function AnalysisProgressCard({ progress }: { progress: string | null }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Build a human-readable summary after analysis completes            */
-/* ------------------------------------------------------------------ */
-
-function buildAnalysisSummary(reviewId: string): string {
-  const graph = getGraphData(reviewId);
-  const prereqs = getPrerequisites(reviewId);
-
-  const relatedCount = graph ? Math.max(0, graph.nodes.length - 1) : 0;
-  const prereqCount = prereqs?.prerequisites.length ?? 0;
-
-  // Count by relationship type
-  const typeCounts = new Map<RelationshipType, number>();
-  for (const edge of graph?.edges ?? []) {
-    typeCounts.set(
-      edge.relationship,
-      (typeCounts.get(edge.relationship) ?? 0) + 1,
-    );
-  }
-
-  let summary: string;
-
-  if (relatedCount === 0 && prereqCount === 0) {
-    summary =
-      "I wasn't able to find related papers or prerequisites for this paper. You can try re-analyzing with a different model.";
-    return summary;
-  }
-
-  const parts: string[] = [];
-  if (prereqCount > 0)
-    parts.push(
-      `**${prereqCount} prerequisite${prereqCount !== 1 ? "s" : ""}**`,
-    );
-  if (relatedCount > 0)
-    parts.push(
-      `**${relatedCount} related paper${relatedCount !== 1 ? "s" : ""}**`,
-    );
-
-  summary = `I analyzed this paper and found ${parts.join(" and ")}`;
-
-  if (typeCounts.size > 0) {
-    summary += ":\n\n";
-    for (const [type, count] of typeCounts) {
-      const label = RELATIONSHIP_SHORT_LABEL[type] ?? type;
-      summary += `- ${count} ${label.toLowerCase()}\n`;
-    }
-  } else {
-    summary += ".\n\n";
-  }
-
-  summary +=
-    "\nCheck the **Explore** tab for your prerequisite checklist. These papers have been added to your [Knowledge Graph](/discover).";
-
-  return summary;
-}

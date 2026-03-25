@@ -13,6 +13,7 @@ import { getReview } from "@/lib/reviews";
 import { getAnnotations, addAnnotation } from "@/lib/annotations";
 import { arxivPdfUrl } from "@/lib/utils";
 import { useAnalysis } from "@/hooks/use-auto-analysis";
+import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
 
@@ -46,6 +47,19 @@ export default function ReviewPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [rightTab, setRightTab] = useState<RightTab>("assistant");
+
+  // Restore persisted model once client is ready
+  useEffect(() => {
+    if (!clientReady) return;
+    const saved = getSavedSelectedModel();
+    if (saved) setSelectedModel(saved);
+  }, [clientReady]);
+
+  // Wrap setter to also persist the choice
+  const handleModelChange = useCallback((model: Model | null) => {
+    setSelectedModel(model);
+    saveSelectedModel(model);
+  }, []);
 
   // Annotation state
   const [annotationVersion, setAnnotationVersion] = useState(0);
@@ -210,7 +224,7 @@ export default function ReviewPage() {
             onHighlightClick={handleHighlightClick}
             onAnnotationHover={setHoveredAnnotationId}
             selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
+            onModelChange={handleModelChange}
             analysisStatus={analysis.status}
             analysisProgress={analysis.progress}
             analysisError={analysis.error}
