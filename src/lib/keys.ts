@@ -1,4 +1,4 @@
-import { Provider } from "./models";
+import { PROVIDER_ORDER, type Provider } from "./models";
 
 const STORAGE_PREFIX = "paper-copilot-key-";
 
@@ -13,6 +13,12 @@ function notifyKeysUpdated() {
 export function getApiKey(provider: Provider): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(`${STORAGE_PREFIX}${provider}`);
+}
+
+/** True if the user has saved at least one provider key (models load only after this). */
+export function hasAnySavedApiKey(): boolean {
+  if (typeof window === "undefined") return false;
+  return PROVIDER_ORDER.some((p) => !!localStorage.getItem(`${STORAGE_PREFIX}${p}`));
 }
 
 export function setApiKey(provider: Provider, key: string): void {

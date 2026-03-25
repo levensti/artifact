@@ -1,7 +1,12 @@
-export type Provider = "anthropic" | "openai" | "openrouter";
+export type Provider = "anthropic" | "openai" | "xai" | "openrouter";
 
 /** Stable order for settings UI and model dropdown groups. */
-export const PROVIDER_ORDER: Provider[] = ["anthropic", "openai", "openrouter"];
+export const PROVIDER_ORDER: Provider[] = [
+  "anthropic",
+  "openai",
+  "xai",
+  "openrouter",
+];
 
 export interface Model {
   id: string;
@@ -42,6 +47,24 @@ export const FALLBACK_MODELS: Model[] = [
     modelId: "o3-mini",
   },
   {
+    id: "grok-3",
+    label: "Grok 3",
+    provider: "xai",
+    modelId: "grok-3",
+  },
+  {
+    id: "grok-3-mini",
+    label: "Grok 3 Mini",
+    provider: "xai",
+    modelId: "grok-3-mini",
+  },
+  {
+    id: "grok-4-0709",
+    label: "Grok 4",
+    provider: "xai",
+    modelId: "grok-4-0709",
+  },
+  {
     id: "or-deepseek-r1",
     label: "DeepSeek R1",
     provider: "openrouter",
@@ -74,6 +97,11 @@ export const PROVIDER_META: Record<
     label: "OpenAI",
     description: "OpenAI Chat Completions models. Uses an OpenAI API key.",
     keyHint: "OpenAI API key",
+  },
+  xai: {
+    label: "xAI",
+    description: "Grok models via the xAI API. Uses an xAI API key.",
+    keyHint: "xAI API key",
   },
   openrouter: {
     label: "OpenRouter",

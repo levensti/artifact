@@ -49,7 +49,7 @@ Progress appears live in the Assistant tab as each phase runs.
 
 **Privacy** — All data lives in your browser's `localStorage`. No accounts, no telemetry, no server-side storage. API calls go directly from your browser to the model provider. Safe for pre-publication work.
 
-**Multi-model** — Bring your own keys for Anthropic, OpenAI, or OpenRouter. Switch between Claude, GPT-4o, o3-mini, and others from a single dropdown.
+**Multi-model** — Bring your own keys for Anthropic, OpenAI, xAI, or OpenRouter and switch between the frontier models from a single model selector.
 
 ## Contributing
 

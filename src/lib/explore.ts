@@ -1,4 +1,7 @@
-export type ExploreProvider = "anthropic" | "openai" | "openrouter";
+import type { Provider } from "./models";
+
+/** Same as chat/generate API providers — kept as alias for explore/generation call sites. */
+export type ExploreProvider = Provider;
 
 export interface GenerateRequest {
   model: string;
