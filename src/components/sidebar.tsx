@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Plus,
@@ -9,7 +9,6 @@ import {
   PanelLeftClose,
   PanelLeft,
   ScrollText,
-  Home,
   Network,
 } from "lucide-react";
 import {
@@ -17,6 +16,10 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
+import {
+  getGlobalGraphData,
+  EXPLORE_UPDATED_EVENT,
+} from "@/lib/explore";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -60,48 +63,42 @@ export default function Sidebar({
   const router = useRouter();
   const pathname = usePathname();
 
+  // Track whether the knowledge graph has any entries
+  const [hasGraphData, setHasGraphData] = useState(() => {
+    const g = getGlobalGraphData();
+    return g !== null && g.nodes.length > 0;
+  });
+  useEffect(() => {
+    const check = () => {
+      const g = getGlobalGraphData();
+      setHasGraphData(g !== null && g.nodes.length > 0);
+    };
+    window.addEventListener(EXPLORE_UPDATED_EVENT, check);
+    return () => window.removeEventListener(EXPLORE_UPDATED_EVENT, check);
+  }, []);
+
   const handleReviewCreated = (reviewId: string) => {
     setShowNewReview(false);
     router.push(`/review/${reviewId}`);
   };
 
   const grouped = useMemo(() => {
-    const today = new Date();
-    const todayStr = today.toISOString().split("T")[0];
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split("T")[0];
-
-    const buckets: Record<string, PaperReview[]> = {
-      today: [],
-      yesterday: [],
-      week: [],
-      older: [],
-    };
-
+    const byDate = new Map<string, PaperReview[]>();
     for (const r of reviews) {
-      const d = new Date(r.createdAt).toISOString().split("T")[0];
-      if (d === todayStr) buckets.today.push(r);
-      else if (d === yesterdayStr) buckets.yesterday.push(r);
-      else {
-        const daysDiff = Math.floor(
-          (today.getTime() - new Date(r.createdAt).getTime()) / 86400000,
-        );
-        if (daysDiff < 7) buckets.week.push(r);
-        else buckets.older.push(r);
-      }
+      const dateKey = new Date(r.createdAt).toISOString().split("T")[0];
+      const list = byDate.get(dateKey) ?? [];
+      list.push(r);
+      byDate.set(dateKey, list);
     }
 
-    const result: { label: string; items: PaperReview[] }[] = [];
-    if (buckets.today.length)
-      result.push({ label: "Today", items: buckets.today });
-    if (buckets.yesterday.length)
-      result.push({ label: "Yesterday", items: buckets.yesterday });
-    if (buckets.week.length)
-      result.push({ label: "This week", items: buckets.week });
-    if (buckets.older.length)
-      result.push({ label: "Older", items: buckets.older });
-    return result;
+    // Sort date keys descending (most recent first)
+    const sortedKeys = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
+
+    return sortedKeys.map((dateKey) => {
+      const d = new Date(dateKey + "T12:00:00"); // noon to avoid timezone shift
+      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      return { label, items: byDate.get(dateKey)! };
+    });
   }, [reviews]);
 
   return (
@@ -123,13 +120,14 @@ export default function Sidebar({
           </div>
           <div className="flex items-center gap-0.5">
             <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs gap-1"
               onClick={() => setShowNewReview(true)}
-              title="New review"
+              title="New paper review"
             >
-              <Plus size={14} />
+              <Plus size={12} />
+              New
             </Button>
             <Button
               variant="ghost"
@@ -144,20 +142,16 @@ export default function Sidebar({
         </div>
 
         <ScrollArea className="flex-1 px-2 py-2">
-          <div className="mb-4 space-y-0.5">
-            <NavItem
-              label="Home"
-              icon={<Home size={13} className="shrink-0 opacity-50" />}
-              active={pathname === "/"}
-              onClick={() => router.push("/")}
-            />
-            <NavItem
-              label="Knowledge Graph"
-              icon={<Network size={13} className="shrink-0 opacity-50" />}
-              active={pathname === "/discover"}
-              onClick={() => router.push("/discover")}
-            />
-          </div>
+          {hasGraphData && (
+            <div className="mb-4 space-y-0.5">
+              <NavItem
+                label="Knowledge Graph"
+                icon={<Network size={13} className="shrink-0 opacity-50" />}
+                active={pathname === "/discover"}
+                onClick={() => router.push("/discover")}
+              />
+            </div>
+          )}
 
           {grouped.length === 0 && (
             <div className="px-3 py-10 text-center">

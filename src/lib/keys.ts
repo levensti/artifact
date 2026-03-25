@@ -1,6 +1,7 @@
-import { PROVIDER_ORDER, type Provider } from "./models";
+import { PROVIDER_ORDER, type Provider, type Model } from "./models";
 
 const STORAGE_PREFIX = "paper-copilot-key-";
+const MODEL_STORAGE_KEY = "paper-copilot-selected-model";
 
 /** Fired on same tab after set/clear so UI can refresh key presence. */
 export const KEYS_UPDATED_EVENT = "paper-copilot-keys-updated";
@@ -31,5 +32,30 @@ export function clearApiKey(provider: Provider): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(`${STORAGE_PREFIX}${provider}`);
   notifyKeysUpdated();
+}
+
+/* ── Model persistence ── */
+
+export function saveSelectedModel(model: Model | null): void {
+  if (typeof window === "undefined") return;
+  if (model) {
+    localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(model));
+  } else {
+    localStorage.removeItem(MODEL_STORAGE_KEY);
+  }
+}
+
+export function getSavedSelectedModel(): Model | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(MODEL_STORAGE_KEY);
+    if (!raw) return null;
+    const model = JSON.parse(raw) as Model;
+    // Only restore if the provider key still exists
+    if (!getApiKey(model.provider)) return null;
+    return model;
+  } catch {
+    return null;
+  }
 }
 
