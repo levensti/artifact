@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Check, ExternalLink, Key, Shield } from "lucide-react";
+import { Eye, EyeOff, Check, ExternalLink, Key } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -80,7 +80,7 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
             )}
           </div>
           <p className="text-xs text-muted-foreground leading-snug">
-            {meta.description}
+            {meta.keyHint}
           </p>
         </div>
         <a

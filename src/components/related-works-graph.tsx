@@ -104,7 +104,7 @@ export default function RelatedWorksGraph({
               onChange={setPaperSearch}
               matchCount={searchMatchCount}
               total={graph.nodes.length}
-              className="sm:max-w-[14rem]"
+              className="sm:max-w-56"
             />
             <Button
               size="sm"
@@ -136,7 +136,9 @@ export default function RelatedWorksGraph({
           <GraphDetailPanel
             {...detailPanelProps}
             onDiscussInChat={
-              onDiscussInChat ? (node) => onDiscussInChat(node.title) : undefined
+              onDiscussInChat
+                ? (node) => onDiscussInChat(node.title)
+                : undefined
             }
           />
         )}
@@ -165,7 +167,7 @@ export default function RelatedWorksGraph({
                       onChange={setPaperSearch}
                       matchCount={searchMatchCount}
                       total={graph.nodes.length}
-                      className="min-w-[12rem] flex-1 sm:max-w-[16rem]"
+                      className="min-w-48 flex-1 sm:max-w-[16rem]"
                     />
                     <Button
                       size="sm"
@@ -236,7 +238,7 @@ export default function RelatedWorksGraph({
         <div className="absolute bottom-3 left-3 z-10">
           <GraphLegend />
         </div>
-        <div className="pointer-events-none absolute right-3 top-3 max-w-[11rem] text-right text-[10px] text-muted-foreground/60 select-none">
+        <div className="pointer-events-none absolute right-3 top-3 max-w-44 text-right text-[10px] text-muted-foreground/60 select-none">
           Scroll to zoom · Drag to pan · Click a paper
         </div>
       </div>
@@ -263,7 +265,9 @@ export default function RelatedWorksGraph({
             <GraphDetailPanel
               {...detailPanelProps}
               onDiscussInChat={
-                onDiscussInChat ? (node) => onDiscussInChat(node.title) : undefined
+                onDiscussInChat
+                  ? (node) => onDiscussInChat(node.title)
+                  : undefined
               }
             />
           </div>

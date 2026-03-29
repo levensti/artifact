@@ -22,7 +22,7 @@ export default function Home() {
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
               Artifact
             </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-[26rem] mx-auto">
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-104 mx-auto">
               Read arXiv papers with full-text context, annotate, and chat with
               an AI assistant.
             </p>

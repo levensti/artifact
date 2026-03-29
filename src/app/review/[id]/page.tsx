@@ -33,7 +33,7 @@ import type { TextSelectionInfo } from "@/components/pdf-viewer";
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-[var(--reader-mat)] text-muted-foreground text-sm">
+    <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
       <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
       Loading PDF viewer…
     </div>
@@ -71,12 +71,16 @@ export default function ReviewPage() {
   }, [clientReady, params.id]);
 
   const [paperText, setPaperText] = useState("");
-  const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(null);
+  const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(
+    null,
+  );
   const [panelWidth, setPanelWidth] = useState(440);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   /** Passage threads (Dive deeper) / selection: which annotation thread is open in chat */
-  const [chatThreadAnnotationId, setChatThreadAnnotationId] = useState<string | null>(null);
+  const [chatThreadAnnotationId, setChatThreadAnnotationId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (!clientReady) return;
@@ -109,9 +113,17 @@ export default function ReviewPage() {
       cancelled = true;
     };
   }, [review, annotationVersion]);
-  const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
-  const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<{ annotationId: string; x: number; y: number } | null>(null);
+  const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(
+    null,
+  );
+  const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(
+    null,
+  );
+  const [tooltip, setTooltip] = useState<{
+    annotationId: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!clientReady || !dataReady) return;
@@ -187,7 +199,10 @@ export default function ReviewPage() {
   );
 
   const handleAnnotationClick = useCallback(
-    (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => {
+    (
+      annotationId: string,
+      info: { clickY: number; highlightRight: number; pageRight: number },
+    ) => {
       setActiveAnnotationId(annotationId);
       if (!review) return;
       void getAnnotation(review.id, annotationId).then((a) => {
@@ -213,7 +228,9 @@ export default function ReviewPage() {
   const handleHighlightClick = useCallback((pageNumber: number) => {
     const container = document.querySelector("[data-pdf-container]");
     if (!container) return;
-    const target = container.querySelector(`[data-page-number="${pageNumber}"]`);
+    const target = container.querySelector(
+      `[data-page-number="${pageNumber}"]`,
+    );
     target?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
@@ -241,7 +258,7 @@ export default function ReviewPage() {
   }, []);
 
   const tooltipAnnotation = tooltip
-    ? annotations.find((a) => a.id === tooltip.annotationId) ?? null
+    ? (annotations.find((a) => a.id === tooltip.annotationId) ?? null)
     : null;
 
   if (!clientReady || !dataReady || !review) {
@@ -258,7 +275,7 @@ export default function ReviewPage() {
     <DashboardLayout>
       <div className="flex h-full overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--reader-mat)]">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             <PdfViewer
               url={arxivPdfUrl(review.arxivId)}
               onTextExtracted={setPaperText}
@@ -319,9 +336,7 @@ export default function ReviewPage() {
         />
       )}
 
-      {tooltipAnnotation &&
-        tooltip &&
-        tooltipAnnotation.kind === "comment" && (
+      {tooltipAnnotation && tooltip && tooltipAnnotation.kind === "comment" && (
         <NoteTooltip
           annotation={tooltipAnnotation}
           position={{ x: tooltip.x, y: tooltip.y }}

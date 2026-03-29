@@ -11,8 +11,16 @@ import {
   getReviewsSnapshot,
 } from "@/lib/client-data";
 import { globalGraphToGraphData, EXPLORE_UPDATED_EVENT } from "@/lib/explore";
-import { normalizeArxivId, REVIEWS_UPDATED_EVENT, createOrGetReview } from "@/lib/reviews";
-import { KEYS_UPDATED_EVENT, getApiKey, getSavedSelectedModel } from "@/lib/keys";
+import {
+  normalizeArxivId,
+  REVIEWS_UPDATED_EVENT,
+  createOrGetReview,
+} from "@/lib/reviews";
+import {
+  KEYS_UPDATED_EVENT,
+  getApiKey,
+  getSavedSelectedModel,
+} from "@/lib/keys";
 import { FALLBACK_MODELS, type Model } from "@/lib/models";
 import type { GraphNode } from "@/lib/explore";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
@@ -20,10 +28,16 @@ import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 export default function DiscoveryPage() {
   const [ready, setReady] = useState(false);
   const [version, setVersion] = useState(0);
-  const [isGeneratingNodeId, setIsGeneratingNodeId] = useState<string | null>(null);
-  const [generationProgress, setGenerationProgress] = useState<string | null>(null);
+  const [isGeneratingNodeId, setIsGeneratingNodeId] = useState<string | null>(
+    null,
+  );
+  const [generationProgress, setGenerationProgress] = useState<string | null>(
+    null,
+  );
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string>>(new Set());
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const router = useRouter();
 
@@ -109,7 +123,9 @@ export default function DiscoveryPage() {
 
       const model = generationModel;
       if (!model) {
-        setGenerationError("Add an API key and select a model in Settings first.");
+        setGenerationError(
+          "Add an API key and select a model in Settings first.",
+        );
         router.push("/settings");
         return;
       }
@@ -125,7 +141,9 @@ export default function DiscoveryPage() {
       setGenerationProgress("Starting analysis…");
 
       try {
-        const beforeIds = new Set((graph?.nodes ?? []).map((n) => normalizeArxivId(n.arxivId)));
+        const beforeIds = new Set(
+          (graph?.nodes ?? []).map((n) => normalizeArxivId(n.arxivId)),
+        );
         const review = await createOrGetReview(node.arxivId, node.title);
         const paperContext = [node.title, node.abstract]
           .filter((x) => typeof x === "string" && x.trim().length > 0)
@@ -156,7 +174,9 @@ export default function DiscoveryPage() {
         setGenerationProgress("Done. Discover graph updated.");
       } catch (err) {
         setGenerationError(
-          err instanceof Error ? err.message : "Failed to generate related works.",
+          err instanceof Error
+            ? err.message
+            : "Failed to generate related works.",
         );
       } finally {
         setTimeout(() => {
@@ -195,7 +215,7 @@ export default function DiscoveryPage() {
                   Map your research frontier
                 </p>
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
                 You have not reviewed any papers yet. Start your first review,
                 then grow this space into a living map of ideas, methods, and
                 connections as you explore with the assistant.

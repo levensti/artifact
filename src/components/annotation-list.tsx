@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, Highlighter, MessageSquareQuote, Sparkles, StickyNote, Trash2 } from "lucide-react";
+import {
+  ChevronRight,
+  Highlighter,
+  MessageSquareQuote,
+  Sparkles,
+  StickyNote,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -39,7 +46,10 @@ export default function AnnotationList({
   useEffect(() => {
     if (activeAnnotationId) {
       setTimeout(() => {
-        activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        activeRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
       }, 50);
     }
   }, [activeAnnotationId]);
@@ -58,7 +68,7 @@ export default function AnnotationList({
             <p className="text-sm font-semibold leading-snug tracking-tight text-foreground">
               Your annotations
             </p>
-            <p className="min-h-[2.5rem] text-xs leading-relaxed text-muted-foreground">
+            <p className="min-h-10 text-xs leading-relaxed text-muted-foreground">
               Select text in the paper to begin.
             </p>
           </div>
@@ -81,7 +91,10 @@ export default function AnnotationList({
                 className="flex min-h-14 items-start gap-2.5 rounded-lg px-2 py-2.5"
               >
                 <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5">
-                  <item.icon className="size-3 text-foreground/45" strokeWidth={1.8} />
+                  <item.icon
+                    className="size-3 text-foreground/45"
+                    strokeWidth={1.8}
+                  />
                 </div>
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <p className="text-xs font-medium leading-snug text-foreground/70">
@@ -96,7 +109,10 @@ export default function AnnotationList({
           </div>
 
           <div className="mt-5 flex items-start gap-2 px-2">
-            <Highlighter className="mt-0.5 size-3 shrink-0 text-muted-foreground/35" strokeWidth={1.5} />
+            <Highlighter
+              className="mt-0.5 size-3 shrink-0 text-muted-foreground/35"
+              strokeWidth={1.5}
+            />
             <span className="text-[10px] leading-snug text-muted-foreground/45 not-italic">
               Select text in the PDF to see options
             </span>
@@ -275,8 +291,8 @@ function AnnotationCard({
                   <span className="font-medium tabular-nums text-foreground/85">
                     {annotation.thread.length}
                   </span>{" "}
-                  {annotation.thread.length === 1 ? "message" : "messages"} — open
-                  in assistant
+                  {annotation.thread.length === 1 ? "message" : "messages"} —
+                  open in assistant
                 </p>
                 <ChevronRight
                   className="size-4 shrink-0 text-muted-foreground/70"
@@ -339,7 +355,10 @@ function AnnotationCard({
       {isActive && !isAskAi && (
         <>
           <div className="h-px w-full bg-border" aria-hidden />
-          <div className="px-3 pb-2.5 pt-2" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="px-3 pb-2.5 pt-2"
+            onClick={(e) => e.stopPropagation()}
+          >
             <textarea
               value={note}
               onChange={handleNoteChange}
