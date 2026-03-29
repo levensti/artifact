@@ -26,7 +26,6 @@ const VALID_RELATIONSHIPS = new Set<RelationshipType>([
   "similar-approach",
   "prerequisite",
   "contrasts-with",
-  "surveys",
 ]);
 
 function stripCodeFences(raw: string): string {
@@ -313,7 +312,6 @@ Relationship types (pick exactly one per candidate):
 - "extends": Candidate is later work that clearly extends the same approach as the main paper (less common in retrieval results).
 - "similar-approach": Same core problem or algorithmic family; useful comparison or alternative pipeline.
 - "contrasts-with": Meaningful opposing assumption, objective, or design choice vs the main paper (not merely different topic).
-- "surveys": Survey, tutorial, or broad overview highly relevant to understanding the main paper's subfield.
 
 Rules:
 - Set relevant=false for off-topic hits, duplicates, or when the link is too weak to justify an edge.

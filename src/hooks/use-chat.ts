@@ -9,6 +9,7 @@ import {
   type ChatAssistantBlock,
   type ChatMessage,
 } from "@/lib/reviews";
+import { invalidateExploreCache } from "@/lib/client-data";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
@@ -20,7 +21,13 @@ import type { StreamEvent } from "@/lib/stream-types";
 export type AgentStep =
   | { kind: "thinking" }
   | { kind: "text"; text: string }
-  | { kind: "tool_call"; id: string; name: string; input: Record<string, unknown>; output?: string };
+  | {
+      kind: "tool_call";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      output?: string;
+    };
 
 /* ------------------------------------------------------------------ */
 /*  NDJSON stream parser                                               */
@@ -56,7 +63,9 @@ async function parseNDJSONStream(
     if (buffer.trim()) {
       try {
         onEvent(JSON.parse(buffer.trim()) as StreamEvent);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
   } finally {
     reader.releaseLock();
@@ -209,7 +218,9 @@ export function useChat({
   const [keysVersion, setKeysVersion] = useState(0);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
-  const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(null);
+  const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(
+    null,
+  );
 
   // Load messages on review change
   useEffect(() => {
@@ -217,7 +228,9 @@ export function useChat({
     void loadMessages(reviewId).then((rows) => {
       if (!cancelled) setMessages(rows);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [reviewId]);
 
   // Listen for API key changes
@@ -322,15 +335,34 @@ export function useChat({
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsg.id
-              ? { ...m, content, blocks: blocks.length > 0 ? blocks : undefined }
+              ? {
+                  ...m,
+                  content,
+                  blocks: blocks.length > 0 ? blocks : undefined,
+                }
               : m,
           ),
         );
+
+        // If the assistant saved to the knowledge graph, invalidate cache
+        // so the Discovery tab picks up the new data.
+        const touchedGraph = steps.some(
+          (s) =>
+            s.kind === "tool_call" &&
+            s.name === "save_to_knowledge_graph" &&
+            s.output,
+        );
+        if (touchedGraph) {
+          invalidateExploreCache(reviewId);
+        }
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Something went wrong";
+        const message =
+          err instanceof Error ? err.message : "Something went wrong";
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
+            m.id === assistantMsg.id
+              ? { ...m, content: `Error: ${message}` }
+              : m,
           ),
         );
         setError(message);
@@ -340,7 +372,15 @@ export function useChat({
         setAgentSteps([]);
       }
     },
-    [isStreaming, selectedModel, messages, paperContext, paperTitle, arxivId, reviewId],
+    [
+      isStreaming,
+      selectedModel,
+      messages,
+      paperContext,
+      paperTitle,
+      arxivId,
+      reviewId,
+    ],
   );
 
   /* ---------------------------------------------------------------- */
@@ -434,7 +474,8 @@ export function useChat({
         await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Something went wrong";
+        const message =
+          err instanceof Error ? err.message : "Something went wrong";
         thread = thread.map((m) =>
           m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
         );
@@ -450,8 +491,14 @@ export function useChat({
       }
     },
     [
-      isStreaming, selectedModel, chatThreadAnnotationId,
-      reviewId, arxivId, paperTitle, paperContext, onAnnotationsPersist,
+      isStreaming,
+      selectedModel,
+      chatThreadAnnotationId,
+      reviewId,
+      arxivId,
+      paperTitle,
+      paperContext,
+      onAnnotationsPersist,
     ],
   );
 

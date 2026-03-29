@@ -9,6 +9,7 @@ import type { ToolDefinition } from "./types";
 import { arxivSearchTool } from "./arxiv-search";
 import { webSearchTool } from "./web-search";
 import { rankResultsTool } from "./rank-results";
+import { saveToGraphTool } from "./save-to-graph";
 
 /* ------------------------------------------------------------------ */
 /*  Register tools here                                                */
@@ -18,6 +19,7 @@ const ALL_TOOLS: ToolDefinition[] = [
   arxivSearchTool,
   webSearchTool,
   rankResultsTool,
+  saveToGraphTool,
 ];
 
 /* ------------------------------------------------------------------ */

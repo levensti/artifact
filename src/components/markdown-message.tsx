@@ -16,6 +16,15 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
+        components={{
+          a: (props) => (
+            <a
+              {...props}
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          ),
+        }}
       >
         {content}
       </ReactMarkdown>

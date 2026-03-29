@@ -32,8 +32,7 @@ export type RelationshipType =
   | "extends"
   | "similar-approach"
   | "prerequisite"
-  | "contrasts-with"
-  | "surveys";
+  | "contrasts-with";
 
 /** Short labels for graph edges / legend */
 export const RELATIONSHIP_SHORT_LABEL: Record<RelationshipType, string> = {
@@ -42,7 +41,6 @@ export const RELATIONSHIP_SHORT_LABEL: Record<RelationshipType, string> = {
   extends: "Follow-on",
   "similar-approach": "Similar",
   "contrasts-with": "Contrasts",
-  surveys: "Survey",
 };
 
 export interface GraphNode {

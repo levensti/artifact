@@ -50,8 +50,11 @@ const EDGE_COLORS: Record<RelationshipType, string> = {
   "similar-approach": "#8d8c77",
   prerequisite: "#5c6f4d",
   "contrasts-with": "#9e6b6b",
-  surveys: "#6f7487",
 };
+
+function isRenderableRelationship(rel: string): rel is RelationshipType {
+  return rel in EDGE_COLORS;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Layout helpers                                                     */
@@ -217,6 +220,7 @@ function buildFlowNodes(
   selectedNodeId: string | null,
   hoverNodeId: string | null,
   searchQuery: string,
+  highlightedNodeIds?: Set<string>,
 ): Node[] {
   const q = searchQuery.trim();
   const searchOn = q.length > 0;
@@ -226,6 +230,7 @@ function buildFlowNodes(
     const hovered = hoverNodeId === node.id;
     const matches = paperMatchesQuery(node, q);
     const searchMatch = searchOn && matches;
+    const fresh = highlightedNodeIds?.has(node.id) ?? false;
 
     const selectionDimmed =
       !searchOn &&
@@ -253,6 +258,7 @@ function buildFlowNodes(
         dimmed,
         hovered,
         searchMatch,
+        fresh,
       },
     };
   });
@@ -266,7 +272,9 @@ function buildFlowEdges(
   const q = searchQuery.trim();
   const searchOn = q.length > 0;
 
-  return graph.edges.map((edge, index) => {
+  return graph.edges
+    .filter((edge) => isRenderableRelationship(edge.relationship))
+    .map((edge, index) => {
     const sNode = graph.nodes.find((n) => n.id === edge.source);
     const tNode = graph.nodes.find((n) => n.id === edge.target);
 
@@ -285,27 +293,31 @@ function buildFlowEdges(
     const dimmed = searchOn ? !edgeTouchesSearch : selectedNodeId != null && !isIncident;
 
     const color = EDGE_COLORS[edge.relationship];
-    return {
-      id: `e-${edge.source}-${edge.target}-${index}`,
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: "s",
-      targetHandle: "t",
-      type: "relationship",
-      data: {
-        label: RELATIONSHIP_SHORT_LABEL[edge.relationship],
-        color,
-        dimmed,
-        incident,
-      },
-    };
-  });
+      return {
+        id: `e-${edge.source}-${edge.target}-${index}`,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: "s",
+        targetHandle: "t",
+        type: "relationship",
+        data: {
+          label: RELATIONSHIP_SHORT_LABEL[edge.relationship],
+          color,
+          dimmed,
+          incident,
+        },
+      };
+    });
 }
 
 function incidentEdges(graph: GraphData, nodeId: string | null): GraphEdge[] {
   if (!nodeId) return [];
   const anchorArxiv = graph.nodes.find((n) => n.isCurrent)?.arxivId ?? null;
-  const all = graph.edges.filter((e) => e.source === nodeId || e.target === nodeId);
+  const all = graph.edges.filter(
+    (e) =>
+      isRenderableRelationship(e.relationship) &&
+      (e.source === nodeId || e.target === nodeId),
+  );
   if (!anchorArxiv) return all;
   const viaAnchor = all.filter((e) => e.source === anchorArxiv || e.target === anchorArxiv);
   return viaAnchor.length > 0 ? viaAnchor : all;
@@ -325,6 +337,7 @@ interface GraphCanvasProps {
   reviewedArxivIds?: Set<string>;
   /** Case-insensitive substring on title and arXiv id */
   searchQuery: string;
+  highlightedNodeIds?: Set<string>;
 }
 
 const FIT_VIEW_OPTIONS = {
@@ -350,6 +363,7 @@ function GraphCanvasInner({
   onDeselectNode,
   reviewedArxivIds,
   searchQuery,
+  highlightedNodeIds,
 }: GraphCanvasProps) {
   const positionedNodes = useStaticLayout(graph, width, height, reviewedArxivIds);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
@@ -362,8 +376,9 @@ function GraphCanvasInner({
         selectedNodeId,
         hoverNodeId,
         searchQuery,
+        highlightedNodeIds,
       ),
-    [graph, positionedNodes, selectedNodeId, hoverNodeId, searchQuery],
+    [graph, positionedNodes, selectedNodeId, hoverNodeId, searchQuery, highlightedNodeIds],
   );
 
   const flowEdges = useMemo(
@@ -477,6 +492,7 @@ function GraphCanvas(props: GraphCanvasProps) {
           onDeselectNode={props.onDeselectNode}
           reviewedArxivIds={props.reviewedArxivIds}
           searchQuery={props.searchQuery}
+            highlightedNodeIds={props.highlightedNodeIds}
         />
       </ReactFlowProvider>
     </div>
@@ -537,7 +553,6 @@ const LEGEND_ORDER: RelationshipType[] = [
   "extends",
   "similar-approach",
   "contrasts-with",
-  "surveys",
 ];
 
 function GraphLegend({ className }: { className?: string }) {
@@ -571,6 +586,13 @@ interface RelatedWorksGraphProps {
   onDiscussInChat?: (title: string) => void;
   /** arXiv IDs of papers the user has reviewed — shown as anchor nodes */
   reviewedArxivIds?: Set<string>;
+  onGenerateRelated?: (node: GraphNode) => void;
+  isGeneratingNodeId?: string | null;
+  generationProgress?: string | null;
+  generationError?: string | null;
+  canGenerate?: boolean;
+  onOpenSettings?: () => void;
+  highlightedNodeIds?: Set<string>;
 }
 
 export default function RelatedWorksGraph({
@@ -578,6 +600,13 @@ export default function RelatedWorksGraph({
   workspace = false,
   onDiscussInChat,
   reviewedArxivIds,
+  onGenerateRelated,
+  isGeneratingNodeId = null,
+  generationProgress = null,
+  generationError = null,
+  canGenerate = true,
+  onOpenSettings,
+  highlightedNodeIds,
 }: RelatedWorksGraphProps) {
   const router = useRouter();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -644,6 +673,7 @@ export default function RelatedWorksGraph({
             onDeselectNode={() => setSelectedNodeId(null)}
             reviewedArxivIds={reviewedArxivIds}
             searchQuery={paperSearch}
+            highlightedNodeIds={highlightedNodeIds}
           />
         </div>
 
@@ -655,6 +685,16 @@ export default function RelatedWorksGraph({
             onDiscussInChat={
               onDiscussInChat ? (node) => onDiscussInChat(node.title) : undefined
             }
+            onGenerateRelated={onGenerateRelated}
+            isGenerating={isGeneratingNodeId === selectedNode?.id}
+            generationProgress={
+              isGeneratingNodeId === selectedNode?.id ? generationProgress : null
+            }
+            generationError={
+              isGeneratingNodeId === selectedNode?.id ? generationError : null
+            }
+            canGenerate={canGenerate}
+            onOpenSettings={onOpenSettings}
           />
         )}
 
@@ -705,6 +745,7 @@ export default function RelatedWorksGraph({
                     onDeselectNode={() => setSelectedNodeId(null)}
                     reviewedArxivIds={reviewedArxivIds}
                     searchQuery={paperSearch}
+                    highlightedNodeIds={highlightedNodeIds}
                   />
                 </div>
                 <div className="mt-2 shrink-0">
@@ -717,6 +758,16 @@ export default function RelatedWorksGraph({
                     node={selectedNode}
                     incidentEdges={selectedIncident}
                     onStartReview={onStartReview}
+                    onGenerateRelated={onGenerateRelated}
+                    isGenerating={isGeneratingNodeId === selectedNode?.id}
+                    generationProgress={
+                      isGeneratingNodeId === selectedNode?.id ? generationProgress : null
+                    }
+                    generationError={
+                      isGeneratingNodeId === selectedNode?.id ? generationError : null
+                    }
+                    canGenerate={canGenerate}
+                    onOpenSettings={onOpenSettings}
                   />
                 </div>
               )}
@@ -743,6 +794,7 @@ export default function RelatedWorksGraph({
           onDeselectNode={() => setSelectedNodeId(null)}
           reviewedArxivIds={reviewedArxivIds}
           searchQuery={paperSearch}
+          highlightedNodeIds={highlightedNodeIds}
         />
         <div className="pointer-events-auto absolute left-3 top-3 z-10 w-[min(100%,18rem)]">
           <GraphPaperSearch
@@ -788,6 +840,16 @@ export default function RelatedWorksGraph({
               onDiscussInChat={
                 onDiscussInChat ? (node) => onDiscussInChat(node.title) : undefined
               }
+              onGenerateRelated={onGenerateRelated}
+              isGenerating={isGeneratingNodeId === selectedNode?.id}
+              generationProgress={
+                isGeneratingNodeId === selectedNode?.id ? generationProgress : null
+              }
+              generationError={
+                isGeneratingNodeId === selectedNode?.id ? generationError : null
+              }
+              canGenerate={canGenerate}
+              onOpenSettings={onOpenSettings}
             />
           </div>
         </div>
