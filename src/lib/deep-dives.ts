@@ -1,3 +1,10 @@
+import {
+  getDeepDivesSnapshot,
+  saveDeepDive as saveDeepDiveRemote,
+} from "@/lib/client-data";
+
+export { DEEP_DIVES_UPDATED_EVENT } from "@/lib/storage-events";
+
 export interface DeepDiveSession {
   id: string;
   reviewId: string;
@@ -8,36 +15,12 @@ export interface DeepDiveSession {
   createdAt: string;
 }
 
-const DEEP_DIVES_KEY = "paper-copilot-deep-dives";
-export const DEEP_DIVES_UPDATED_EVENT = "paper-copilot-deep-dives-updated";
-
-function notifyDeepDivesUpdated() {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(DEEP_DIVES_UPDATED_EVENT));
-}
-
 export function getDeepDives(): DeepDiveSession[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(DEEP_DIVES_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as DeepDiveSession[];
-  } catch {
-    return [];
-  }
+  return getDeepDivesSnapshot();
 }
 
-export function saveDeepDive(
+export async function saveDeepDive(
   payload: Omit<DeepDiveSession, "id" | "createdAt">,
-): DeepDiveSession {
-  const next: DeepDiveSession = {
-    ...payload,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-  };
-  const list = getDeepDives();
-  list.unshift(next);
-  localStorage.setItem(DEEP_DIVES_KEY, JSON.stringify(list));
-  notifyDeepDivesUpdated();
-  return next;
+): Promise<DeepDiveSession> {
+  return saveDeepDiveRemote(payload);
 }

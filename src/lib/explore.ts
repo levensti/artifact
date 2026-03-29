@@ -84,78 +84,9 @@ export interface GlobalGraphData {
   updatedAt: string;
 }
 
-const GLOBAL_GRAPH_KEY = "paper-copilot-knowledge-graph";
-
-function edgeKeyDirected(e: GraphEdge): string {
-  return `${e.source}→${e.target}:${e.relationship}`;
-}
-
-/** Merge a session graph into the persistent knowledge map (all Explore sessions). */
-export function mergeSessionGraphIntoGlobal(anchorReviewId: string, graph: GraphData): void {
-  if (typeof window === "undefined") return;
-  const existing =
-    safeRead<GlobalGraphData>(GLOBAL_GRAPH_KEY) ??
-    ({
-      nodes: [],
-      edges: [],
-      updatedAt: new Date().toISOString(),
-    } satisfies GlobalGraphData);
-
-  const nodeByArxiv = new Map<string, GraphNode>();
-  for (const n of existing.nodes) {
-    nodeByArxiv.set(n.arxivId, { ...n, id: n.arxivId, isCurrent: false });
-  }
-
-  for (const n of graph.nodes) {
-    const merged: GraphNode = {
-      ...n,
-      id: n.arxivId,
-      isCurrent: false,
-    };
-    const prev = nodeByArxiv.get(n.arxivId);
-    if (
-      !prev ||
-      (merged.abstract?.length ?? 0) > (prev.abstract?.length ?? 0) ||
-      (merged.title?.length ?? 0) > (prev.title?.length ?? 0)
-    ) {
-      nodeByArxiv.set(n.arxivId, merged);
-    }
-  }
-
-  const edgeMap = new Map<string, GlobalGraphData["edges"][number]>();
-  for (const e of existing.edges) {
-    edgeMap.set(edgeKeyDirected(e), e);
-  }
-
-  for (const e of graph.edges) {
-    const k = edgeKeyDirected(e);
-    const prev = edgeMap.get(k);
-    if (!prev) {
-      edgeMap.set(k, { ...e, sourceReviewIds: [anchorReviewId] });
-    } else if (!prev.sourceReviewIds.includes(anchorReviewId)) {
-      edgeMap.set(k, {
-        ...prev,
-        reasoning: prev.reasoning.length >= e.reasoning.length ? prev.reasoning : e.reasoning,
-        sourceReviewIds: [...prev.sourceReviewIds, anchorReviewId],
-      });
-    }
-  }
-
-  const next: GlobalGraphData = {
-    nodes: [...nodeByArxiv.values()],
-    edges: [...edgeMap.values()],
-    updatedAt: new Date().toISOString(),
-  };
-  localStorage.setItem(GLOBAL_GRAPH_KEY, JSON.stringify(next));
-  notifyExploreUpdated();
-}
-
-export function getGlobalGraphData(): GlobalGraphData | null {
-  return safeRead<GlobalGraphData>(GLOBAL_GRAPH_KEY);
-}
-
-export function globalGraphToGraphData(): GraphData | null {
-  const g = getGlobalGraphData();
+export function globalGraphToGraphData(
+  g: GlobalGraphData | null,
+): GraphData | null {
   if (!g || g.nodes.length === 0) return null;
   return {
     nodes: g.nodes,
@@ -176,62 +107,4 @@ export interface ArxivSearchResult {
   categories: string[];
 }
 
-const PREREQ_KEY_PREFIX = "paper-copilot-prerequisites-";
-const GRAPH_KEY_PREFIX = "paper-copilot-graph-";
-
-export const EXPLORE_UPDATED_EVENT = "paper-copilot-explore-updated";
-
-function safeRead<T>(key: string): T | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(key);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-function notifyExploreUpdated() {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-}
-
-export function getPrerequisites(reviewId: string): PrerequisitesData | null {
-  return safeRead<PrerequisitesData>(`${PREREQ_KEY_PREFIX}${reviewId}`);
-}
-
-export function savePrerequisites(
-  reviewId: string,
-  prerequisites: PrerequisitesData,
-): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    `${PREREQ_KEY_PREFIX}${reviewId}`,
-    JSON.stringify(prerequisites),
-  );
-  notifyExploreUpdated();
-}
-
-export function getGraphData(reviewId: string): GraphData | null {
-  return safeRead<GraphData>(`${GRAPH_KEY_PREFIX}${reviewId}`);
-}
-
-export function saveGraphData(reviewId: string, graph: GraphData): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(`${GRAPH_KEY_PREFIX}${reviewId}`, JSON.stringify(graph));
-  notifyExploreUpdated();
-}
-
-export function clearExploreData(reviewId: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(`${PREREQ_KEY_PREFIX}${reviewId}`);
-  localStorage.removeItem(`${GRAPH_KEY_PREFIX}${reviewId}`);
-  notifyExploreUpdated();
-}
-
-export function clearGlobalKnowledgeGraph(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(GLOBAL_GRAPH_KEY);
-  notifyExploreUpdated();
-}
+export { EXPLORE_UPDATED_EVENT } from "@/lib/storage-events";

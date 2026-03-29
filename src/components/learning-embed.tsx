@@ -1,17 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Loader2, Sparkles } from "lucide-react";
 import type { Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
 import type { Prerequisite } from "@/lib/explore";
-import {
-  EXPLORE_UPDATED_EVENT,
-  getGraphData,
-  getPrerequisites,
-  savePrerequisites,
-} from "@/lib/explore";
+import { savePrerequisites } from "@/lib/client-data";
+import { useExploreData } from "@/hooks/use-explore-data";
 import PrerequisitesSection from "@/components/prerequisites-section";
 import RelatedWorksGraph from "@/components/related-works-graph";
 import MarkdownMessage from "@/components/markdown-message";
@@ -64,17 +60,8 @@ export default function LearningEmbed({
   paperContext,
   selectedModel,
 }: LearningEmbedProps) {
-  const [prereqVersion, setPrereqVersion] = useState(0);
-  const prereqData = getPrerequisites(reviewId);
-  const graphData = getGraphData(reviewId);
-
-  useEffect(() => {
-    const bump = () => setPrereqVersion((v) => v + 1);
-    window.addEventListener(EXPLORE_UPDATED_EVENT, bump);
-    return () => window.removeEventListener(EXPLORE_UPDATED_EVENT, bump);
-  }, []);
-
-  void prereqVersion;
+  const { prerequisites: prereqData, graph: graphData } =
+    useExploreData(reviewId);
 
   const [loadingTopicId, setLoadingTopicId] = useState<string | null>(null);
   const [studyItem, setStudyItem] = useState<Prerequisite | null>(null);
@@ -85,7 +72,7 @@ export default function LearningEmbed({
       if (item.explanation) return;
       if (!selectedModel) return;
       const apiKey = getApiKey(selectedModel.provider);
-      const snapshot = getPrerequisites(reviewId);
+      const snapshot = prereqData;
       if (!apiKey || !snapshot) return;
 
       setLoadingTopicId(item.id);
@@ -120,8 +107,8 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
             p.id === item.id ? { ...p, explanation } : p,
           ),
         };
-        savePrerequisites(reviewId, next);
-        saveDeepDive({
+        await savePrerequisites(reviewId, next);
+        await saveDeepDive({
           reviewId,
           paperTitle,
           arxivId,
@@ -133,7 +120,7 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
         setLoadingTopicId(null);
       }
     },
-    [arxivId, paperContext, paperTitle, reviewId, selectedModel],
+    [arxivId, paperContext, paperTitle, prereqData, reviewId, selectedModel],
   );
 
   const handleToggleComplete = useCallback(
@@ -147,8 +134,7 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
             : p,
         ),
       };
-      savePrerequisites(reviewId, next);
-      setPrereqVersion((v) => v + 1);
+      void savePrerequisites(reviewId, next);
     },
     [prereqData, reviewId],
   );

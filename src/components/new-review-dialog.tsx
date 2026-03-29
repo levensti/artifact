@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
   createOrGetReview,
   getReviewByArxivId,
   REVIEWS_UPDATED_EVENT,
+  type PaperReview,
 } from "@/lib/reviews";
 import { extractArxivId } from "@/lib/utils";
 
@@ -35,7 +36,20 @@ export default function NewReviewDialog({
   const [loading, setLoading] = useState(false);
 
   const arxivId = extractArxivId(url);
-  const existingReview = arxivId ? getReviewByArxivId(arxivId) : undefined;
+  const [existingReview, setExistingReview] = useState<
+    PaperReview | undefined
+  >(undefined);
+
+  useEffect(() => {
+    const sync = () => {
+      setExistingReview(
+        arxivId ? getReviewByArxivId(arxivId) : undefined,
+      );
+    };
+    sync();
+    window.addEventListener(REVIEWS_UPDATED_EVENT, sync);
+    return () => window.removeEventListener(REVIEWS_UPDATED_EVENT, sync);
+  }, [arxivId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,8 +90,7 @@ export default function NewReviewDialog({
         /* keep fallback */
       }
 
-      const review = createOrGetReview(arxivId, paperTitle);
-      window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
+      const review = await createOrGetReview(arxivId, paperTitle);
 
       setUrl("");
       onCreated(review.id);

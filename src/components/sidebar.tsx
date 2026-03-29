@@ -16,7 +16,8 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import { getGlobalGraphData, EXPLORE_UPDATED_EVENT } from "@/lib/explore";
+import { EXPLORE_UPDATED_EVENT } from "@/lib/explore";
+import { getGlobalGraphData } from "@/lib/client-data";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";

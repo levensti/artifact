@@ -13,11 +13,11 @@ import type {
   RelationshipType,
 } from "@/lib/explore";
 import {
-  getPrerequisites,
+  loadExplore,
   mergeSessionGraphIntoGlobal,
   saveGraphData,
   savePrerequisites,
-} from "@/lib/explore";
+} from "@/lib/client-data";
 
 const VALID_DIFFICULTIES = new Set(["foundational", "intermediate", "advanced"]);
 const VALID_RELATIONSHIPS = new Set<RelationshipType>([
@@ -188,7 +188,7 @@ Return **only** valid JSON (no markdown fences, no commentary):
     : Array.isArray(parsedPrereqRaw.items)
       ? (parsedPrereqRaw.items as Array<Omit<Prerequisite, "id">>)
       : [];
-  const prevSnap = getPrerequisites(reviewId);
+  const prevSnap = (await loadExplore(reviewId)).prerequisites;
   const prevByTopic = new Map(
     (prevSnap?.prerequisites ?? []).map((p) => [prereqTopicKey(p.topic), p]),
   );
@@ -220,7 +220,7 @@ Return **only** valid JSON (no markdown fences, no commentary):
   if (prerequisites.prerequisites.length === 0) {
     throw new Error("Could not parse prerequisites from model output. Try again or switch model.");
   }
-  savePrerequisites(reviewId, prerequisites);
+  await savePrerequisites(reviewId, prerequisites);
 
   report("Extracting search keywords…");
   const keywordPrompt = `You will generate search phrases for arXiv (full paper text is in your context).
@@ -287,8 +287,8 @@ No markdown, no extra keys.`;
       modelUsed: model.label,
       anchorReviewId: reviewId,
     };
-    saveGraphData(reviewId, graph);
-    mergeSessionGraphIntoGlobal(reviewId, graph);
+    await saveGraphData(reviewId, graph);
+    await mergeSessionGraphIntoGlobal(reviewId, graph);
     return { prerequisites, graph };
   }
 
@@ -396,8 +396,8 @@ Return **only** a JSON array (no markdown):
       modelUsed: model.label,
       anchorReviewId: reviewId,
     };
-    saveGraphData(reviewId, graph);
-    mergeSessionGraphIntoGlobal(reviewId, graph);
+    await saveGraphData(reviewId, graph);
+    await mergeSessionGraphIntoGlobal(reviewId, graph);
     return { prerequisites, graph };
   }
 
@@ -447,8 +447,8 @@ Return **only** a JSON array (no markdown):
     modelUsed: model.label,
     anchorReviewId: reviewId,
   };
-  saveGraphData(reviewId, graph);
-  mergeSessionGraphIntoGlobal(reviewId, graph);
+  await saveGraphData(reviewId, graph);
+  await mergeSessionGraphIntoGlobal(reviewId, graph);
 
   return { prerequisites, graph };
 }

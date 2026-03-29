@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2 } from "lucide-react";
@@ -9,7 +9,10 @@ import RightPanel from "@/components/right-panel";
 import type { RightTab } from "@/components/right-panel";
 import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
+import { hydrateClientStore } from "@/lib/client-data";
 import { getReview } from "@/lib/reviews";
+import { REVIEWS_UPDATED_EVENT } from "@/lib/storage-events";
+import type { Annotation } from "@/lib/annotations";
 import { getAnnotations, addAnnotation } from "@/lib/annotations";
 import { arxivPdfUrl } from "@/lib/utils";
 import { useAnalysis } from "@/hooks/use-auto-analysis";
@@ -35,9 +38,26 @@ export default function ReviewPage() {
     queueMicrotask(() => setClientReady(true));
   }, []);
 
-  const review = useMemo(() => {
-    if (!clientReady) return undefined;
-    return getReview(params.id);
+  const [review, setReview] = useState<
+    import("@/lib/reviews").PaperReview | undefined
+  >(undefined);
+  const [dataReady, setDataReady] = useState(false);
+
+  useEffect(() => {
+    if (!clientReady) return;
+    startTransition(() => setDataReady(false));
+    let cancelled = false;
+    void hydrateClientStore().then(() => {
+      if (cancelled) return;
+      setReview(getReview(params.id));
+      setDataReady(true);
+    });
+    const onReviews = () => setReview(getReview(params.id));
+    window.addEventListener(REVIEWS_UPDATED_EVENT, onReviews);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(REVIEWS_UPDATED_EVENT, onReviews);
+    };
   }, [clientReady, params.id]);
 
   const [paperText, setPaperText] = useState("");
@@ -48,24 +68,37 @@ export default function ReviewPage() {
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [rightTab, setRightTab] = useState<RightTab>("assistant");
 
-  // Restore persisted model once client is ready
   useEffect(() => {
     if (!clientReady) return;
-    const saved = getSavedSelectedModel();
-    if (saved) setSelectedModel(saved);
+    void hydrateClientStore().then(() => {
+      const saved = getSavedSelectedModel();
+      if (saved) setSelectedModel(saved);
+    });
   }, [clientReady]);
 
   // Wrap setter to also persist the choice
   const handleModelChange = useCallback((model: Model | null) => {
     setSelectedModel(model);
-    saveSelectedModel(model);
+    void saveSelectedModel(model);
   }, []);
 
-  // Annotation state
   const [annotationVersion, setAnnotationVersion] = useState(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const annotations = useMemo(() => (review ? getAnnotations(review.id) : []), [review, annotationVersion]);
-  const refreshAnnotations = useCallback(() => setAnnotationVersion((v) => v + 1), []);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const refreshAnnotations = useCallback(
+    () => setAnnotationVersion((v) => v + 1),
+    [],
+  );
+
+  useEffect(() => {
+    if (!review) return;
+    let cancelled = false;
+    void getAnnotations(review.id).then((rows) => {
+      if (!cancelled) setAnnotations(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [review, annotationVersion]);
   const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
   const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ annotationId: string; x: number; y: number } | null>(null);
@@ -80,11 +113,11 @@ export default function ReviewPage() {
   });
 
   useEffect(() => {
-    if (!clientReady) return;
+    if (!clientReady || !dataReady) return;
     if (!getReview(params.id)) {
       router.push("/");
     }
-  }, [clientReady, params.id, router]);
+  }, [clientReady, dataReady, params.id, router]);
 
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
     setSelectionInfo(info);
@@ -106,15 +139,16 @@ export default function ReviewPage() {
 
   const handleAnnotateSelection = useCallback(() => {
     if (selectionInfo && review) {
-      const ann = addAnnotation(review.id, {
+      void addAnnotation(review.id, {
         pageNumber: selectionInfo.pageNumber,
         highlightText: selectionInfo.text,
         anchorRects: selectionInfo.anchorRects,
         note: "",
         thread: [],
+      }).then((ann) => {
+        refreshAnnotations();
+        setActiveAnnotationId(ann.id);
       });
-      refreshAnnotations();
-      setActiveAnnotationId(ann.id);
       setRightTab("notes");
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
@@ -171,7 +205,7 @@ export default function ReviewPage() {
     ? annotations.find((a) => a.id === tooltip.annotationId) ?? null
     : null;
 
-  if (!clientReady || !review) {
+  if (!clientReady || !dataReady || !review) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">

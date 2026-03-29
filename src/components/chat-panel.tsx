@@ -11,7 +11,7 @@ import { Loader2, Send, Sparkles } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import {
-  getMessages,
+  loadMessages,
   saveMessages,
   type ChatAssistantBlock,
   type ChatMessage,
@@ -154,7 +154,13 @@ export default function ChatPanel({
   const setSelectedModel = onModelChange ?? setInternalModel;
 
   useEffect(() => {
-    setMessages(getMessages(reviewId));
+    let cancelled = false;
+    void loadMessages(reviewId).then((rows) => {
+      if (!cancelled) setMessages(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [reviewId]);
 
   useEffect(() => {
@@ -165,7 +171,7 @@ export default function ChatPanel({
 
   useEffect(() => {
     if (!isStreaming && messages.length > 0) {
-      saveMessages(reviewId, messages);
+      void saveMessages(reviewId, messages);
     }
   }, [messages, isStreaming, reviewId]);
 
@@ -286,7 +292,7 @@ export default function ChatPanel({
       setIsStreaming(true);
 
       const historyForApi = [...messages, userMsg];
-      const learningCtx = buildLearningContextSummary(reviewId);
+      const learningCtx = await buildLearningContextSummary(reviewId);
 
       try {
         const response = await fetch("/api/chat", {

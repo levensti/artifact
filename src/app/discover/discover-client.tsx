@@ -12,11 +12,8 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import {
-  EXPLORE_UPDATED_EVENT,
-  globalGraphToGraphData,
-  type GraphData,
-} from "@/lib/explore";
+import { EXPLORE_UPDATED_EVENT, globalGraphToGraphData, type GraphData } from "@/lib/explore";
+import { getGlobalGraphData } from "@/lib/client-data";
 
 /* ------------------------------------------------------------------ */
 /*  Store subscriptions                                                */
@@ -37,7 +34,7 @@ function reviewsSnapshot() {
 }
 
 function globalGraphSnapshot() {
-  return JSON.stringify(globalGraphToGraphData());
+  return JSON.stringify(globalGraphToGraphData(getGlobalGraphData()));
 }
 
 /* ------------------------------------------------------------------ */

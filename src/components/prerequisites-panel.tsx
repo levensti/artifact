@@ -5,7 +5,7 @@ import { Loader2, Sparkles, Compass } from "lucide-react";
 import type { Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
 import type { Prerequisite } from "@/lib/explore";
-import { getPrerequisites, savePrerequisites } from "@/lib/explore";
+import { savePrerequisites } from "@/lib/client-data";
 import { useExploreData } from "@/hooks/use-explore-data";
 import type { AnalysisStatus } from "@/hooks/use-auto-analysis";
 import PrerequisitesSection from "@/components/prerequisites-section";
@@ -80,7 +80,7 @@ export default function PrerequisitesPanel({
       if (item.explanation) return;
       if (!selectedModel) return;
       const apiKey = getApiKey(selectedModel.provider);
-      const snapshot = getPrerequisites(reviewId);
+      const snapshot = prereqData;
       if (!apiKey || !snapshot) return;
 
       setLoadingTopicId(item.id);
@@ -115,8 +115,8 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
             p.id === item.id ? { ...p, explanation } : p,
           ),
         };
-        savePrerequisites(reviewId, next);
-        saveDeepDive({
+        await savePrerequisites(reviewId, next);
+        await saveDeepDive({
           reviewId,
           paperTitle,
           arxivId,
@@ -128,7 +128,7 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
         setLoadingTopicId(null);
       }
     },
-    [arxivId, paperContext, paperTitle, reviewId, selectedModel],
+    [arxivId, paperContext, paperTitle, prereqData, reviewId, selectedModel],
   );
 
   const handleToggleComplete = useCallback(
@@ -142,7 +142,7 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
             : p,
         ),
       };
-      savePrerequisites(reviewId, next);
+      void savePrerequisites(reviewId, next);
     },
     [prereqData, reviewId],
   );

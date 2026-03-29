@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import Sidebar from "./sidebar";
 import SettingsDialog from "./settings-dialog";
 import { SettingsOpenerProvider } from "./settings-opener-context";
+import DataHydration from "./data-hydration";
 
 const SIDEBAR_KEY = "paper-copilot-sidebar-collapsed";
 const OPEN_SETTINGS_FLAG = "paper-copilot-open-settings";
@@ -59,6 +60,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <SettingsOpenerProvider openSettings={openSettings}>
+      <DataHydration />
       <div className="flex h-full overflow-hidden">
         <Suspense
           fallback={

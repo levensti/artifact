@@ -182,7 +182,7 @@ export default function ModelSelector({ selected, onSelect }: ModelSelectorProps
           <div className="px-2 py-3 space-y-2">
             <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
               Save an API key for any provider in Settings. Models load from the
-              provider only after your key is stored in this browser.
+              provider only after your key is stored in SQLite on this machine.
             </p>
             <DropdownMenuItem
               className="text-xs gap-2 cursor-pointer"
