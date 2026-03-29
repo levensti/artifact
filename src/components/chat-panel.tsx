@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -25,44 +24,16 @@ import {
   Wrench,
 } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
-import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
-import {
-  loadMessages,
-  saveMessages,
-  type ChatAssistantBlock,
-  type ChatMessage,
-} from "@/lib/reviews";
 import type { ArxivSearchResult } from "@/lib/explore";
-import type { ToolCallBlock } from "@/lib/review-types";
+import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
 import type { Annotation, AnnotationMessage } from "@/lib/annotations";
-import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import ModelSelector from "./model-selector";
 import MarkdownMessage from "./markdown-message";
 import { useSettingsOpener } from "./settings-opener-context";
 import LearningEmbed from "./learning-embed";
-
-/* ------------------------------------------------------------------ */
-/*  NDJSON stream event types (mirroring /api/chat)                    */
-/* ------------------------------------------------------------------ */
-
-type StreamEvent =
-  | { type: "turn_start" }
-  | { type: "text_delta"; text: string }
-  | { type: "tool_call"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; id: string; name: string; output: string }
-  | { type: "error"; message: string }
-  | { type: "done" };
-
-/* ------------------------------------------------------------------ */
-/*  Agent step types (used during streaming for progressive rendering) */
-/* ------------------------------------------------------------------ */
-
-type AgentStep =
-  | { kind: "thinking" }
-  | { kind: "text"; text: string }
-  | { kind: "tool_call"; id: string; name: string; input: Record<string, unknown>; output?: string };
+import { useChat, type AgentStep } from "@/hooks/use-chat";
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                              */
@@ -198,6 +169,14 @@ function ToolCallStep({
 /*  Interleaved blocks renderer (for persisted messages)               */
 /* ------------------------------------------------------------------ */
 
+interface BlockCtx {
+  reviewId: string;
+  arxivId: string;
+  paperTitle: string;
+  paperContext: string;
+  selectedModel: Model | null;
+}
+
 function hasInterleavedBlocks(blocks: ChatAssistantBlock[]): boolean {
   return blocks.some((b) => b.type === "text_segment" || b.type === "tool_call");
 }
@@ -239,7 +218,7 @@ function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: BlockCtx) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Legacy block renderers                                             */
+/*  ArXiv hits block                                                   */
 /* ------------------------------------------------------------------ */
 
 function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearchResult[] }) {
@@ -268,156 +247,92 @@ function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearc
   );
 }
 
-interface BlockCtx {
-  reviewId: string;
-  arxivId: string;
-  paperTitle: string;
-  paperContext: string;
-  selectedModel: Model | null;
+/* ------------------------------------------------------------------ */
+/*  Agent steps renderer (live streaming view)                         */
+/* ------------------------------------------------------------------ */
+
+function renderAgentSteps(steps: AgentStep[]) {
+  return steps.map((step, i) => {
+    switch (step.kind) {
+      case "thinking":
+        return <ThinkingIndicator key={`think-${i}`} />;
+      case "text":
+        return step.text ? (
+          <MarkdownMessage key={`text-${i}`} content={step.text} />
+        ) : null;
+      case "tool_call":
+        return (
+          <ToolCallStep
+            key={step.id}
+            name={step.name}
+            input={step.input}
+            output={step.output}
+            isLive
+          />
+        );
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ */
-/*  NDJSON stream parser                                               */
+/*  Single message renderer                                            */
 /* ------------------------------------------------------------------ */
 
-async function parseNDJSONStream(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (event: StreamEvent) => void,
-) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          onEvent(JSON.parse(trimmed) as StreamEvent);
-        } catch {
-          // skip malformed lines
-        }
-      }
-    }
-    if (buffer.trim()) {
-      try {
-        onEvent(JSON.parse(buffer.trim()) as StreamEvent);
-      } catch { /* ignore */ }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Agent step management (used during streaming)                      */
-/* ------------------------------------------------------------------ */
-
-function processStreamEvent(
-  steps: AgentStep[],
-  event: StreamEvent,
-): AgentStep[] {
-  const next = [...steps];
-
-  switch (event.type) {
-    case "turn_start": {
-      // If the last step is a completed tool call, show thinking before next turn
-      const last = next[next.length - 1];
-      if (last && last.kind === "tool_call" && last.output !== undefined) {
-        next.push({ kind: "thinking" });
-      } else if (next.length === 0) {
-        // First turn
-        next.push({ kind: "thinking" });
-      }
-      break;
-    }
-
-    case "text_delta": {
-      // Remove trailing thinking indicator
-      if (next.length > 0 && next[next.length - 1].kind === "thinking") {
-        next.pop();
-      }
-      // Append to existing text step or create new one
-      const last = next[next.length - 1];
-      if (last && last.kind === "text") {
-        next[next.length - 1] = { kind: "text", text: last.text + event.text };
-      } else {
-        next.push({ kind: "text", text: event.text });
-      }
-      break;
-    }
-
-    case "tool_call": {
-      // Remove trailing thinking
-      if (next.length > 0 && next[next.length - 1].kind === "thinking") {
-        next.pop();
-      }
-      next.push({
-        kind: "tool_call",
-        id: event.id,
-        name: event.name,
-        input: event.input,
-      });
-      break;
-    }
-
-    case "tool_result": {
-      // Find the matching tool call and set its output
-      for (let i = next.length - 1; i >= 0; i--) {
-        const step = next[i];
-        if (step.kind === "tool_call" && step.id === event.id) {
-          next[i] = { ...step, output: event.output };
-          break;
-        }
-      }
-      break;
-    }
-
-    case "done": {
-      // Remove trailing thinking
-      if (next.length > 0 && next[next.length - 1].kind === "thinking") {
-        next.pop();
-      }
-      break;
-    }
+function ChatMessageBubble({
+  msg,
+  isCurrentlyStreaming,
+  agentSteps,
+  blockCtx,
+}: {
+  msg: ChatMessage | AnnotationMessage;
+  isCurrentlyStreaming: boolean;
+  agentSteps: AgentStep[];
+  blockCtx: BlockCtx;
+}) {
+  if (msg.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[88%] rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border border-l-2 border-l-primary/50 bg-secondary text-foreground">
+          <div className="whitespace-pre-wrap">{msg.content}</div>
+        </div>
+      </div>
+    );
   }
 
-  return next;
-}
-
-/** Convert agent steps to ordered blocks for persistence. */
-function stepsToBlocks(steps: AgentStep[]): ChatAssistantBlock[] {
-  const blocks: ChatAssistantBlock[] = [];
-  for (const step of steps) {
-    if (step.kind === "text" && step.text) {
-      blocks.push({ type: "text_segment", content: step.text });
-    } else if (step.kind === "tool_call") {
-      blocks.push({
-        type: "tool_call",
-        id: step.id,
-        name: step.name,
-        input: step.input,
-        output: step.output,
-      });
-    }
+  if (isCurrentlyStreaming) {
+    return (
+      <div className="max-w-full">
+        <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
+          {agentSteps.length === 0 ? (
+            <ThinkingIndicator />
+          ) : (
+            renderAgentSteps(agentSteps)
+          )}
+        </div>
+      </div>
+    );
   }
-  return blocks;
-}
 
-/** Extract concatenated text from steps (for the content field). */
-function stepsToContent(steps: AgentStep[]): string {
-  return steps
-    .filter((s): s is AgentStep & { kind: "text" } => s.kind === "text")
-    .map((s) => s.text)
-    .join("");
+  const hasBlocks = msg.blocks && msg.blocks.length > 0;
+
+  if (hasBlocks && hasInterleavedBlocks(msg.blocks!)) {
+    return (
+      <div className="max-w-full">
+        <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
+          {renderInterleavedBlocks(msg.blocks!, blockCtx)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-full">
+      <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
+        {msg.content ? <MarkdownMessage content={msg.content} /> : null}
+        {hasBlocks ? renderInterleavedBlocks(msg.blocks!, blockCtx) : null}
+      </div>
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -513,6 +428,104 @@ function EmptyState({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Chat input                                                         */
+/* ------------------------------------------------------------------ */
+
+function ChatInput({
+  input,
+  setInput,
+  sendMessage,
+  isStreaming,
+  selectedModel,
+  hasSavedKeys,
+  chatThreadAnnotationId,
+}: {
+  input: string;
+  setInput: (v: string) => void;
+  sendMessage: () => Promise<void>;
+  isStreaming: boolean;
+  selectedModel: Model | null;
+  hasSavedKeys: boolean;
+  chatThreadAnnotationId: string | null;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollComposerIntoViewRef = useRef(false);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+
+    if (!scrollComposerIntoViewRef.current) return;
+    scrollComposerIntoViewRef.current = false;
+  }, [input]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void sendMessage();
+    }
+  };
+
+  return (
+    <div className="p-3 border-t border-border shrink-0 bg-muted/20">
+      <div className="flex items-end gap-2 bg-card rounded-md border border-border focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-ring/40 transition-[box-shadow,border-color] duration-200">
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            chatThreadAnnotationId
+              ? "Reply in this selection thread…"
+              : "Ask about the paper…"
+          }
+          rows={1}
+          className="flex-1 bg-transparent px-3 py-2.5 text-sm resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 m-1 text-muted-foreground hover:text-primary"
+          onClick={sendMessage}
+          disabled={!selectedModel || !input.trim() || isStreaming}
+          aria-label={
+            !selectedModel
+              ? hasSavedKeys
+                ? "Choose a model to send"
+                : "Manage API keys to send"
+              : isStreaming
+                ? "Sending..."
+                : "Send message"
+          }
+        >
+          {isStreaming ? (
+            <Loader2 className="animate-spin" size={15} />
+          ) : (
+            <Send size={15} />
+          )}
+        </Button>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground/85">
+          {chatThreadAnnotationId
+            ? "Replies stay tied to this highlight."
+            : "Messages apply to the whole paper."}
+        </p>
+        <p className="px-1 text-center text-xs leading-snug text-muted-foreground/70">
+          {selectedModel
+            ? `${selectedModel.label} · Shift+Enter new line`
+            : hasSavedKeys
+              ? "Choose a model above · Shift+Enter new line"
+              : "Manage API keys first · Shift+Enter new line"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -532,49 +545,24 @@ export default function ChatPanel({
   onModelChange,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
   const [internalModel, setInternalModel] = useState<Model | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [keysVersion, setKeysVersion] = useState(0);
-  /** Ordered agent steps during streaming — drives the interleaved live view */
-  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
-  /** ID of the assistant message currently being streamed */
-  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const scrollComposerIntoViewRef = useRef(false);
 
   const selectedModel =
     externalModel !== undefined ? externalModel : internalModel;
   const setSelectedModel = onModelChange ?? setInternalModel;
 
-  useEffect(() => {
-    let cancelled = false;
-    void loadMessages(reviewId).then((rows) => {
-      if (!cancelled) setMessages(rows);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reviewId]);
+  const chat = useChat({
+    reviewId,
+    arxivId,
+    paperTitle,
+    paperContext,
+    selectedModel,
+    chatThreadAnnotationId,
+    onAnnotationsPersist,
+  });
 
-  useEffect(() => {
-    const onKeys = () => setKeysVersion((v) => v + 1);
-    window.addEventListener(KEYS_UPDATED_EVENT, onKeys);
-    return () => window.removeEventListener(KEYS_UPDATED_EVENT, onKeys);
-  }, []);
-
-  useEffect(() => {
-    if (!isStreaming && messages.length > 0) {
-      void saveMessages(reviewId, messages);
-    }
-  }, [messages, isStreaming, reviewId]);
-
-  void keysVersion;
-
-  const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollComposerIntoViewRef = useRef(false);
 
   const activeThreadAnn = useMemo(() => {
     if (!chatThreadAnnotationId) return undefined;
@@ -584,14 +572,11 @@ export default function ChatPanel({
   }, [annotations, chatThreadAnnotationId]);
 
   const displayThread = useMemo(
-    () => threadStream ?? activeThreadAnn?.thread ?? [],
-    [threadStream, activeThreadAnn?.thread],
+    () => chat.displayThread.length > 0 ? chat.displayThread : (activeThreadAnn?.thread ?? []),
+    [chat.displayThread, activeThreadAnn?.thread],
   );
 
-  const hasSavedKeys = hasAnySavedApiKey();
-  const hasKeyForModel =
-    selectedModel != null && !!getApiKey(selectedModel.provider);
-
+  // Auto-scroll on new content
   useLayoutEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
@@ -600,18 +585,16 @@ export default function ChatPanel({
     if (dist <= thresholdPx) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, agentSteps, displayThread]);
+  }, [chat.messages, chat.agentSteps, displayThread]);
 
+  // Reset thread when annotation is gone
   useEffect(() => {
     if (chatThreadAnnotationId && !activeThreadAnn) {
       onChatThreadChange(null);
     }
   }, [chatThreadAnnotationId, activeThreadAnn, onChatThreadChange]);
 
-  useEffect(() => {
-    setThreadStream(null);
-  }, [chatThreadAnnotationId]);
-
+  // Scroll to top on new thread
   useEffect(() => {
     if (!chatThreadAnnotationId) return;
     const el = scrollAreaRef.current;
@@ -623,20 +606,16 @@ export default function ChatPanel({
   useEffect(() => {
     if (!externalPrompt) return;
     scrollComposerIntoViewRef.current = true;
-    setInput(externalPrompt);
+    chat.setInput(externalPrompt);
     onExternalPromptConsumed?.();
     const safety = window.setTimeout(() => {
       scrollComposerIntoViewRef.current = false;
     }, 600);
     return () => clearTimeout(safety);
-  }, [externalPrompt, onExternalPromptConsumed]);
+  }, [externalPrompt, onExternalPromptConsumed, chat.setInput]);
 
+  // Scroll composer into view when input changes externally
   useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-
     if (!scrollComposerIntoViewRef.current) return;
     scrollComposerIntoViewRef.current = false;
 
@@ -647,240 +626,10 @@ export default function ChatPanel({
     scrollMessagesToBottom();
     requestAnimationFrame(() => {
       scrollMessagesToBottom();
-      textareaRef.current?.focus({ preventScroll: true });
       requestAnimationFrame(scrollMessagesToBottom);
     });
     setTimeout(scrollMessagesToBottom, 0);
-  }, [input]);
-
-  /* ---------------------------------------------------------------- */
-  /*  Main chat submit                                                 */
-  /* ---------------------------------------------------------------- */
-
-  const submitChat = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed || isStreaming || !selectedModel) return;
-
-      const apiKey = getApiKey(selectedModel.provider);
-      if (!apiKey) return;
-
-      setError(null);
-
-      const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: text,
-        timestamp: new Date().toISOString(),
-      };
-      const assistantMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "",
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
-      setIsStreaming(true);
-      setStreamingMsgId(assistantMsg.id);
-      setAgentSteps([]);
-
-      const historyForApi = [...messages, userMsg];
-      let steps: AgentStep[] = [];
-
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: historyForApi.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-            model: selectedModel.modelId,
-            provider: selectedModel.provider,
-            apiKey,
-            paperContext,
-            paperTitle,
-            arxivId,
-            reviewId,
-          }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || `Request failed: ${response.status}`);
-        }
-
-        if (!response.body) throw new Error("No response body received");
-
-        await parseNDJSONStream(response.body, (event) => {
-          if (event.type === "error") {
-            setError(event.message);
-            return;
-          }
-          steps = processStreamEvent(steps, event);
-          setAgentSteps([...steps]);
-        });
-
-        // Finalize: convert steps to blocks and content
-        const blocks = stepsToBlocks(steps);
-        const content = stepsToContent(steps);
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsg.id
-              ? { ...m, content, blocks: blocks.length > 0 ? blocks : undefined }
-              : m,
-          ),
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Something went wrong";
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
-          ),
-        );
-        setError(message);
-      } finally {
-        setIsStreaming(false);
-        setStreamingMsgId(null);
-        setAgentSteps([]);
-      }
-    },
-    [isStreaming, selectedModel, messages, paperContext, paperTitle, arxivId, reviewId],
-  );
-
-  /* ---------------------------------------------------------------- */
-  /*  Selection thread submit                                          */
-  /* ---------------------------------------------------------------- */
-
-  const submitThreadChat = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed || isStreaming || !selectedModel || !chatThreadAnnotationId)
-        return;
-
-      const apiKey = getApiKey(selectedModel.provider);
-      if (!apiKey) return;
-
-      const ann = await getAnnotation(reviewId, chatThreadAnnotationId);
-      if (!ann || ann.kind !== "ask_ai") return;
-
-      setError(null);
-
-      const userMsg: AnnotationMessage = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: trimmed,
-        timestamp: new Date().toISOString(),
-      };
-      const assistantMsg: AnnotationMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "",
-        timestamp: new Date().toISOString(),
-      };
-
-      let thread: AnnotationMessage[] = [...ann.thread, userMsg, assistantMsg];
-      setThreadStream(thread);
-      await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
-      onAnnotationsPersist();
-
-      setIsStreaming(true);
-      setStreamingMsgId(assistantMsg.id);
-      setAgentSteps([]);
-
-      const historyForApi = [...ann.thread, userMsg].map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
-      let steps: AgentStep[] = [];
-
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: historyForApi,
-            model: selectedModel.modelId,
-            provider: selectedModel.provider,
-            apiKey,
-            paperContext,
-            paperTitle,
-            arxivId,
-            reviewId,
-          }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || `Request failed: ${response.status}`);
-        }
-
-        if (!response.body) throw new Error("No response body received");
-
-        await parseNDJSONStream(response.body, (event) => {
-          if (event.type === "error") {
-            setError(event.message);
-            return;
-          }
-          steps = processStreamEvent(steps, event);
-          setAgentSteps([...steps]);
-        });
-
-        // Finalize
-        const blocks = stepsToBlocks(steps);
-        const content = stepsToContent(steps);
-
-        thread = thread.map((m) =>
-          m.id === assistantMsg.id
-            ? { ...m, content, blocks: blocks.length > 0 ? blocks : undefined }
-            : m,
-        );
-        setThreadStream(thread);
-        await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
-        onAnnotationsPersist();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Something went wrong";
-        thread = thread.map((m) =>
-          m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
-        );
-        await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
-        onAnnotationsPersist();
-        setThreadStream(thread);
-        setError(message);
-      } finally {
-        setIsStreaming(false);
-        setStreamingMsgId(null);
-        setAgentSteps([]);
-        setThreadStream(null);
-      }
-    },
-    [
-      isStreaming, selectedModel, chatThreadAnnotationId,
-      reviewId, arxivId, paperTitle, paperContext, onAnnotationsPersist,
-    ],
-  );
-
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
-    if (!text) return;
-    setInput("");
-    if (chatThreadAnnotationId) {
-      await submitThreadChat(text);
-    } else {
-      await submitChat(text);
-    }
-  }, [input, submitChat, submitThreadChat, chatThreadAnnotationId]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void sendMessage();
-    }
-  };
+  }, [chat.input]);
 
   const openKeysForChat = () => {
     if (selectedModel) openSettings({ provider: selectedModel.provider });
@@ -888,93 +637,6 @@ export default function ChatPanel({
   };
 
   const blockCtx: BlockCtx = { reviewId, arxivId, paperTitle, paperContext, selectedModel };
-
-  /* ---------------------------------------------------------------- */
-  /*  Render: agent steps (live streaming view)                        */
-  /* ---------------------------------------------------------------- */
-
-  function renderAgentSteps(steps: AgentStep[]) {
-    return steps.map((step, i) => {
-      switch (step.kind) {
-        case "thinking":
-          return <ThinkingIndicator key={`think-${i}`} />;
-        case "text":
-          return step.text ? (
-            <MarkdownMessage key={`text-${i}`} content={step.text} />
-          ) : null;
-        case "tool_call":
-          return (
-            <ToolCallStep
-              key={step.id}
-              name={step.name}
-              input={step.input}
-              output={step.output}
-              isLive
-            />
-          );
-      }
-    });
-  }
-
-  /* ---------------------------------------------------------------- */
-  /*  Render: a single message                                         */
-  /* ---------------------------------------------------------------- */
-
-  function renderMessage(msg: ChatMessage | AnnotationMessage) {
-    const isCurrentlyStreaming = msg.id === streamingMsgId && isStreaming;
-
-    // User message
-    if (msg.role === "user") {
-      return (
-        <div key={msg.id} className="flex justify-end">
-          <div className="max-w-[88%] rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border border-l-2 border-l-primary/50 bg-secondary text-foreground">
-            <div className="whitespace-pre-wrap">{msg.content}</div>
-          </div>
-        </div>
-      );
-    }
-
-    // Assistant message — streaming: render live agent steps
-    if (isCurrentlyStreaming) {
-      return (
-        <div key={msg.id} className="max-w-full">
-          <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
-            {agentSteps.length === 0 ? (
-              <ThinkingIndicator />
-            ) : (
-              renderAgentSteps(agentSteps)
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Assistant message — persisted: render from blocks if interleaved, else fallback
-    const hasBlocks = msg.blocks && msg.blocks.length > 0;
-
-    if (hasBlocks && hasInterleavedBlocks(msg.blocks!)) {
-      // Interleaved view — blocks contain ordered text_segment + tool_call entries
-      return (
-        <div key={msg.id} className="max-w-full">
-          <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
-            {renderInterleavedBlocks(msg.blocks!, blockCtx)}
-          </div>
-        </div>
-      );
-    }
-
-    // Legacy / plain text fallback
-    return (
-      <div key={msg.id} className="max-w-full">
-        <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
-          {msg.content ? <MarkdownMessage content={msg.content} /> : null}
-          {hasBlocks
-            ? renderInterleavedBlocks(msg.blocks!, blockCtx)
-            : null}
-        </div>
-      </div>
-    );
-  }
 
   /* ---------------------------------------------------------------- */
   /*  JSX                                                              */
@@ -1035,24 +697,40 @@ export default function ChatPanel({
                 </div>
               )}
 
-              {displayThread.map(renderMessage)}
+              {displayThread.map((msg) => (
+                <ChatMessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  isCurrentlyStreaming={msg.id === chat.streamingMsgId && chat.isStreaming}
+                  agentSteps={chat.agentSteps}
+                  blockCtx={blockCtx}
+                />
+              ))}
             </>
           ) : (
             <>
-              {messages.length === 0 && (
+              {chat.messages.length === 0 && (
                 <EmptyState
-                  canSend={!!selectedModel && hasKeyForModel && !isStreaming}
-                  onSend={submitChat}
+                  canSend={!!selectedModel && chat.hasKeyForModel && !chat.isStreaming}
+                  onSend={chat.submitChat}
                 />
               )}
 
-              {messages.map(renderMessage)}
+              {chat.messages.map((msg) => (
+                <ChatMessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  isCurrentlyStreaming={msg.id === chat.streamingMsgId && chat.isStreaming}
+                  agentSteps={chat.agentSteps}
+                  blockCtx={blockCtx}
+                />
+              ))}
             </>
           )}
         </div>
       </div>
 
-      {selectedModel && !hasKeyForModel && (
+      {selectedModel && !chat.hasKeyForModel && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-md border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span>
             {PROVIDER_META[selectedModel.provider].keyHint} required to send
@@ -1070,9 +748,9 @@ export default function ChatPanel({
         </div>
       )}
 
-      {error && (
+      {chat.error && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug space-y-2">
-          <p>{error}</p>
+          <p>{chat.error}</p>
           <Button
             type="button"
             size="sm"
@@ -1085,59 +763,15 @@ export default function ChatPanel({
         </div>
       )}
 
-      <div className="p-3 border-t border-border shrink-0 bg-muted/20">
-        <div className="flex items-end gap-2 bg-card rounded-md border border-border focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-ring/40 transition-[box-shadow,border-color] duration-200">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              chatThreadAnnotationId
-                ? "Reply in this selection thread…"
-                : "Ask about the paper…"
-            }
-            rows={1}
-            className="flex-1 bg-transparent px-3 py-2.5 text-sm resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 m-1 text-muted-foreground hover:text-primary"
-            onClick={sendMessage}
-            disabled={!selectedModel || !input.trim() || isStreaming}
-            aria-label={
-              !selectedModel
-                ? hasSavedKeys
-                  ? "Choose a model to send"
-                  : "Manage API keys to send"
-                : isStreaming
-                  ? "Sending..."
-                  : "Send message"
-            }
-          >
-            {isStreaming ? (
-              <Loader2 className="animate-spin" size={15} />
-            ) : (
-              <Send size={15} />
-            )}
-          </Button>
-        </div>
-        <div className="mt-2 space-y-1.5">
-          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground/85">
-            {chatThreadAnnotationId
-              ? "Replies stay tied to this highlight."
-              : "Messages apply to the whole paper."}
-          </p>
-          <p className="px-1 text-center text-xs leading-snug text-muted-foreground/70">
-            {selectedModel
-              ? `${selectedModel.label} · Shift+Enter new line`
-              : hasSavedKeys
-                ? "Choose a model above · Shift+Enter new line"
-                : "Manage API keys first · Shift+Enter new line"}
-          </p>
-        </div>
-      </div>
+      <ChatInput
+        input={chat.input}
+        setInput={chat.setInput}
+        sendMessage={chat.sendMessage}
+        isStreaming={chat.isStreaming}
+        selectedModel={selectedModel}
+        hasSavedKeys={chat.hasSavedKeys}
+        chatThreadAnnotationId={chatThreadAnnotationId}
+      />
     </div>
   );
 }
