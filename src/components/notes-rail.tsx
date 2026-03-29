@@ -29,20 +29,23 @@ export default function NotesRail({
 
   return (
     <aside className="flex h-full min-h-0 w-[min(280px,32vw)] min-w-[220px] shrink-0 flex-col border-l border-border bg-muted/15">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border/80 bg-background/80 px-4 backdrop-blur-sm">
-        <StickyNote
-          className="size-[15px] shrink-0 text-muted-foreground"
-          strokeWidth={2}
-        />
-        <span className="text-xs font-semibold leading-none tracking-tight text-foreground">
-          Notes
-        </span>
-        {count > 0 && (
-          <span className="ml-auto tabular-nums text-[10px] font-medium leading-none text-muted-foreground">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <StickyNote
+            className="size-4 shrink-0 text-primary"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+            Notes
+          </span>
+        </div>
+        {count > 0 ? (
+          <span className="shrink-0 tabular-nums text-xs font-medium text-muted-foreground">
             {count}
           </span>
-        )}
-      </div>
+        ) : null}
+      </header>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AnnotationList
           reviewId={reviewId}

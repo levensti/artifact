@@ -316,11 +316,6 @@ export default function ReviewPage() {
             onAnnotationsPersist={refreshAnnotations}
             selectedModel={selectedModel}
             onModelChange={handleModelChange}
-            analysisStatus={analysis.status}
-            analysisProgress={analysis.progress}
-            analysisError={analysis.error}
-            canRunAnalysis={analysis.canRun}
-            onTriggerAnalysis={analysis.trigger}
           />
         </div>
       </div>

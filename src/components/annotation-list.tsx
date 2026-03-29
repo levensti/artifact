@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, Sparkles, StickyNote, Trash2 } from "lucide-react";
+import { ChevronRight, Highlighter, MessageSquareQuote, Sparkles, StickyNote, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -49,31 +49,58 @@ export default function AnnotationList({
     return (
       <div
         className={cn(
-          "flex flex-1 min-h-0 flex-col items-center justify-center text-center",
-          compact ? "gap-3 px-2 py-8" : "gap-4 px-2 py-24",
+          "flex min-h-0 flex-1 flex-col text-left font-sans antialiased",
+          compact ? "px-4 pb-4 pt-5" : "px-4 pb-4 pt-6",
         )}
       >
-        <div
-          className={cn(
-            "rounded-md border border-border bg-muted/40 flex items-center justify-center",
-            compact ? "size-9" : "size-11",
-          )}
-        >
-          <StickyNote
-            className="text-muted-foreground"
-            size={compact ? 18 : 20}
-            strokeWidth={1.75}
-          />
-        </div>
-        <div className={cn("space-y-1.5", compact ? "max-w-[200px]" : "max-w-[260px] space-y-2")}>
-          <p className="text-sm font-semibold tracking-tight text-foreground">
-            No notes yet
-          </p>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground/80">Add note</span> for a margin note, or{" "}
-            <span className="font-medium text-foreground/80">Dive deeper</span> for threaded Q&amp;A on
-            the selection.
-          </p>
+        <div className="flex flex-col">
+          <div className="mb-4 space-y-1 px-2">
+            <p className="text-sm font-semibold leading-snug tracking-tight text-foreground">
+              Your annotations
+            </p>
+            <p className="min-h-[2.5rem] text-xs leading-relaxed text-muted-foreground">
+              Select text in the paper to begin.
+            </p>
+          </div>
+
+          <div className="space-y-0.5">
+            {[
+              {
+                icon: StickyNote,
+                label: "Add note",
+                desc: "Attach a margin note to any passage",
+              },
+              {
+                icon: MessageSquareQuote,
+                label: "Dive deeper",
+                desc: "Start a threaded Q&A on a selection",
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="flex items-start gap-2.5 rounded-lg px-2 py-2.5"
+              >
+                <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5">
+                  <item.icon className="size-3 text-foreground/45" strokeWidth={1.8} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium leading-snug text-foreground/70">
+                    {item.label}
+                  </p>
+                  <p className="text-[11px] leading-snug text-muted-foreground/80">
+                    {item.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 flex items-start gap-2 px-2">
+            <Highlighter className="mt-0.5 size-3 shrink-0 text-muted-foreground/35" strokeWidth={1.5} />
+            <span className="text-[10px] leading-snug text-muted-foreground/45 not-italic">
+              Select text in the PDF to see options
+            </span>
+          </div>
         </div>
       </div>
     );

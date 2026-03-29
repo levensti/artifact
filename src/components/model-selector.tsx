@@ -164,17 +164,27 @@ export default function ModelSelector({ selected, onSelect }: ModelSelectorProps
   const showTriggerSpinner =
     !selected && anyKey && loadingKeyed && totalSelectable === 0;
 
+  const hasModelSelected = !!(selected && getApiKey(selected.provider));
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex items-center h-7 gap-1 max-w-[min(200px,42vw)] px-2 text-xs text-muted-foreground font-normal rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+        className={cn(
+          "inline-flex max-w-[min(200px,42vw)] items-center gap-1 rounded-md px-2 transition-colors hover:bg-accent hover:text-accent-foreground",
+          hasModelSelected
+            ? "h-8 text-sm font-medium text-foreground"
+            : "h-7 text-xs font-normal text-muted-foreground",
+        )}
         aria-label={selected ? `Model: ${selected.label}` : triggerLabel}
       >
         <span className="truncate">{triggerLabel}</span>
         {showTriggerSpinner ? (
           <Loader2 size={10} className="animate-spin shrink-0" />
         ) : (
-          <ChevronDown size={10} className="shrink-0" />
+          <ChevronDown
+            className={cn("shrink-0", hasModelSelected ? "size-3.5" : "size-2.5")}
+            strokeWidth={2}
+          />
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[min(18rem,calc(100vw-1.5rem))]">
