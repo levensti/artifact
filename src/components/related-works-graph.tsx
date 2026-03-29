@@ -599,8 +599,9 @@ export default function RelatedWorksGraph({
   const selectedIncident = incidentEdges(graph, resolvedSelectedNodeId);
 
   const onStartReview = (node: GraphNode) => {
-    const review = createOrGetReview(node.arxivId, node.title);
-    router.push(`/review/${review.id}`);
+    void createOrGetReview(node.arxivId, node.title).then((review) => {
+      router.push(`/review/${review.id}`);
+    });
   };
 
   /** Compact coordinate space; viewport is filled via fitView (no pan/zoom UI). */

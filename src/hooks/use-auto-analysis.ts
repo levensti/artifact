@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
-import { getPrerequisites, getGraphData } from "@/lib/explore";
+import { loadExplore } from "@/lib/client-data";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 
 export type AnalysisStatus = "idle" | "running" | "done" | "error";
@@ -26,10 +26,6 @@ interface UseAnalysisReturn {
   canRun: boolean;
 }
 
-function hasAnalysisData(reviewId: string): boolean {
-  return getPrerequisites(reviewId) !== null || getGraphData(reviewId) !== null;
-}
-
 export function useAnalysis({
   reviewId,
   arxivId,
@@ -37,9 +33,7 @@ export function useAnalysis({
   paperContext,
   selectedModel,
 }: UseAnalysisOptions): UseAnalysisReturn {
-  const [status, setStatus] = useState<AnalysisStatus>(() =>
-    hasAnalysisData(reviewId) ? "done" : "idle",
-  );
+  const [status, setStatus] = useState<AnalysisStatus>("idle");
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -49,11 +43,24 @@ export function useAnalysis({
     !!paperContext.trim() &&
     !!getApiKey(selectedModel.provider);
 
-  // Reset when reviewId changes
+  // Reset when reviewId changes; restore "done" if explore data exists
   useEffect(() => {
     setError(null);
-    setStatus(hasAnalysisData(reviewId) ? "done" : "idle");
     setProgress(null);
+    if (!reviewId.trim()) {
+      setStatus("idle");
+      return;
+    }
+    let cancelled = false;
+    void loadExplore(reviewId).then((d) => {
+      if (cancelled) return;
+      const hasData =
+        d.prerequisites !== null || d.graph !== null;
+      setStatus(hasData ? "done" : "idle");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [reviewId]);
 
   const trigger = useCallback((): boolean => {
@@ -94,7 +101,6 @@ export function useAnalysis({
     return true;
   }, [reviewId, arxivId, paperTitle, paperContext, selectedModel]);
 
-  // Cleanup abort on unmount
   useEffect(() => {
     return () => {
       abortRef.current?.abort();

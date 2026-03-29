@@ -69,8 +69,9 @@ export default function AnnotationList({
             onMouseLeave={() => onAnnotationHover(null)}
             onPageClick={() => onHighlightClick(ann.pageNumber)}
             onDelete={() => {
-              deleteAnnotation(reviewId, ann.id);
-              onAnnotationsChanged();
+              void deleteAnnotation(reviewId, ann.id).then(() =>
+                onAnnotationsChanged(),
+              );
             }}
             onUpdate={onAnnotationsChanged}
           />
@@ -117,8 +118,9 @@ function AnnotationCard({
     (value: string) => {
       if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
       noteTimerRef.current = setTimeout(() => {
-        updateAnnotation(reviewId, annotation.id, { note: value });
-        onUpdate();
+        void updateAnnotation(reviewId, annotation.id, { note: value }).then(
+          () => onUpdate(),
+        );
       }, 400);
     },
     [reviewId, annotation.id, onUpdate],

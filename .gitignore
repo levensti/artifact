@@ -8,6 +8,9 @@
 # production
 /build
 
+# local SQLite database
+/data/
+
 # misc
 .DS_Store
 *.pem

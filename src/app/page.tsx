@@ -24,9 +24,9 @@ export default function Home() {
             </h1>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
               Open an arXiv PDF, ask questions with the full text in context,
-              and keep a per-paper thread in this browser. Use your own API
-              keys; nothing is stored on our servers except in transit to the
-              model provider.
+              and keep a per-paper thread in a local SQLite database. Use your
+              own API keys; the app stores data on this machine and sends
+              prompts to the model provider when you chat.
             </p>
           </div>
           <Button
@@ -42,7 +42,7 @@ export default function Home() {
             <span className="size-0.5 rounded-full bg-muted-foreground/35" />
             <span>Per-paper threads</span>
             <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-            <span>Local storage</span>
+            <span>SQLite on device</span>
           </div>
         </div>
       </div>
