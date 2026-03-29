@@ -181,8 +181,8 @@ export default function ModelSelector({ selected, onSelect }: ModelSelectorProps
         {!anyKey ? (
           <div className="px-2 py-3 space-y-2">
             <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
-              Add a key for any provider to load models. Keys stay on this
-              device.
+              Save an API key in Settings. Keys stay in local SQLite on this
+              device; models load from the provider after your key is stored.
             </p>
             <DropdownMenuItem
               className="text-xs gap-2 cursor-pointer"

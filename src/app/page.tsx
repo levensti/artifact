@@ -28,9 +28,10 @@ export default function Home() {
               </p>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
-              Read arXiv PDFs with the full text in context, keep a thread per
-              paper, and map how it connects to the literature. Your data stays
-              in a local database; only chat requests go to your model provider.
+              Read arXiv PDFs with the full text in context and keep a thread
+              per paper. Your data stays in a local SQLite database on this
+              machine; only chat requests go to your model provider when you use
+              your own API keys.
             </p>
           </div>
           <Button

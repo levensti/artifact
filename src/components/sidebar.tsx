@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TextTooltip, TooltipProvider } from "@/components/ui/tooltip";
 import NewReviewDialog from "./new-review-dialog";
 
 /** YYYY-MM-DD in the user's local timezone (do not use UTC from toISOString). */
@@ -146,61 +147,60 @@ export default function Sidebar({
           </button>
         </div>
 
-        <ScrollArea className="flex-1 px-2.5 py-2">
-          {grouped.length === 0 && (
-            <div className="py-10 text-center">
-              <FileText
-                size={18}
-                className="mx-auto text-muted-foreground/40 mb-2"
-              />
-              <p className="text-xs text-muted-foreground leading-relaxed px-1">
-                No papers yet. Add one from arXiv to read, annotate, and chat in
-                context.
-              </p>
-            </div>
-          )}
-          {grouped.map((group) => (
-            <div key={group.label} className="mb-4 last:mb-0">
-              <p className="pb-1.5 text-xs font-medium text-muted-foreground">
-                {group.label}
-              </p>
-              <div className="space-y-0.5">
-                {group.items.map((review) => {
-                  const isActive = pathname === `/review/${review.id}`;
-                  return (
-                    <div
-                      key={review.id}
-                      role="button"
-                      tabIndex={0}
-                      title={review.title}
-                      onClick={() => router.push(`/review/${review.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ")
-                          router.push(`/review/${review.id}`);
-                      }}
-                      className={cn(
-                        "flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-colors duration-150",
-                        isActive
-                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                      )}
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-                        <FileText
-                          className="size-4 opacity-40"
-                          strokeWidth={1.75}
-                        />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">
-                        {review.title}
-                      </span>
-                    </div>
-                  );
-                })}
+        <TooltipProvider delay={100}>
+          <ScrollArea className="flex-1 px-2.5 py-2">
+            {grouped.length === 0 && (
+              <div className="py-10 text-center">
+                <FileText
+                  size={18}
+                  className="mx-auto text-muted-foreground/40 mb-2"
+                />
+                <p className="text-xs text-muted-foreground leading-relaxed px-1">
+                  No papers yet. Add one from arXiv to read, annotate, and chat in
+                  context.
+                </p>
               </div>
-            </div>
-          ))}
-        </ScrollArea>
+            )}
+            {grouped.map((group) => (
+              <div key={group.label} className="mb-4 last:mb-0">
+                <p className="pb-1.5 text-xs font-medium text-muted-foreground">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((review) => {
+                    const isActive = pathname === `/review/${review.id}`;
+                    return (
+                      <div
+                        key={review.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => router.push(`/review/${review.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            router.push(`/review/${review.id}`);
+                        }}
+                        className={cn(
+                          "flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-colors duration-150",
+                          isActive
+                            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                          <FileText
+                            className="size-4 opacity-40"
+                            strokeWidth={1.75}
+                          />
+                        </span>
+                        <TextTooltip label={review.title} side="right" />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </ScrollArea>
+        </TooltipProvider>
 
         <div className="border-t border-sidebar-border px-2.5 py-2 shrink-0">
           <button

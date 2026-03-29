@@ -1,61 +1,41 @@
-import { PROVIDER_ORDER, type Provider, type Model } from "./models";
+import {
+  clearApiKey as clearApiKeyRemote,
+  getApiKey as getApiKeyCached,
+  getSavedSelectedModel as getSavedSelectedModelCached,
+  hasAnySavedApiKey as hasAnySavedApiKeyCached,
+  saveSelectedModel as saveSelectedModelRemote,
+  setApiKey as setApiKeyRemote,
+} from "@/lib/client-data";
 
-const STORAGE_PREFIX = "paper-copilot-key-";
-const MODEL_STORAGE_KEY = "paper-copilot-selected-model";
+export { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
 
-/** Fired on same tab after set/clear so UI can refresh key presence. */
-export const KEYS_UPDATED_EVENT = "paper-copilot-keys-updated";
-
-function notifyKeysUpdated() {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+export function getApiKey(provider: import("./models").Provider): string | null {
+  return getApiKeyCached(provider);
 }
 
-export function getApiKey(provider: Provider): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(`${STORAGE_PREFIX}${provider}`);
-}
-
-/** True if the user has saved at least one provider key (models load only after this). */
 export function hasAnySavedApiKey(): boolean {
-  if (typeof window === "undefined") return false;
-  return PROVIDER_ORDER.some((p) => !!localStorage.getItem(`${STORAGE_PREFIX}${p}`));
+  return hasAnySavedApiKeyCached();
 }
 
-export function setApiKey(provider: Provider, key: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(`${STORAGE_PREFIX}${provider}`, key);
-  notifyKeysUpdated();
+export async function setApiKey(
+  provider: import("./models").Provider,
+  key: string,
+): Promise<void> {
+  return setApiKeyRemote(provider, key);
 }
 
-export function clearApiKey(provider: Provider): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(`${STORAGE_PREFIX}${provider}`);
-  notifyKeysUpdated();
+export async function clearApiKey(
+  provider: import("./models").Provider,
+): Promise<void> {
+  return clearApiKeyRemote(provider);
 }
 
-/* ── Model persistence ── */
-
-export function saveSelectedModel(model: Model | null): void {
-  if (typeof window === "undefined") return;
-  if (model) {
-    localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(model));
-  } else {
-    localStorage.removeItem(MODEL_STORAGE_KEY);
-  }
+export async function saveSelectedModel(
+  model: import("./models").Model | null,
+): Promise<void> {
+  return saveSelectedModelRemote(model);
 }
 
-export function getSavedSelectedModel(): Model | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(MODEL_STORAGE_KEY);
-    if (!raw) return null;
-    const model = JSON.parse(raw) as Model;
-    // Only restore if the provider key still exists
-    if (!getApiKey(model.provider)) return null;
-    return model;
-  } catch {
-    return null;
-  }
+export function getSavedSelectedModel(): import("./models").Model | null {
+  return getSavedSelectedModelCached();
 }
-

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Check, ExternalLink, Key } from "lucide-react";
+import { Eye, EyeOff, Check, ExternalLink, Key, Shield } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { getApiKey, setApiKey, clearApiKey } from "@/lib/keys";
+import { getApiKey, setApiKey, clearApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import { PROVIDER_META, type Provider } from "@/lib/models";
 
 interface ProviderRowProps {
@@ -28,20 +28,32 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
   const [saved, setSaved] = useState(false);
   const [hasKey, setHasKey] = useState(() => !!getApiKey(provider));
 
+  useEffect(() => {
+    const sync = () => {
+      setValue(getApiKey(provider) ?? "");
+      setHasKey(!!getApiKey(provider));
+    };
+    sync();
+    window.addEventListener(KEYS_UPDATED_EVENT, sync);
+    return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
+  }, [provider]);
+
   const handleSave = () => {
     const trimmed = value.trim();
     if (!trimmed) return;
-    setApiKey(provider, trimmed);
-    setHasKey(true);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    void setApiKey(provider, trimmed).then(() => {
+      setHasKey(true);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    });
   };
 
   const handleClear = () => {
-    clearApiKey(provider);
-    setValue("");
-    setHasKey(false);
-    setVisible(false);
+    void clearApiKey(provider).then(() => {
+      setValue("");
+      setHasKey(false);
+      setVisible(false);
+    });
   };
 
   return (
@@ -118,7 +130,7 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
       {hasKey && (
         <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border/60">
           <span className="text-[11px] text-muted-foreground/70">
-            Only on this device
+            Stored in local SQLite on this machine
           </span>
           <button
             type="button"
@@ -188,7 +200,9 @@ export default function SettingsDialog({
             <div>
               <DialogTitle>Manage API keys</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
-                Your API keys only live on your device.
+                Keys are stored in a local SQLite file on this machine. API
+                calls use this app&apos;s server to reach Anthropic, OpenAI,
+                xAI, or OpenRouter.
               </DialogDescription>
             </div>
           </div>
@@ -196,6 +210,15 @@ export default function SettingsDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="space-y-3 px-4 py-3">
+            <div className="flex items-start gap-2.5 rounded-lg border border-border/80 bg-muted/30 px-3 py-2.5">
+              <Shield size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Values are stored in SQLite under this project&apos;s{" "}
+                <code className="text-[10px]">data/</code> folder. Self-host the
+                app if you need full control over where traffic goes.
+              </p>
+            </div>
+
             <ProviderRow
               provider="anthropic"
               placeholder="sk-ant-api03-..."

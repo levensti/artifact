@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Compass } from "lucide-react";
 import type { Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
 import type { Prerequisite } from "@/lib/explore";
 import { savePrerequisites } from "@/lib/client-data";
 import { useExploreData } from "@/hooks/use-explore-data";
+import type { AnalysisStatus } from "@/hooks/use-auto-analysis";
 import PrerequisitesSection from "@/components/prerequisites-section";
-import RelatedWorksGraph from "@/components/related-works-graph";
 import MarkdownMessage from "@/components/markdown-message";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -44,24 +45,32 @@ async function generateStudyMarkdown(
   return String(data.content ?? "");
 }
 
-interface LearningEmbedProps {
+interface PrerequisitesPanelProps {
   reviewId: string;
   arxivId: string;
   paperTitle: string;
   paperContext: string;
   selectedModel: Model | null;
+  onAskAbout?: (topic: string) => void;
+  analysisStatus: AnalysisStatus;
+  analysisProgress: string | null;
+  canRunAnalysis: boolean;
+  onTriggerAnalysis: () => boolean;
 }
 
-export default function LearningEmbed({
+export default function PrerequisitesPanel({
   reviewId,
   arxivId,
   paperTitle,
   paperContext,
   selectedModel,
-}: LearningEmbedProps) {
-  const { prerequisites: prereqData, graph: graphData } =
-    useExploreData(reviewId);
-
+  onAskAbout,
+  analysisStatus,
+  analysisProgress,
+  canRunAnalysis,
+  onTriggerAnalysis,
+}: PrerequisitesPanelProps) {
+  const { prerequisites: prereqData } = useExploreData(reviewId);
   const [loadingTopicId, setLoadingTopicId] = useState<string | null>(null);
   const [studyItem, setStudyItem] = useState<Prerequisite | null>(null);
 
@@ -138,40 +147,69 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
     [prereqData, reviewId],
   );
 
-  if (!prereqData && !graphData) {
+  // Empty state — analysis trigger lives in the banner above the tabs
+  if (!prereqData || prereqData.prerequisites.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        Nothing saved yet. Use <span className="font-medium text-foreground/85">Build learning map</span>{" "}
-        above to generate prerequisites and a related-works graph for this paper.
-      </p>
+      <div className="flex flex-col items-center justify-center py-10 text-center gap-3 px-4">
+        {analysisStatus === "running" ? (
+          <>
+            <Loader2 className="size-7 text-primary animate-spin" />
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-[260px]">
+              {analysisProgress ?? "Analyzing paper\u2026"}
+            </p>
+          </>
+        ) : (
+          <>
+            <Compass className="size-7 text-muted-foreground/30" />
+            <div className="space-y-1.5 max-w-[260px]">
+              <p className="text-sm font-medium text-foreground/75">
+                Nothing here yet
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Use <span className="font-medium text-foreground/65">Analyze</span> above
+                to discover prerequisites and related works for this paper.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4 pt-1">
-      {prereqData && prereqData.prerequisites.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-4 text-primary shrink-0" />
-            <h4 className="text-sm font-semibold text-foreground">Prerequisites</h4>
-          </div>
-          <PrerequisitesSection
-            prerequisites={prereqData.prerequisites}
-            loadingTopicId={loadingTopicId}
-            onOpenStudy={(item) => {
-              void openStudyGuide(item);
-            }}
-            onToggleComplete={handleToggleComplete}
-          />
-        </section>
-      )}
+    <div className="p-3 space-y-2">
+      {/* Re-analyze button when analysis is done and prereqs exist */}
+      <div className="flex items-center justify-end">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-[11px] text-muted-foreground hover:text-foreground"
+          onClick={onTriggerAnalysis}
+          disabled={!canRunAnalysis || analysisStatus === "running"}
+        >
+          {analysisStatus === "running" ? (
+            <>
+              <Loader2 className="size-3 mr-1 animate-spin" />
+              {analysisProgress ?? "Analyzing…"}
+            </>
+          ) : (
+            <>
+              <Sparkles className="size-3 mr-1" />
+              Re-analyze
+            </>
+          )}
+        </Button>
+      </div>
 
-      {graphData && (
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold text-foreground">Related works</h4>
-          <RelatedWorksGraph graph={graphData} />
-        </section>
-      )}
+      <PrerequisitesSection
+        prerequisites={prereqData.prerequisites}
+        loadingTopicId={loadingTopicId}
+        onOpenStudy={(item) => {
+          void openStudyGuide(item);
+        }}
+        onToggleComplete={handleToggleComplete}
+        onAskAbout={onAskAbout}
+      />
 
       <Dialog open={studyItem !== null} onOpenChange={(open) => !open && setStudyItem(null)}>
         <DialogContent className="max-w-lg max-h-[min(85vh,720px)] overflow-y-auto overflow-x-hidden">

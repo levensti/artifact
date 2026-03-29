@@ -18,7 +18,7 @@ import {
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import {
-  getMessages,
+  loadMessages,
   saveMessages,
   type ChatAssistantBlock,
   type ChatMessage,
@@ -172,7 +172,13 @@ export default function ChatPanel({
   const setSelectedModel = onModelChange ?? setInternalModel;
 
   useEffect(() => {
-    setMessages(getMessages(reviewId));
+    let cancelled = false;
+    void loadMessages(reviewId).then((rows) => {
+      if (!cancelled) setMessages(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [reviewId]);
 
   useEffect(() => {
@@ -183,7 +189,7 @@ export default function ChatPanel({
 
   useEffect(() => {
     if (!isStreaming && messages.length > 0) {
-      saveMessages(reviewId, messages);
+      void saveMessages(reviewId, messages);
     }
   }, [messages, isStreaming, reviewId]);
 
@@ -325,7 +331,7 @@ export default function ChatPanel({
       setIsStreaming(true);
 
       const historyForApi = [...messages, userMsg];
-      const learningCtx = buildLearningContextSummary(reviewId);
+      const learningCtx = await buildLearningContextSummary(reviewId);
 
       try {
         const response = await fetch("/api/chat", {
@@ -471,7 +477,7 @@ export default function ChatPanel({
       const apiKey = getApiKey(selectedModel.provider);
       if (!apiKey) return;
 
-      const ann = getAnnotation(reviewId, chatThreadAnnotationId);
+      const ann = await getAnnotation(reviewId, chatThreadAnnotationId);
       if (!ann || ann.kind !== "ask_ai") return;
 
       setError(null);
@@ -490,7 +496,7 @@ export default function ChatPanel({
 
       let thread: AnnotationMessage[] = [...ann.thread, userMsg, assistantMsg];
       setThreadStream(thread);
-      updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+      await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
       onAnnotationsPersist();
 
       setIsStreaming(true);
@@ -548,7 +554,7 @@ export default function ChatPanel({
           setThreadStream(thread);
         }
 
-        updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+        await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
 
         if (
@@ -582,7 +588,9 @@ export default function ChatPanel({
                 blocks: [{ type: "learning_embed", reviewId }],
               };
               thread = [...thread, followup];
-              updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+              await updateAnnotation(reviewId, chatThreadAnnotationId, {
+                thread,
+              });
               onAnnotationsPersist();
               setThreadStream(thread);
             } catch (runErr) {
@@ -606,7 +614,7 @@ export default function ChatPanel({
         thread = thread.map((m) =>
           m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
         );
-        updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+        await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
         setThreadStream(thread);
         setError(message);

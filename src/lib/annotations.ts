@@ -1,4 +1,10 @@
 import type { ChatAssistantBlock } from "@/lib/reviews";
+import {
+  loadAnnotations,
+  saveAnnotations,
+} from "@/lib/client-data";
+
+export { ANNOTATIONS_UPDATED_EVENT } from "@/lib/storage-events";
 
 /** Margin note (kind "comment") vs passage thread (kind "ask_ai"; UI: Dive deeper) */
 export type AnnotationKind = "comment" | "ask_ai";
@@ -25,46 +31,33 @@ export interface AnnotationMessage {
   blocks?: ChatAssistantBlock[];
 }
 
-const KEY_PREFIX = "paper-copilot-annotations-";
-export const ANNOTATIONS_UPDATED_EVENT = "paper-copilot-annotations-updated";
-
-function notify() {
-  window.dispatchEvent(new Event(ANNOTATIONS_UPDATED_EVENT));
+export async function getAnnotations(
+  reviewId: string,
+): Promise<Annotation[]> {
+  const list = await loadAnnotations(reviewId);
+  return list.map((a) => ({
+    ...a,
+    kind: a.kind ?? "comment",
+  }));
 }
 
-export function getAnnotations(reviewId: string): Annotation[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(`${KEY_PREFIX}${reviewId}`);
-  if (!raw) return [];
-  try {
-    const list = JSON.parse(raw) as Annotation[];
-    return list.map((a) => ({
-      ...a,
-      kind: a.kind ?? "comment",
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export function getAnnotation(
+export async function getAnnotation(
   reviewId: string,
   annotationId: string,
-): Annotation | undefined {
-  return getAnnotations(reviewId).find((a) => a.id === annotationId);
+): Promise<Annotation | undefined> {
+  const list = await getAnnotations(reviewId);
+  return list.find((a) => a.id === annotationId);
 }
 
-function persist(reviewId: string, annotations: Annotation[]) {
-  localStorage.setItem(`${KEY_PREFIX}${reviewId}`, JSON.stringify(annotations));
-  notify();
-}
-
-export function addAnnotation(
+export async function addAnnotation(
   reviewId: string,
-  data: Omit<Annotation, "id" | "reviewId" | "createdAt" | "updatedAt" | "kind"> & {
+  data: Omit<
+    Annotation,
+    "id" | "reviewId" | "createdAt" | "updatedAt" | "kind"
+  > & {
     kind?: AnnotationKind;
   },
-): Annotation {
+): Promise<Annotation> {
   const annotation: Annotation = {
     ...data,
     kind: data.kind ?? "comment",
@@ -73,25 +66,30 @@ export function addAnnotation(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  const list = getAnnotations(reviewId);
+  const list = await loadAnnotations(reviewId);
   list.push(annotation);
-  persist(reviewId, list);
+  await saveAnnotations(reviewId, list);
   return annotation;
 }
 
-export function updateAnnotation(
+export async function updateAnnotation(
   reviewId: string,
   annotationId: string,
   patch: Partial<Pick<Annotation, "note" | "thread" | "kind">>,
-) {
-  const list = getAnnotations(reviewId);
+): Promise<void> {
+  const list = await loadAnnotations(reviewId);
   const idx = list.findIndex((a) => a.id === annotationId);
   if (idx === -1) return;
   list[idx] = { ...list[idx], ...patch, updatedAt: new Date().toISOString() };
-  persist(reviewId, list);
+  await saveAnnotations(reviewId, list);
 }
 
-export function deleteAnnotation(reviewId: string, annotationId: string) {
-  const list = getAnnotations(reviewId).filter((a) => a.id !== annotationId);
-  persist(reviewId, list);
+export async function deleteAnnotation(
+  reviewId: string,
+  annotationId: string,
+): Promise<void> {
+  const list = (await loadAnnotations(reviewId)).filter(
+    (a) => a.id !== annotationId,
+  );
+  await saveAnnotations(reviewId, list);
 }

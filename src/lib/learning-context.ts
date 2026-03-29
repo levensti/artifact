@@ -1,18 +1,17 @@
-import { getGraphData, getPrerequisites } from "@/lib/explore";
+import { loadExplore } from "@/lib/client-data";
 
 /** Short summary for the chat system prompt so the assistant can reference learning progress. */
-export function buildLearningContextSummary(reviewId: string): string {
-  const p = getPrerequisites(reviewId);
-  const g = getGraphData(reviewId);
+export async function buildLearningContextSummary(
+  reviewId: string,
+): Promise<string> {
+  const { prerequisites: p, graph: g } = await loadExplore(reviewId);
   const parts: string[] = [];
   if (p?.prerequisites?.length) {
     const done = p.prerequisites.filter((x) => x.completedAt).length;
     parts.push(
       `Pre-reading: ${done}/${p.prerequisites.length} marked as read.`,
     );
-    parts.push(
-      `Topics: ${p.prerequisites.map((x) => x.topic).join("; ")}`,
-    );
+    parts.push(`Topics: ${p.prerequisites.map((x) => x.topic).join("; ")}`);
   }
   if (g?.nodes?.length) {
     parts.push(
