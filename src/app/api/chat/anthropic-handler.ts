@@ -4,6 +4,7 @@
 
 import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
+import { readSSEStream } from "@/lib/sse";
 import {
   getAllTools,
   getToolByName,
@@ -139,94 +140,66 @@ async function parseAnthropicSSE(
   body: ReadableStream<Uint8Array>,
   emit: (e: StreamEvent) => void,
 ): Promise<{ contentBlocks: AnthropicContentBlock[]; stopReason: string }> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
   const blocks: AnthropicContentBlock[] = [];
   let toolInputAccum = "";
   let stopReason = "end_turn";
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
-        if (data === "[DONE]") continue;
-
-        let event: AnthropicSSEEvent;
-        try {
-          event = JSON.parse(data);
-        } catch {
-          continue;
+  await readSSEStream<AnthropicSSEEvent>(body, (event) => {
+    switch (event.type) {
+      case "content_block_start": {
+        const cb = event.content_block;
+        if (!cb || event.index === undefined) break;
+        if (cb.type === "text") {
+          blocks[event.index] = { type: "text", text: "" };
+        } else if (cb.type === "tool_use" && cb.id && cb.name) {
+          blocks[event.index] = {
+            type: "tool_use",
+            id: cb.id,
+            name: cb.name,
+            input: {},
+          };
+          toolInputAccum = "";
         }
+        break;
+      }
 
-        switch (event.type) {
-          case "content_block_start": {
-            const cb = event.content_block;
-            if (!cb || event.index === undefined) break;
-            if (cb.type === "text") {
-              blocks[event.index] = { type: "text", text: "" };
-            } else if (cb.type === "tool_use" && cb.id && cb.name) {
-              blocks[event.index] = {
-                type: "tool_use",
-                id: cb.id,
-                name: cb.name,
-                input: {},
-              };
-              toolInputAccum = "";
-            }
-            break;
-          }
-
-          case "content_block_delta": {
-            const idx = event.index;
-            const delta = event.delta;
-            if (idx === undefined || !delta) break;
-            const block = blocks[idx];
-            if (delta.type === "text_delta" && block?.type === "text" && delta.text) {
-              block.text += delta.text;
-              emit({ type: "text_delta", text: delta.text });
-            } else if (delta.type === "input_json_delta" && block?.type === "tool_use" && delta.partial_json) {
-              toolInputAccum += delta.partial_json;
-            }
-            break;
-          }
-
-          case "content_block_stop": {
-            const idx = event.index;
-            if (idx === undefined) break;
-            const block = blocks[idx];
-            if (block?.type === "tool_use" && toolInputAccum) {
-              try {
-                block.input = JSON.parse(toolInputAccum);
-              } catch {
-                block.input = {};
-              }
-              toolInputAccum = "";
-            }
-            break;
-          }
-
-          case "message_delta": {
-            if (event.delta?.stop_reason) {
-              stopReason = event.delta.stop_reason;
-            }
-            break;
-          }
+      case "content_block_delta": {
+        const idx = event.index;
+        const delta = event.delta;
+        if (idx === undefined || !delta) break;
+        const block = blocks[idx];
+        if (delta.type === "text_delta" && block?.type === "text" && delta.text) {
+          block.text += delta.text;
+          emit({ type: "text_delta", text: delta.text });
+        } else if (delta.type === "input_json_delta" && block?.type === "tool_use" && delta.partial_json) {
+          toolInputAccum += delta.partial_json;
         }
+        break;
+      }
+
+      case "content_block_stop": {
+        const idx = event.index;
+        if (idx === undefined) break;
+        const block = blocks[idx];
+        if (block?.type === "tool_use" && toolInputAccum) {
+          try {
+            block.input = JSON.parse(toolInputAccum);
+          } catch {
+            block.input = {};
+          }
+          toolInputAccum = "";
+        }
+        break;
+      }
+
+      case "message_delta": {
+        if (event.delta?.stop_reason) {
+          stopReason = event.delta.stop_reason;
+        }
+        break;
       }
     }
-  } finally {
-    reader.releaseLock();
-  }
+  });
 
   return { contentBlocks: blocks, stopReason };
 }

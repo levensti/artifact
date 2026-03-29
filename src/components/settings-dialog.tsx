@@ -12,7 +12,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { getApiKey, setApiKey, clearApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
+import {
+  getApiKey,
+  setApiKey,
+  clearApiKey,
+  KEYS_UPDATED_EVENT,
+} from "@/lib/keys";
 import { PROVIDER_META, type Provider } from "@/lib/models";
 
 interface ProviderRowProps {
@@ -200,9 +205,7 @@ export default function SettingsDialog({
             <div>
               <DialogTitle>Manage API keys</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
-                Keys are stored in a local SQLite file on this machine. API
-                calls use this app&apos;s server to reach Anthropic, OpenAI,
-                xAI, or OpenRouter.
+                Keys are stored in a local SQLite file on your device.
               </DialogDescription>
             </div>
           </div>
@@ -210,15 +213,6 @@ export default function SettingsDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="space-y-3 px-4 py-3">
-            <div className="flex items-start gap-2.5 rounded-lg border border-border/80 bg-muted/30 px-3 py-2.5">
-              <Shield size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Values are stored in SQLite under this project&apos;s{" "}
-                <code className="text-[10px]">data/</code> folder. Self-host the
-                app if you need full control over where traffic goes.
-              </p>
-            </div>
-
             <ProviderRow
               provider="anthropic"
               placeholder="sk-ant-api03-..."

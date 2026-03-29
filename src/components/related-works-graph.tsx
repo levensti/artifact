@@ -1,590 +1,27 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import {
-  ReactFlow,
-  Background,
-  BackgroundVariant,
-  ReactFlowProvider,
-  applyEdgeChanges,
-  applyNodeChanges,
-  useEdgesState,
-  useNodesState,
-  useReactFlow,
-  type Edge,
-  type Node,
-  type NodeChange,
-  type EdgeChange,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { Maximize2, Minimize2, Search, X } from "lucide-react";
-import type { GraphData, GraphEdge, GraphNode, RelationshipType } from "@/lib/explore";
-import { RELATIONSHIP_SHORT_LABEL } from "@/lib/explore";
+import { useMemo, useState } from "react";
+import { Maximize2, Minimize2, X } from "lucide-react";
+import type { GraphData, GraphNode } from "@/lib/explore";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import GraphDetailPanel from "@/components/graph-detail-panel";
-import { PaperNode } from "@/components/knowledge-graph-node";
-import { RelationshipEdge } from "@/components/knowledge-graph-edge";
-import { cn } from "@/lib/utils";
-import { createOrGetReview, normalizeArxivId } from "@/lib/reviews";
+import { createOrGetReview } from "@/lib/reviews";
 import { useRouter } from "next/navigation";
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                          */
-/* ------------------------------------------------------------------ */
-
-/** Max chars shown inside a pill node */
-const PILL_CHARS = 26;
-const PILL_CHARS_ANCHOR = 32;
-
-/** Approximate char→px for the node font (9px Geist ~5.2px per char) */
-const CHAR_W = 5.2;
-const PILL_PAD_X = 14;
-const PILL_H = 24;
-const PILL_H_ANCHOR = 28;
-
-const EDGE_COLORS: Record<RelationshipType, string> = {
-  "builds-upon": "#7c6d66",
-  extends: "#a07f64",
-  "similar-approach": "#8d8c77",
-  prerequisite: "#5c6f4d",
-  "contrasts-with": "#9e6b6b",
-};
-
-function isRenderableRelationship(rel: string): rel is RelationshipType {
-  return rel in EDGE_COLORS;
-}
+import { paperMatchesQuery } from "./graph-layout";
+import { incidentEdges } from "./graph-flow-builders";
+import GraphCanvas from "./graph-canvas";
+import { GraphPaperSearch, GraphLegend } from "./graph-controls";
 
 /* ------------------------------------------------------------------ */
-/*  Layout helpers                                                     */
-/* ------------------------------------------------------------------ */
-
-type PositionedNode = GraphNode & {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  label: string;
-};
-
-function truncate(text: string, max: number) {
-  if (text.length <= max) return text;
-  return text.slice(0, max - 1).trimEnd() + "\u2026";
-}
-
-function pillWidth(label: string): number {
-  return label.length * CHAR_W + PILL_PAD_X * 2;
-}
-
-/** Max satellites on a circle of radius r without chord length dropping below `need` (px). */
-function maxNodesOnRing(r: number, need: number): number {
-  if (r < 8 || need <= 0) return 1;
-  if (2 * r <= need) return 1;
-  let lo = 1;
-  let hi = 256;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi + 1) / 2);
-    const chord = 2 * r * Math.sin(Math.PI / mid);
-    if (chord >= need) lo = mid;
-    else hi = mid - 1;
-  }
-  return Math.max(1, lo);
-}
-
-/** Push overlapping pill centers apart (circle bounds using max(w,h)). */
-function paperMatchesQuery(node: GraphNode, raw: string): boolean {
-  const q = raw.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    node.title.toLowerCase().includes(q) ||
-    node.arxivId.toLowerCase().includes(q)
-  );
-}
-
-function resolveOverlaps(nodes: PositionedNode[], iterations = 140) {
-  const pad = 10;
-  for (let iter = 0; iter < iterations; iter++) {
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i];
-        const b = nodes[j];
-        const ra = Math.max(a.w, a.h) / 2 + pad;
-        const rb = Math.max(b.w, b.h) / 2 + pad;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.hypot(dx, dy) || 0.001;
-        const minDist = ra + rb;
-        if (dist < minDist) {
-          const push = (minDist - dist) / 2;
-          const ux = dx / dist;
-          const uy = dy / dist;
-          a.x -= ux * push;
-          a.y -= uy * push;
-          b.x += ux * push;
-          b.y += uy * push;
-        }
-      }
-    }
-  }
-}
-
-/**
- * Radial layout: anchor at center, satellites on expanding rings. Ring capacity
- * scales with circumference (chord spacing vs pill width) so we never stack
- * too many nodes on one circle. Radii always increase — we never clamp multiple
- * rings to the same radius (that was causing the “pile in the middle” mess).
- */
-function buildRadialLayout(
-  graph: GraphData,
-  width: number,
-  height: number,
-  reviewedArxivIds?: Set<string>,
-): PositionedNode[] {
-  const layoutNodes: PositionedNode[] = graph.nodes.map((n) => {
-    const isReviewed =
-      reviewedArxivIds?.has(normalizeArxivId(n.arxivId)) ?? false;
-    const isAnchor = n.isCurrent || isReviewed;
-    const maxChars = isAnchor ? PILL_CHARS_ANCHOR : PILL_CHARS;
-    const label = truncate(n.title, maxChars);
-    const w = pillWidth(label);
-    const h = isAnchor ? PILL_H_ANCHOR : PILL_H;
-    return { ...n, w, h, label, isCurrent: n.isCurrent || isReviewed, x: 0, y: 0 };
-  });
-
-  const cx = width / 2;
-  const cy = height / 2;
-
-  if (layoutNodes.length === 0) return [];
-
-  const anchor =
-    layoutNodes.find((n) => n.isCurrent) ??
-    layoutNodes.find((n) =>
-      reviewedArxivIds?.has(normalizeArxivId(n.arxivId)),
-    ) ??
-    layoutNodes[0];
-
-  const others = layoutNodes.filter((n) => n.id !== anchor.id);
-
-  anchor.x = cx;
-  anchor.y = cy;
-
-  if (others.length === 0) {
-    return layoutNodes;
-  }
-
-  const maxW = Math.max(anchor.w, ...others.map((n) => n.w));
-  const gap = 16;
-  const need = maxW + gap;
-
-  let idx = 0;
-  let r = Math.max(need * 0.55, 88);
-
-  while (idx < others.length) {
-    const cap = maxNodesOnRing(r, need);
-    const count = Math.min(cap, others.length - idx);
-    const slice = others.slice(idx, idx + count);
-    slice.forEach((node, j) => {
-      const angle = (2 * Math.PI * j) / slice.length - Math.PI / 2;
-      node.x = cx + r * Math.cos(angle);
-      node.y = cy + r * Math.sin(angle);
-    });
-    idx += count;
-    if (idx >= others.length) break;
-    r += Math.max(44, maxW * 0.42 + gap);
-  }
-
-  resolveOverlaps(layoutNodes, 160);
-
-  return layoutNodes;
-}
-
-function useStaticLayout(
-  graph: GraphData,
-  width: number,
-  height: number,
-  reviewedArxivIds?: Set<string>,
-) {
-  return useMemo(
-    () => buildRadialLayout(graph, width, height, reviewedArxivIds),
-    [graph, width, height, reviewedArxivIds],
-  );
-}
-
-const nodeTypes = { paper: PaperNode };
-const edgeTypes = { relationship: RelationshipEdge };
-
-function buildFlowNodes(
-  graph: GraphData,
-  positionedNodes: PositionedNode[],
-  selectedNodeId: string | null,
-  hoverNodeId: string | null,
-  searchQuery: string,
-  highlightedNodeIds?: Set<string>,
-): Node[] {
-  const q = searchQuery.trim();
-  const searchOn = q.length > 0;
-
-  return positionedNodes.map((node) => {
-    const selected = selectedNodeId === node.id;
-    const hovered = hoverNodeId === node.id;
-    const matches = paperMatchesQuery(node, q);
-    const searchMatch = searchOn && matches;
-    const fresh = highlightedNodeIds?.has(node.id) ?? false;
-
-    const selectionDimmed =
-      !searchOn &&
-      selectedNodeId != null &&
-      !selected &&
-      !graph.edges.some(
-        (e) =>
-          (e.source === selectedNodeId && e.target === node.id) ||
-          (e.target === selectedNodeId && e.source === node.id),
-      );
-
-    const searchDimmed = searchOn && !matches;
-    const dimmed = selectionDimmed || searchDimmed;
-
-    return {
-      id: node.id,
-      type: "paper",
-      position: { x: node.x - node.w / 2, y: node.y - node.h / 2 },
-      selected,
-      style: { width: node.w, height: node.h },
-      data: {
-        label: node.label,
-        title: node.title,
-        isAnchor: node.isCurrent,
-        dimmed,
-        hovered,
-        searchMatch,
-        fresh,
-      },
-    };
-  });
-}
-
-function buildFlowEdges(
-  graph: GraphData,
-  selectedNodeId: string | null,
-  searchQuery: string,
-): Edge[] {
-  const q = searchQuery.trim();
-  const searchOn = q.length > 0;
-
-  return graph.edges
-    .filter((edge) => isRenderableRelationship(edge.relationship))
-    .map((edge, index) => {
-    const sNode = graph.nodes.find((n) => n.id === edge.source);
-    const tNode = graph.nodes.find((n) => n.id === edge.target);
-
-    const edgeTouchesSearch =
-      searchOn &&
-      sNode &&
-      tNode &&
-      (paperMatchesQuery(sNode, q) || paperMatchesQuery(tNode, q));
-
-    const isIncident =
-      !searchOn &&
-      selectedNodeId != null &&
-      (edge.source === selectedNodeId || edge.target === selectedNodeId);
-
-    const incident = searchOn ? edgeTouchesSearch : isIncident;
-    const dimmed = searchOn ? !edgeTouchesSearch : selectedNodeId != null && !isIncident;
-
-    const color = EDGE_COLORS[edge.relationship];
-      return {
-        id: `e-${edge.source}-${edge.target}-${index}`,
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: "s",
-        targetHandle: "t",
-        type: "relationship",
-        data: {
-          label: RELATIONSHIP_SHORT_LABEL[edge.relationship],
-          color,
-          dimmed,
-          incident,
-        },
-      };
-    });
-}
-
-function incidentEdges(graph: GraphData, nodeId: string | null): GraphEdge[] {
-  if (!nodeId) return [];
-  const anchorArxiv = graph.nodes.find((n) => n.isCurrent)?.arxivId ?? null;
-  const all = graph.edges.filter(
-    (e) =>
-      isRenderableRelationship(e.relationship) &&
-      (e.source === nodeId || e.target === nodeId),
-  );
-  if (!anchorArxiv) return all;
-  const viaAnchor = all.filter((e) => e.source === anchorArxiv || e.target === anchorArxiv);
-  return viaAnchor.length > 0 ? viaAnchor : all;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Graph canvas                                                       */
-/* ------------------------------------------------------------------ */
-
-interface GraphCanvasProps {
-  graph: GraphData;
-  width: number;
-  height: number;
-  selectedNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
-  onDeselectNode: () => void;
-  reviewedArxivIds?: Set<string>;
-  /** Case-insensitive substring on title and arXiv id */
-  searchQuery: string;
-  highlightedNodeIds?: Set<string>;
-}
-
-const FIT_VIEW_OPTIONS = {
-  padding: 0.08,
-  maxZoom: 1.75,
-  minZoom: 0.4,
-} as const;
-
-function FitViewWhenGraphChanges({ graphKey }: { graphKey: string }) {
-  const { fitView } = useReactFlow();
-  useEffect(() => {
-    fitView(FIT_VIEW_OPTIONS);
-  }, [graphKey, fitView]);
-  return null;
-}
-
-function GraphCanvasInner({
-  graph,
-  width,
-  height,
-  selectedNodeId,
-  onSelectNode,
-  onDeselectNode,
-  reviewedArxivIds,
-  searchQuery,
-  highlightedNodeIds,
-}: GraphCanvasProps) {
-  const positionedNodes = useStaticLayout(graph, width, height, reviewedArxivIds);
-  const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
-
-  const flowNodes = useMemo(
-    () =>
-      buildFlowNodes(
-        graph,
-        positionedNodes,
-        selectedNodeId,
-        hoverNodeId,
-        searchQuery,
-        highlightedNodeIds,
-      ),
-    [graph, positionedNodes, selectedNodeId, hoverNodeId, searchQuery, highlightedNodeIds],
-  );
-
-  const flowEdges = useMemo(
-    () => buildFlowEdges(graph, selectedNodeId, searchQuery),
-    [graph, selectedNodeId, searchQuery],
-  );
-
-  const [nodes, setNodes] = useNodesState(flowNodes);
-  const [edges, setEdges] = useEdgesState(flowEdges);
-
-  useEffect(() => {
-    setNodes(flowNodes);
-  }, [flowNodes, setNodes]);
-
-  useEffect(() => {
-    setEdges(flowEdges);
-  }, [flowEdges, setEdges]);
-
-  const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((nds) => applyNodeChanges(changes, nds));
-    },
-    [setNodes],
-  );
-
-  const handleEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      setEdges((eds) => applyEdgeChanges(changes, eds));
-    },
-    [setEdges],
-  );
-
-  const graphKey = `${graph.generatedAt}-${graph.nodes.length}-${graph.edges.length}`;
-
-  return (
-    <div
-      style={{ width, height }}
-      className="relative overflow-hidden rounded-md bg-linear-to-br from-background via-card/50 to-muted/30"
-    >
-      <ReactFlow
-        key={graphKey}
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        panOnScroll={false}
-        zoomOnScroll
-        zoomOnPinch
-        zoomOnDoubleClick={false}
-        panOnDrag
-        minZoom={0.35}
-        maxZoom={2.8}
-        onInit={(instance) => {
-          instance.fitView(FIT_VIEW_OPTIONS);
-        }}
-        onNodeClick={(_, node) => onSelectNode(node.id)}
-        onPaneClick={() => onDeselectNode()}
-        onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
-        onNodeMouseLeave={() => setHoverNodeId(null)}
-        proOptions={{ hideAttribution: true }}
-        className="bg-transparent!"
-      >
-        <FitViewWhenGraphChanges graphKey={graphKey} />
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color="var(--border)"
-          className="opacity-[0.38]"
-        />
-      </ReactFlow>
-    </div>
-  );
-}
-
-function GraphCanvas(props: GraphCanvasProps) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState(() => ({ w: props.width, h: props.height }));
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const update = () => {
-      const r = el.getBoundingClientRect();
-      const rw = Math.round(r.width);
-      const rh = Math.round(r.height);
-      const w = rw > 12 ? rw : props.width;
-      const h = rh > 12 ? rh : props.height;
-      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [props.width, props.height]);
-
-  return (
-    <div ref={wrapRef} className="h-full w-full min-h-[200px] min-w-0">
-      <ReactFlowProvider>
-        <GraphCanvasInner
-          graph={props.graph}
-          width={size.w}
-          height={size.h}
-          selectedNodeId={props.selectedNodeId}
-          onSelectNode={props.onSelectNode}
-          onDeselectNode={props.onDeselectNode}
-          reviewedArxivIds={props.reviewedArxivIds}
-          searchQuery={props.searchQuery}
-            highlightedNodeIds={props.highlightedNodeIds}
-        />
-      </ReactFlowProvider>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Search                                                              */
-/* ------------------------------------------------------------------ */
-
-function GraphPaperSearch({
-  value,
-  onChange,
-  matchCount,
-  total,
-  className,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  matchCount: number;
-  total: number;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "relative flex w-full min-w-0 max-w-sm items-center gap-2",
-        className,
-      )}
-    >
-      <Search
-        className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-        aria-hidden
-      />
-      <Input
-        aria-label="Search papers by title or arXiv id"
-        placeholder="Search papers…"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 w-full min-w-0 border-border/80 bg-card/90 pl-8 backdrop-blur-sm"
-      />
-      {value.trim() ? (
-        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-          {matchCount}/{total}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Legend                                                              */
-/* ------------------------------------------------------------------ */
-
-const LEGEND_ORDER: RelationshipType[] = [
-  "prerequisite",
-  "builds-upon",
-  "extends",
-  "similar-approach",
-  "contrasts-with",
-];
-
-function GraphLegend({ className }: { className?: string }) {
-  return (
-    <div
-      className={`inline-flex flex-wrap gap-x-3.5 gap-y-1 text-[10px] rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 ${className ?? ""}`}
-    >
-      {LEGEND_ORDER.map((rel) => (
-        <span key={rel} className="inline-flex items-center gap-1.5">
-          <span
-            className="size-[7px] rounded-full shrink-0"
-            style={{ backgroundColor: EDGE_COLORS[rel] }}
-          />
-          <span className="text-foreground/70 font-medium">
-            {RELATIONSHIP_SHORT_LABEL[rel]}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Main component                                                     */
+/*  Props                                                              */
 /* ------------------------------------------------------------------ */
 
 interface RelatedWorksGraphProps {
   graph: GraphData;
-  /** When true, renders a larger graph canvas (reserved for full-page layouts). */
   workspace?: boolean;
   onDiscussInChat?: (title: string) => void;
-  /** arXiv IDs of papers the user has reviewed — shown as anchor nodes */
   reviewedArxivIds?: Set<string>;
   onGenerateRelated?: (node: GraphNode) => void;
   isGeneratingNodeId?: string | null;
@@ -594,6 +31,10 @@ interface RelatedWorksGraphProps {
   onOpenSettings?: () => void;
   highlightedNodeIds?: Set<string>;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Main component                                                     */
+/* ------------------------------------------------------------------ */
 
 export default function RelatedWorksGraph({
   graph,
@@ -633,9 +74,23 @@ export default function RelatedWorksGraph({
     });
   };
 
-  /** Compact coordinate space; viewport is filled via fitView (no pan/zoom UI). */
   const canvasW = workspace ? 560 : 520;
   const canvasH = workspace ? 380 : 320;
+
+  /* ---- Shared detail panel props ---- */
+  const detailPanelProps = {
+    node: selectedNode,
+    incidentEdges: selectedIncident,
+    onStartReview,
+    onGenerateRelated,
+    isGenerating: isGeneratingNodeId === selectedNode?.id,
+    generationProgress:
+      isGeneratingNodeId === selectedNode?.id ? generationProgress : null,
+    generationError:
+      isGeneratingNodeId === selectedNode?.id ? generationError : null,
+    canGenerate,
+    onOpenSettings,
+  };
 
   /* ---- Compact (in-review) layout ---- */
   if (!workspace) {
@@ -679,22 +134,10 @@ export default function RelatedWorksGraph({
 
         {resolvedSelectedNodeId && (
           <GraphDetailPanel
-            node={selectedNode}
-            incidentEdges={selectedIncident}
-            onStartReview={onStartReview}
+            {...detailPanelProps}
             onDiscussInChat={
               onDiscussInChat ? (node) => onDiscussInChat(node.title) : undefined
             }
-            onGenerateRelated={onGenerateRelated}
-            isGenerating={isGeneratingNodeId === selectedNode?.id}
-            generationProgress={
-              isGeneratingNodeId === selectedNode?.id ? generationProgress : null
-            }
-            generationError={
-              isGeneratingNodeId === selectedNode?.id ? generationError : null
-            }
-            canGenerate={canGenerate}
-            onOpenSettings={onOpenSettings}
           />
         )}
 
@@ -754,21 +197,7 @@ export default function RelatedWorksGraph({
               </div>
               {resolvedSelectedNodeId && (
                 <div className="w-[340px] border-l border-border bg-card/50 p-4 overflow-y-auto">
-                  <GraphDetailPanel
-                    node={selectedNode}
-                    incidentEdges={selectedIncident}
-                    onStartReview={onStartReview}
-                    onGenerateRelated={onGenerateRelated}
-                    isGenerating={isGeneratingNodeId === selectedNode?.id}
-                    generationProgress={
-                      isGeneratingNodeId === selectedNode?.id ? generationProgress : null
-                    }
-                    generationError={
-                      isGeneratingNodeId === selectedNode?.id ? generationError : null
-                    }
-                    canGenerate={canGenerate}
-                    onOpenSettings={onOpenSettings}
-                  />
+                  <GraphDetailPanel {...detailPanelProps} />
                 </div>
               )}
             </div>
@@ -804,11 +233,9 @@ export default function RelatedWorksGraph({
             total={graph.nodes.length}
           />
         </div>
-        {/* Floating legend */}
         <div className="absolute bottom-3 left-3 z-10">
           <GraphLegend />
         </div>
-        {/* Hint */}
         <div className="pointer-events-none absolute right-3 top-3 max-w-[11rem] text-right text-[10px] text-muted-foreground/60 select-none">
           Scroll to zoom · Drag to pan · Click a paper
         </div>
@@ -834,22 +261,10 @@ export default function RelatedWorksGraph({
           </div>
           <div className="p-3">
             <GraphDetailPanel
-              node={selectedNode}
-              incidentEdges={selectedIncident}
-              onStartReview={onStartReview}
+              {...detailPanelProps}
               onDiscussInChat={
                 onDiscussInChat ? (node) => onDiscussInChat(node.title) : undefined
               }
-              onGenerateRelated={onGenerateRelated}
-              isGenerating={isGeneratingNodeId === selectedNode?.id}
-              generationProgress={
-                isGeneratingNodeId === selectedNode?.id ? generationProgress : null
-              }
-              generationError={
-                isGeneratingNodeId === selectedNode?.id ? generationError : null
-              }
-              canGenerate={canGenerate}
-              onOpenSettings={onOpenSettings}
             />
           </div>
         </div>

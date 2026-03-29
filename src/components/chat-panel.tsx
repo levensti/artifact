@@ -3,31 +3,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
-  ArrowUpRight,
-  BookOpen,
-  BrainCircuit,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Globe,
   Loader2,
   MessageSquareQuote,
-  Network,
-  Search,
   Send,
-  Wrench,
+  AlertTriangle,
 } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
-import type { ArxivSearchResult } from "@/lib/explore";
-import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
-import type { Annotation, AnnotationMessage } from "@/lib/annotations";
+import type { Annotation } from "@/lib/annotations";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import ModelSelector from "./model-selector";
-import MarkdownMessage from "./markdown-message";
 import { useSettingsOpener } from "./settings-opener-context";
-import LearningEmbed from "./learning-embed";
-import { useChat, type AgentStep } from "@/hooks/use-chat";
+import ChatEmptyState from "./chat-empty-state";
+import { ChatMessageBubble, type BlockCtx } from "./chat-message-bubble";
+import { useChat } from "@/hooks/use-chat";
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                              */
@@ -47,420 +36,6 @@ interface ChatPanelProps {
   onExternalPromptConsumed?: () => void;
   selectedModel?: Model | null;
   onModelChange?: (model: Model | null) => void;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Tool display helpers                                               */
-/* ------------------------------------------------------------------ */
-
-const TOOL_LABELS: Record<string, [string, string]> = {
-  arxiv_search: ["Searching arXiv", "Searched arXiv"],
-  web_search: ["Searching the web", "Searched the web"],
-  rank_results: ["Ranking results", "Ranked results"],
-  save_to_knowledge_graph: [
-    "Saving to knowledge graph",
-    "Saved to knowledge graph",
-  ],
-};
-
-function toolLabel(name: string, done: boolean): string {
-  const entry = TOOL_LABELS[name];
-  if (entry) return done ? entry[1] : entry[0];
-  return done ? `Ran ${name}` : `Running ${name}`;
-}
-
-const TOOL_ICONS: Record<string, typeof Search> = {
-  arxiv_search: Search,
-  web_search: Search,
-  rank_results: Wrench,
-  save_to_knowledge_graph: Network,
-};
-
-/* ------------------------------------------------------------------ */
-/*  Step renderers                                                     */
-/* ------------------------------------------------------------------ */
-
-function ThinkingIndicator() {
-  return (
-    <div className="flex items-center gap-2 py-1.5">
-      <BrainCircuit className="size-3.5 text-primary/60 animate-pulse shrink-0" />
-      <span className="text-xs text-muted-foreground font-medium">
-        Thinking…
-      </span>
-      <span className="inline-flex gap-[3px]">
-        {[0, 150, 300].map((delay) => (
-          <span
-            key={delay}
-            className="size-[4px] rounded-full bg-primary/40 animate-bounce"
-            style={{ animationDelay: `${delay}ms`, animationDuration: "1.2s" }}
-          />
-        ))}
-      </span>
-    </div>
-  );
-}
-
-function ToolCallStep({
-  name,
-  input,
-  output,
-  isLive,
-}: {
-  name: string;
-  input: Record<string, unknown>;
-  output?: string;
-  isLive?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const Icon = TOOL_ICONS[name] ?? Wrench;
-  const done = !!output;
-  const queryStr = "query" in input && input.query ? String(input.query) : null;
-
-  return (
-    <div
-      className="my-1.5 rounded-md border border-border/70 bg-muted/15 text-xs overflow-hidden"
-      style={isLive ? { animation: "fadeIn 200ms ease-out" } : undefined}
-    >
-      <button
-        type="button"
-        className={cn(
-          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors",
-          done && "hover:bg-muted/30 cursor-pointer",
-          !done && "cursor-default",
-        )}
-        onClick={() => done && setOpen(!open)}
-        disabled={!done}
-      >
-        {done ? (
-          <Check
-            className="size-3 text-emerald-600 shrink-0"
-            strokeWidth={2.5}
-          />
-        ) : (
-          <Loader2 className="size-3 text-primary/60 animate-spin shrink-0" />
-        )}
-        <Icon className="size-3 text-muted-foreground/70 shrink-0" />
-        <span className="font-medium text-foreground/80">
-          {toolLabel(name, done)}
-        </span>
-        {queryStr && (
-          <span className="text-muted-foreground/70 truncate max-w-[180px]">
-            &middot; {queryStr}
-          </span>
-        )}
-        {done && (
-          <span className="ml-auto text-muted-foreground/50">
-            {open ? (
-              <ChevronDown className="size-3" />
-            ) : (
-              <ChevronRight className="size-3" />
-            )}
-          </span>
-        )}
-      </button>
-      {open && output && (
-        <div className="border-t border-border/40 px-2.5 py-2 max-h-[180px] overflow-y-auto bg-muted/5">
-          {name === "save_to_knowledge_graph" ? (
-            <div className="text-[11px] leading-relaxed text-muted-foreground/80">
-              <MarkdownMessage content={output} />
-            </div>
-          ) : (
-            <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
-              {output}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Interleaved blocks renderer (for persisted messages)               */
-/* ------------------------------------------------------------------ */
-
-interface BlockCtx {
-  reviewId: string;
-  arxivId: string;
-  paperTitle: string;
-  paperContext: string;
-  selectedModel: Model | null;
-}
-
-function hasInterleavedBlocks(blocks: ChatAssistantBlock[]): boolean {
-  return blocks.some(
-    (b) => b.type === "text_segment" || b.type === "tool_call",
-  );
-}
-
-function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: BlockCtx) {
-  return blocks.map((block, i) => {
-    if (block.type === "text_segment") {
-      return block.content ? (
-        <MarkdownMessage key={`ts-${i}`} content={block.content} />
-      ) : null;
-    }
-    if (block.type === "tool_call") {
-      return (
-        <ToolCallStep
-          key={block.id}
-          name={block.name}
-          input={block.input}
-          output={block.output}
-        />
-      );
-    }
-    if (block.type === "learning_embed") {
-      return (
-        <LearningEmbed
-          key={`le-${i}`}
-          reviewId={block.reviewId}
-          arxivId={ctx.arxivId}
-          paperTitle={ctx.paperTitle}
-          paperContext={ctx.paperContext}
-          selectedModel={ctx.selectedModel}
-        />
-      );
-    }
-    if (block.type === "arxiv_hits") {
-      return (
-        <ArxivHitsBlock
-          key={`ah-${i}`}
-          query={block.query}
-          results={block.results}
-        />
-      );
-    }
-    return null;
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/*  ArXiv hits block                                                   */
-/* ------------------------------------------------------------------ */
-
-function ArxivHitsBlock({
-  query,
-  results,
-}: {
-  query: string;
-  results: ArxivSearchResult[];
-}) {
-  return (
-    <div className="mt-3 rounded-md border border-border bg-muted/15 p-3 space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">
-        arXiv ({results.length} results) &middot;{" "}
-        <span className="text-foreground/80">{query}</span>
-      </p>
-      <ul className="space-y-2 max-h-[240px] overflow-y-auto">
-        {results.slice(0, 12).map((r) => (
-          <li
-            key={r.arxivId}
-            className="text-xs border border-border/60 rounded-md p-2 bg-background/80"
-          >
-            <a
-              href={`https://arxiv.org/abs/${r.arxivId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-primary hover:underline leading-snug block"
-            >
-              {r.title}
-            </a>
-            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
-              {r.abstract}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Agent steps renderer (live streaming view)                         */
-/* ------------------------------------------------------------------ */
-
-function renderAgentSteps(steps: AgentStep[]) {
-  return steps.map((step, i) => {
-    switch (step.kind) {
-      case "thinking":
-        return <ThinkingIndicator key={`think-${i}`} />;
-      case "text":
-        return step.text ? (
-          <MarkdownMessage key={`text-${i}`} content={step.text} />
-        ) : null;
-      case "tool_call":
-        return (
-          <ToolCallStep
-            key={step.id}
-            name={step.name}
-            input={step.input}
-            output={step.output}
-            isLive
-          />
-        );
-    }
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/*  Single message renderer                                            */
-/* ------------------------------------------------------------------ */
-
-function ChatMessageBubble({
-  msg,
-  isCurrentlyStreaming,
-  agentSteps,
-  blockCtx,
-}: {
-  msg: ChatMessage | AnnotationMessage;
-  isCurrentlyStreaming: boolean;
-  agentSteps: AgentStep[];
-  blockCtx: BlockCtx;
-}) {
-  if (msg.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[88%] rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border border-l-2 border-l-primary/50 bg-secondary text-foreground">
-          <div className="whitespace-pre-wrap">{msg.content}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isCurrentlyStreaming) {
-    return (
-      <div className="max-w-full">
-        <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
-          {agentSteps.length === 0 ? (
-            <ThinkingIndicator />
-          ) : (
-            renderAgentSteps(agentSteps)
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const hasBlocks = msg.blocks && msg.blocks.length > 0;
-
-  if (hasBlocks && hasInterleavedBlocks(msg.blocks!)) {
-    return (
-      <div className="max-w-full">
-        <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
-          {renderInterleavedBlocks(msg.blocks!, blockCtx)}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-full">
-      <div className="rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border bg-card text-card-foreground max-w-full">
-        {msg.content ? <MarkdownMessage content={msg.content} /> : null}
-        {hasBlocks ? renderInterleavedBlocks(msg.blocks!, blockCtx) : null}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Empty state                                                        */
-/* ------------------------------------------------------------------ */
-
-const STARTERS = [
-  {
-    icon: BookOpen,
-    label: "Prerequisites",
-    desc: "Background concepts and papers to read first",
-    prompt:
-      "What concepts and background should I understand before reading this paper? Search for the most important prerequisite papers.",
-  },
-  {
-    icon: Network,
-    label: "Related work",
-    desc: "How this paper connects to neighboring research",
-    prompt:
-      "Find the most important related papers to this work. Search arXiv and explain how they connect.",
-  },
-  {
-    icon: Search,
-    label: "Key contributions",
-    desc: "Main results and how they advance the field",
-    prompt:
-      "What are the key contributions of this paper? How do they advance the state of the art?",
-  },
-  {
-    icon: Globe,
-    label: "Explain the method",
-    desc: "Step-by-step walkthrough with equations",
-    prompt:
-      "Walk me through the main method/approach in this paper step by step, including the key equations.",
-  },
-];
-
-function EmptyState({
-  canSend,
-  onSend,
-}: {
-  canSend: boolean;
-  onSend: (text: string) => void;
-}) {
-  return (
-    <div className="flex flex-col pb-4 pt-0 font-sans antialiased">
-      <div className="mb-4 space-y-1 px-2">
-        <p className="text-sm font-semibold leading-snug tracking-tight text-foreground">
-          Research assistant
-        </p>
-        <p className="min-h-[2.5rem] text-xs leading-relaxed text-muted-foreground">
-          Ask anything, or pick a starting point below.
-        </p>
-      </div>
-
-      <div className="space-y-0.5">
-        {STARTERS.map((s) => (
-          <button
-            key={s.label}
-            type="button"
-            disabled={!canSend}
-            onClick={() => onSend(s.prompt)}
-            className={cn(
-              "group flex min-h-14 w-full items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-all duration-150",
-              canSend
-                ? "cursor-pointer hover:bg-foreground/4 active:bg-foreground/6"
-                : "cursor-not-allowed opacity-50",
-            )}
-          >
-            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5 transition-colors group-hover:border-border/70 group-hover:bg-foreground/8">
-              <s.icon className="size-3 text-foreground/45" strokeWidth={1.8} />
-            </div>
-            <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="text-xs font-medium leading-snug text-foreground/70 transition-colors group-hover:text-foreground/90">
-                {s.label}
-              </p>
-              <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground/80">
-                {s.desc}
-              </p>
-            </div>
-            <ArrowUpRight
-              className="mt-1 size-3 shrink-0 text-muted-foreground/0 transition-all duration-150 group-hover:text-muted-foreground/50"
-              strokeWidth={2}
-            />
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-5 flex items-start gap-2 px-2">
-        <BrainCircuit
-          className="mt-0.5 size-3 shrink-0 text-muted-foreground/35"
-          strokeWidth={1.5}
-        />
-        <span className="text-[10px] leading-snug text-muted-foreground/45 not-italic">
-          Searches arXiv &amp; the web automatically when needed
-        </span>
-      </div>
-    </div>
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -543,7 +118,9 @@ function ChatInput({
           size="icon"
           className="size-8 m-1 text-muted-foreground hover:text-primary"
           onClick={sendMessage}
-          disabled={inputLocked || !selectedModel || !input.trim() || isStreaming}
+          disabled={
+            inputLocked || !selectedModel || !input.trim() || isStreaming
+          }
           aria-label={
             !selectedModel
               ? hasSavedKeys
@@ -712,6 +289,16 @@ export default function ChatPanel({
     else openSettings();
   };
 
+  const errorText = chat.error ?? "";
+  const errorIsAuth =
+    /\b(api key|unauthorized|forbidden|401|403|invalid key|missing key)\b/i.test(
+      errorText,
+    );
+  const errorIsTransient =
+    /\b(timeout|timed out|429|rate limit|overloaded|unavailable|network|failed to fetch)\b/i.test(
+      errorText,
+    );
+
   const blockCtx: BlockCtx = {
     reviewId,
     arxivId,
@@ -755,7 +342,7 @@ export default function ChatPanel({
                   aria-label="Back to whole-paper assistant chat"
                 >
                   <ArrowLeft className="size-3.5 shrink-0" strokeWidth={2.5} />
-                  Back to paper chat
+                  Return to main thread
                 </Button>
               </div>
 
@@ -794,7 +381,7 @@ export default function ChatPanel({
           ) : (
             <>
               {chat.messages.length === 0 && (
-                <EmptyState
+                <ChatEmptyState
                   canSend={
                     !!selectedModel && chat.hasKeyForModel && !chat.isStreaming
                   }
@@ -838,16 +425,65 @@ export default function ChatPanel({
 
       {chat.error && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug space-y-2">
-          <p>{chat.error}</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={openKeysForChat}
-          >
-            Manage API keys
-          </Button>
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            <div className="min-w-0 space-y-1">
+              <p>{chat.error}</p>
+              <p className="text-xs text-destructive/80">
+                {errorIsAuth
+                  ? "This looks like an authentication issue."
+                  : errorIsTransient
+                    ? "This looks temporary. Try again in a moment."
+                    : "This may be a provider or model issue."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {errorIsAuth ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={openKeysForChat}
+              >
+                Manage API keys
+              </Button>
+            ) : (
+              <>
+                {chat.canRetry && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => void chat.retryLastError()}
+                    disabled={chat.isStreaming}
+                  >
+                    Retry
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => chat.clearError()}
+                >
+                  Dismiss
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={openKeysForChat}
+                >
+                  Model & keys
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       )}
 

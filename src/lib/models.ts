@@ -86,31 +86,30 @@ export const FALLBACK_MODELS: Model[] = [
 
 export const PROVIDER_META: Record<
   Provider,
-  { label: string; description: string; keyHint: string }
+  { label: string; keyHint: string }
 > = {
   anthropic: {
     label: "Anthropic",
-    description: "Claude models. Uses an Anthropic API key.",
     keyHint: "Anthropic API key",
   },
   openai: {
     label: "OpenAI",
-    description: "OpenAI Chat Completions models. Uses an OpenAI API key.",
     keyHint: "OpenAI API key",
   },
   xai: {
     label: "xAI",
-    description: "Grok models via the xAI API. Uses an xAI API key.",
     keyHint: "xAI API key",
   },
   openrouter: {
     label: "OpenRouter",
-    description: "Third-party models via OpenRouter. Uses an OpenRouter API key.",
     keyHint: "OpenRouter API key",
   },
 };
 
-export function modelsGroupedByProvider(): { provider: Provider; models: Model[] }[] {
+export function modelsGroupedByProvider(): {
+  provider: Provider;
+  models: Model[];
+}[] {
   return PROVIDER_ORDER.map((provider) => ({
     provider,
     models: FALLBACK_MODELS.filter((m) => m.provider === provider),

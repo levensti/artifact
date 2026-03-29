@@ -20,6 +20,42 @@ interface PaperResult {
   url: string;
 }
 
+function normalizeQueryText(raw: string): string {
+  return raw
+    .replace(/["']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Build a broader fallback query when the original is too specific. */
+function synthesizeBroaderQuery(raw: string): string | null {
+  const cleaned = normalizeQueryText(raw);
+  if (!cleaned) return null;
+
+  // Remove highly specific / often low-recall tokens.
+  const tokens = cleaned
+    .split(" ")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !/^\d{4}$/.test(t)) // years like 2009, 2018
+    .filter((t) => !/^arxiv$/i.test(t))
+    .filter((t) => !/^\d{4}\.\d{4,5}(v\d+)?$/i.test(t)); // arXiv IDs
+
+  if (tokens.length === 0) return null;
+
+  // Keep meaningful technical words and de-emphasize ultra-long tails.
+  const compact = tokens.filter((t) => t.length >= 3).slice(0, 8);
+  if (compact.length === 0) return null;
+
+  // Use a phrase-ish query + loose keyword fallback.
+  if (compact.length >= 5) {
+    const phrase = compact.slice(0, 4).join(" ");
+    const tail = compact.slice(4, 7).join(" ");
+    return tail ? `${phrase} ${tail}` : phrase;
+  }
+  return compact.join(" ");
+}
+
 /* ------------------------------------------------------------------ */
 /*  Semantic Scholar (primary)                                         */
 /* ------------------------------------------------------------------ */
@@ -184,26 +220,50 @@ export const arxivSearchTool: ToolDefinition = {
     if (!query) return "Error: query parameter is required.";
 
     const maxResults = Math.max(1, Math.min(20, Number(input.max_results) || 8));
+    const queryAttempts = [
+      query,
+      synthesizeBroaderQuery(query),
+    ].filter((q, i, arr): q is string => !!q && arr.indexOf(q) === i);
 
     let results: PaperResult[];
     let source: string;
+    let usedQuery = query;
 
-    // Try Semantic Scholar first, fall back to arXiv
-    try {
-      results = await searchSemanticScholar(query, maxResults);
-      source = "Semantic Scholar";
-    } catch {
+    results = [];
+    source = "Semantic Scholar";
+    let lastErr: unknown = null;
+
+    for (const attemptQuery of queryAttempts) {
+      usedQuery = attemptQuery;
+      // Try Semantic Scholar first, fall back to arXiv
       try {
-        results = await searchArxivFallback(query, maxResults);
-        source = "arXiv";
-      } catch (err) {
-        return `Paper search failed: ${err instanceof Error ? err.message : "unknown error"}. Both Semantic Scholar and arXiv are unavailable.`;
+        results = await searchSemanticScholar(attemptQuery, maxResults);
+        source = "Semantic Scholar";
+      } catch {
+        try {
+          results = await searchArxivFallback(attemptQuery, maxResults);
+          source = "arXiv";
+        } catch (err) {
+          lastErr = err;
+          continue;
+        }
       }
+      if (results.length > 0) break;
+    }
+
+    if (results.length === 0 && lastErr) {
+      return `Paper search failed: ${lastErr instanceof Error ? lastErr.message : "unknown error"}. Both Semantic Scholar and arXiv are unavailable.`;
     }
 
     if (results.length === 0) {
-      return `No papers found for: "${query}". Try broadening or rephrasing the search.`;
+      const broadened = queryAttempts.length > 1 ? ` Also tried broader query: "${queryAttempts[1]}".` : "";
+      return `No papers found for: "${query}". Try broader concepts (method family, task, or domain) instead of very specific phrases.${broadened}`;
     }
+
+    const broadenNote =
+      usedQuery !== query
+        ? `\n(Broadened from "${query}" to "${usedQuery}" for better recall.)`
+        : "";
 
     const formatted = results.map((r, i) => {
       const authors =
@@ -229,6 +289,6 @@ export const arxivSearchTool: ToolDefinition = {
         .join("\n");
     });
 
-    return `Found ${results.length} papers for "${query}" (via ${source}):\n\n${formatted.join("\n\n")}`;
+    return `Found ${results.length} papers for "${usedQuery}" (via ${source}).${broadenNote}\n\n${formatted.join("\n\n")}`;
   },
 };

@@ -4,6 +4,7 @@
 
 import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
+import { readSSEStream } from "@/lib/sse";
 import {
   openAiCompatibleChatCompletionsUrl,
   OPENROUTER_APP_TITLE,
@@ -156,71 +157,43 @@ async function parseOpenAISSE(
   body: ReadableStream<Uint8Array>,
   emit: (e: StreamEvent) => void,
 ): Promise<{ textContent: string; toolCalls: OpenAIToolCall[]; finishReason: string }> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
   let textContent = "";
   const toolCallMap = new Map<number, OpenAIToolCall>();
   let finishReason = "stop";
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+  await readSSEStream<OpenAIStreamEvent>(body, (event) => {
+    const choice = event.choices?.[0];
+    if (!choice) return;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+    if (choice.finish_reason) {
+      finishReason = choice.finish_reason;
+    }
 
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
-        if (data === "[DONE]") continue;
+    const delta = choice.delta;
+    if (!delta) return;
 
-        let event: OpenAIStreamEvent;
-        try {
-          event = JSON.parse(data);
-        } catch {
-          continue;
+    if (delta.content) {
+      textContent += delta.content;
+      emit({ type: "text_delta", text: delta.content });
+    }
+
+    if (delta.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        const idx = tc.index ?? 0;
+        if (!toolCallMap.has(idx)) {
+          toolCallMap.set(idx, {
+            index: idx,
+            id: tc.id ?? "",
+            function: { name: tc.function?.name ?? "", arguments: "" },
+          });
         }
-
-        const choice = event.choices?.[0];
-        if (!choice) continue;
-
-        if (choice.finish_reason) {
-          finishReason = choice.finish_reason;
-        }
-
-        const delta = choice.delta;
-        if (!delta) continue;
-
-        if (delta.content) {
-          textContent += delta.content;
-          emit({ type: "text_delta", text: delta.content });
-        }
-
-        if (delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            if (!toolCallMap.has(idx)) {
-              toolCallMap.set(idx, {
-                index: idx,
-                id: tc.id ?? "",
-                function: { name: tc.function?.name ?? "", arguments: "" },
-              });
-            }
-            const existing = toolCallMap.get(idx)!;
-            if (tc.id) existing.id = tc.id;
-            if (tc.function?.name) existing.function.name = tc.function.name;
-            if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
-          }
-        }
+        const existing = toolCallMap.get(idx)!;
+        if (tc.id) existing.id = tc.id;
+        if (tc.function?.name) existing.function.name = tc.function.name;
+        if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
       }
     }
-  } finally {
-    reader.releaseLock();
-  }
+  });
 
   const toolCalls = Array.from(toolCallMap.values()).sort((a, b) => a.index - b.index);
   return { textContent, toolCalls, finishReason };

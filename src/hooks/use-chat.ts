@@ -196,6 +196,9 @@ export interface UseChatReturn {
   streamingMsgId: string | null;
   hasSavedKeys: boolean;
   hasKeyForModel: boolean;
+  canRetry: boolean;
+  retryLastError: () => Promise<void>;
+  clearError: () => void;
   sendMessage: () => Promise<void>;
   submitChat: (text: string) => Promise<void>;
   submitThreadChat: (text: string) => Promise<void>;
@@ -221,6 +224,10 @@ export function useChat({
   const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(
     null,
   );
+  const [lastFailedRequest, setLastFailedRequest] = useState<{
+    text: string;
+    threadAnnotationId: string | null;
+  } | null>(null);
 
   // Load messages on review change
   useEffect(() => {
@@ -272,6 +279,7 @@ export function useChat({
       if (!apiKey) return;
 
       setError(null);
+      setLastFailedRequest(null);
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -366,6 +374,7 @@ export function useChat({
           ),
         );
         setError(message);
+        setLastFailedRequest({ text: trimmed, threadAnnotationId: null });
       } finally {
         setIsStreaming(false);
         setStreamingMsgId(null);
@@ -400,6 +409,7 @@ export function useChat({
       if (!ann || ann.kind !== "ask_ai") return;
 
       setError(null);
+      setLastFailedRequest(null);
 
       const userMsg: AnnotationMessage = {
         id: crypto.randomUUID(),
@@ -414,16 +424,22 @@ export function useChat({
         timestamp: new Date().toISOString(),
       };
 
-      let thread: AnnotationMessage[] = [...ann.thread, userMsg, assistantMsg];
-      setThreadStream(thread);
-      await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+      // Persist the user message immediately so it isn't lost, but keep
+      // the assistant placeholder in UI-only state until streaming finishes.
+      const threadWithUser = [...ann.thread, userMsg];
+      await updateAnnotation(reviewId, chatThreadAnnotationId, {
+        thread: threadWithUser,
+      });
       onAnnotationsPersist();
+
+      let thread: AnnotationMessage[] = [...threadWithUser, assistantMsg];
+      setThreadStream(thread);
 
       setIsStreaming(true);
       setStreamingMsgId(assistantMsg.id);
       setAgentSteps([]);
 
-      const historyForApi = [...ann.thread, userMsg].map((m) => ({
+      const historyForApi = threadWithUser.map((m) => ({
         role: m.role,
         content: m.content,
       }));
@@ -476,13 +492,17 @@ export function useChat({
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
-        thread = thread.map((m) =>
-          m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
-        );
+        // On error, roll back to the thread with only the user message —
+        // don't persist an empty/broken assistant placeholder to the DB.
+        thread = threadWithUser;
         await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
         setThreadStream(thread);
         setError(message);
+        setLastFailedRequest({
+          text: trimmed,
+          threadAnnotationId: chatThreadAnnotationId,
+        });
       } finally {
         setIsStreaming(false);
         setStreamingMsgId(null);
@@ -513,6 +533,26 @@ export function useChat({
     }
   }, [input, submitChat, submitThreadChat, chatThreadAnnotationId]);
 
+  const retryLastError = useCallback(async () => {
+    if (!lastFailedRequest || isStreaming) return;
+    const { text, threadAnnotationId } = lastFailedRequest;
+    if (threadAnnotationId) {
+      if (chatThreadAnnotationId !== threadAnnotationId) {
+        setError("Retry this message from the original selection thread.");
+        return;
+      }
+      await submitThreadChat(text);
+      return;
+    }
+    await submitChat(text);
+  }, [
+    lastFailedRequest,
+    isStreaming,
+    chatThreadAnnotationId,
+    submitThreadChat,
+    submitChat,
+  ]);
+
   return {
     messages,
     input,
@@ -523,6 +563,9 @@ export function useChat({
     streamingMsgId,
     hasSavedKeys,
     hasKeyForModel,
+    canRetry: !!lastFailedRequest,
+    retryLastError,
+    clearError: () => setError(null),
     sendMessage,
     submitChat,
     submitThreadChat,
