@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel from "@/components/right-panel";
-import CommentRail from "@/components/comment-rail";
+import NotesRail from "@/components/notes-rail";
 import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
 import { getReview } from "@/lib/reviews";
@@ -45,7 +45,7 @@ export default function ReviewPage() {
   const [panelWidth, setPanelWidth] = useState(440);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
-  /** Ask AI / selection threads: which annotation thread is open in the chat panel */
+  /** Passage threads (Dive deeper) / selection: which annotation thread is open in chat */
   const [chatThreadAnnotationId, setChatThreadAnnotationId] = useState<string | null>(null);
 
   // Restore persisted model once client is ready
@@ -164,7 +164,7 @@ export default function ReviewPage() {
     [review],
   );
 
-  const handleFocusCommentThread = useCallback(() => {
+  const handleFocusNoteThread = useCallback(() => {
     if (tooltip) {
       setActiveAnnotationId(tooltip.annotationId);
       setTooltip(null);
@@ -232,7 +232,7 @@ export default function ReviewPage() {
             />
           </div>
 
-          <CommentRail
+          <NotesRail
             reviewId={review.id}
             annotations={annotations}
             activeAnnotationId={activeAnnotationId}
@@ -295,7 +295,7 @@ export default function ReviewPage() {
             setTooltip(null);
             setHoveredAnnotationId(null);
           }}
-          onFocusThread={handleFocusCommentThread}
+          onFocusThread={handleFocusNoteThread}
         />
       )}
     </DashboardLayout>

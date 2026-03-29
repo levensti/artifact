@@ -8,7 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, MessageSquareQuote, Send, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  MessageSquareQuote,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import {
@@ -157,7 +163,7 @@ export default function ChatPanel({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const learningAbortRef = useRef<AbortController | null>(null);
-  /** After Ask AI / external prompt: scroll messages to bottom once input layout has settled */
+  /** After passage-thread send / external prompt: scroll messages to bottom once input layout has settled */
   const scrollComposerIntoViewRef = useRef(false);
 
   // Use lifted model state if provided, otherwise use internal state
@@ -248,6 +254,13 @@ export default function ChatPanel({
 
   useEffect(() => {
     setThreadStream(null);
+  }, [chatThreadAnnotationId]);
+
+  useEffect(() => {
+    if (!chatThreadAnnotationId) return;
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
   }, [chatThreadAnnotationId]);
 
   // Handle external prompt from context zone (prerequisites "Ask about this", graph "Discuss")
@@ -665,22 +678,24 @@ export default function ChatPanel({
         <div className="px-4 py-5 space-y-5">
           {chatThreadAnnotationId && activeThreadAnn ? (
             <>
-              <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-3">
+              <div className="flex flex-col gap-2 border-b border-border/80 pb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Selection thread
                 </span>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="secondary"
                   size="sm"
-                  className="h-7 text-xs text-muted-foreground"
+                  className="h-9 w-full shrink-0 gap-2 px-3 text-xs font-medium shadow-sm sm:h-8 sm:w-auto"
                   onClick={() => onChatThreadChange(null)}
+                  aria-label="Back to whole-paper assistant chat"
                 >
-                  Paper chat
+                  <ArrowLeft className="size-3.5 shrink-0" strokeWidth={2.5} />
+                  Back to paper chat
                 </Button>
               </div>
 
-              <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.06] px-3 py-2.5">
+              <div className="rounded-lg border border-sky-500/25 bg-sky-500/6 px-3 py-2.5">
                 <div className="flex gap-2">
                   <MessageSquareQuote
                     className="mt-0.5 size-4 shrink-0 text-sky-600/90"
@@ -693,10 +708,24 @@ export default function ChatPanel({
               </div>
 
               {displayThread.length === 0 && (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  Ask a question about this passage below. Replies stay in this
-                  thread so you can revisit them without scanning the full chat.
-                </p>
+                <div className="space-y-2 py-6 text-center px-1">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Ask a question about this passage below. Replies stay in
+                    this thread only.
+                  </p>
+                  <div className="text-xs text-muted-foreground/85 leading-relaxed">
+                    Whole-paper starters and general Q&amp;A live in{" "}
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 font-medium text-foreground/90 underline-offset-2 hover:underline"
+                      onClick={() => onChatThreadChange(null)}
+                    >
+                      <ArrowLeft className="size-3" strokeWidth={2.5} />
+                      paper chat
+                    </button>
+                    .
+                  </div>
+                </div>
               )}
 
               {displayThread.map((msg) => {
@@ -769,10 +798,28 @@ export default function ChatPanel({
             </>
           ) : (
             <>
+              <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Paper chat
+                </span>
+                <span className="text-[10px] font-medium text-muted-foreground/80">
+                  Whole paper
+                </span>
+              </div>
+
               {messages.length === 0 && (
-                <div className="flex min-h-[120px] h-full flex-col items-center justify-center px-4 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Ask anything about this paper.
+                <div className="flex min-h-[120px] h-full flex-col items-center justify-center gap-2 px-4 text-center">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Messages here apply to the full document—not a single
+                    highlight. Use{" "}
+                    <span className="font-medium text-foreground/85">
+                      Dive deeper
+                    </span>{" "}
+                    on a selection to open a thread tied to that passage.
+                  </p>
+                  <p className="text-xs text-muted-foreground/90 leading-relaxed max-w-[280px]">
+                    Starters below (prerequisites, related papers) run in this
+                    chat only.
                   </p>
                 </div>
               )}
@@ -883,10 +930,14 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* Suggestion chips — above input */}
+      {/* Whole-paper suggestion chips — main chat only; not for selection threads */}
       {analysisStatus === "idle" && !chatThreadAnnotationId && (
-        <div className="flex items-center gap-2 px-3 py-3 shrink-0 flex-wrap border-t border-border/50">
-          {[
+        <div className="shrink-0 border-t border-border/50 px-3 pt-3 pb-2">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Whole-paper starters
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
             {
               label: "Prerequisites",
               message:
@@ -918,12 +969,13 @@ export default function ChatPanel({
               <Sparkles className="size-3" />
               {chip.label}
             </button>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
       {analysisStatus === "error" && onTriggerAnalysis && (
-        <div className="mx-3 mt-2 px-3 py-2 rounded-md border border-destructive/20 bg-destructive/[0.04] shrink-0 flex items-center justify-between gap-2">
+        <div className="mx-3 mt-2 px-3 py-2 rounded-md border border-destructive/20 bg-destructive/4 shrink-0 flex items-center justify-between gap-2">
           <p className="text-xs text-destructive/90 truncate">
             {analysisError ?? "Analysis failed"}
           </p>
@@ -982,17 +1034,24 @@ export default function ChatPanel({
             )}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground/70 mt-1.5 text-center leading-snug px-1">
-          {chatThreadAnnotationId
-            ? selectedModel
-              ? `Selection thread · ${selectedModel.label} · Shift+Enter new line`
-              : "Choose a model above · Shift+Enter new line"
-            : selectedModel
-              ? `${selectedModel.label} · Shift+Enter new line`
-              : hasSavedKeys
-                ? "Choose a model above · Shift+Enter new line"
-                : "Manage API keys first · Shift+Enter new line"}
-        </p>
+        <div className="mt-2 space-y-1.5">
+          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground/85">
+            {chatThreadAnnotationId
+              ? "Replies stay tied to this highlight."
+              : "Messages apply to the whole paper, not one selection."}
+          </p>
+          <p className="px-1 text-center text-xs leading-snug text-muted-foreground/70">
+            {chatThreadAnnotationId
+              ? selectedModel
+                ? `${selectedModel.label} · Shift+Enter new line`
+                : "Choose a model above · Shift+Enter new line"
+              : selectedModel
+                ? `${selectedModel.label} · Shift+Enter new line`
+                : hasSavedKeys
+                  ? "Choose a model above · Shift+Enter new line"
+                  : "Manage API keys first · Shift+Enter new line"}
+          </p>
+        </div>
       </div>
     </div>
   );

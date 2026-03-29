@@ -26,7 +26,7 @@ interface RightPanelProps {
 
 /**
  * Paper workspace: model picker + assistant chat. Annotations live beside the PDF
- * (comment rail), not here — avoids a redundant single-tab chrome.
+ * (notes rail), not here — avoids a redundant single-tab chrome.
  */
 export default function RightPanel({
   reviewId,

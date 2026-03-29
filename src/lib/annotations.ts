@@ -1,6 +1,6 @@
 import type { ChatAssistantBlock } from "@/lib/reviews";
 
-/** Margin comment vs selection-based AI Q&A thread */
+/** Margin note (kind "comment") vs passage thread (kind "ask_ai"; UI: Dive deeper) */
 export type AnnotationKind = "comment" | "ask_ai";
 
 export interface Annotation {

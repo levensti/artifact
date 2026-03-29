@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles, StickyNote, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight, Sparkles, StickyNote, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { type Annotation, updateAnnotation, deleteAnnotation } from "@/lib/annotations";
+import {
+  type Annotation,
+  updateAnnotation,
+  deleteAnnotation,
+} from "@/lib/annotations";
 
 interface AnnotationListProps {
   reviewId: string;
@@ -14,7 +18,7 @@ interface AnnotationListProps {
   onAnnotationsChanged: () => void;
   onHighlightClick: (pageNumber: number) => void;
   onAnnotationHover: (annotationId: string | null) => void;
-  /** Narrow sidebar (e.g. beside PDF) uses tighter empty state */
+  /** Narrow notes rail (beside PDF) uses tighter empty state */
   density?: "default" | "rail";
   onAnnotationSelect?: (id: string) => void;
 }
@@ -63,11 +67,11 @@ export default function AnnotationList({
         </div>
         <div className={cn("space-y-1.5", compact ? "max-w-[200px]" : "max-w-[260px] space-y-2")}>
           <p className="text-sm font-semibold tracking-tight text-foreground">
-            No comments yet
+            No notes yet
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground/80">Add comment</span> for a note, or{" "}
-            <span className="font-medium text-foreground/80">Ask AI</span> for a threaded Q&amp;A on
+            <span className="font-medium text-foreground/80">Add note</span> for a margin note, or{" "}
+            <span className="font-medium text-foreground/80">Dive deeper</span> for threaded Q&amp;A on
             the selection.
           </p>
         </div>
@@ -77,7 +81,7 @@ export default function AnnotationList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
         {annotations.map((ann) => (
           <AnnotationCard
             key={ann.id}
@@ -114,7 +118,7 @@ interface AnnotationCardProps {
   onPageClick: () => void;
   onDelete: () => void;
   onUpdate: () => void;
-  /** Focus this thread (e.g. Google Docs–style sidebar) */
+  /** Focus this card in the notes rail */
   onActivate?: () => void;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -135,19 +139,6 @@ function AnnotationCard({
   const isAskAi = annotation.kind === "ask_ai";
   const [note, setNote] = useState(annotation.note);
   const noteTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
-
-  const askAiPreview = useMemo(() => {
-    if (!isAskAi) return "";
-    if (annotation.thread.length === 0) {
-      return "No messages yet — ask in the assistant panel.";
-    }
-    const last = annotation.thread[annotation.thread.length - 1];
-    const prefix = last.role === "user" ? "You · " : "AI · ";
-    const raw =
-      last.content.trim() ||
-      (last.blocks?.length ? "Learning map attached" : "");
-    return prefix + raw.slice(0, 130) + (raw.length > 130 ? "…" : "");
-  }, [isAskAi, annotation.thread]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing prop to local editable state
@@ -189,82 +180,132 @@ function AnnotationCard({
           : undefined
       }
       className={cn(
-        "overflow-hidden rounded-lg border bg-card transition-all duration-150",
+        "overflow-hidden rounded-xl border bg-card transition-all duration-150",
         onActivate && "cursor-pointer",
         isActive
           ? isAskAi
-            ? "border-sky-500/40 ring-1 ring-sky-500/15"
+            ? "border-sky-500/35 ring-1 ring-sky-500/10"
             : "border-primary/40 ring-1 ring-primary/15"
           : isHovered
             ? isAskAi
-              ? "border-sky-500/30"
+              ? "border-sky-500/28"
               : "border-primary/25"
             : "border-border",
       )}
     >
-      <div className="flex items-start gap-2.5 px-3 pt-2.5 pb-2.5">
-        <div
-          className="mt-0.5 w-0.5 min-h-9 shrink-0 self-stretch rounded-full transition-colors duration-150"
-          style={{
-            backgroundColor: isAskAi
-              ? isActive || isHovered
-                ? "color-mix(in srgb, rgb(14 165 233) 55%, transparent)"
-                : "color-mix(in srgb, rgb(14 165 233) 22%, transparent)"
-              : isActive || isHovered
-                ? "color-mix(in srgb, var(--primary) 60%, transparent)"
-                : "color-mix(in srgb, var(--primary) 20%, transparent)",
-          }}
-        />
-        <div className="min-w-0 flex-1 pt-px">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {isAskAi && (
-              <span className="inline-flex items-center gap-0.5 rounded bg-sky-500/12 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-200">
-                <Sparkles className="size-2.5" strokeWidth={2} />
-                Ask AI
-              </span>
+      {isAskAi ? (
+        <>
+          <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
+            <span className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-md bg-sky-500/12 px-1.5 py-0.5 text-[10px] font-semibold leading-tight tracking-tight text-sky-900 dark:text-sky-100">
+              <Sparkles className="size-3 shrink-0" strokeWidth={2} />
+              Dive deeper
+            </span>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPageClick();
+                }}
+                className="rounded-md bg-muted/80 px-2 py-1 text-[10px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent"
+              >
+                p.{annotation.pageNumber}
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground/60 hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                title="Delete thread"
+              >
+                <Trash2 size={12} />
+              </Button>
+            </div>
+          </div>
+
+          <div className="mx-3.5 mt-3 rounded-xl border border-border/60 bg-muted/25 px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              From the paper
+            </p>
+            <p className="mt-2 line-clamp-4 text-sm italic leading-relaxed text-foreground/90">
+              &ldquo;{annotation.highlightText}&rdquo;
+            </p>
+          </div>
+
+          <div className="mt-3 border-t border-border/60 px-3.5 pb-3.5 pt-3">
+            {annotation.thread.length === 0 ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                No replies yet. Click here and ask in the assistant panel.
+              </p>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                  <span className="font-medium tabular-nums text-foreground/85">
+                    {annotation.thread.length}
+                  </span>{" "}
+                  {annotation.thread.length === 1 ? "message" : "messages"} — open
+                  in assistant
+                </p>
+                <ChevronRight
+                  className="size-4 shrink-0 text-muted-foreground/70"
+                  aria-hidden
+                />
+              </div>
             )}
           </div>
-          <p className="text-xs italic leading-snug text-muted-foreground line-clamp-3">
-            &ldquo;{annotation.highlightText}&rdquo;
-          </p>
-          {isAskAi ? (
-            <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-muted-foreground">
-              {askAiPreview}
-            </p>
-          ) : (
-            annotation.note &&
-            !isActive && (
-              <p className="mt-1.5 line-clamp-2 text-sm leading-snug text-foreground">
-                {annotation.note}
+        </>
+      ) : (
+        <>
+          <div className="flex items-start gap-2.5 px-3 pt-2.5 pb-2.5">
+            <div
+              className="mt-0.5 w-0.5 min-h-9 shrink-0 self-stretch rounded-full transition-colors duration-150"
+              style={{
+                backgroundColor:
+                  isActive || isHovered
+                    ? "color-mix(in srgb, var(--primary) 60%, transparent)"
+                    : "color-mix(in srgb, var(--primary) 20%, transparent)",
+              }}
+            />
+            <div className="min-w-0 flex-1 pt-px">
+              <p className="text-xs italic leading-snug text-muted-foreground line-clamp-3">
+                &ldquo;{annotation.highlightText}&rdquo;
               </p>
-            )
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1 pt-px">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPageClick();
-            }}
-            className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent"
-          >
-            p.{annotation.pageNumber}
-          </button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-5 text-muted-foreground/50 hover:text-destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            title={isAskAi ? "Delete thread" : "Delete comment"}
-          >
-            <Trash2 size={10} />
-          </Button>
-        </div>
-      </div>
+              {annotation.note && !isActive && (
+                <p className="mt-1.5 line-clamp-2 text-sm leading-snug text-foreground">
+                  {annotation.note}
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1 pt-px">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPageClick();
+                }}
+                className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent"
+              >
+                p.{annotation.pageNumber}
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-5 text-muted-foreground/50 hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                title="Delete note"
+              >
+                <Trash2 size={10} />
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
 
       {isActive && !isAskAi && (
         <>
@@ -279,14 +320,6 @@ function AnnotationCard({
               className="w-full resize-none bg-transparent text-sm leading-snug text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
             />
           </div>
-        </>
-      )}
-      {isActive && isAskAi && (
-        <>
-          <div className="h-px w-full bg-border" aria-hidden />
-          <p className="px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-            Conversation is in the assistant panel →
-          </p>
         </>
       )}
     </div>

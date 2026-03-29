@@ -286,7 +286,7 @@ export default function PdfViewer({
                   const isActive = ann.id === activeAnnotationId;
                   const isHovered = ann.id === hoveredAnnotationId;
                   const isAskAi = ann.kind === "ask_ai";
-                  /* Comments: amber marker. Ask AI: blue-violet so threads are visually distinct */
+                  /* Notes: amber marker. Dive deeper (ask_ai): sky tint so threads are distinct */
                   const backgroundColor = isAskAi
                     ? isActive
                       ? "rgba(96, 165, 250, 0.48)"

@@ -7,7 +7,7 @@ interface NoteTooltipProps {
   annotation: Annotation;
   position: { x: number; y: number };
   onClose: () => void;
-  /** Focus the comment thread in the sidebar */
+  /** Focus the note in the notes rail */
   onFocusThread: () => void;
 }
 
@@ -65,7 +65,7 @@ export default function NoteTooltip({
             onClick={onFocusThread}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            {annotation.note ? "Edit comment" : "Add comment"} &rarr;
+            {annotation.note ? "Edit note" : "Add note"} &rarr;
           </button>
         </div>
       </div>
