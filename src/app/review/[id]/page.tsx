@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2 } from "lucide-react";
@@ -123,13 +129,12 @@ export default function ReviewPage() {
     }
   }, [clientReady, dataReady, params.id, router]);
 
-  useEffect(() => {
-    if (
-      chatThreadAnnotationId &&
-      !annotations.some((a) => a.id === chatThreadAnnotationId)
-    ) {
-      setChatThreadAnnotationId(null);
-    }
+  /** Ignore stale thread id if that annotation was removed (no setState in an effect). */
+  const effectiveChatThreadAnnotationId = useMemo(() => {
+    if (!chatThreadAnnotationId) return null;
+    return annotations.some((a) => a.id === chatThreadAnnotationId)
+      ? chatThreadAnnotationId
+      : null;
   }, [annotations, chatThreadAnnotationId]);
 
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
@@ -306,7 +311,7 @@ export default function ReviewPage() {
             paperTitle={review.title}
             paperContext={paperText}
             annotations={annotations}
-            chatThreadAnnotationId={chatThreadAnnotationId}
+            chatThreadAnnotationId={effectiveChatThreadAnnotationId}
             onChatThreadChange={setChatThreadAnnotationId}
             onAnnotationsPersist={refreshAnnotations}
             selectedModel={selectedModel}
