@@ -9,7 +9,6 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
-  ScrollText,
 } from "lucide-react";
 import {
   getReviews,
@@ -129,7 +128,7 @@ export default function Sidebar({
           <div className="flex min-h-10 items-start justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-start gap-2">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/70 text-muted-foreground">
-                <ScrollText
+                <FileText
                   className="size-[18px] text-foreground/80"
                   strokeWidth={1.75}
                 />
@@ -163,7 +162,7 @@ export default function Sidebar({
             <span className="flex h-8 w-8 shrink-0 items-center justify-center">
               <FilePlus className="size-4 opacity-50" strokeWidth={1.75} />
             </span>
-            New review
+            Start a review
           </button>
           <button
             type="button"
@@ -195,9 +194,9 @@ export default function Sidebar({
                   size={18}
                   className="mx-auto text-muted-foreground/40 mb-2"
                 />
-                <p className="text-xs text-muted-foreground leading-relaxed px-1">
-                  No papers yet. Add one from arXiv to read, annotate, and chat
-                  in context.
+                <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+                  No papers yet. Start a review from an arXiv link to read,
+                  annotate, and explore with the assistant.
                 </p>
               </div>
             )}

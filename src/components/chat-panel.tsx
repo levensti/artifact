@@ -475,6 +475,7 @@ function ChatInput({
   selectedModel,
   hasSavedKeys,
   chatThreadAnnotationId,
+  onOpenSettings,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -483,9 +484,11 @@ function ChatInput({
   selectedModel: Model | null;
   hasSavedKeys: boolean;
   chatThreadAnnotationId: string | null;
+  onOpenSettings: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
+  const inputLocked = !hasSavedKeys;
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -506,26 +509,41 @@ function ChatInput({
 
   return (
     <div className="p-3 border-t border-border shrink-0 bg-muted/20">
-      <div className="flex items-end gap-2 bg-card rounded-md border border-border focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-ring/40 transition-[box-shadow,border-color] duration-200">
+      <div
+        className={cn(
+          "flex items-end gap-2 rounded-md border transition-[box-shadow,border-color,background-color] duration-200",
+          inputLocked
+            ? "border-amber-500/35 bg-amber-500/5"
+            : "bg-card border-border focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-ring/40",
+        )}
+      >
         <textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
+          disabled={inputLocked}
           placeholder={
-            chatThreadAnnotationId
-              ? "Reply in this selection thread…"
-              : "Ask about the paper…"
+            inputLocked
+              ? "Add an API key to start chatting…"
+              : chatThreadAnnotationId
+                ? "Reply in this selection thread…"
+                : "Ask about the paper…"
           }
           rows={1}
-          className="flex-1 bg-transparent px-3 py-2.5 text-sm resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
+          className={cn(
+            "flex-1 bg-transparent px-3 py-2.5 text-sm resize-none text-foreground placeholder:text-muted-foreground",
+            inputLocked
+              ? "cursor-not-allowed opacity-75"
+              : "focus:outline-none",
+          )}
         />
         <Button
           variant="ghost"
           size="icon"
           className="size-8 m-1 text-muted-foreground hover:text-primary"
           onClick={sendMessage}
-          disabled={!selectedModel || !input.trim() || isStreaming}
+          disabled={inputLocked || !selectedModel || !input.trim() || isStreaming}
           aria-label={
             !selectedModel
               ? hasSavedKeys
@@ -544,11 +562,17 @@ function ChatInput({
         </Button>
       </div>
       <div className="mt-2 space-y-1.5">
-        <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground/85">
-          {chatThreadAnnotationId
-            ? "Replies stay tied to this highlight."
-            : "Messages apply to the whole paper."}
-        </p>
+        {inputLocked ? (
+          <p className="px-1 text-center text-[11px] leading-snug text-amber-700/90">
+            Chat is locked until you add an API key.
+          </p>
+        ) : (
+          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground/85">
+            {chatThreadAnnotationId
+              ? "Replies stay tied to this highlight."
+              : "Messages apply to the whole paper."}
+          </p>
+        )}
         <p className="px-1 text-center text-xs leading-snug text-muted-foreground/70">
           {selectedModel
             ? `${selectedModel.label} · Shift+Enter new line`
@@ -556,6 +580,19 @@ function ChatInput({
               ? "Choose a model above · Shift+Enter new line"
               : "Manage API keys first · Shift+Enter new line"}
         </p>
+        {!hasSavedKeys && (
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 text-xs"
+              onClick={onOpenSettings}
+            >
+              Add API key to unlock chat
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -822,6 +859,7 @@ export default function ChatPanel({
         selectedModel={selectedModel}
         hasSavedKeys={chat.hasSavedKeys}
         chatThreadAnnotationId={chatThreadAnnotationId}
+        onOpenSettings={openSettings}
       />
     </div>
   );

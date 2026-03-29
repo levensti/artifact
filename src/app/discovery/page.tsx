@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Compass, Network } from "lucide-react";
+import { CheckCircle2, Compass } from "lucide-react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard-layout";
 import RelatedWorksGraph from "@/components/related-works-graph";
@@ -157,23 +157,31 @@ export default function DiscoveryPage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full px-6 bg-background">
-          <div className="max-w-sm text-center space-y-5">
-            <div className="mx-auto size-14 rounded-xl border border-border bg-card flex items-center justify-center">
-              <Network
-                size={26}
-                className="text-muted-foreground/40"
-                strokeWidth={1.5}
-              />
+          <div className="max-w-md text-center space-y-8">
+            <div className="mx-auto size-16 rounded-xl border border-border bg-card flex items-center justify-center">
+              <Compass size={28} className="text-primary" strokeWidth={1.5} />
             </div>
-            <div className="space-y-2">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                Discover
-              </h1>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Related papers will appear here as you explore. Ask the
-                assistant to find related work for any paper you&apos;re
-                reviewing.
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                  Discover
+                </h1>
+                <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                  Your paper knowledge graph
+                </p>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
+                As you ask the assistant about related work, papers and their
+                relationships are saved here automatically. The graph grows
+                across every paper you review.
               </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-muted-foreground/70 text-xs">
+              <span>Cross-paper connections</span>
+              <span className="size-0.5 rounded-full bg-muted-foreground/35" />
+              <span>Built from chat</span>
+              <span className="size-0.5 rounded-full bg-muted-foreground/35" />
+              <span>Local-first</span>
             </div>
           </div>
         </div>

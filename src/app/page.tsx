@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Plus, ArrowRight } from "lucide-react";
+import { BookOpen, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DashboardLayout from "@/components/dashboard-layout";
 import { useState } from "react";
@@ -19,36 +19,21 @@ export default function Home() {
             <BookOpen size={28} className="text-primary" strokeWidth={1.5} />
           </div>
           <div className="space-y-3">
-            <div className="space-y-1">
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                Artifact
-              </h1>
-              <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                Discover the frontier
-              </p>
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
-              Read arXiv PDFs with the full text in context and keep a thread
-              per paper. Your data stays in a local SQLite database on this
-              machine; only chat requests go to your model provider when you use
-              your own API keys.
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+              Artifact
+            </h1>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-[26rem] mx-auto">
+              Read arXiv papers with full-text context, annotate, and chat with
+              an AI assistant.
             </p>
           </div>
           <Button
             onClick={() => setShowNewReview(true)}
             className="gap-2 h-10 px-5 rounded-lg"
           >
-            <Plus size={16} strokeWidth={2} />
-            New review
+            Start a review
             <ArrowRight size={15} strokeWidth={2} />
           </Button>
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-muted-foreground/70 text-xs">
-            <span>Manage API keys</span>
-            <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-            <span>Per-paper threads</span>
-            <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-            <span>SQLite on device</span>
-          </div>
         </div>
       </div>
 

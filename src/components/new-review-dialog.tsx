@@ -36,15 +36,13 @@ export default function NewReviewDialog({
   const [loading, setLoading] = useState(false);
 
   const arxivId = extractArxivId(url);
-  const [existingReview, setExistingReview] = useState<
-    PaperReview | undefined
-  >(undefined);
+  const [existingReview, setExistingReview] = useState<PaperReview | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     const sync = () => {
-      setExistingReview(
-        arxivId ? getReviewByArxivId(arxivId) : undefined,
-      );
+      setExistingReview(arxivId ? getReviewByArxivId(arxivId) : undefined);
     };
     sync();
     window.addEventListener(REVIEWS_UPDATED_EVENT, sync);
@@ -112,7 +110,7 @@ export default function NewReviewDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>New review</DialogTitle>
+          <DialogTitle>Start a review</DialogTitle>
           <DialogDescription>
             Paste a link to any arXiv paper.
           </DialogDescription>
