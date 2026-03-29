@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -63,6 +57,10 @@ const TOOL_LABELS: Record<string, [string, string]> = {
   arxiv_search: ["Searching arXiv", "Searched arXiv"],
   web_search: ["Searching the web", "Searched the web"],
   rank_results: ["Ranking results", "Ranked results"],
+  save_to_knowledge_graph: [
+    "Saving to knowledge graph",
+    "Saved to knowledge graph",
+  ],
 };
 
 function toolLabel(name: string, done: boolean): string {
@@ -75,6 +73,7 @@ const TOOL_ICONS: Record<string, typeof Search> = {
   arxiv_search: Search,
   web_search: Search,
   rank_results: Wrench,
+  save_to_knowledge_graph: Network,
 };
 
 /* ------------------------------------------------------------------ */
@@ -85,7 +84,9 @@ function ThinkingIndicator() {
   return (
     <div className="flex items-center gap-2 py-1.5">
       <BrainCircuit className="size-3.5 text-primary/60 animate-pulse shrink-0" />
-      <span className="text-xs text-muted-foreground font-medium">Thinking…</span>
+      <span className="text-xs text-muted-foreground font-medium">
+        Thinking…
+      </span>
       <span className="inline-flex gap-[3px]">
         {[0, 150, 300].map((delay) => (
           <span
@@ -131,7 +132,10 @@ function ToolCallStep({
         disabled={!done}
       >
         {done ? (
-          <Check className="size-3 text-emerald-600 shrink-0" strokeWidth={2.5} />
+          <Check
+            className="size-3 text-emerald-600 shrink-0"
+            strokeWidth={2.5}
+          />
         ) : (
           <Loader2 className="size-3 text-primary/60 animate-spin shrink-0" />
         )}
@@ -156,9 +160,15 @@ function ToolCallStep({
       </button>
       {open && output && (
         <div className="border-t border-border/40 px-2.5 py-2 max-h-[180px] overflow-y-auto bg-muted/5">
-          <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
-            {output}
-          </pre>
+          {name === "save_to_knowledge_graph" ? (
+            <div className="text-[11px] leading-relaxed text-muted-foreground/80">
+              <MarkdownMessage content={output} />
+            </div>
+          ) : (
+            <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
+              {output}
+            </pre>
+          )}
         </div>
       )}
     </div>
@@ -178,7 +188,9 @@ interface BlockCtx {
 }
 
 function hasInterleavedBlocks(blocks: ChatAssistantBlock[]): boolean {
-  return blocks.some((b) => b.type === "text_segment" || b.type === "tool_call");
+  return blocks.some(
+    (b) => b.type === "text_segment" || b.type === "tool_call",
+  );
 }
 
 function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: BlockCtx) {
@@ -211,7 +223,13 @@ function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: BlockCtx) {
       );
     }
     if (block.type === "arxiv_hits") {
-      return <ArxivHitsBlock key={`ah-${i}`} query={block.query} results={block.results} />;
+      return (
+        <ArxivHitsBlock
+          key={`ah-${i}`}
+          query={block.query}
+          results={block.results}
+        />
+      );
     }
     return null;
   });
@@ -221,7 +239,13 @@ function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: BlockCtx) {
 /*  ArXiv hits block                                                   */
 /* ------------------------------------------------------------------ */
 
-function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearchResult[] }) {
+function ArxivHitsBlock({
+  query,
+  results,
+}: {
+  query: string;
+  results: ArxivSearchResult[];
+}) {
   return (
     <div className="mt-3 rounded-md border border-border bg-muted/15 p-3 space-y-2">
       <p className="text-xs font-medium text-muted-foreground">
@@ -230,7 +254,10 @@ function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearc
       </p>
       <ul className="space-y-2 max-h-[240px] overflow-y-auto">
         {results.slice(0, 12).map((r) => (
-          <li key={r.arxivId} className="text-xs border border-border/60 rounded-md p-2 bg-background/80">
+          <li
+            key={r.arxivId}
+            className="text-xs border border-border/60 rounded-md p-2 bg-background/80"
+          >
             <a
               href={`https://arxiv.org/abs/${r.arxivId}`}
               target="_blank"
@@ -239,7 +266,9 @@ function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearc
             >
               {r.title}
             </a>
-            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{r.abstract}</p>
+            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
+              {r.abstract}
+            </p>
           </li>
         ))}
       </ul>
@@ -344,25 +373,29 @@ const STARTERS = [
     icon: BookOpen,
     label: "Prerequisites",
     desc: "Background concepts and papers to read first",
-    prompt: "What concepts and background should I understand before reading this paper? Search for the most important prerequisite papers.",
+    prompt:
+      "What concepts and background should I understand before reading this paper? Search for the most important prerequisite papers.",
   },
   {
     icon: Network,
     label: "Related work",
     desc: "How this paper connects to neighboring research",
-    prompt: "Find the most important related papers to this work. Search arXiv and explain how they connect.",
+    prompt:
+      "Find the most important related papers to this work. Search arXiv and explain how they connect.",
   },
   {
     icon: Search,
     label: "Key contributions",
     desc: "Main results and how they advance the field",
-    prompt: "What are the key contributions of this paper? How do they advance the state of the art?",
+    prompt:
+      "What are the key contributions of this paper? How do they advance the state of the art?",
   },
   {
     icon: Globe,
     label: "Explain the method",
     desc: "Step-by-step walkthrough with equations",
-    prompt: "Walk me through the main method/approach in this paper step by step, including the key equations.",
+    prompt:
+      "Walk me through the main method/approach in this paper step by step, including the key equations.",
   },
 ];
 
@@ -418,7 +451,10 @@ function EmptyState({
       </div>
 
       <div className="mt-5 flex items-start gap-2 px-2">
-        <BrainCircuit className="mt-0.5 size-3 shrink-0 text-muted-foreground/35" strokeWidth={1.5} />
+        <BrainCircuit
+          className="mt-0.5 size-3 shrink-0 text-muted-foreground/35"
+          strokeWidth={1.5}
+        />
         <span className="text-[10px] leading-snug text-muted-foreground/45 not-italic">
           Searches arXiv &amp; the web automatically when needed
         </span>
@@ -572,7 +608,10 @@ export default function ChatPanel({
   }, [annotations, chatThreadAnnotationId]);
 
   const displayThread = useMemo(
-    () => chat.displayThread.length > 0 ? chat.displayThread : (activeThreadAnn?.thread ?? []),
+    () =>
+      chat.displayThread.length > 0
+        ? chat.displayThread
+        : (activeThreadAnn?.thread ?? []),
     [chat.displayThread, activeThreadAnn?.thread],
   );
 
@@ -612,7 +651,7 @@ export default function ChatPanel({
       scrollComposerIntoViewRef.current = false;
     }, 600);
     return () => clearTimeout(safety);
-  }, [externalPrompt, onExternalPromptConsumed, chat.setInput]);
+  }, [externalPrompt, onExternalPromptConsumed, chat.setInput, chat]);
 
   // Scroll composer into view when input changes externally
   useEffect(() => {
@@ -636,7 +675,13 @@ export default function ChatPanel({
     else openSettings();
   };
 
-  const blockCtx: BlockCtx = { reviewId, arxivId, paperTitle, paperContext, selectedModel };
+  const blockCtx: BlockCtx = {
+    reviewId,
+    arxivId,
+    paperTitle,
+    paperContext,
+    selectedModel,
+  };
 
   /* ---------------------------------------------------------------- */
   /*  JSX                                                              */
@@ -701,7 +746,9 @@ export default function ChatPanel({
                 <ChatMessageBubble
                   key={msg.id}
                   msg={msg}
-                  isCurrentlyStreaming={msg.id === chat.streamingMsgId && chat.isStreaming}
+                  isCurrentlyStreaming={
+                    msg.id === chat.streamingMsgId && chat.isStreaming
+                  }
                   agentSteps={chat.agentSteps}
                   blockCtx={blockCtx}
                 />
@@ -711,7 +758,9 @@ export default function ChatPanel({
             <>
               {chat.messages.length === 0 && (
                 <EmptyState
-                  canSend={!!selectedModel && chat.hasKeyForModel && !chat.isStreaming}
+                  canSend={
+                    !!selectedModel && chat.hasKeyForModel && !chat.isStreaming
+                  }
                   onSend={chat.submitChat}
                 />
               )}
@@ -720,7 +769,9 @@ export default function ChatPanel({
                 <ChatMessageBubble
                   key={msg.id}
                   msg={msg}
-                  isCurrentlyStreaming={msg.id === chat.streamingMsgId && chat.isStreaming}
+                  isCurrentlyStreaming={
+                    msg.id === chat.streamingMsgId && chat.isStreaming
+                  }
                   agentSteps={chat.agentSteps}
                   blockCtx={blockCtx}
                 />

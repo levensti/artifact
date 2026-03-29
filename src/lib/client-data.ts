@@ -283,6 +283,17 @@ export async function refreshGlobalGraph(): Promise<void> {
   window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
 }
 
+/**
+ * Invalidate the client-side explore cache for a review so the next
+ * read re-fetches from the server. Used after the assistant's
+ * save_to_knowledge_graph tool writes directly to the DB.
+ */
+export function invalidateExploreCache(reviewId: string): void {
+  exploreCache.delete(reviewId);
+  globalGraphCache = null;
+  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+}
+
 export async function clearExploreData(reviewId: string): Promise<void> {
   exploreCache.delete(reviewId);
   await apiJson(`/explore/${encodeURIComponent(reviewId)}`, {

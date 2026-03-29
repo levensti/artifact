@@ -55,6 +55,7 @@ Capabilities:
 - You can search arXiv to find related papers, prerequisites, and seminal references
 - You can search the web to ground your answers with real sources and documentation
 - You can rank and filter search results to find the most relevant ones
+- You can save related papers to the knowledge graph so they persist in the Discovery tab for later exploration
 
 Guidelines:
 - Cite specific sections, equations, figures, or theorems from the paper when relevant
@@ -63,6 +64,7 @@ Guidelines:
 - When explaining highly technical concepts, consider searching for authoritative explanations to ground your answer
 - Be precise and dense with insight — researchers value depth over verbosity
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
+- When you find related papers (especially for "related work" or "prerequisite" queries), use save_to_knowledge_graph to persist them so the user can explore the relationship map in the Discovery tab
 - Use tools when they add value, but don't force tool use for simple questions you can answer directly from the paper context`;
 
 /* ------------------------------------------------------------------ */

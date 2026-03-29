@@ -25,7 +25,7 @@ import {
   getAnnotation,
 } from "@/lib/annotations";
 import { arxivPdfUrl } from "@/lib/utils";
-import { useAnalysis } from "@/hooks/use-auto-analysis";
+
 import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
@@ -112,15 +112,6 @@ export default function ReviewPage() {
   const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
   const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ annotationId: string; x: number; y: number } | null>(null);
-
-  // Paper analysis (explicitly triggered, not automatic)
-  const analysis = useAnalysis({
-    reviewId: review?.id ?? "",
-    arxivId: review?.arxivId ?? "",
-    paperTitle: review?.title ?? "",
-    paperContext: paperText,
-    selectedModel,
-  });
 
   useEffect(() => {
     if (!clientReady || !dataReady) return;

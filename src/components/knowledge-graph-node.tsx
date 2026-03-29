@@ -11,12 +11,14 @@ export type PaperNodeData = {
   hovered: boolean;
   /** Substring search matched title or arXiv id */
   searchMatch: boolean;
+  /** Newly added from latest generation run */
+  fresh?: boolean;
 };
 
 const handleStyle = { top: "50%", left: "50%", transform: "translate(-50%, -50%)" } as const;
 
 export function PaperNode({ data, selected }: NodeProps) {
-  const { label, title, isAnchor, dimmed, hovered, searchMatch } = data as PaperNodeData;
+  const { label, title, isAnchor, dimmed, hovered, searchMatch, fresh } = data as PaperNodeData;
 
   return (
     <div
@@ -37,6 +39,7 @@ export function PaperNode({ data, selected }: NodeProps) {
           hovered &&
           !dimmed &&
           (isAnchor ? "ring-1 ring-primary/30" : "ring-1 ring-border"),
+        !selected && fresh && !dimmed && "ring-2 ring-emerald-500/65 ring-offset-2 ring-offset-background",
       )}
       title={title}
     >
