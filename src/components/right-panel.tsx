@@ -1,7 +1,7 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
 import type { Model } from "@/lib/models";
-import type { AnalysisStatus } from "@/hooks/use-auto-analysis";
 import type { Annotation } from "@/lib/annotations";
 import ChatPanel from "./chat-panel";
 import ModelSelector from "./model-selector";
@@ -17,11 +17,6 @@ interface RightPanelProps {
   onAnnotationsPersist: () => void;
   selectedModel: Model | null;
   onModelChange: (model: Model | null) => void;
-  analysisStatus: AnalysisStatus;
-  analysisProgress: string | null;
-  analysisError: string | null;
-  canRunAnalysis: boolean;
-  onTriggerAnalysis: () => boolean;
 }
 
 /**
@@ -39,17 +34,24 @@ export default function RightPanel({
   onAnnotationsPersist,
   selectedModel,
   onModelChange,
-  analysisStatus,
-  analysisProgress,
-  analysisError,
-  canRunAnalysis,
-  onTriggerAnalysis,
 }: RightPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-11 shrink-0 items-center justify-end gap-2 border-b border-border bg-background px-3">
-        <ModelSelector selected={selectedModel} onSelect={onModelChange} />
-      </div>
+      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Sparkles
+            className="size-4 shrink-0 text-primary"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+            Assistant
+          </span>
+        </div>
+        <div className="min-w-0 shrink-0">
+          <ModelSelector selected={selectedModel} onSelect={onModelChange} />
+        </div>
+      </header>
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <ChatPanel
@@ -64,11 +66,6 @@ export default function RightPanel({
           hideHeader
           selectedModel={selectedModel}
           onModelChange={onModelChange}
-          analysisStatus={analysisStatus}
-          analysisProgress={analysisProgress}
-          analysisError={analysisError}
-          canRunAnalysis={canRunAnalysis}
-          onTriggerAnalysis={onTriggerAnalysis}
         />
       </div>
     </div>

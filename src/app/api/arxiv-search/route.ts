@@ -25,17 +25,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing query parameter" }, { status: 400 });
   }
 
-  const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&start=0&max_results=${maxResults}&sortBy=relevance&sortOrder=descending`;
+  const url = `http://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&start=0&max_results=${maxResults}&sortBy=relevance&sortOrder=descending`;
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "PaperCopilot/1.0 (academic use)",
-      },
-      next: { revalidate: 3600 },
-    });
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await new Promise((r) => setTimeout(r, 3000 * attempt));
+      }
+      response = await fetch(url, {
+        headers: {
+          "User-Agent": "PaperCopilot/1.0 (academic research tool; mailto:contact@paper-copilot.dev)",
+        },
+        next: { revalidate: 3600 },
+      });
+      if (response.status !== 429) break;
+    }
 
-    if (!response.ok) {
+    if (!response || !response.ok) {
       return NextResponse.json({ error: "Failed to query arXiv" }, { status: 502 });
     }
 
