@@ -197,7 +197,7 @@ export default function PdfViewer({
     <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-background/40 px-4 backdrop-blur-sm">
-        <div className="flex items-center gap-0.5">
+        <div className="flex h-8 items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
@@ -208,7 +208,7 @@ export default function PdfViewer({
           >
             <ChevronUp size={14} />
           </Button>
-          <span className="text-xs text-muted-foreground tabular-nums min-w-[56px] text-center font-medium">
+          <span className="min-w-[56px] text-center text-xs font-medium tabular-nums leading-none text-muted-foreground">
             {currentPage} / {numPages || "—"}
           </span>
           <Button
@@ -222,7 +222,7 @@ export default function PdfViewer({
             <ChevronDown size={14} />
           </Button>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex h-8 items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
@@ -232,7 +232,7 @@ export default function PdfViewer({
           >
             <ZoomOut size={14} />
           </Button>
-          <span className="text-xs text-muted-foreground tabular-nums min-w-[36px] text-center font-medium">
+          <span className="min-w-[40px] text-center text-xs font-medium tabular-nums leading-none text-muted-foreground">
             {Math.round(scale * 100)}%
           </span>
           <Button
@@ -285,17 +285,32 @@ export default function PdfViewer({
                 {pageAnnotations.map((ann) => {
                   const isActive = ann.id === activeAnnotationId;
                   const isHovered = ann.id === hoveredAnnotationId;
-                  const opacity = isActive ? 32 : isHovered ? 25 : 14;
+                  const isAskAi = ann.kind === "ask_ai";
+                  /* Notes: amber marker. Dive deeper (ask_ai): sky tint so threads are distinct */
+                  const backgroundColor = isAskAi
+                    ? isActive
+                      ? "rgba(96, 165, 250, 0.48)"
+                      : isHovered
+                        ? "rgba(147, 197, 253, 0.42)"
+                        : "rgba(186, 230, 253, 0.36)"
+                    : isActive
+                      ? "rgba(250, 204, 21, 0.52)"
+                      : isHovered
+                        ? "rgba(252, 211, 77, 0.44)"
+                        : "rgba(253, 224, 71, 0.38)";
                   return ann.anchorRects.map((r, ri) => (
                     <div
                       key={`hl-${ann.id}-${ri}`}
-                      className="absolute pointer-events-none transition-[background-color] duration-150"
+                      className="absolute pointer-events-none transition-[background-color,box-shadow] duration-150"
                       style={{
                         left: `${r.x * 100}%`,
                         top: `${r.y * 100}%`,
                         width: `${r.w * 100}%`,
                         height: `${r.h * 100}%`,
-                        backgroundColor: `color-mix(in srgb, var(--primary) ${opacity}%, transparent)`,
+                        backgroundColor,
+                        boxShadow: isActive
+                          ? `inset 0 0 0 1.5px ${isAskAi ? "color-mix(in srgb, rgb(59 130 246) 50%, transparent)" : "color-mix(in srgb, var(--primary) 55%, transparent)"}`
+                          : undefined,
                         zIndex: 1,
                       }}
                     />

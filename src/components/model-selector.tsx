@@ -181,15 +181,15 @@ export default function ModelSelector({ selected, onSelect }: ModelSelectorProps
         {!anyKey ? (
           <div className="px-2 py-3 space-y-2">
             <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
-              Save an API key for any provider in Settings. Models load from the
-              provider only after your key is stored in SQLite on this machine.
+              Save an API key in Settings. Keys stay in local SQLite on this
+              device; models load from the provider after your key is stored.
             </p>
             <DropdownMenuItem
               className="text-xs gap-2 cursor-pointer"
               onClick={() => openSettings()}
             >
               <KeyRound className="size-3.5 opacity-80" />
-              Open API keys
+              Manage API keys
             </DropdownMenuItem>
           </div>
         ) : (
@@ -212,8 +212,8 @@ export default function ModelSelector({ selected, onSelect }: ModelSelectorProps
                   {state.status === "no-key" && (
                     <>
                       <p className="px-1.5 pb-1 text-[10px] text-muted-foreground leading-snug">
-                        Add your {meta.label} key in Settings to load models from
-                        this provider.
+                        Add your {meta.label} key to load models from this
+                        provider.
                       </p>
                       <DropdownMenuItem
                         className="text-xs gap-2 cursor-pointer text-primary focus:text-primary"

@@ -117,7 +117,9 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
             disabled={!value.trim()}
             variant={saved ? "outline" : "default"}
             size="sm"
-            className={saved ? "text-primary border-primary/35 gap-1 h-9" : "h-9 gap-1"}
+            className={
+              saved ? "text-primary border-primary/35 gap-1 h-9" : "h-9 gap-1"
+            }
           >
             {saved && <Check size={13} />}
             {saved ? "Saved" : "Save"}
@@ -196,7 +198,7 @@ export default function SettingsDialog({
               <Key size={16} className="text-primary" />
             </div>
             <div>
-              <DialogTitle>API keys</DialogTitle>
+              <DialogTitle>Manage API keys</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
                 Keys are stored in a local SQLite file on this machine. API
                 calls use this app&apos;s server to reach Anthropic, OpenAI,

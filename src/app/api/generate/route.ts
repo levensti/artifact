@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   if (!apiKey || typeof apiKey !== "string") {
     return jsonError(
-      "API key is required. Please add your key in Settings.",
+      "API key is required. Manage API keys in the app to add one.",
       401,
     );
   }

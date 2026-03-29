@@ -1,19 +1,29 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel from "@/components/right-panel";
-import type { RightTab } from "@/components/right-panel";
+import NotesRail from "@/components/notes-rail";
 import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
 import { hydrateClientStore } from "@/lib/client-data";
 import { getReview } from "@/lib/reviews";
 import { REVIEWS_UPDATED_EVENT } from "@/lib/storage-events";
 import type { Annotation } from "@/lib/annotations";
-import { getAnnotations, addAnnotation } from "@/lib/annotations";
+import {
+  getAnnotations,
+  addAnnotation,
+  getAnnotation,
+} from "@/lib/annotations";
 import { arxivPdfUrl } from "@/lib/utils";
 import { useAnalysis } from "@/hooks/use-auto-analysis";
 import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
@@ -62,11 +72,11 @@ export default function ReviewPage() {
 
   const [paperText, setPaperText] = useState("");
   const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(null);
-  const [pendingSelection, setPendingSelection] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(440);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
-  const [rightTab, setRightTab] = useState<RightTab>("assistant");
+  /** Passage threads (Dive deeper) / selection: which annotation thread is open in chat */
+  const [chatThreadAnnotationId, setChatThreadAnnotationId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!clientReady) return;
@@ -119,6 +129,14 @@ export default function ReviewPage() {
     }
   }, [clientReady, dataReady, params.id, router]);
 
+  /** Ignore stale thread id if that annotation was removed (no setState in an effect). */
+  const effectiveChatThreadAnnotationId = useMemo(() => {
+    if (!chatThreadAnnotationId) return null;
+    return annotations.some((a) => a.id === chatThreadAnnotationId)
+      ? chatThreadAnnotationId
+      : null;
+  }, [annotations, chatThreadAnnotationId]);
+
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
     setSelectionInfo(info);
     setTooltip(null);
@@ -129,13 +147,22 @@ export default function ReviewPage() {
   }, []);
 
   const handleAskAboutSelection = useCallback(() => {
-    if (selectionInfo) {
-      setPendingSelection(selectionInfo.text);
-      setSelectionInfo(null);
-      setRightTab("assistant");
-      window.getSelection()?.removeAllRanges();
-    }
-  }, [selectionInfo]);
+    if (!selectionInfo || !review) return;
+    void addAnnotation(review.id, {
+      pageNumber: selectionInfo.pageNumber,
+      highlightText: selectionInfo.text,
+      anchorRects: selectionInfo.anchorRects,
+      note: "",
+      thread: [],
+      kind: "ask_ai",
+    }).then((ann) => {
+      refreshAnnotations();
+      setActiveAnnotationId(ann.id);
+      setChatThreadAnnotationId(ann.id);
+    });
+    setSelectionInfo(null);
+    window.getSelection()?.removeAllRanges();
+  }, [selectionInfo, review, refreshAnnotations]);
 
   const handleAnnotateSelection = useCallback(() => {
     if (selectionInfo && review) {
@@ -145,28 +172,49 @@ export default function ReviewPage() {
         anchorRects: selectionInfo.anchorRects,
         note: "",
         thread: [],
+        kind: "comment",
       }).then((ann) => {
         refreshAnnotations();
         setActiveAnnotationId(ann.id);
+        setChatThreadAnnotationId(null);
       });
-      setRightTab("notes");
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
     }
   }, [selectionInfo, review, refreshAnnotations]);
 
-  const handleAnnotationClick = useCallback(
-    (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => {
-      setTooltip({ annotationId, x: info.highlightRight, y: info.clickY });
-      setHoveredAnnotationId(annotationId);
+  const handleAnnotationSelect = useCallback(
+    (id: string) => {
+      setActiveAnnotationId(id);
+      if (!review) return;
+      void getAnnotation(review.id, id).then((a) => {
+        if (a?.kind === "ask_ai") setChatThreadAnnotationId(id);
+        else setChatThreadAnnotationId(null);
+      });
     },
-    [],
+    [review],
   );
 
-  const handleTooltipOpenInNotes = useCallback(() => {
+  const handleAnnotationClick = useCallback(
+    (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => {
+      setActiveAnnotationId(annotationId);
+      if (!review) return;
+      void getAnnotation(review.id, annotationId).then((a) => {
+        if (a?.kind === "ask_ai") {
+          setChatThreadAnnotationId(annotationId);
+          setTooltip(null);
+        } else {
+          setTooltip({ annotationId, x: info.highlightRight, y: info.clickY });
+        }
+      });
+      setHoveredAnnotationId(annotationId);
+    },
+    [review],
+  );
+
+  const handleFocusNoteThread = useCallback(() => {
     if (tooltip) {
       setActiveAnnotationId(tooltip.annotationId);
-      setRightTab("notes");
       setTooltip(null);
     }
   }, [tooltip]);
@@ -185,7 +233,7 @@ export default function ReviewPage() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = window.innerWidth - e.clientX;
-      const minWidth = rightTab === "assistant" ? 380 : 340;
+      const minWidth = 380;
       setPanelWidth(Math.max(minWidth, Math.min(980, newWidth)));
     };
 
@@ -199,7 +247,7 @@ export default function ReviewPage() {
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [rightTab]);
+  }, []);
 
   const tooltipAnnotation = tooltip
     ? annotations.find((a) => a.id === tooltip.annotationId) ?? null
@@ -218,16 +266,29 @@ export default function ReviewPage() {
   return (
     <DashboardLayout>
       <div className="flex h-full overflow-hidden">
-        <div className="flex-1 min-w-0 overflow-hidden bg-[var(--reader-mat)]">
-          <PdfViewer
-            url={arxivPdfUrl(review.arxivId)}
-            onTextExtracted={setPaperText}
-            onTextSelected={handleTextSelected}
-            onSelectionCleared={handleSelectionCleared}
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--reader-mat)]">
+            <PdfViewer
+              url={arxivPdfUrl(review.arxivId)}
+              onTextExtracted={setPaperText}
+              onTextSelected={handleTextSelected}
+              onSelectionCleared={handleSelectionCleared}
+              annotations={annotations}
+              activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
+              hoveredAnnotationId={hoveredAnnotationId}
+              onAnnotationClick={handleAnnotationClick}
+            />
+          </div>
+
+          <NotesRail
+            reviewId={review.id}
             annotations={annotations}
-            activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
+            activeAnnotationId={activeAnnotationId}
             hoveredAnnotationId={hoveredAnnotationId}
-            onAnnotationClick={handleAnnotationClick}
+            onAnnotationsChanged={refreshAnnotations}
+            onHighlightClick={handleHighlightClick}
+            onAnnotationHover={setHoveredAnnotationId}
+            onAnnotationSelect={handleAnnotationSelect}
           />
         </div>
 
@@ -249,14 +310,10 @@ export default function ReviewPage() {
             arxivId={review.arxivId}
             paperTitle={review.title}
             paperContext={paperText}
-            pendingSelection={pendingSelection}
-            onSelectionConsumed={() => setPendingSelection(null)}
             annotations={annotations}
-            activeAnnotationId={activeAnnotationId}
-            hoveredAnnotationId={hoveredAnnotationId}
-            onAnnotationsChanged={refreshAnnotations}
-            onHighlightClick={handleHighlightClick}
-            onAnnotationHover={setHoveredAnnotationId}
+            chatThreadAnnotationId={effectiveChatThreadAnnotationId}
+            onChatThreadChange={setChatThreadAnnotationId}
+            onAnnotationsPersist={refreshAnnotations}
             selectedModel={selectedModel}
             onModelChange={handleModelChange}
             analysisStatus={analysis.status}
@@ -264,13 +321,6 @@ export default function ReviewPage() {
             analysisError={analysis.error}
             canRunAnalysis={analysis.canRun}
             onTriggerAnalysis={analysis.trigger}
-            activeTab={rightTab}
-            onTabChange={(tab) => {
-              setRightTab(tab);
-              if (tab === "assistant") {
-                setPanelWidth((prev) => Math.max(prev, 420));
-              }
-            }}
           />
         </div>
       </div>
@@ -283,7 +333,9 @@ export default function ReviewPage() {
         />
       )}
 
-      {tooltipAnnotation && tooltip && (
+      {tooltipAnnotation &&
+        tooltip &&
+        tooltipAnnotation.kind === "comment" && (
         <NoteTooltip
           annotation={tooltipAnnotation}
           position={{ x: tooltip.x, y: tooltip.y }}
@@ -291,7 +343,7 @@ export default function ReviewPage() {
             setTooltip(null);
             setHoveredAnnotationId(null);
           }}
-          onOpenInNotes={handleTooltipOpenInNotes}
+          onFocusThread={handleFocusNoteThread}
         />
       )}
     </DashboardLayout>

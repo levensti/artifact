@@ -30,7 +30,7 @@ export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionP
           className="gap-1.5 text-xs h-7 rounded-md px-2.5"
         >
           <MessageSquarePlus size={12} />
-          Ask AI
+          Dive deeper
         </Button>
         <div className="w-px h-4 bg-border" />
         <Button

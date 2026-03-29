@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 const OPEN_SETTINGS_FLAG = "paper-copilot-open-settings";
 
 /**
- * Legacy /settings URL: hand off to home and open the API keys dialog.
+ * Legacy /settings URL: hand off to home and open Manage API keys.
  */
 export default function SettingsRedirectPage() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function SettingsRedirectPage() {
 
   return (
     <div className="h-full w-full flex items-center justify-center bg-background text-muted-foreground text-sm">
-      Opening settings…
+      Opening API keys…
     </div>
   );
 }
