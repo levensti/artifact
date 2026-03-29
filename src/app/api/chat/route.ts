@@ -21,6 +21,7 @@ import {
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
 import type { StreamEvent } from "@/lib/stream-types";
+import { jsonError } from "@/lib/api-utils";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import { runAnthropicAgentLoop } from "./anthropic-handler";
@@ -63,17 +64,6 @@ Guidelines:
 - Be precise and dense with insight — researchers value depth over verbosity
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
 - Use tools when they add value, but don't force tool use for simple questions you can answer directly from the paper context`;
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
-function jsonError(message: string, status: number) {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 /* ------------------------------------------------------------------ */
 /*  POST handler                                                       */

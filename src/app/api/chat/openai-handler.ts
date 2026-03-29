@@ -3,6 +3,7 @@
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
+import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
   openAiCompatibleChatCompletionsUrl,
   OPENROUTER_APP_TITLE,
@@ -19,10 +20,32 @@ import type { ToolContext } from "@/tools/types";
 
 const MAX_TOOL_ROUNDS = 8;
 
+/* ------------------------------------------------------------------ */
+/*  OpenAI API types                                                   */
+/* ------------------------------------------------------------------ */
+
 interface OpenAIToolCall {
   index: number;
   id: string;
   function: { name: string; arguments: string };
+}
+
+interface OpenAIStreamDelta {
+  content?: string;
+  tool_calls?: Array<{
+    index?: number;
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }>;
+}
+
+interface OpenAIStreamChoice {
+  finish_reason?: string;
+  delta?: OpenAIStreamDelta;
+}
+
+interface OpenAIStreamEvent {
+  choices?: OpenAIStreamChoice[];
 }
 
 export async function runOpenAIAgentLoop(
@@ -52,8 +75,7 @@ export async function runOpenAIAgentLoop(
     headers["X-Title"] = OPENROUTER_APP_TITLE;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const apiMessages: any[] = [
+  const apiMessages: Array<Record<string, unknown>> = [
     { role: "system", content: systemContent },
     ...chatMessages.map((m) => ({ role: m.role, content: m.content })),
   ];
@@ -75,9 +97,7 @@ export async function runOpenAIAgentLoop(
     if (!response.ok) {
       const errText = await response.text();
       const label = providerApiErrorLabel(provider);
-      let msg = `${label} API error: ${response.status}`;
-      try { msg = JSON.parse(errText).error?.message || msg; } catch { /* ok */ }
-      throw new Error(msg);
+      throw new Error(parseApiErrorMessage(errText, `${label} API error: ${response.status}`));
     }
 
     if (!response.body) {
@@ -158,15 +178,14 @@ async function parseOpenAISSE(
         const data = line.slice(6).trim();
         if (data === "[DONE]") continue;
 
-        let event: Record<string, unknown>;
+        let event: OpenAIStreamEvent;
         try {
           event = JSON.parse(data);
         } catch {
           continue;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const choice = (event.choices as any[])?.[0];
+        const choice = event.choices?.[0];
         if (!choice) continue;
 
         if (choice.finish_reason) {

@@ -32,8 +32,23 @@ export function getToolByName(name: string): ToolDefinition | undefined {
   return ALL_TOOLS.find((t) => t.name === name);
 }
 
+export interface AnthropicToolSchema {
+  name: string;
+  description: string;
+  input_schema: ToolDefinition["parameters"];
+}
+
+export interface OpenAIToolSchema {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: ToolDefinition["parameters"];
+  };
+}
+
 /** Convert to Anthropic /v1/messages `tools` format. */
-export function toAnthropicTools(tools: ToolDefinition[]) {
+export function toAnthropicTools(tools: ToolDefinition[]): AnthropicToolSchema[] {
   return tools.map((t) => ({
     name: t.name,
     description: t.description,
@@ -42,7 +57,7 @@ export function toAnthropicTools(tools: ToolDefinition[]) {
 }
 
 /** Convert to OpenAI /chat/completions `tools` format. */
-export function toOpenAITools(tools: ToolDefinition[]) {
+export function toOpenAITools(tools: ToolDefinition[]): OpenAIToolSchema[] {
   return tools.map((t) => ({
     type: "function" as const,
     function: {

@@ -78,7 +78,7 @@ export const webSearchTool: ToolDefinition = {
     required: ["query"],
   },
 
-  async execute(input) {
+  async execute(input: Record<string, unknown>) {
     const query = String(input.query ?? "").trim();
     if (!query) return "Error: query parameter is required.";
 

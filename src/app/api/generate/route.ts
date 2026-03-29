@@ -8,6 +8,7 @@ import {
   providerApiErrorLabel,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
+import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import type { GenerateRequest } from "@/lib/explore";
 
 const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
@@ -16,13 +17,6 @@ When asked to output JSON:
 - Return valid JSON only
 - Do not include markdown fences
 - Do not include extra commentary`;
-
-function jsonError(message: string, status: number) {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 export async function POST(req: NextRequest) {
   let body: GenerateRequest;
@@ -160,12 +154,6 @@ async function generateOpenAICompatible(
 
 async function parseError(response: Response, providerLabel: string) {
   const errorText = await response.text();
-  let errorMessage = `${providerLabel} API error: ${response.status}`;
-  try {
-    const parsed = JSON.parse(errorText);
-    errorMessage = parsed.error?.message || errorMessage;
-  } catch {
-    // Use default.
-  }
-  return new Error(errorMessage);
+  const fallback = `${providerLabel} API error: ${response.status}`;
+  return new Error(parseApiErrorMessage(errorText, fallback));
 }
