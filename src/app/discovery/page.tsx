@@ -167,21 +167,21 @@ export default function DiscoveryPage() {
                   Discover
                 </h1>
                 <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                  Your paper knowledge graph
+                  Map your research frontier
                 </p>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
-                As you ask the assistant about related work, papers and their
-                relationships are saved here automatically. The graph grows
-                across every paper you review.
+                You have not reviewed any papers yet. Start your first review,
+                then grow this space into a living map of ideas, methods, and
+                connections as you explore with the assistant.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-muted-foreground/70 text-xs">
-              <span>Cross-paper connections</span>
+              <span>From first paper to research map</span>
               <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-              <span>Built from chat</span>
+              <span>Assistant-guided discovery</span>
               <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-              <span>Local-first</span>
+              <span>Built as you learn</span>
             </div>
           </div>
         </div>
