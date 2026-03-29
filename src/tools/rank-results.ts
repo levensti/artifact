@@ -44,7 +44,7 @@ export const rankResultsTool: ToolDefinition = {
     required: ["items", "criterion"],
   },
 
-  async execute(input) {
+  async execute(input: Record<string, unknown>) {
     const criterion = String(input.criterion ?? "").trim();
     if (!criterion) return "Error: criterion parameter is required.";
 

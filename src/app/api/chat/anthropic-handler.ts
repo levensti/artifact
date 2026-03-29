@@ -3,6 +3,7 @@
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
+import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
   getAllTools,
   getToolByName,
@@ -12,14 +13,38 @@ import type { ToolContext } from "@/tools/types";
 
 const MAX_TOOL_ROUNDS = 8;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnthropicContent = any;
+/* ------------------------------------------------------------------ */
+/*  Anthropic API types                                                */
+/* ------------------------------------------------------------------ */
 
-interface AnthropicToolCall {
+interface AnthropicTextBlock {
+  type: "text";
+  text: string;
+}
+
+interface AnthropicToolUseBlock {
+  type: "tool_use";
   id: string;
   name: string;
   input: Record<string, unknown>;
 }
+
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock;
+
+interface AnthropicToolResultBlock {
+  type: "tool_result";
+  tool_use_id: string;
+  content: string;
+}
+
+interface AnthropicSSEEvent {
+  type: string;
+  index?: number;
+  content_block?: { type: string; id?: string; name?: string };
+  delta?: { type: string; text?: string; partial_json?: string; stop_reason?: string };
+}
+
+type AnthropicMessageContent = AnthropicContentBlock | AnthropicToolResultBlock;
 
 export async function runAnthropicAgentLoop(
   chatMessages: { role: "user" | "assistant"; content: string }[],
@@ -37,8 +62,7 @@ export async function runAnthropicAgentLoop(
 
   const anthropicTools = toAnthropicTools(tools);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const apiMessages: any[] = chatMessages.map((m) => ({
+  const apiMessages: Array<{ role: string; content: string | AnthropicMessageContent[] }> = chatMessages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
@@ -65,9 +89,7 @@ export async function runAnthropicAgentLoop(
 
     if (!response.ok) {
       const errText = await response.text();
-      let msg = `Anthropic API error: ${response.status}`;
-      try { msg = JSON.parse(errText).error?.message || msg; } catch { /* ok */ }
-      throw new Error(msg);
+      throw new Error(parseApiErrorMessage(errText, `Anthropic API error: ${response.status}`));
     }
 
     if (!response.body) throw new Error("No response body from Anthropic");
@@ -77,13 +99,13 @@ export async function runAnthropicAgentLoop(
     if (stopReason !== "tool_use") break;
 
     const toolCalls = contentBlocks.filter(
-      (b): b is { type: "tool_use" } & AnthropicToolCall => b.type === "tool_use",
+      (b): b is AnthropicToolUseBlock => b.type === "tool_use",
     );
     if (toolCalls.length === 0) break;
 
     apiMessages.push({ role: "assistant", content: contentBlocks });
 
-    const toolResults: AnthropicContent[] = [];
+    const toolResults: AnthropicToolResultBlock[] = [];
     for (const tc of toolCalls) {
       emit({ type: "tool_call", id: tc.id, name: tc.name, input: tc.input });
 
@@ -116,12 +138,12 @@ export async function runAnthropicAgentLoop(
 async function parseAnthropicSSE(
   body: ReadableStream<Uint8Array>,
   emit: (e: StreamEvent) => void,
-): Promise<{ contentBlocks: AnthropicContent[]; stopReason: string }> {
+): Promise<{ contentBlocks: AnthropicContentBlock[]; stopReason: string }> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
-  const blocks: AnthropicContent[] = [];
+  const blocks: AnthropicContentBlock[] = [];
   let toolInputAccum = "";
   let stopReason = "end_turn";
 
@@ -139,7 +161,7 @@ async function parseAnthropicSSE(
         const data = line.slice(6).trim();
         if (data === "[DONE]") continue;
 
-        let event: Record<string, AnthropicContent>;
+        let event: AnthropicSSEEvent;
         try {
           event = JSON.parse(data);
         } catch {
@@ -149,9 +171,10 @@ async function parseAnthropicSSE(
         switch (event.type) {
           case "content_block_start": {
             const cb = event.content_block;
+            if (!cb || event.index === undefined) break;
             if (cb.type === "text") {
               blocks[event.index] = { type: "text", text: "" };
-            } else if (cb.type === "tool_use") {
+            } else if (cb.type === "tool_use" && cb.id && cb.name) {
               blocks[event.index] = {
                 type: "tool_use",
                 id: cb.id,
@@ -166,10 +189,12 @@ async function parseAnthropicSSE(
           case "content_block_delta": {
             const idx = event.index;
             const delta = event.delta;
-            if (delta.type === "text_delta" && blocks[idx]?.type === "text") {
-              blocks[idx].text += delta.text;
+            if (idx === undefined || !delta) break;
+            const block = blocks[idx];
+            if (delta.type === "text_delta" && block?.type === "text" && delta.text) {
+              block.text += delta.text;
               emit({ type: "text_delta", text: delta.text });
-            } else if (delta.type === "input_json_delta" && blocks[idx]?.type === "tool_use") {
+            } else if (delta.type === "input_json_delta" && block?.type === "tool_use" && delta.partial_json) {
               toolInputAccum += delta.partial_json;
             }
             break;
@@ -177,11 +202,13 @@ async function parseAnthropicSSE(
 
           case "content_block_stop": {
             const idx = event.index;
-            if (blocks[idx]?.type === "tool_use" && toolInputAccum) {
+            if (idx === undefined) break;
+            const block = blocks[idx];
+            if (block?.type === "tool_use" && toolInputAccum) {
               try {
-                blocks[idx].input = JSON.parse(toolInputAccum);
+                block.input = JSON.parse(toolInputAccum);
               } catch {
-                blocks[idx].input = {};
+                block.input = {};
               }
               toolInputAccum = "";
             }

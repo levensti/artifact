@@ -195,7 +195,8 @@ export function getMessages(reviewId: string): ChatMessage[] {
   if (!row) return [];
   try {
     return JSON.parse(row.payload) as ChatMessage[];
-  } catch {
+  } catch (err) {
+    console.warn(`[store] Failed to parse messages for review ${reviewId}:`, err);
     return [];
   }
 }
@@ -219,7 +220,8 @@ export function getAnnotations(reviewId: string): Annotation[] {
   if (!row) return [];
   try {
     return JSON.parse(row.payload) as Annotation[];
-  } catch {
+  } catch (err) {
+    console.warn(`[store] Failed to parse annotations for review ${reviewId}:`, err);
     return [];
   }
 }
@@ -275,7 +277,8 @@ export function getPrerequisites(reviewId: string): PrerequisitesData | null {
   if (!row) return null;
   try {
     return JSON.parse(row.payload) as PrerequisitesData;
-  } catch {
+  } catch (err) {
+    console.warn(`[store] Failed to parse prerequisites for review ${reviewId}:`, err);
     return null;
   }
 }
@@ -299,7 +302,8 @@ export function getGraphData(reviewId: string): GraphData | null {
   if (!row) return null;
   try {
     return JSON.parse(row.payload) as GraphData;
-  } catch {
+  } catch (err) {
+    console.warn(`[store] Failed to parse graph data for review ${reviewId}:`, err);
     return null;
   }
 }
@@ -330,7 +334,8 @@ export function getGlobalGraphData(): GlobalGraphData | null {
   if (!row) return null;
   try {
     return JSON.parse(row.payload) as GlobalGraphData;
-  } catch {
+  } catch (err) {
+    console.warn("[store] Failed to parse global graph data:", err);
     return null;
   }
 }
@@ -369,7 +374,8 @@ export function getSettings(): {
   if (modelRow?.value) {
     try {
       selectedModel = JSON.parse(modelRow.value) as Model;
-    } catch {
+    } catch (err) {
+      console.warn("[store] Failed to parse selected model:", err);
       selectedModel = null;
     }
   }
