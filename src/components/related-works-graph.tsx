@@ -1,21 +1,33 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
-  forceCenter,
-  forceCollide,
-  forceLink,
-  forceManyBody,
-  forceSimulation,
-  type SimulationNodeDatum,
-} from "d3-force";
-import { Maximize2, Minimize2, X } from "lucide-react";
+  ReactFlow,
+  Background,
+  BackgroundVariant,
+  ReactFlowProvider,
+  applyEdgeChanges,
+  applyNodeChanges,
+  useEdgesState,
+  useNodesState,
+  useReactFlow,
+  type Edge,
+  type Node,
+  type NodeChange,
+  type EdgeChange,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { Maximize2, Minimize2, Search, X } from "lucide-react";
 import type { GraphData, GraphEdge, GraphNode, RelationshipType } from "@/lib/explore";
 import { RELATIONSHIP_SHORT_LABEL } from "@/lib/explore";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import GraphDetailPanel from "@/components/graph-detail-panel";
-import { createOrGetReview } from "@/lib/reviews";
+import { PaperNode } from "@/components/knowledge-graph-node";
+import { RelationshipEdge } from "@/components/knowledge-graph-edge";
+import { cn } from "@/lib/utils";
+import { createOrGetReview, normalizeArxivId } from "@/lib/reviews";
 import { useRouter } from "next/navigation";
 
 /* ------------------------------------------------------------------ */
@@ -31,7 +43,6 @@ const CHAR_W = 5.2;
 const PILL_PAD_X = 14;
 const PILL_H = 24;
 const PILL_H_ANCHOR = 28;
-const PILL_RX = 6;
 
 const EDGE_COLORS: Record<RelationshipType, string> = {
   "builds-upon": "#7c6d66",
@@ -54,8 +65,6 @@ type PositionedNode = GraphNode & {
   label: string;
 };
 
-type SimNode = GraphNode & SimulationNodeDatum & { w: number; h: number; label: string };
-
 function truncate(text: string, max: number) {
   if (text.length <= max) return text;
   return text.slice(0, max - 1).trimEnd() + "\u2026";
@@ -65,41 +74,126 @@ function pillWidth(label: string): number {
   return label.length * CHAR_W + PILL_PAD_X * 2;
 }
 
-function buildLayout(
+/** Max satellites on a circle of radius r without chord length dropping below `need` (px). */
+function maxNodesOnRing(r: number, need: number): number {
+  if (r < 8 || need <= 0) return 1;
+  if (2 * r <= need) return 1;
+  let lo = 1;
+  let hi = 256;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi + 1) / 2);
+    const chord = 2 * r * Math.sin(Math.PI / mid);
+    if (chord >= need) lo = mid;
+    else hi = mid - 1;
+  }
+  return Math.max(1, lo);
+}
+
+/** Push overlapping pill centers apart (circle bounds using max(w,h)). */
+function paperMatchesQuery(node: GraphNode, raw: string): boolean {
+  const q = raw.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    node.title.toLowerCase().includes(q) ||
+    node.arxivId.toLowerCase().includes(q)
+  );
+}
+
+function resolveOverlaps(nodes: PositionedNode[], iterations = 140) {
+  const pad = 10;
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const ra = Math.max(a.w, a.h) / 2 + pad;
+        const rb = Math.max(b.w, b.h) / 2 + pad;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy) || 0.001;
+        const minDist = ra + rb;
+        if (dist < minDist) {
+          const push = (minDist - dist) / 2;
+          const ux = dx / dist;
+          const uy = dy / dist;
+          a.x -= ux * push;
+          a.y -= uy * push;
+          b.x += ux * push;
+          b.y += uy * push;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Radial layout: anchor at center, satellites on expanding rings. Ring capacity
+ * scales with circumference (chord spacing vs pill width) so we never stack
+ * too many nodes on one circle. Radii always increase — we never clamp multiple
+ * rings to the same radius (that was causing the “pile in the middle” mess).
+ */
+function buildRadialLayout(
   graph: GraphData,
   width: number,
   height: number,
   reviewedArxivIds?: Set<string>,
-) {
-  const layoutNodes: SimNode[] = graph.nodes.map((n) => {
-    const isReviewed = reviewedArxivIds?.has(n.arxivId) ?? false;
+): PositionedNode[] {
+  const layoutNodes: PositionedNode[] = graph.nodes.map((n) => {
+    const isReviewed =
+      reviewedArxivIds?.has(normalizeArxivId(n.arxivId)) ?? false;
     const isAnchor = n.isCurrent || isReviewed;
     const maxChars = isAnchor ? PILL_CHARS_ANCHOR : PILL_CHARS;
     const label = truncate(n.title, maxChars);
     const w = pillWidth(label);
     const h = isAnchor ? PILL_H_ANCHOR : PILL_H;
-    return { ...n, w, h, label, isCurrent: n.isCurrent || isReviewed };
+    return { ...n, w, h, label, isCurrent: n.isCurrent || isReviewed, x: 0, y: 0 };
   });
 
-  const links = graph.edges.map((e) => ({ ...e }));
+  const cx = width / 2;
+  const cy = height / 2;
 
-  const sim = forceSimulation(layoutNodes)
-    .force(
-      "link",
-      forceLink<SimNode, GraphEdge>(links)
-        .id((d) => d.id)
-        .distance(120),
-    )
-    .force("charge", forceManyBody<SimNode>().strength(-380))
-    .force("center", forceCenter<SimNode>(width / 2, height / 2))
-    .force(
-      "collide",
-      forceCollide<SimNode>().radius((d) => Math.max(d.w, d.h) / 2 + 8),
-    )
-    .stop();
+  if (layoutNodes.length === 0) return [];
 
-  for (let i = 0; i < 360; i += 1) sim.tick();
-  return layoutNodes as PositionedNode[];
+  const anchor =
+    layoutNodes.find((n) => n.isCurrent) ??
+    layoutNodes.find((n) =>
+      reviewedArxivIds?.has(normalizeArxivId(n.arxivId)),
+    ) ??
+    layoutNodes[0];
+
+  const others = layoutNodes.filter((n) => n.id !== anchor.id);
+
+  anchor.x = cx;
+  anchor.y = cy;
+
+  if (others.length === 0) {
+    return layoutNodes;
+  }
+
+  const maxW = Math.max(anchor.w, ...others.map((n) => n.w));
+  const gap = 16;
+  const need = maxW + gap;
+
+  let idx = 0;
+  let r = Math.max(need * 0.55, 88);
+
+  while (idx < others.length) {
+    const cap = maxNodesOnRing(r, need);
+    const count = Math.min(cap, others.length - idx);
+    const slice = others.slice(idx, idx + count);
+    slice.forEach((node, j) => {
+      const angle = (2 * Math.PI * j) / slice.length - Math.PI / 2;
+      node.x = cx + r * Math.cos(angle);
+      node.y = cy + r * Math.sin(angle);
+    });
+    idx += count;
+    if (idx >= others.length) break;
+    r += Math.max(44, maxW * 0.42 + gap);
+  }
+
+  resolveOverlaps(layoutNodes, 160);
+
+  return layoutNodes;
 }
 
 function useStaticLayout(
@@ -109,10 +203,103 @@ function useStaticLayout(
   reviewedArxivIds?: Set<string>,
 ) {
   return useMemo(
-    () => buildLayout(graph, width, height, reviewedArxivIds),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graph, width, height],
+    () => buildRadialLayout(graph, width, height, reviewedArxivIds),
+    [graph, width, height, reviewedArxivIds],
   );
+}
+
+const nodeTypes = { paper: PaperNode };
+const edgeTypes = { relationship: RelationshipEdge };
+
+function buildFlowNodes(
+  graph: GraphData,
+  positionedNodes: PositionedNode[],
+  selectedNodeId: string | null,
+  hoverNodeId: string | null,
+  searchQuery: string,
+): Node[] {
+  const q = searchQuery.trim();
+  const searchOn = q.length > 0;
+
+  return positionedNodes.map((node) => {
+    const selected = selectedNodeId === node.id;
+    const hovered = hoverNodeId === node.id;
+    const matches = paperMatchesQuery(node, q);
+    const searchMatch = searchOn && matches;
+
+    const selectionDimmed =
+      !searchOn &&
+      selectedNodeId != null &&
+      !selected &&
+      !graph.edges.some(
+        (e) =>
+          (e.source === selectedNodeId && e.target === node.id) ||
+          (e.target === selectedNodeId && e.source === node.id),
+      );
+
+    const searchDimmed = searchOn && !matches;
+    const dimmed = selectionDimmed || searchDimmed;
+
+    return {
+      id: node.id,
+      type: "paper",
+      position: { x: node.x - node.w / 2, y: node.y - node.h / 2 },
+      selected,
+      style: { width: node.w, height: node.h },
+      data: {
+        label: node.label,
+        title: node.title,
+        isAnchor: node.isCurrent,
+        dimmed,
+        hovered,
+        searchMatch,
+      },
+    };
+  });
+}
+
+function buildFlowEdges(
+  graph: GraphData,
+  selectedNodeId: string | null,
+  searchQuery: string,
+): Edge[] {
+  const q = searchQuery.trim();
+  const searchOn = q.length > 0;
+
+  return graph.edges.map((edge, index) => {
+    const sNode = graph.nodes.find((n) => n.id === edge.source);
+    const tNode = graph.nodes.find((n) => n.id === edge.target);
+
+    const edgeTouchesSearch =
+      searchOn &&
+      sNode &&
+      tNode &&
+      (paperMatchesQuery(sNode, q) || paperMatchesQuery(tNode, q));
+
+    const isIncident =
+      !searchOn &&
+      selectedNodeId != null &&
+      (edge.source === selectedNodeId || edge.target === selectedNodeId);
+
+    const incident = searchOn ? edgeTouchesSearch : isIncident;
+    const dimmed = searchOn ? !edgeTouchesSearch : selectedNodeId != null && !isIncident;
+
+    const color = EDGE_COLORS[edge.relationship];
+    return {
+      id: `e-${edge.source}-${edge.target}-${index}`,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: "s",
+      targetHandle: "t",
+      type: "relationship",
+      data: {
+        label: RELATIONSHIP_SHORT_LABEL[edge.relationship],
+        color,
+        dimmed,
+        incident,
+      },
+    };
+  });
 }
 
 function incidentEdges(graph: GraphData, nodeId: string | null): GraphEdge[] {
@@ -122,22 +309,6 @@ function incidentEdges(graph: GraphData, nodeId: string | null): GraphEdge[] {
   if (!anchorArxiv) return all;
   const viaAnchor = all.filter((e) => e.source === anchorArxiv || e.target === anchorArxiv);
   return viaAnchor.length > 0 ? viaAnchor : all;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Edge midpoint for label placement                                  */
-/* ------------------------------------------------------------------ */
-
-function quadMid(
-  s: { x: number; y: number },
-  t: { x: number; y: number },
-  cx: number,
-  cy: number,
-) {
-  return {
-    x: 0.25 * s.x + 0.5 * cx + 0.25 * t.x,
-    y: 0.25 * s.y + 0.5 * cy + 0.25 * t.y,
-  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -152,9 +323,25 @@ interface GraphCanvasProps {
   onSelectNode: (nodeId: string) => void;
   onDeselectNode: () => void;
   reviewedArxivIds?: Set<string>;
+  /** Case-insensitive substring on title and arXiv id */
+  searchQuery: string;
 }
 
-function GraphCanvas({
+const FIT_VIEW_OPTIONS = {
+  padding: 0.08,
+  maxZoom: 1.75,
+  minZoom: 0.4,
+} as const;
+
+function FitViewWhenGraphChanges({ graphKey }: { graphKey: string }) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    fitView(FIT_VIEW_OPTIONS);
+  }, [graphKey, fitView]);
+  return null;
+}
+
+function GraphCanvasInner({
   graph,
   width,
   height,
@@ -162,201 +349,181 @@ function GraphCanvas({
   onSelectNode,
   onDeselectNode,
   reviewedArxivIds,
+  searchQuery,
 }: GraphCanvasProps) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
-  const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const positionedNodes = useStaticLayout(graph, width, height, reviewedArxivIds);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
 
-  const nodeMap = useMemo(
-    () => new Map(positionedNodes.map((n) => [n.id, n])),
-    [positionedNodes],
+  const flowNodes = useMemo(
+    () =>
+      buildFlowNodes(
+        graph,
+        positionedNodes,
+        selectedNodeId,
+        hoverNodeId,
+        searchQuery,
+      ),
+    [graph, positionedNodes, selectedNodeId, hoverNodeId, searchQuery],
   );
 
-  // Wheel zoom
+  const flowEdges = useMemo(
+    () => buildFlowEdges(graph, selectedNodeId, searchQuery),
+    [graph, selectedNodeId, searchQuery],
+  );
+
+  const [nodes, setNodes] = useNodesState(flowNodes);
+  const [edges, setEdges] = useEdgesState(flowEdges);
+
   useEffect(() => {
-    const el = svgRef.current;
-    if (!el) return;
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const scaleDelta = e.deltaY > 0 ? 0.93 : 1.07;
-      setTransform((prev) => ({
-        ...prev,
-        k: Math.max(0.35, Math.min(2.8, prev.k * scaleDelta)),
-      }));
-    };
-    el.addEventListener("wheel", handleWheel, { passive: false });
-    return () => el.removeEventListener("wheel", handleWheel);
-  }, []);
+    setNodes(flowNodes);
+  }, [flowNodes, setNodes]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    dragRef.current = { x: e.clientX, y: e.clientY, moved: false };
-  }, []);
+  useEffect(() => {
+    setEdges(flowEdges);
+  }, [flowEdges, setEdges]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.x;
-    const dy = e.clientY - dragRef.current.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragRef.current.moved = true;
-    dragRef.current.x = e.clientX;
-    dragRef.current.y = e.clientY;
-    setTransform((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-  }, []);
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((nds) => applyNodeChanges(changes, nds));
+    },
+    [setNodes],
+  );
 
-  const handleMouseUp = useCallback(() => {
-    const wasDrag = dragRef.current?.moved;
-    dragRef.current = null;
-    // Click on empty canvas (not drag) deselects
-    if (!wasDrag) onDeselectNode();
-  }, [onDeselectNode]);
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    [setEdges],
+  );
+
+  const graphKey = `${graph.generatedAt}-${graph.nodes.length}-${graph.edges.length}`;
 
   return (
-    <svg
-      ref={svgRef}
-      className="w-full h-full select-none"
-      viewBox={`0 0 ${width} ${height}`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => { dragRef.current = null; }}
+    <div
+      style={{ width, height }}
+      className="relative overflow-hidden rounded-md bg-linear-to-br from-background via-card/50 to-muted/30"
     >
-      {/* Background */}
-      <defs>
-        <pattern id="kgDotGrid" width="16" height="16" patternUnits="userSpaceOnUse">
-          <circle cx="2" cy="2" r="0.5" fill="#b8ada4" fillOpacity="0.28" />
-        </pattern>
-      </defs>
-      <rect width={width} height={height} fill="#f5f1ee" />
-      <rect width={width} height={height} fill="url(#kgDotGrid)" />
+      <ReactFlow
+        key={graphKey}
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        panOnScroll={false}
+        zoomOnScroll
+        zoomOnPinch
+        zoomOnDoubleClick={false}
+        panOnDrag
+        minZoom={0.35}
+        maxZoom={2.8}
+        onInit={(instance) => {
+          instance.fitView(FIT_VIEW_OPTIONS);
+        }}
+        onNodeClick={(_, node) => onSelectNode(node.id)}
+        onPaneClick={() => onDeselectNode()}
+        onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
+        onNodeMouseLeave={() => setHoverNodeId(null)}
+        proOptions={{ hideAttribution: true }}
+        className="bg-transparent!"
+      >
+        <FitViewWhenGraphChanges graphKey={graphKey} />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1}
+          color="var(--border)"
+          className="opacity-[0.38]"
+        />
+      </ReactFlow>
+    </div>
+  );
+}
 
-      <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
-        {/* Edges */}
-        {graph.edges.map((edge, index) => {
-          const s = nodeMap.get(edge.source);
-          const t = nodeMap.get(edge.target);
-          if (!s || !t) return null;
-          const cx = (s.x + t.x) / 2;
-          const cy = (s.y + t.y) / 2 - 24;
-          const mid = quadMid(s, t, cx, cy);
-          const isIncident =
-            selectedNodeId != null &&
-            (edge.source === selectedNodeId || edge.target === selectedNodeId);
-          const dimmed = selectedNodeId != null && !isIncident;
-          return (
-            <g key={`e-${edge.source}-${edge.target}-${index}`}>
-              <path
-                d={`M ${s.x} ${s.y} Q ${cx} ${cy} ${t.x} ${t.y}`}
-                fill="none"
-                stroke={EDGE_COLORS[edge.relationship]}
-                strokeOpacity={dimmed ? 0.12 : isIncident ? 0.85 : 0.4}
-                strokeWidth={isIncident ? 2 : 1.2}
-                strokeDasharray={dimmed ? "3 4" : undefined}
-              />
-              {!dimmed && (
-                <text
-                  x={mid.x}
-                  y={mid.y - 3}
-                  textAnchor="middle"
-                  className="pointer-events-none"
-                  style={{
-                    fontSize: 7.5,
-                    fill: EDGE_COLORS[edge.relationship],
-                    fontWeight: 600,
-                    opacity: isIncident ? 1 : 0.72,
-                  }}
-                >
-                  {RELATIONSHIP_SHORT_LABEL[edge.relationship]}
-                </text>
-              )}
-            </g>
-          );
-        })}
+function GraphCanvas(props: GraphCanvasProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState(() => ({ w: props.width, h: props.height }));
 
-        {/* Nodes (pills) */}
-        {positionedNodes.map((node) => {
-          const selected = selectedNodeId === node.id;
-          const hovered = hoverNodeId === node.id;
-          const dimmed =
-            selectedNodeId != null &&
-            !selected &&
-            !graph.edges.some(
-              (e) =>
-                (e.source === selectedNodeId && e.target === node.id) ||
-                (e.target === selectedNodeId && e.source === node.id),
-            );
-          const rx = node.w / 2;
-          const ry = node.h / 2;
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      const rw = Math.round(r.width);
+      const rh = Math.round(r.height);
+      const w = rw > 12 ? rw : props.width;
+      const h = rh > 12 ? rh : props.height;
+      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [props.width, props.height]);
 
-          return (
-            <g
-              key={node.id}
-              className="cursor-pointer"
-              onMouseEnter={() => setHoverNodeId(node.id)}
-              onMouseLeave={() => setHoverNodeId(null)}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectNode(node.id);
-              }}
-            >
-              {/* Shadow */}
-              <rect
-                x={node.x - rx}
-                y={node.y - ry + 1.5}
-                width={node.w}
-                height={node.h}
-                rx={PILL_RX}
-                fill="#28262b"
-                fillOpacity={dimmed ? 0.02 : 0.06}
-              />
-              {/* Pill body */}
-              <rect
-                x={node.x - rx}
-                y={node.y - ry}
-                width={node.w}
-                height={node.h}
-                rx={PILL_RX}
-                fill={node.isCurrent ? "#2b2a28" : "#faf7f4"}
-                stroke={
-                  selected
-                    ? "#6b4c36"
-                    : hovered
-                      ? (node.isCurrent ? "#555" : "#b8ada4")
-                      : (node.isCurrent ? "#444" : "#d0c7bf")
-                }
-                strokeWidth={selected ? 2 : 1}
-                opacity={dimmed ? 0.25 : 1}
-                style={{
-                  transition: "opacity 180ms ease",
-                }}
-              />
-              {/* Label */}
-              <text
-                x={node.x}
-                y={node.y + 3.5}
-                textAnchor="middle"
-                className="pointer-events-none"
-                style={{
-                  fontSize: node.isCurrent ? 9.5 : 8.5,
-                  fill: dimmed
-                    ? "#a9a29c"
-                    : node.isCurrent
-                      ? "#f0ebe8"
-                      : "#3a3836",
-                  fontWeight: node.isCurrent ? 600 : 500,
-                  letterSpacing: "-0.01em",
-                  opacity: dimmed ? 0.4 : 1,
-                  transition: "opacity 180ms ease",
-                }}
-              >
-                {node.label}
-              </text>
-              <title>{node.title}</title>
-            </g>
-          );
-        })}
-      </g>
-    </svg>
+  return (
+    <div ref={wrapRef} className="h-full w-full min-h-[200px] min-w-0">
+      <ReactFlowProvider>
+        <GraphCanvasInner
+          graph={props.graph}
+          width={size.w}
+          height={size.h}
+          selectedNodeId={props.selectedNodeId}
+          onSelectNode={props.onSelectNode}
+          onDeselectNode={props.onDeselectNode}
+          reviewedArxivIds={props.reviewedArxivIds}
+          searchQuery={props.searchQuery}
+        />
+      </ReactFlowProvider>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Search                                                              */
+/* ------------------------------------------------------------------ */
+
+function GraphPaperSearch({
+  value,
+  onChange,
+  matchCount,
+  total,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  matchCount: number;
+  total: number;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative flex w-full min-w-0 max-w-sm items-center gap-2",
+        className,
+      )}
+    >
+      <Search
+        className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+        aria-hidden
+      />
+      <Input
+        aria-label="Search papers by title or arXiv id"
+        placeholder="Search papers…"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 w-full min-w-0 border-border/80 bg-card/90 pl-8 backdrop-blur-sm"
+      />
+      {value.trim() ? (
+        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+          {matchCount}/{total}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -415,6 +582,12 @@ export default function RelatedWorksGraph({
   const router = useRouter();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [paperSearch, setPaperSearch] = useState("");
+
+  const searchMatchCount = useMemo(
+    () => graph.nodes.filter((n) => paperMatchesQuery(n, paperSearch)).length,
+    [graph.nodes, paperSearch],
+  );
 
   const resolvedSelectedNodeId =
     selectedNodeId && graph.nodes.some((n) => n.id === selectedNodeId)
@@ -430,27 +603,37 @@ export default function RelatedWorksGraph({
     router.push(`/review/${review.id}`);
   };
 
-  const canvasW = workspace ? 1400 : 760;
-  const canvasH = workspace ? 900 : 520;
+  /** Compact coordinate space; viewport is filled via fitView (no pan/zoom UI). */
+  const canvasW = workspace ? 560 : 520;
+  const canvasH = workspace ? 380 : 320;
 
   /* ---- Compact (in-review) layout ---- */
   if (!workspace) {
     return (
       <div className="space-y-3">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <GraphLegend />
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs shrink-0"
-            onClick={() => setExpanded(true)}
-          >
-            <Maximize2 className="size-3.5 mr-1.5" />
-            Expand
-          </Button>
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <GraphPaperSearch
+              value={paperSearch}
+              onChange={setPaperSearch}
+              matchCount={searchMatchCount}
+              total={graph.nodes.length}
+              className="sm:max-w-[14rem]"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 self-start text-xs sm:self-center"
+              onClick={() => setExpanded(true)}
+            >
+              <Maximize2 className="size-3.5 mr-1.5" />
+              Expand
+            </Button>
+          </div>
         </div>
 
-        <div className="h-[360px] rounded-md border border-border overflow-hidden">
+        <div className="h-[360px] rounded-md border border-border overflow-hidden min-h-0">
           <GraphCanvas
             graph={graph}
             width={canvasW}
@@ -459,6 +642,7 @@ export default function RelatedWorksGraph({
             onSelectNode={setSelectedNodeId}
             onDeselectNode={() => setSelectedNodeId(null)}
             reviewedArxivIds={reviewedArxivIds}
+            searchQuery={paperSearch}
           />
         </div>
 
@@ -487,29 +671,39 @@ export default function RelatedWorksGraph({
           >
             <div className="h-full flex">
               <div className="flex-1 flex flex-col min-h-0 p-4">
-                <div className="flex items-center justify-between mb-2 shrink-0">
+                <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <DialogTitle className="text-base font-semibold">
                     Related Works
                   </DialogTitle>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs"
-                    onClick={() => setExpanded(false)}
-                  >
-                    <Minimize2 className="size-3.5 mr-1.5" />
-                    Collapse
-                  </Button>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:justify-end">
+                    <GraphPaperSearch
+                      value={paperSearch}
+                      onChange={setPaperSearch}
+                      matchCount={searchMatchCount}
+                      total={graph.nodes.length}
+                      className="min-w-[12rem] flex-1 sm:max-w-[16rem]"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 shrink-0 text-xs"
+                      onClick={() => setExpanded(false)}
+                    >
+                      <Minimize2 className="size-3.5 mr-1.5" />
+                      Collapse
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex-1 min-h-0 rounded-md border border-border overflow-hidden">
                   <GraphCanvas
                     graph={graph}
-                    width={980}
-                    height={760}
+                    width={600}
+                    height={400}
                     selectedNodeId={resolvedSelectedNodeId}
                     onSelectNode={setSelectedNodeId}
                     onDeselectNode={() => setSelectedNodeId(null)}
                     reviewedArxivIds={reviewedArxivIds}
+                    searchQuery={paperSearch}
                   />
                 </div>
                 <div className="mt-2 shrink-0">
@@ -536,9 +730,9 @@ export default function RelatedWorksGraph({
   const showPanel = resolvedSelectedNodeId != null;
 
   return (
-    <div className="flex h-full min-h-0 rounded-lg border border-border overflow-hidden bg-[#f5f1ee]">
+    <div className="flex h-full min-h-0 w-full rounded-lg border border-border overflow-hidden bg-background">
       {/* Graph area */}
-      <div className="flex-1 min-w-0 relative">
+      <div className="relative h-full min-h-0 min-w-0 flex-1">
         <GraphCanvas
           graph={graph}
           width={canvasW}
@@ -547,14 +741,23 @@ export default function RelatedWorksGraph({
           onSelectNode={setSelectedNodeId}
           onDeselectNode={() => setSelectedNodeId(null)}
           reviewedArxivIds={reviewedArxivIds}
+          searchQuery={paperSearch}
         />
+        <div className="pointer-events-auto absolute left-3 top-3 z-10 w-[min(100%,18rem)]">
+          <GraphPaperSearch
+            value={paperSearch}
+            onChange={setPaperSearch}
+            matchCount={searchMatchCount}
+            total={graph.nodes.length}
+          />
+        </div>
         {/* Floating legend */}
-        <div className="absolute bottom-3 left-3">
+        <div className="absolute bottom-3 left-3 z-10">
           <GraphLegend />
         </div>
         {/* Hint */}
-        <div className="absolute top-3 right-3 text-[10px] text-muted-foreground/60 select-none">
-          Scroll to zoom · Drag to pan
+        <div className="pointer-events-none absolute right-3 top-3 max-w-[11rem] text-right text-[10px] text-muted-foreground/60 select-none">
+          Scroll to zoom · Drag to pan · Click a paper
         </div>
       </div>
 

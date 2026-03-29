@@ -6,7 +6,12 @@ import { Network, ArrowRight } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import RelatedWorksGraph from "@/components/related-works-graph";
-import { getReviews, REVIEWS_UPDATED_EVENT, type PaperReview } from "@/lib/reviews";
+import {
+  getReviews,
+  normalizeArxivId,
+  REVIEWS_UPDATED_EVENT,
+  type PaperReview,
+} from "@/lib/reviews";
 import {
   EXPLORE_UPDATED_EVENT,
   globalGraphToGraphData,
@@ -55,7 +60,7 @@ export default function DiscoverClient() {
   }, [mergedGraphJson]);
 
   const reviewedArxivIds = useMemo(
-    () => new Set(reviews.map((r) => r.arxivId)),
+    () => new Set(reviews.map((r) => normalizeArxivId(r.arxivId))),
     [reviews],
   );
 

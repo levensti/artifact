@@ -50,15 +50,25 @@ interface ChatPanelProps {
   onTriggerAnalysis?: () => boolean;
 }
 
-function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearchResult[] }) {
+function ArxivHitsBlock({
+  query,
+  results,
+}: {
+  query: string;
+  results: ArxivSearchResult[];
+}) {
   return (
     <div className="mt-3 rounded-md border border-border bg-muted/15 p-3 space-y-2">
       <p className="text-xs font-medium text-muted-foreground">
-        arXiv ({results.length} results) · <span className="text-foreground/80">{query}</span>
+        arXiv ({results.length} results) ·{" "}
+        <span className="text-foreground/80">{query}</span>
       </p>
       <ul className="space-y-2 max-h-[240px] overflow-y-auto">
         {results.slice(0, 12).map((r) => (
-          <li key={r.arxivId} className="text-xs border border-border/60 rounded-md p-2 bg-background/80">
+          <li
+            key={r.arxivId}
+            className="text-xs border border-border/60 rounded-md p-2 bg-background/80"
+          >
             <a
               href={`https://arxiv.org/abs/${r.arxivId}`}
               target="_blank"
@@ -67,7 +77,9 @@ function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearc
             >
               {r.title}
             </a>
-            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{r.abstract}</p>
+            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
+              {r.abstract}
+            </p>
           </li>
         ))}
       </ul>
@@ -75,7 +87,16 @@ function ArxivHitsBlock({ query, results }: { query: string; results: ArxivSearc
   );
 }
 
-function renderAssistantBlocks(blocks: ChatAssistantBlock[], ctx: { reviewId: string; arxivId: string; paperTitle: string; paperContext: string; selectedModel: Model | null }) {
+function renderAssistantBlocks(
+  blocks: ChatAssistantBlock[],
+  ctx: {
+    reviewId: string;
+    arxivId: string;
+    paperTitle: string;
+    paperContext: string;
+    selectedModel: Model | null;
+  },
+) {
   return blocks.map((block, i) => {
     if (block.type === "learning_embed") {
       return (
@@ -89,7 +110,9 @@ function renderAssistantBlocks(blocks: ChatAssistantBlock[], ctx: { reviewId: st
         />
       );
     }
-    return <ArxivHitsBlock key={i} query={block.query} results={block.results} />;
+    return (
+      <ArxivHitsBlock key={i} query={block.query} results={block.results} />
+    );
   });
 }
 
@@ -122,9 +145,12 @@ export default function ChatPanel({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const learningAbortRef = useRef<AbortController | null>(null);
+  /** After Ask AI / external prompt: scroll messages to bottom once input layout has settled */
+  const scrollComposerIntoViewRef = useRef(false);
 
   // Use lifted model state if provided, otherwise use internal state
-  const selectedModel = externalModel !== undefined ? externalModel : internalModel;
+  const selectedModel =
+    externalModel !== undefined ? externalModel : internalModel;
   const setSelectedModel = onModelChange ?? setInternalModel;
 
   useEffect(() => {
@@ -158,10 +184,7 @@ export default function ChatPanel({
       prevReviewIdRef.current = reviewId;
       return;
     }
-    if (
-      prevAnalysisStatus.current === "running" &&
-      analysisStatus === "done"
-    ) {
+    if (prevAnalysisStatus.current === "running" && analysisStatus === "done") {
       const resultMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -189,24 +212,28 @@ export default function ChatPanel({
   }, [messages, learningProgress, analysisProgress]);
 
   useEffect(() => {
-    if (pendingSelection) {
-      setInput(
-        (prev) =>
-          (prev ? prev + "\n\n" : "") +
-          `> ${pendingSelection}\n\nExplain this passage:`,
-      );
-      onSelectionConsumed();
-      textareaRef.current?.focus();
-    }
+    if (!pendingSelection) return;
+    scrollComposerIntoViewRef.current = true;
+    setInput(
+      (prev) => (prev ? prev + "\n\n" : "") + `> ${pendingSelection}\n\n`,
+    );
+    onSelectionConsumed();
+    const safety = window.setTimeout(() => {
+      scrollComposerIntoViewRef.current = false;
+    }, 600);
+    return () => clearTimeout(safety);
   }, [pendingSelection, onSelectionConsumed]);
 
   // Handle external prompt from context zone (prerequisites "Ask about this", graph "Discuss")
   useEffect(() => {
-    if (externalPrompt) {
-      setInput(externalPrompt);
-      onExternalPromptConsumed?.();
-      requestAnimationFrame(() => textareaRef.current?.focus());
-    }
+    if (!externalPrompt) return;
+    scrollComposerIntoViewRef.current = true;
+    setInput(externalPrompt);
+    onExternalPromptConsumed?.();
+    const safety = window.setTimeout(() => {
+      scrollComposerIntoViewRef.current = false;
+    }, 600);
+    return () => clearTimeout(safety);
   }, [externalPrompt, onExternalPromptConsumed]);
 
   useEffect(() => {
@@ -214,151 +241,168 @@ export default function ChatPanel({
     if (!textarea) return;
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+
+    if (!scrollComposerIntoViewRef.current) return;
+    scrollComposerIntoViewRef.current = false;
+
+    const scrollMessagesToBottom = () => {
+      const el = scrollAreaRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    };
+    scrollMessagesToBottom();
+    requestAnimationFrame(() => {
+      scrollMessagesToBottom();
+      textareaRef.current?.focus({ preventScroll: true });
+      requestAnimationFrame(scrollMessagesToBottom);
+    });
+    setTimeout(scrollMessagesToBottom, 0);
   }, [input]);
 
   const submitChat = useCallback(
     async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || isStreaming || learningProgress || !selectedModel) return;
+      const trimmed = text.trim();
+      if (!trimmed || isStreaming || learningProgress || !selectedModel) return;
 
-    const apiKey = getApiKey(selectedModel.provider);
-    if (!apiKey) {
-      return;
-    }
-
-    setError(null);
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      timestamp: new Date().toISOString(),
-    };
-    const assistantMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "",
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setIsStreaming(true);
-
-    const historyForApi = [...messages, userMsg];
-    const learningCtx = buildLearningContextSummary(reviewId);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: historyForApi.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          model: selectedModel.modelId,
-          provider: selectedModel.provider,
-          apiKey,
-          paperContext,
-          ...(learningCtx ? { learningContext: learningCtx } : {}),
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || `Request failed: ${response.status}`);
+      const apiKey = getApiKey(selectedModel.provider);
+      if (!apiKey) {
+        return;
       }
 
-      if (!response.body) {
-        throw new Error("No response body received");
-      }
+      setError(null);
+      const userMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: text,
+        timestamp: new Date().toISOString(),
+      };
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+        timestamp: new Date().toISOString(),
+      };
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let streamed = "";
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setIsStreaming(true);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        streamed += chunk;
-        const snapshot = streamed;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: snapshot } : m,
-          ),
-        );
-      }
+      const historyForApi = [...messages, userMsg];
+      const learningCtx = buildLearningContextSummary(reviewId);
 
-      const { text: withoutSentinel, shouldRunLearningMap } =
-        stripLearningMapSentinel(streamed);
-      if (withoutSentinel !== streamed) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: withoutSentinel } : m,
-          ),
-        );
-      }
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: historyForApi.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            model: selectedModel.modelId,
+            provider: selectedModel.provider,
+            apiKey,
+            paperContext,
+            ...(learningCtx ? { learningContext: learningCtx } : {}),
+          }),
+        });
 
-      // When sentinel fires, run analysis and update context zone (no inline embed for new messages)
-      if (
-        shouldRunLearningMap &&
-        paperContext.trim() &&
-        selectedModel &&
-        hasKeyForModel
-      ) {
-        const apiKeyRun = getApiKey(selectedModel.provider);
-        if (apiKeyRun) {
-          learningAbortRef.current?.abort();
-          const controller = new AbortController();
-          learningAbortRef.current = controller;
-          setLearningProgress("Building learning map…");
-          try {
-            await runPaperExploreAnalysis({
-              reviewId,
-              arxivId,
-              paperTitle,
-              paperContext,
-              model: selectedModel,
-              apiKey: apiKeyRun,
-              signal: controller.signal,
-              onProgress: setLearningProgress,
-            });
-            const followup: ChatMessage = {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: "",
-              timestamp: new Date().toISOString(),
-              blocks: [{ type: "learning_embed", reviewId }],
-            };
-            setMessages((prev) => [...prev, followup]);
-          } catch (runErr) {
-            if (runErr instanceof Error && runErr.name === "AbortError") {
-              /* ignore */
-            } else {
-              const msg =
-                runErr instanceof Error
-                  ? runErr.message
-                  : "Could not build learning map.";
-              setError(msg);
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Request failed: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error("No response body received");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let streamed = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          streamed += chunk;
+          const snapshot = streamed;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsg.id ? { ...m, content: snapshot } : m,
+            ),
+          );
+        }
+
+        const { text: withoutSentinel, shouldRunLearningMap } =
+          stripLearningMapSentinel(streamed);
+        if (withoutSentinel !== streamed) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsg.id ? { ...m, content: withoutSentinel } : m,
+            ),
+          );
+        }
+
+        // When sentinel fires, run analysis and update context zone (no inline embed for new messages)
+        if (
+          shouldRunLearningMap &&
+          paperContext.trim() &&
+          selectedModel &&
+          hasKeyForModel
+        ) {
+          const apiKeyRun = getApiKey(selectedModel.provider);
+          if (apiKeyRun) {
+            learningAbortRef.current?.abort();
+            const controller = new AbortController();
+            learningAbortRef.current = controller;
+            setLearningProgress("Building learning map…");
+            try {
+              await runPaperExploreAnalysis({
+                reviewId,
+                arxivId,
+                paperTitle,
+                paperContext,
+                model: selectedModel,
+                apiKey: apiKeyRun,
+                signal: controller.signal,
+                onProgress: setLearningProgress,
+              });
+              const followup: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: "",
+                timestamp: new Date().toISOString(),
+                blocks: [{ type: "learning_embed", reviewId }],
+              };
+              setMessages((prev) => [...prev, followup]);
+            } catch (runErr) {
+              if (runErr instanceof Error && runErr.name === "AbortError") {
+                /* ignore */
+              } else {
+                const msg =
+                  runErr instanceof Error
+                    ? runErr.message
+                    : "Could not build learning map.";
+                setError(msg);
+              }
+            } finally {
+              setLearningProgress(null);
             }
-          } finally {
-            setLearningProgress(null);
           }
         }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Something went wrong";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsg.id
+              ? { ...m, content: `Error: ${message}` }
+              : m,
+          ),
+        );
+        setError(message);
+      } finally {
+        setIsStreaming(false);
       }
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Something went wrong";
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
-        ),
-      );
-      setError(message);
-    } finally {
-      setIsStreaming(false);
-    }
-  },
+    },
     [
       isStreaming,
       learningProgress,
@@ -530,13 +574,26 @@ export default function ChatPanel({
       {analysisStatus === "idle" && (
         <div className="flex items-center gap-2 px-3 py-3 shrink-0 flex-wrap border-t border-border/50">
           {[
-            { label: "Prerequisites", message: "What concepts and background should I understand before reading this paper?" },
-            { label: "Related papers", message: "Find related papers and map the research landscape around this work." },
+            {
+              label: "Prerequisites",
+              message:
+                "What concepts and background should I understand before reading this paper?",
+            },
+            {
+              label: "Related papers",
+              message:
+                "Find related papers and map the research landscape around this work.",
+            },
           ].map((chip) => (
             <button
               key={chip.label}
               type="button"
-              disabled={!selectedModel || !hasKeyForModel || isStreaming || !!learningProgress}
+              disabled={
+                !selectedModel ||
+                !hasKeyForModel ||
+                isStreaming ||
+                !!learningProgress
+              }
               onClick={() => void submitChat(chip.message)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors",
@@ -586,7 +643,10 @@ export default function ChatPanel({
             className="size-8 m-1 text-muted-foreground hover:text-primary"
             onClick={sendMessage}
             disabled={
-              !selectedModel || !input.trim() || isStreaming || !!learningProgress
+              !selectedModel ||
+              !input.trim() ||
+              isStreaming ||
+              !!learningProgress
             }
             aria-label={
               !selectedModel
@@ -635,9 +695,18 @@ function AnalysisProgressCard({ progress }: { progress: string | null }) {
             </p>
             <div className="flex items-center gap-2">
               <span className="inline-flex gap-[3px]">
-                <span className="size-[5px] rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms", animationDuration: "1.2s" }} />
-                <span className="size-[5px] rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms", animationDuration: "1.2s" }} />
-                <span className="size-[5px] rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms", animationDuration: "1.2s" }} />
+                <span
+                  className="size-[5px] rounded-full bg-primary/60 animate-bounce"
+                  style={{ animationDelay: "0ms", animationDuration: "1.2s" }}
+                />
+                <span
+                  className="size-[5px] rounded-full bg-primary/60 animate-bounce"
+                  style={{ animationDelay: "150ms", animationDuration: "1.2s" }}
+                />
+                <span
+                  className="size-[5px] rounded-full bg-primary/60 animate-bounce"
+                  style={{ animationDelay: "300ms", animationDuration: "1.2s" }}
+                />
               </span>
               <p className="text-xs text-muted-foreground truncate">
                 {progress ?? "Starting analysis\u2026"}
@@ -649,4 +718,3 @@ function AnalysisProgressCard({ progress }: { progress: string | null }) {
     </div>
   );
 }
-

@@ -57,11 +57,17 @@ export function getReview(id: string): PaperReview | undefined {
   return getReviews().find((r) => r.id === id);
 }
 
+/** Canonical id for matching (lowercase, no version suffix). */
+export function normalizeArxivId(raw: string): string {
+  return raw.trim().toLowerCase().replace(/v\d+$/i, "");
+}
+
 export function createReview(arxivId: string, title: string): PaperReview {
+  const canonical = normalizeArxivId(arxivId);
   const review: PaperReview = {
     id: crypto.randomUUID(),
     title,
-    arxivId,
+    arxivId: canonical,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -73,9 +79,11 @@ export function createReview(arxivId: string, title: string): PaperReview {
 }
 
 export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
-  return getReviews().find((r) => r.arxivId === arxivId);
+  const key = normalizeArxivId(arxivId);
+  return getReviews().find((r) => normalizeArxivId(r.arxivId) === key);
 }
 
+/** Opens an existing review for this arXiv paper when present; otherwise creates one. */
 export function createOrGetReview(arxivId: string, title: string): PaperReview {
   const existing = getReviewByArxivId(arxivId);
   if (existing) return existing;

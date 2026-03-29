@@ -80,7 +80,7 @@ export default function RightPanel({
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
       {/* Tab bar */}
-      <div className="flex items-center px-4 h-11 border-b border-border shrink-0 gap-4">
+      <div className="flex h-11 shrink-0 items-stretch gap-4 border-b border-border bg-background px-4">
         <TabButton active={activeTab === "assistant"} onClick={() => onTabChange("assistant")}>
           Assistant
         </TabButton>
@@ -95,7 +95,7 @@ export default function RightPanel({
         <TabButton active={activeTab === "explore"} onClick={() => onTabChange("explore")}>
           Explore
         </TabButton>
-        <div className="ml-auto">
+        <div className="ml-auto flex min-w-0 items-center">
           <ModelSelector selected={selectedModel} onSelect={onModelChange} />
         </div>
       </div>
@@ -172,7 +172,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative text-sm font-medium pb-px transition-colors flex items-center",
+        "relative flex h-full items-center text-sm font-medium transition-colors",
         active
           ? "text-foreground"
           : "text-muted-foreground hover:text-foreground/70",
@@ -180,7 +180,10 @@ function TabButton({
     >
       {children}
       {active && (
-        <span className="absolute -bottom-[9px] left-0 right-0 h-[2px] bg-foreground rounded-full" />
+        <span
+          className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-foreground"
+          aria-hidden
+        />
       )}
     </button>
   );

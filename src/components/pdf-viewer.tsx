@@ -196,7 +196,7 @@ export default function PdfViewer({
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 h-12 border-b border-border/60 bg-background/40 backdrop-blur-sm shrink-0">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-background/40 px-4 backdrop-blur-sm">
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"

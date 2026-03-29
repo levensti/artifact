@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  Plus,
+  FilePlus,
   FileText,
   Settings,
   PanelLeftClose,
@@ -16,14 +16,20 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import {
-  getGlobalGraphData,
-  EXPLORE_UPDATED_EVENT,
-} from "@/lib/explore";
+import { getGlobalGraphData, EXPLORE_UPDATED_EVENT } from "@/lib/explore";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NewReviewDialog from "./new-review-dialog";
+
+/** YYYY-MM-DD in the user's local timezone (do not use UTC from toISOString). */
+function localDateKeyFromIso(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 function subscribeReviews(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -63,16 +69,14 @@ export default function Sidebar({
   const router = useRouter();
   const pathname = usePathname();
 
-  // Track whether the knowledge graph has any entries
-  const [hasGraphData, setHasGraphData] = useState(() => {
-    const g = getGlobalGraphData();
-    return g !== null && g.nodes.length > 0;
-  });
+  // Client-only: avoid SSR/client mismatch (local graph exists only in the browser).
+  const [hasGraphData, setHasGraphData] = useState(false);
   useEffect(() => {
     const check = () => {
       const g = getGlobalGraphData();
       setHasGraphData(g !== null && g.nodes.length > 0);
     };
+    check();
     window.addEventListener(EXPLORE_UPDATED_EVENT, check);
     return () => window.removeEventListener(EXPLORE_UPDATED_EVENT, check);
   }, []);
@@ -85,7 +89,7 @@ export default function Sidebar({
   const grouped = useMemo(() => {
     const byDate = new Map<string, PaperReview[]>();
     for (const r of reviews) {
-      const dateKey = new Date(r.createdAt).toISOString().split("T")[0];
+      const dateKey = localDateKeyFromIso(r.createdAt);
       const list = byDate.get(dateKey) ?? [];
       list.push(r);
       byDate.set(dateKey, list);
@@ -95,8 +99,13 @@ export default function Sidebar({
     const sortedKeys = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
 
     return sortedKeys.map((dateKey) => {
-      const d = new Date(dateKey + "T12:00:00"); // noon to avoid timezone shift
-      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const [yy, mm, dd] = dateKey.split("-").map(Number);
+      const d = new Date(yy, mm - 1, dd);
+      const label = d.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
       return { label, items: byDate.get(dateKey)! };
     });
   }, [reviews]);
@@ -106,47 +115,60 @@ export default function Sidebar({
       <aside
         className={cn(
           "flex flex-col h-full bg-sidebar border-r border-sidebar-border transition-sidebar shrink-0 overflow-hidden",
-          collapsed ? "w-0 border-r-0" : "w-[260px]",
+          collapsed ? "w-0 border-r-0" : "w-[272px]",
         )}
       >
-        <div className="flex items-center justify-between px-3 h-12 shrink-0 border-b border-sidebar-border">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="size-7 rounded-lg bg-primary/12 ring-1 ring-primary/10 flex items-center justify-center shrink-0">
-              <ScrollText size={14} className="text-primary" strokeWidth={1.75} />
+        <div className="shrink-0 space-y-1 border-b border-sidebar-border px-2.5 pb-2.5 pt-2.5">
+          <div className="flex min-h-10 items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/70 text-muted-foreground">
+                <ScrollText
+                  className="size-[18px] text-foreground/80"
+                  strokeWidth={1.75}
+                />
+              </div>
+              <span className="text-lg font-semibold tracking-tight leading-none text-foreground">
+                Artifact
+              </span>
             </div>
-            <span className="text-sm font-semibold tracking-tight text-foreground truncate">
-              Artifact
-            </span>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2.5 text-xs gap-1"
-              onClick={() => setShowNewReview(true)}
-              title="New paper review"
-            >
-              <Plus size={12} />
-              New
-            </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="size-7 text-muted-foreground"
+              className="size-8 shrink-0 text-muted-foreground hover:bg-sidebar-accent"
               onClick={onToggle}
               title="Collapse sidebar"
+              aria-label="Collapse sidebar"
             >
-              <PanelLeftClose size={14} />
+              <PanelLeftClose className="size-4" strokeWidth={1.75} />
             </Button>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowNewReview(true)}
+            title="Start a new paper review"
+            className="flex w-full min-h-10 items-center gap-2 rounded-lg px-0 py-0 text-left text-sm text-sidebar-foreground transition-colors duration-150 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              <FilePlus
+                className="size-4 opacity-50"
+                strokeWidth={1.75}
+              />
+            </span>
+            New paper review
+          </button>
         </div>
 
-        <ScrollArea className="flex-1 px-2 py-2">
+        <ScrollArea className="flex-1 px-2.5 py-2">
           {hasGraphData && (
             <div className="mb-4 space-y-0.5">
               <NavItem
                 label="Knowledge Graph"
-                icon={<Network size={13} className="shrink-0 opacity-50" />}
+                icon={
+                  <Network
+                    className="size-4 opacity-50"
+                    strokeWidth={1.75}
+                  />
+                }
                 active={pathname === "/discover"}
                 onClick={() => router.push("/discover")}
               />
@@ -154,7 +176,7 @@ export default function Sidebar({
           )}
 
           {grouped.length === 0 && (
-            <div className="px-3 py-10 text-center">
+            <div className="py-10 text-center">
               <FileText
                 size={18}
                 className="mx-auto text-muted-foreground/40 mb-2"
@@ -166,8 +188,8 @@ export default function Sidebar({
             </div>
           )}
           {grouped.map((group) => (
-            <div key={group.label} className="mb-4">
-              <p className="px-2 pb-2 text-xs font-medium text-muted-foreground/75 tracking-wide">
+            <div key={group.label} className="mb-4 last:mb-0">
+              <p className="pb-1.5 text-xs font-medium text-muted-foreground">
                 {group.label}
               </p>
               <div className="space-y-0.5">
@@ -178,22 +200,26 @@ export default function Sidebar({
                       key={review.id}
                       role="button"
                       tabIndex={0}
+                      title={review.title}
                       onClick={() => router.push(`/review/${review.id}`)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ")
                           router.push(`/review/${review.id}`);
                       }}
                       className={cn(
-                        "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors duration-150 cursor-pointer",
+                        "flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-colors duration-150",
                         isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                       )}
                     >
-                      <FileText size={13} className="shrink-0 opacity-40" />
-                      <span className="truncate flex-1 text-sm">
-                        {review.title}
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                        <FileText
+                          className="size-4 opacity-40"
+                          strokeWidth={1.75}
+                        />
                       </span>
+                      <span className="min-w-0 flex-1 truncate">{review.title}</span>
                     </div>
                   );
                 })}
@@ -202,13 +228,15 @@ export default function Sidebar({
           ))}
         </ScrollArea>
 
-        <div className="px-3 py-2 border-t border-sidebar-border shrink-0">
+        <div className="border-t border-sidebar-border px-2.5 py-2 shrink-0">
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors duration-150 text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            className="flex w-full min-h-10 items-center gap-2 rounded-lg px-0 py-0 text-sm transition-colors duration-150 text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
           >
-            <Settings size={13} />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              <Settings className="size-4" strokeWidth={1.75} />
+            </span>
             API keys
           </button>
         </div>
@@ -218,7 +246,7 @@ export default function Sidebar({
         <Button
           variant="outline"
           size="icon"
-          className="fixed top-2 left-2 z-40 size-8 shadow-sm"
+          className="fixed left-2 top-2 z-40 size-8 border-border bg-background"
           onClick={onToggle}
           title="Expand sidebar"
         >
@@ -251,13 +279,15 @@ function NavItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-sm transition-colors duration-150",
+        "flex w-full min-h-10 items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-colors duration-150",
         active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
           : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
       )}
     >
-      {icon}
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center [&_svg]:shrink-0">
+        {icon}
+      </span>
       <span className="truncate">{label}</span>
     </button>
   );
