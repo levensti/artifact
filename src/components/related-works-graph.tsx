@@ -566,7 +566,7 @@ function GraphLegend({ className }: { className?: string }) {
 
 interface RelatedWorksGraphProps {
   graph: GraphData;
-  /** When true, renders full-height immersive layout for the discover page */
+  /** When true, renders a larger graph canvas (reserved for full-page layouts). */
   workspace?: boolean;
   onDiscussInChat?: (title: string) => void;
   /** arXiv IDs of papers the user has reviewed — shown as anchor nodes */

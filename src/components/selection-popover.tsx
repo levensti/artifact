@@ -40,7 +40,7 @@ export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionP
           className="gap-1.5 text-xs h-7 rounded-md px-2.5"
         >
           <StickyNote size={12} />
-          Add note
+          Add comment
         </Button>
       </div>
     </div>

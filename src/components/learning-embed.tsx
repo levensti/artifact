@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import type { Model } from "@/lib/models";
 import { getApiKey } from "@/lib/keys";
 import type { Prerequisite } from "@/lib/explore";
@@ -162,8 +161,6 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
     );
   }
 
-  const hasMap = graphData != null;
-
   return (
     <div className="space-y-4 pt-1">
       {prereqData && prereqData.prerequisites.length > 0 && (
@@ -185,18 +182,7 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
 
       {graphData && (
         <section className="space-y-2">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h4 className="text-sm font-semibold text-foreground">Related works</h4>
-            {hasMap && (
-              <Link
-                href="/discover"
-                className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
-              >
-                Knowledge Graph
-                <ExternalLink className="size-3 opacity-70" />
-              </Link>
-            )}
-          </div>
+          <h4 className="text-sm font-semibold text-foreground">Related works</h4>
           <RelatedWorksGraph graph={graphData} />
         </section>
       )}

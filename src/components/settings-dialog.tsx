@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Check, ExternalLink, Key, Shield } from "lucide-react";
+import { Eye, EyeOff, Check, ExternalLink, Key } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -105,7 +105,9 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
             disabled={!value.trim()}
             variant={saved ? "outline" : "default"}
             size="sm"
-            className={saved ? "text-primary border-primary/35 gap-1 h-9" : "h-9 gap-1"}
+            className={
+              saved ? "text-primary border-primary/35 gap-1 h-9" : "h-9 gap-1"
+            }
           >
             {saved && <Check size={13} />}
             {saved ? "Saved" : "Save"}
@@ -116,7 +118,7 @@ function ProviderRow({ provider, placeholder, docsUrl }: ProviderRowProps) {
       {hasKey && (
         <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border/60">
           <span className="text-[11px] text-muted-foreground/70">
-            Stored in this browser only
+            Only on this device
           </span>
           <button
             type="button"
@@ -184,10 +186,9 @@ export default function SettingsDialog({
               <Key size={16} className="text-primary" />
             </div>
             <div>
-              <DialogTitle>API keys</DialogTitle>
+              <DialogTitle>Manage API keys</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
-                Keys stay in your browser. Requests use this app&apos;s server
-                only to reach Anthropic, OpenAI, xAI, or OpenRouter.
+                Your API keys only live on your device.
               </DialogDescription>
             </div>
           </div>
@@ -195,14 +196,6 @@ export default function SettingsDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="space-y-3 px-4 py-3">
-            <div className="flex items-start gap-2.5 rounded-lg border border-border/80 bg-muted/30 px-3 py-2.5">
-              <Shield size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Values are stored in localStorage on this device. Self-host the
-                app if you need full control over where traffic goes.
-              </p>
-            </div>
-
             <ProviderRow
               provider="anthropic"
               placeholder="sk-ant-api03-..."

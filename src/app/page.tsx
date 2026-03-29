@@ -19,14 +19,18 @@ export default function Home() {
             <BookOpen size={28} className="text-primary" strokeWidth={1.5} />
           </div>
           <div className="space-y-3">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              Artifact
-            </h1>
+            <div className="space-y-1">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                Artifact
+              </h1>
+              <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                Discover the frontier
+              </p>
+            </div>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem] mx-auto">
-              Open an arXiv PDF, ask questions with the full text in context,
-              and keep a per-paper thread in this browser. Use your own API
-              keys; nothing is stored on our servers except in transit to the
-              model provider.
+              Read arXiv PDFs with the full text in context, keep a thread per
+              paper, and map how it connects to the literature. Your data stays
+              in a local database; only chat requests go to your model provider.
             </p>
           </div>
           <Button
@@ -34,15 +38,15 @@ export default function Home() {
             className="gap-2 h-10 px-5 rounded-lg"
           >
             <Plus size={16} strokeWidth={2} />
-            New paper review
+            New review
             <ArrowRight size={15} strokeWidth={2} />
           </Button>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-muted-foreground/70 text-xs">
-            <span>Bring your own keys</span>
+            <span>Manage API keys</span>
             <span className="size-0.5 rounded-full bg-muted-foreground/35" />
             <span>Per-paper threads</span>
             <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-            <span>Local storage</span>
+            <span>SQLite on device</span>
           </div>
         </div>
       </div>

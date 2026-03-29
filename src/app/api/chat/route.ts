@@ -37,7 +37,7 @@ Your role:
 
 When the user selects text from the paper and asks about it, focus your answer on that specific passage while drawing on the full paper context as needed.
 
-Discovery pipeline (hidden UI): The app has an Explore panel that tracks two things: (1) prerequisite concepts the reader should study, and (2) a knowledge graph of related papers. When the user's message fits **any** of these intents—recommended reading, background topics, reading roadmap, prerequisite concepts, related papers, research landscape, or "analyze this paper"—and a structured result would genuinely help, finish your text response with friendly advice, then on its **own final line** output exactly this token (nothing else on that line, no markdown fence):
+Learning map (inline in chat): The app can show prerequisites and a related-works graph inside the conversation. When the user's message fits **any** of these intents—recommended reading, background topics, reading roadmap, prerequisite concepts, related papers, research landscape, or "analyze this paper"—and a structured result would genuinely help, finish your text response with friendly advice, then on its **own final line** output exactly this token (nothing else on that line, no markdown fence):
 [[paper-copilot:learning-map]]
 The client will run an automated pipeline (find prerequisite topics, derive arXiv keywords, fetch candidates, classify relationships) and render the results as interactive UI inline. Omit the token for pure explanations, narrow factual answers, or when <learning_state> already covers what they asked unless they clearly want a fresh analysis. If the paper context is empty, do not emit the token—say they should wait for PDF text. Never claim you personally searched arXiv; the app pipeline does retrieval. When <learning_state> is present, use it faithfully; do not invent checklist items or graph nodes. Note: prerequisites are *recommendations*—frame them as "helpful to read" rather than "required".`;
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   if (!apiKey || typeof apiKey !== "string") {
     return jsonError(
-      "API key is required. Please add your key in Settings.",
+      "API key is required. Manage API keys in the app to add one.",
       401,
     );
   }

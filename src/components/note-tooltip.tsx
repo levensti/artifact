@@ -7,14 +7,15 @@ interface NoteTooltipProps {
   annotation: Annotation;
   position: { x: number; y: number };
   onClose: () => void;
-  onOpenInNotes: () => void;
+  /** Focus the comment thread in the sidebar */
+  onFocusThread: () => void;
 }
 
 export default function NoteTooltip({
   annotation,
   position,
   onClose,
-  onOpenInNotes,
+  onFocusThread,
 }: NoteTooltipProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -61,10 +62,10 @@ export default function NoteTooltip({
         <div className="border-t border-border px-3 py-1.5">
           <button
             type="button"
-            onClick={onOpenInNotes}
+            onClick={onFocusThread}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            {annotation.note ? "Edit in Notes" : "Add note"} &rarr;
+            {annotation.note ? "Edit comment" : "Add comment"} &rarr;
           </button>
         </div>
       </div>

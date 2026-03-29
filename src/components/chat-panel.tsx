@@ -4,10 +4,11 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import { Loader2, Send, Sparkles } from "lucide-react";
+import { Loader2, MessageSquareQuote, Send, Sparkles } from "lucide-react";
 import { PROVIDER_META, type Model } from "@/lib/models";
 import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 import {
@@ -21,6 +22,11 @@ import { stripLearningMapSentinel } from "@/lib/learning-sentinel";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 import { type ArxivSearchResult } from "@/lib/explore";
 import type { AnalysisStatus } from "@/hooks/use-auto-analysis";
+import type { Annotation, AnnotationMessage } from "@/lib/annotations";
+import {
+  getAnnotation,
+  updateAnnotation,
+} from "@/lib/annotations";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import ModelSelector from "./model-selector";
@@ -33,8 +39,12 @@ interface ChatPanelProps {
   arxivId: string;
   paperTitle: string;
   paperContext: string;
-  pendingSelection: string | null;
-  onSelectionConsumed: () => void;
+  /** Live annotation list (for anchored AI threads) */
+  annotations: Annotation[];
+  /** When set, chat shows this selection’s Q&A thread instead of global paper chat */
+  chatThreadAnnotationId: string | null;
+  onChatThreadChange: (id: string | null) => void;
+  onAnnotationsPersist: () => void;
   hideHeader?: boolean;
   /** Pre-filled prompt from cross-feature interactions (prerequisites, graph) */
   externalPrompt?: string | null;
@@ -121,8 +131,10 @@ export default function ChatPanel({
   arxivId,
   paperTitle,
   paperContext,
-  pendingSelection,
-  onSelectionConsumed,
+  annotations,
+  chatThreadAnnotationId,
+  onChatThreadChange,
+  onAnnotationsPersist,
   hideHeader,
   externalPrompt,
   onExternalPromptConsumed,
@@ -170,6 +182,23 @@ export default function ChatPanel({
   }, [messages, isStreaming, reviewId]);
 
   void keysVersion;
+
+  const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(
+    null,
+  );
+
+  const activeThreadAnn = useMemo(() => {
+    if (!chatThreadAnnotationId) return undefined;
+    return annotations.find(
+      (a) => a.id === chatThreadAnnotationId && a.kind === "ask_ai",
+    );
+  }, [annotations, chatThreadAnnotationId]);
+
+  const displayThread = useMemo(
+    () => threadStream ?? activeThreadAnn?.thread ?? [],
+    [threadStream, activeThreadAnn?.thread],
+  );
+
   const hasSavedKeys = hasAnySavedApiKey();
   const hasKeyForModel =
     selectedModel != null && !!getApiKey(selectedModel.provider);
@@ -209,20 +238,17 @@ export default function ChatPanel({
     if (dist <= thresholdPx) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, learningProgress, analysisProgress]);
+  }, [messages, learningProgress, analysisProgress, displayThread]);
 
   useEffect(() => {
-    if (!pendingSelection) return;
-    scrollComposerIntoViewRef.current = true;
-    setInput(
-      (prev) => (prev ? prev + "\n\n" : "") + `> ${pendingSelection}\n\n`,
-    );
-    onSelectionConsumed();
-    const safety = window.setTimeout(() => {
-      scrollComposerIntoViewRef.current = false;
-    }, 600);
-    return () => clearTimeout(safety);
-  }, [pendingSelection, onSelectionConsumed]);
+    if (chatThreadAnnotationId && !activeThreadAnn) {
+      onChatThreadChange(null);
+    }
+  }, [chatThreadAnnotationId, activeThreadAnn, onChatThreadChange]);
+
+  useEffect(() => {
+    setThreadStream(null);
+  }, [chatThreadAnnotationId]);
 
   // Handle external prompt from context zone (prerequisites "Ask about this", graph "Discuss")
   useEffect(() => {
@@ -416,12 +442,190 @@ export default function ChatPanel({
     ],
   );
 
+  const submitThreadChat = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (
+        !trimmed ||
+        isStreaming ||
+        learningProgress ||
+        !selectedModel ||
+        !chatThreadAnnotationId
+      ) {
+        return;
+      }
+
+      const apiKey = getApiKey(selectedModel.provider);
+      if (!apiKey) return;
+
+      const ann = getAnnotation(reviewId, chatThreadAnnotationId);
+      if (!ann || ann.kind !== "ask_ai") return;
+
+      setError(null);
+      const userMsg: AnnotationMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: trimmed,
+        timestamp: new Date().toISOString(),
+      };
+      const assistantMsg: AnnotationMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+        timestamp: new Date().toISOString(),
+      };
+
+      let thread: AnnotationMessage[] = [...ann.thread, userMsg, assistantMsg];
+      setThreadStream(thread);
+      updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+      onAnnotationsPersist();
+
+      setIsStreaming(true);
+
+      const historyForApi = [...ann.thread, userMsg].map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const learningCtx = buildLearningContextSummary(reviewId);
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: historyForApi,
+            model: selectedModel.modelId,
+            provider: selectedModel.provider,
+            apiKey,
+            paperContext,
+            ...(learningCtx ? { learningContext: learningCtx } : {}),
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Request failed: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error("No response body received");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let streamed = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          streamed += chunk;
+          thread = thread.map((m) =>
+            m.id === assistantMsg.id ? { ...m, content: streamed } : m,
+          );
+          setThreadStream(thread);
+        }
+
+        const { text: withoutSentinel, shouldRunLearningMap } =
+          stripLearningMapSentinel(streamed);
+        if (withoutSentinel !== streamed) {
+          thread = thread.map((m) =>
+            m.id === assistantMsg.id ? { ...m, content: withoutSentinel } : m,
+          );
+          setThreadStream(thread);
+        }
+
+        updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+        onAnnotationsPersist();
+
+        if (
+          shouldRunLearningMap &&
+          paperContext.trim() &&
+          selectedModel &&
+          hasKeyForModel
+        ) {
+          const apiKeyRun = getApiKey(selectedModel.provider);
+          if (apiKeyRun) {
+            learningAbortRef.current?.abort();
+            const controller = new AbortController();
+            learningAbortRef.current = controller;
+            setLearningProgress("Building learning map…");
+            try {
+              await runPaperExploreAnalysis({
+                reviewId,
+                arxivId,
+                paperTitle,
+                paperContext,
+                model: selectedModel,
+                apiKey: apiKeyRun,
+                signal: controller.signal,
+                onProgress: setLearningProgress,
+              });
+              const followup: AnnotationMessage = {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: "",
+                timestamp: new Date().toISOString(),
+                blocks: [{ type: "learning_embed", reviewId }],
+              };
+              thread = [...thread, followup];
+              updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+              onAnnotationsPersist();
+              setThreadStream(thread);
+            } catch (runErr) {
+              if (runErr instanceof Error && runErr.name === "AbortError") {
+                /* ignore */
+              } else {
+                const msg =
+                  runErr instanceof Error
+                    ? runErr.message
+                    : "Could not build learning map.";
+                setError(msg);
+              }
+            } finally {
+              setLearningProgress(null);
+            }
+          }
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Something went wrong";
+        thread = thread.map((m) =>
+          m.id === assistantMsg.id ? { ...m, content: `Error: ${message}` } : m,
+        );
+        updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
+        onAnnotationsPersist();
+        setThreadStream(thread);
+        setError(message);
+      } finally {
+        setIsStreaming(false);
+        setThreadStream(null);
+      }
+    },
+    [
+      isStreaming,
+      learningProgress,
+      selectedModel,
+      chatThreadAnnotationId,
+      reviewId,
+      arxivId,
+      paperTitle,
+      paperContext,
+      hasKeyForModel,
+      onAnnotationsPersist,
+    ],
+  );
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
     setInput("");
-    await submitChat(text);
-  }, [input, submitChat]);
+    if (chatThreadAnnotationId) {
+      await submitThreadChat(text);
+    } else {
+      await submitChat(text);
+    }
+  }, [input, submitChat, submitThreadChat, chatThreadAnnotationId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -459,80 +663,189 @@ export default function ChatPanel({
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
       >
         <div className="px-4 py-5 space-y-5">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full min-h-[120px] text-center px-4">
-              <p className="text-sm text-muted-foreground">
-                Ask anything about this paper.
-              </p>
-            </div>
-          )}
+          {chatThreadAnnotationId && activeThreadAnn ? (
+            <>
+              <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Selection thread
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={() => onChatThreadChange(null)}
+                >
+                  Paper chat
+                </Button>
+              </div>
 
-          {messages.map((msg) => {
-            const hasBlocks = msg.blocks && msg.blocks.length > 0;
-            const blockOnly = hasBlocks && !msg.content;
+              <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.06] px-3 py-2.5">
+                <div className="flex gap-2">
+                  <MessageSquareQuote
+                    className="mt-0.5 size-4 shrink-0 text-sky-600/90"
+                    strokeWidth={2}
+                  />
+                  <p className="text-xs italic leading-snug text-muted-foreground">
+                    &ldquo;{activeThreadAnn.highlightText}&rdquo;
+                  </p>
+                </div>
+              </div>
 
-            return (
-              <div
-                key={msg.id}
-                className={cn(
-                  "max-w-full",
-                  msg.role === "user" ? "flex justify-end" : "",
-                )}
-              >
-                {/* Block-only messages (e.g. learning_embed) render without card wrapper */}
-                {msg.role === "assistant" && blockOnly && !isStreaming ? (
-                  <div className="max-w-full">
-                    {renderAssistantBlocks(msg.blocks!, blockCtx)}
-                  </div>
-                ) : (
+              {displayThread.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  Ask a question about this passage below. Replies stay in this
+                  thread so you can revisit them without scanning the full chat.
+                </p>
+              )}
+
+              {displayThread.map((msg) => {
+                const hasBlocks = msg.blocks && msg.blocks.length > 0;
+                const blockOnly = hasBlocks && !msg.content;
+
+                return (
                   <div
+                    key={msg.id}
                     className={cn(
-                      "rounded-md px-3 py-2.5 text-sm leading-relaxed",
-                      msg.role === "user"
-                        ? "bg-secondary text-foreground max-w-[88%] border border-border border-l-2 border-l-primary/50"
-                        : "bg-card border border-border text-card-foreground max-w-full",
+                      "max-w-full",
+                      msg.role === "user" ? "flex justify-end" : "",
                     )}
                   >
-                    {msg.role === "assistant" &&
-                    msg.content === "" &&
-                    isStreaming ? (
-                      <div className="flex items-center gap-2 py-0.5 font-sans">
-                        <Loader2
-                          className="animate-spin text-muted-foreground"
-                          size={14}
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          Generating…
-                        </span>
+                    {msg.role === "assistant" && blockOnly && !isStreaming ? (
+                      <div className="max-w-full">
+                        {renderAssistantBlocks(msg.blocks!, blockCtx)}
                       </div>
-                    ) : msg.role === "assistant" ? (
-                      <>
-                        {msg.content ? (
-                          <MarkdownMessage
-                            content={stripLearningMapSentinel(msg.content).text}
-                          />
-                        ) : null}
-                        {hasBlocks
-                          ? renderAssistantBlocks(msg.blocks!, blockCtx)
-                          : null}
-                      </>
                     ) : (
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                      <div
+                        className={cn(
+                          "rounded-md px-3 py-2.5 text-sm leading-relaxed",
+                          msg.role === "user"
+                            ? "max-w-[88%] border border-border border-l-2 border-l-sky-500/45 bg-secondary text-foreground"
+                            : "max-w-full border border-border bg-card text-card-foreground",
+                        )}
+                      >
+                        {msg.role === "assistant" &&
+                        msg.content === "" &&
+                        isStreaming ? (
+                          <div className="flex items-center gap-2 py-0.5 font-sans">
+                            <Loader2
+                              className="animate-spin text-muted-foreground"
+                              size={14}
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              Generating…
+                            </span>
+                          </div>
+                        ) : msg.role === "assistant" ? (
+                          <>
+                            {msg.content ? (
+                              <MarkdownMessage
+                                content={
+                                  stripLearningMapSentinel(msg.content).text
+                                }
+                              />
+                            ) : null}
+                            {hasBlocks
+                              ? renderAssistantBlocks(msg.blocks!, blockCtx)
+                              : null}
+                          </>
+                        ) : (
+                          <div className="whitespace-pre-wrap">
+                            {msg.content}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
 
-          {/* External analysis (e.g. Explore tab re-analyze): live progress card */}
-          {externalAnalysisRunning && (
-            <AnalysisProgressCard progress={analysisProgress ?? null} />
-          )}
+              {externalAnalysisRunning && (
+                <AnalysisProgressCard progress={analysisProgress ?? null} />
+              )}
+              {learningProgress && !externalAnalysisRunning && (
+                <AnalysisProgressCard progress={learningProgress} />
+              )}
+            </>
+          ) : (
+            <>
+              {messages.length === 0 && (
+                <div className="flex min-h-[120px] h-full flex-col items-center justify-center px-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Ask anything about this paper.
+                  </p>
+                </div>
+              )}
 
-          {/* Sentinel-triggered analysis: live progress card */}
-          {learningProgress && !externalAnalysisRunning && (
-            <AnalysisProgressCard progress={learningProgress} />
+              {messages.map((msg) => {
+                const hasBlocks = msg.blocks && msg.blocks.length > 0;
+                const blockOnly = hasBlocks && !msg.content;
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "max-w-full",
+                      msg.role === "user" ? "flex justify-end" : "",
+                    )}
+                  >
+                    {msg.role === "assistant" && blockOnly && !isStreaming ? (
+                      <div className="max-w-full">
+                        {renderAssistantBlocks(msg.blocks!, blockCtx)}
+                      </div>
+                    ) : (
+                      <div
+                        className={cn(
+                          "rounded-md px-3 py-2.5 text-sm leading-relaxed",
+                          msg.role === "user"
+                            ? "max-w-[88%] border border-border border-l-2 border-l-primary/50 bg-secondary text-foreground"
+                            : "max-w-full border border-border bg-card text-card-foreground",
+                        )}
+                      >
+                        {msg.role === "assistant" &&
+                        msg.content === "" &&
+                        isStreaming ? (
+                          <div className="flex items-center gap-2 py-0.5 font-sans">
+                            <Loader2
+                              className="animate-spin text-muted-foreground"
+                              size={14}
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              Generating…
+                            </span>
+                          </div>
+                        ) : msg.role === "assistant" ? (
+                          <>
+                            {msg.content ? (
+                              <MarkdownMessage
+                                content={
+                                  stripLearningMapSentinel(msg.content).text
+                                }
+                              />
+                            ) : null}
+                            {hasBlocks
+                              ? renderAssistantBlocks(msg.blocks!, blockCtx)
+                              : null}
+                          </>
+                        ) : (
+                          <div className="whitespace-pre-wrap">
+                            {msg.content}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {externalAnalysisRunning && (
+                <AnalysisProgressCard progress={analysisProgress ?? null} />
+              )}
+
+              {learningProgress && !externalAnalysisRunning && (
+                <AnalysisProgressCard progress={learningProgress} />
+              )}
+            </>
           )}
         </div>
       </div>
@@ -565,13 +878,13 @@ export default function ChatPanel({
             className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={openKeysForChat}
           >
-            Open API keys
+            Manage API keys
           </Button>
         </div>
       )}
 
       {/* Suggestion chips — above input */}
-      {analysisStatus === "idle" && (
+      {analysisStatus === "idle" && !chatThreadAnnotationId && (
         <div className="flex items-center gap-2 px-3 py-3 shrink-0 flex-wrap border-t border-border/50">
           {[
             {
@@ -633,7 +946,11 @@ export default function ChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about the paper…"
+            placeholder={
+              chatThreadAnnotationId
+                ? "Reply in this selection thread…"
+                : "Ask about the paper…"
+            }
             rows={1}
             className="flex-1 bg-transparent px-3 py-2.5 text-sm resize-none focus:outline-none text-foreground placeholder:text-muted-foreground"
           />
@@ -652,7 +969,7 @@ export default function ChatPanel({
               !selectedModel
                 ? hasSavedKeys
                   ? "Choose a model to send"
-                  : "Add an API key in Settings to send"
+                  : "Manage API keys to send"
                 : isStreaming
                   ? "Sending..."
                   : "Send message"
@@ -666,11 +983,15 @@ export default function ChatPanel({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground/70 mt-1.5 text-center leading-snug px-1">
-          {selectedModel
-            ? `${selectedModel.label} · Shift+Enter new line`
-            : hasSavedKeys
-              ? "Choose a model above · Shift+Enter new line"
-              : "Add an API key in Settings first · Shift+Enter new line"}
+          {chatThreadAnnotationId
+            ? selectedModel
+              ? `Selection thread · ${selectedModel.label} · Shift+Enter new line`
+              : "Choose a model above · Shift+Enter new line"
+            : selectedModel
+              ? `${selectedModel.label} · Shift+Enter new line`
+              : hasSavedKeys
+                ? "Choose a model above · Shift+Enter new line"
+                : "Manage API keys first · Shift+Enter new line"}
         </p>
       </div>
     </div>
