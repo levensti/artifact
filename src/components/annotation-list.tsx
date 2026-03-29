@@ -78,16 +78,16 @@ export default function AnnotationList({
             ].map((item) => (
               <div
                 key={item.label}
-                className="flex items-start gap-2.5 rounded-lg px-2 py-2.5"
+                className="flex min-h-14 items-start gap-2.5 rounded-lg px-2 py-2.5"
               >
                 <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5">
                   <item.icon className="size-3 text-foreground/45" strokeWidth={1.8} />
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 space-y-0.5">
                   <p className="text-xs font-medium leading-snug text-foreground/70">
                     {item.label}
                   </p>
-                  <p className="text-[11px] leading-snug text-muted-foreground/80">
+                  <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground/80">
                     {item.desc}
                   </p>
                 </div>

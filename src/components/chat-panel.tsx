@@ -392,7 +392,7 @@ function EmptyState({
             disabled={!canSend}
             onClick={() => onSend(s.prompt)}
             className={cn(
-              "group flex w-full items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-all duration-150",
+              "group flex min-h-14 w-full items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-all duration-150",
               canSend
                 ? "cursor-pointer hover:bg-foreground/4 active:bg-foreground/6"
                 : "cursor-not-allowed opacity-50",
@@ -401,11 +401,11 @@ function EmptyState({
             <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5 transition-colors group-hover:border-border/70 group-hover:bg-foreground/8">
               <s.icon className="size-3 text-foreground/45" strokeWidth={1.8} />
             </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-xs font-medium leading-snug text-foreground/70 transition-colors group-hover:text-foreground/90">
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <p className="text-xs font-medium leading-snug text-foreground/70 transition-colors group-hover:text-foreground/90">
                 {s.label}
-              </span>
-              <p className="text-[11px] leading-snug text-muted-foreground/80">
+              </p>
+              <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground/80">
                 {s.desc}
               </p>
             </div>
