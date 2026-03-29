@@ -1,8 +1,9 @@
 "use client";
 
-import { ExternalLink, MessageSquare, Plus } from "lucide-react";
+import { BookOpen, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { GraphEdge, GraphNode } from "@/lib/explore";
+import { getReviewByArxivId } from "@/lib/reviews";
 
 interface GraphDetailPanelProps {
   node: GraphNode | null;
@@ -29,6 +30,10 @@ export default function GraphDetailPanel({
   onStartReview,
   onDiscussInChat,
 }: GraphDetailPanelProps) {
+  const existingReview = node?.arxivId
+    ? getReviewByArxivId(node.arxivId)
+    : undefined;
+
   if (!node) {
     return (
       <div className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-sm text-muted-foreground">
@@ -40,12 +45,16 @@ export default function GraphDetailPanel({
   return (
     <div className="rounded-md border border-border bg-card p-3 space-y-3">
       <div className="space-y-1">
-        <h4 className="text-sm font-semibold leading-snug text-foreground">{node.title}</h4>
+        <h4 className="text-sm font-semibold leading-snug text-foreground">
+          {node.title}
+        </h4>
         <p className="text-xs text-muted-foreground">
           {node.authors.slice(0, 4).join(", ")}
           {node.authors.length > 4 ? " et al." : ""}
         </p>
-        <p className="text-xs text-muted-foreground">{formatDate(node.publishedDate)}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatDate(node.publishedDate)}
+        </p>
       </div>
 
       {incidentEdges.length > 0 && (
@@ -61,35 +70,33 @@ export default function GraphDetailPanel({
               <p className="text-xs font-medium text-foreground capitalize">
                 {e.relationship.replaceAll("-", " ")}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">{e.reasoning}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {e.reasoning}
+              </p>
             </div>
           ))}
         </div>
       )}
 
-      <p className="text-xs leading-relaxed text-foreground/90">{node.abstract}</p>
+      <p className="text-xs leading-relaxed text-foreground/90">
+        {node.abstract}
+      </p>
 
       <div className="flex items-center gap-2">
-        <a
-          href={`https://arxiv.org/abs/${node.arxivId}`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex"
-        >
-          <Button size="sm" variant="outline" className="h-8 text-xs">
-            Open on arXiv
-            <ExternalLink className="ml-1.5 size-3.5" />
-          </Button>
-        </a>
         {!node.isCurrent && node.arxivId && (
           <Button
             size="sm"
             variant="secondary"
             className="h-8 text-xs"
             onClick={() => onStartReview(node)}
+            title={
+              existingReview
+                ? "Open your existing review for this paper"
+                : "Start a new review for this paper"
+            }
           >
-            Open review
-            <Plus className="ml-1.5 size-3.5" />
+            {existingReview ? "Open review" : "Dive deeper"}
+            <BookOpen className="ml-1.5 size-3.5" />
           </Button>
         )}
         {onDiscussInChat && !node.isCurrent && (

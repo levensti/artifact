@@ -12,7 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createReview, REVIEWS_UPDATED_EVENT } from "@/lib/reviews";
+import {
+  createOrGetReview,
+  getReviewByArxivId,
+  REVIEWS_UPDATED_EVENT,
+} from "@/lib/reviews";
 import { extractArxivId } from "@/lib/utils";
 
 interface NewReviewDialogProps {
@@ -31,6 +35,7 @@ export default function NewReviewDialog({
   const [loading, setLoading] = useState(false);
 
   const arxivId = extractArxivId(url);
+  const existingReview = arxivId ? getReviewByArxivId(arxivId) : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +50,12 @@ export default function NewReviewDialog({
       setError(
         "Enter a valid arXiv URL (e.g. https://arxiv.org/abs/2602.00277)",
       );
+      return;
+    }
+
+    if (existingReview) {
+      setUrl("");
+      onCreated(existingReview.id);
       return;
     }
 
@@ -65,7 +76,7 @@ export default function NewReviewDialog({
         /* keep fallback */
       }
 
-      const review = createReview(arxivId, paperTitle);
+      const review = createOrGetReview(arxivId, paperTitle);
       window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
 
       setUrl("");
@@ -105,9 +116,10 @@ export default function NewReviewDialog({
             autoFocus
             disabled={loading}
           />
-          {arxivId && (
-            <p className="text-xs text-primary font-medium mt-2">
-              {arxivId}
+          {arxivId && existingReview && (
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              You already have a review for this paper. Continue to open it, or
+              paste a different link.
             </p>
           )}
           {error && <p className="text-xs text-destructive mt-2">{error}</p>}
@@ -126,6 +138,11 @@ export default function NewReviewDialog({
                 <>
                   <Loader2 size={14} className="animate-spin" />
                   Loading…
+                </>
+              ) : existingReview ? (
+                <>
+                  Open review
+                  <ArrowRight size={14} />
                 </>
               ) : (
                 <>

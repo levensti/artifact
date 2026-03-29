@@ -65,7 +65,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <aside
               className={cn(
                 "flex flex-col h-full bg-sidebar border-r border-sidebar-border shrink-0 overflow-hidden",
-                collapsed ? "w-0 border-r-0" : "w-[260px]",
+                collapsed ? "w-0 border-r-0" : "w-[272px]",
               )}
               aria-hidden
             />
