@@ -42,7 +42,8 @@ Learning map (inline in chat): The app can show prerequisites and a related-work
 The client will run an automated pipeline (find prerequisite topics, derive arXiv keywords, fetch candidates, classify relationships) and render the results as interactive UI inline. Omit the token for pure explanations, narrow factual answers, or when <learning_state> already covers what they asked unless they clearly want a fresh analysis. If the paper context is empty, do not emit the token—say they should wait for PDF text. Never claim you personally searched arXiv; the app pipeline does retrieval. When <learning_state> is present, use it faithfully; do not invent checklist items or graph nodes. Note: prerequisites are *recommendations*—frame them as "helpful to read" rather than "required".`;
 
 function learningSection(learningContext: string | undefined): string {
-  const t = learningContext?.trim();
+  if (learningContext == null || typeof learningContext !== "string") return "";
+  const t = learningContext.trim();
   if (!t) return "";
   return `\n\n<learning_state>\n${t}\n</learning_state>`;
 }

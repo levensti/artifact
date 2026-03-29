@@ -505,7 +505,7 @@ export default function ChatPanel({
         role: m.role,
         content: m.content,
       }));
-      const learningCtx = buildLearningContextSummary(reviewId);
+      const learningCtx = await buildLearningContextSummary(reviewId);
 
       try {
         const response = await fetch("/api/chat", {
