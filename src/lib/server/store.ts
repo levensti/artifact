@@ -15,7 +15,7 @@ import type {
   PrerequisitesData,
 } from "@/lib/explore";
 
-const DB_PATH = path.join(process.cwd(), "data", "paper-copilot.db");
+const DB_PATH = path.join(process.cwd(), "data", "artifact.db");
 
 let dbInstance: Database.Database | null = null;
 
@@ -60,7 +60,8 @@ function initSchema(db: Database.Database) {
       arxiv_id TEXT NOT NULL,
       topic TEXT NOT NULL,
       explanation TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS explore_prerequisites (
@@ -84,6 +85,47 @@ function initSchema(db: Database.Database) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+  `);
+  migrateDeepDivesReviewFk(db);
+}
+
+/** Older DBs created deep_dives without a FK; recreate so DELETE FROM reviews cascades. */
+function migrateDeepDivesReviewFk(db: Database.Database) {
+  let fkRows: Array<{ table: string; from: string; on_delete: string }>;
+  try {
+    fkRows = db.prepare(`PRAGMA foreign_key_list(deep_dives)`).all() as Array<{
+      table: string;
+      from: string;
+      on_delete: string;
+    }>;
+  } catch {
+    return;
+  }
+  const hasCascade = fkRows.some(
+    (r) =>
+      r.table === "reviews" &&
+      r.from === "review_id" &&
+      String(r.on_delete).toUpperCase() === "CASCADE",
+  );
+  if (hasCascade) return;
+
+  db.exec(`
+    BEGIN;
+    DELETE FROM deep_dives WHERE review_id NOT IN (SELECT id FROM reviews);
+    CREATE TABLE deep_dives__new (
+      id TEXT PRIMARY KEY,
+      review_id TEXT NOT NULL,
+      paper_title TEXT NOT NULL,
+      arxiv_id TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      explanation TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+    );
+    INSERT INTO deep_dives__new SELECT * FROM deep_dives;
+    DROP TABLE deep_dives;
+    ALTER TABLE deep_dives__new RENAME TO deep_dives;
+    COMMIT;
   `);
 }
 
@@ -136,6 +178,13 @@ export function insertReview(review: PaperReview): void {
   });
 }
 
+/** Deletes the review and cascades to messages, annotations, explore rows, and deep_dives. */
+export function deleteReview(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare(`DELETE FROM reviews WHERE id = ?`).run(id);
+  return result.changes > 0;
+}
+
 /* ── Messages ── */
 
 export function getMessages(reviewId: string): ChatMessage[] {
@@ -175,7 +224,10 @@ export function getAnnotations(reviewId: string): Annotation[] {
   }
 }
 
-export function setAnnotations(reviewId: string, annotations: Annotation[]): void {
+export function setAnnotations(
+  reviewId: string,
+  annotations: Annotation[],
+): void {
   const db = getDb();
   const payload = JSON.stringify(annotations);
   db.prepare(
@@ -215,9 +267,7 @@ export function insertDeepDive(session: DeepDiveSession): void {
 
 /* ── Explore (per review) ── */
 
-export function getPrerequisites(
-  reviewId: string,
-): PrerequisitesData | null {
+export function getPrerequisites(reviewId: string): PrerequisitesData | null {
   const db = getDb();
   const row = db
     .prepare(`SELECT payload FROM explore_prerequisites WHERE review_id = ?`)
