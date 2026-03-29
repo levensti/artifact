@@ -43,15 +43,40 @@ export default function DiscoveryPage() {
   // Consume version to trigger re-render
   void version;
 
+  const reviewedPapers = useMemo(() => {
+    void version;
+    return ready ? getReviewsSnapshot() : [];
+  }, [ready, version]);
+
   const globalRaw = ready ? getGlobalGraphData() : null;
-  const graph = globalGraphToGraphData(globalRaw);
+  const globalGraph = globalGraphToGraphData(globalRaw);
 
   const reviewedArxivIds = useMemo(() => {
     if (!ready) return new Set<string>();
-    return new Set(
-      getReviewsSnapshot().map((r) => normalizeArxivId(r.arxivId)),
-    );
-  }, [ready, version]); // eslint-disable-line react-hooks/exhaustive-deps
+    return new Set(reviewedPapers.map((r) => normalizeArxivId(r.arxivId)));
+  }, [ready, reviewedPapers]);
+
+  const graph = useMemo(() => {
+    if (globalGraph && globalGraph.nodes.length > 0) return globalGraph;
+    if (reviewedPapers.length === 0) return null;
+
+    return {
+      nodes: reviewedPapers.map((r) => ({
+        id: r.id,
+        title: r.title,
+        authors: [],
+        abstract: "",
+        arxivId: r.arxivId,
+        publishedDate: r.createdAt,
+        categories: [],
+        isCurrent: true,
+      })),
+      edges: [],
+      keywords: [],
+      generatedAt: new Date().toISOString(),
+      modelUsed: "seeded-from-reviews",
+    };
+  }, [globalGraph, reviewedPapers]);
 
   const readCount = useMemo(
     () =>
