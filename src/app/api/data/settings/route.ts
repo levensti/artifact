@@ -1,5 +1,5 @@
 import { getSettings, patchSettings } from "@/lib/server/store";
-import type { Model } from "@/lib/models";
+import type { InferenceProviderProfile, Model } from "@/lib/models";
 import type { Provider } from "@/lib/models";
 
 export const runtime = "nodejs";
@@ -11,6 +11,7 @@ export function GET() {
 export async function PATCH(req: Request) {
   let body: {
     keys?: Partial<Record<Provider, string | null>>;
+    inferenceProfiles?: InferenceProviderProfile[] | null;
     selectedModel?: Model | null;
   };
   try {

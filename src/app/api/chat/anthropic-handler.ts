@@ -14,6 +14,8 @@ import type { ToolContext } from "@/tools/types";
 
 const MAX_TOOL_ROUNDS = 8;
 
+const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
+
 /* ------------------------------------------------------------------ */
 /*  Anthropic API types                                                */
 /* ------------------------------------------------------------------ */
@@ -71,7 +73,7 @@ export async function runAnthropicAgentLoop(
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     emit({ type: "turn_start" });
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(ANTHROPIC_MESSAGES_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

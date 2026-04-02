@@ -1,18 +1,45 @@
-export type Provider = "anthropic" | "openai" | "xai" | "openrouter";
+export type Provider = "anthropic" | "openai" | "xai" | "openai_compatible";
 
-/** Stable order for settings UI and model dropdown groups. */
-export const PROVIDER_ORDER: Provider[] = [
+/** Built-in API providers (single key each). Excludes inference-compatible kinds. */
+export const BUILTIN_PROVIDER_ORDER: Provider[] = [
   "anthropic",
   "openai",
   "xai",
-  "openrouter",
 ];
+
+/** Alias for built-in provider lists (settings groups, keys). */
+export const PROVIDER_ORDER = BUILTIN_PROVIDER_ORDER;
+
+export type InferenceProfileKind = "openai_compatible";
+
+/** One named OpenAI- or Anthropic-compatible endpoint (multiple allowed). */
+export interface InferenceProviderProfile {
+  id: string;
+  /** Display name in Settings and the model menu (e.g. Fireworks). */
+  label: string;
+  kind: InferenceProfileKind;
+  baseUrl: string;
+  apiKey: string;
+  /** Whether the provider supports streaming responses. Default: true. */
+  supportsStreaming?: boolean;
+}
 
 export interface Model {
   id: string;
   label: string;
   provider: Provider;
   modelId: string;
+  /** Set when `provider` is `openai_compatible`. */
+  profileId?: string;
+}
+
+export function isInferenceProviderType(p: Provider): p is "openai_compatible" {
+  return p === "openai_compatible";
+}
+
+/** @deprecated use isInferenceProviderType — old name */
+export function providerRequiresBaseUrl(provider: Provider): boolean {
+  return isInferenceProviderType(provider);
 }
 
 export const FALLBACK_MODELS: Model[] = [
@@ -64,45 +91,20 @@ export const FALLBACK_MODELS: Model[] = [
     provider: "xai",
     modelId: "grok-4-0709",
   },
-  {
-    id: "or-deepseek-r1",
-    label: "DeepSeek R1",
-    provider: "openrouter",
-    modelId: "deepseek/deepseek-r1",
-  },
-  {
-    id: "or-gemini-2.5-pro",
-    label: "Gemini 2.5 Pro",
-    provider: "openrouter",
-    modelId: "google/gemini-2.5-pro-preview",
-  },
-  {
-    id: "or-llama-4-maverick",
-    label: "Llama 4 Maverick",
-    provider: "openrouter",
-    modelId: "meta-llama/llama-4-maverick",
-  },
 ];
 
 export const PROVIDER_META: Record<
-  Provider,
-  { label: string; keyHint: string }
+  Exclude<Provider, "openai_compatible">,
+  { label: string }
 > = {
   anthropic: {
     label: "Anthropic",
-    keyHint: "Anthropic API key",
   },
   openai: {
     label: "OpenAI",
-    keyHint: "OpenAI API key",
   },
   xai: {
     label: "xAI",
-    keyHint: "xAI API key",
-  },
-  openrouter: {
-    label: "OpenRouter",
-    keyHint: "OpenRouter API key",
   },
 };
 
@@ -110,7 +112,7 @@ export function modelsGroupedByProvider(): {
   provider: Provider;
   models: Model[];
 }[] {
-  return PROVIDER_ORDER.map((provider) => ({
+  return BUILTIN_PROVIDER_ORDER.map((provider) => ({
     provider,
     models: FALLBACK_MODELS.filter((m) => m.provider === provider),
   }));

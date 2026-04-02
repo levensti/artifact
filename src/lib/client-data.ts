@@ -2,8 +2,12 @@
  * Client-side cache + HTTP bridge to SQLite-backed /api/data routes.
  */
 
-import type { Provider } from "@/lib/models";
+import type { InferenceProviderProfile, Provider } from "@/lib/models";
 import type { Model } from "@/lib/models";
+import {
+  BUILTIN_PROVIDER_ORDER,
+  isInferenceProviderType,
+} from "@/lib/models";
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
@@ -49,10 +53,18 @@ let hydrated = false;
 let hydratePromise: Promise<void> | null = null;
 
 let reviewsCache: PaperReview[] = [];
-let settingsCache: {
+
+type SettingsCache = {
   keys: Partial<Record<Provider, string>>;
+  inferenceProfiles: InferenceProviderProfile[];
   selectedModel: Model | null;
-} = { keys: {}, selectedModel: null };
+};
+
+let settingsCache: SettingsCache = {
+  keys: {},
+  inferenceProfiles: [],
+  selectedModel: null,
+};
 let globalGraphCache: GlobalGraphData | null = null;
 let deepDivesCache: DeepDiveSession[] = [];
 
@@ -73,10 +85,7 @@ export async function hydrateClientStore(): Promise<void> {
   hydratePromise = (async () => {
     const boot = await apiJson<{
       reviews: PaperReview[];
-      settings: {
-        keys: Partial<Record<Provider, string>>;
-        selectedModel: Model | null;
-      };
+      settings: SettingsCache;
       globalGraph: GlobalGraphData | null;
       deepDives: DeepDiveSession[];
     }>("/bootstrap");
@@ -314,26 +323,67 @@ export function getApiKey(provider: Provider): string | null {
   return settingsCache.keys[provider] ?? null;
 }
 
+export function getInferenceProfiles(): InferenceProviderProfile[] {
+  return settingsCache.inferenceProfiles;
+}
+
+export function getInferenceProfile(
+  id: string,
+): InferenceProviderProfile | undefined {
+  return settingsCache.inferenceProfiles.find((p) => p.id === id);
+}
+
+/** Built-in provider (Anthropic, OpenAI, …) has a saved key. */
+export function isBuiltinProviderReady(provider: Provider): boolean {
+  if (isInferenceProviderType(provider)) return false;
+  return !!getApiKey(provider);
+}
+
+/** Model can be used for API calls (built-in key or inference profile complete). */
+export function isModelReady(model: Model): boolean {
+  if (isInferenceProviderType(model.provider)) {
+    if (!model.profileId) return false;
+    const p = getInferenceProfile(model.profileId);
+    return !!(p?.apiKey?.trim() && p?.baseUrl?.trim() && p?.label?.trim());
+  }
+  return isBuiltinProviderReady(model.provider);
+}
+
+/** @deprecated prefer isBuiltinProviderReady or isModelReady */
+export function isProviderReady(provider: Provider): boolean {
+  if (isInferenceProviderType(provider)) return false;
+  return isBuiltinProviderReady(provider);
+}
+
 export function hasAnySavedApiKey(): boolean {
-  const k = settingsCache.keys;
-  return (
-    !!k.anthropic ||
-    !!k.openai ||
-    !!k.xai ||
-    !!k.openrouter
+  for (const p of BUILTIN_PROVIDER_ORDER) {
+    if (getApiKey(p)) return true;
+  }
+  return settingsCache.inferenceProfiles.some(
+    (x) => x.apiKey.trim() && x.baseUrl.trim(),
   );
 }
 
 export async function setApiKey(provider: Provider, key: string): Promise<void> {
-  settingsCache = await apiJson<typeof settingsCache>("/settings", {
+  settingsCache = await apiJson<SettingsCache>("/settings", {
     method: "PATCH",
     body: JSON.stringify({ keys: { [provider]: key } }),
   });
   window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
 }
 
+export async function saveInferenceProfiles(
+  profiles: InferenceProviderProfile[],
+): Promise<void> {
+  settingsCache = await apiJson<SettingsCache>("/settings", {
+    method: "PATCH",
+    body: JSON.stringify({ inferenceProfiles: profiles }),
+  });
+  window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+}
+
 export async function clearApiKey(provider: Provider): Promise<void> {
-  settingsCache = await apiJson<typeof settingsCache>("/settings", {
+  settingsCache = await apiJson<SettingsCache>("/settings", {
     method: "PATCH",
     body: JSON.stringify({ keys: { [provider]: null } }),
   });
@@ -341,7 +391,7 @@ export async function clearApiKey(provider: Provider): Promise<void> {
 }
 
 export async function saveSelectedModel(model: Model | null): Promise<void> {
-  settingsCache = await apiJson<typeof settingsCache>("/settings", {
+  settingsCache = await apiJson<SettingsCache>("/settings", {
     method: "PATCH",
     body: JSON.stringify({ selectedModel: model }),
   });
@@ -351,11 +401,10 @@ export async function saveSelectedModel(model: Model | null): Promise<void> {
 export function getSavedSelectedModel(): Model | null {
   const m = settingsCache.selectedModel;
   if (!m) return null;
-  if (!getApiKey(m.provider)) return null;
-  return m;
+  return isModelReady(m) ? m : null;
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {
-  settingsCache = await apiJson<typeof settingsCache>("/settings");
+  settingsCache = await apiJson<SettingsCache>("/settings");
   window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
 }

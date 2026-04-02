@@ -4,6 +4,7 @@
  */
 
 import type { Model } from "@/lib/models";
+import { isInferenceProviderType } from "@/lib/models";
 import type {
   ArxivSearchResult,
   GraphData,
@@ -115,7 +116,9 @@ async function generateStructured(
     body: JSON.stringify({
       model: model.modelId,
       provider: model.provider,
-      apiKey,
+      ...(isInferenceProviderType(model.provider)
+        ? { profileId: model.profileId }
+        : { apiKey }),
       prompt: augmented,
       paperContext,
     }),

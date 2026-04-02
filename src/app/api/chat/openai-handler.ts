@@ -1,5 +1,6 @@
 /**
- * OpenAI-compatible agentic loop — works with OpenAI, xAI, and OpenRouter.
+ * OpenAI-compatible agentic loop — works with OpenAI, xAI, and any
+ * OpenAI-compatible inference provider (e.g. Fireworks, OpenRouter).
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
@@ -7,8 +8,6 @@ import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
 import {
   openAiCompatibleChatCompletionsUrl,
-  OPENROUTER_APP_TITLE,
-  OPENROUTER_HTTP_REFERER,
   providerApiErrorLabel,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
@@ -49,6 +48,13 @@ interface OpenAIStreamEvent {
   choices?: OpenAIStreamChoice[];
 }
 
+export interface OpenAIHandlerOptions {
+  /** Custom OpenAI-compatible base URL. */
+  customOpenAiBaseUrl?: string | null;
+  /** Whether the provider supports streaming. Default: true. */
+  supportsStreaming?: boolean;
+}
+
 export async function runOpenAIAgentLoop(
   chatMessages: { role: "user" | "assistant"; content: string }[],
   model: string,
@@ -59,22 +65,20 @@ export async function runOpenAIAgentLoop(
   tools: ReturnType<typeof getAllTools>,
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
+  options?: OpenAIHandlerOptions,
 ) {
+  const useStreaming = options?.supportsStreaming !== false;
   const systemContent = paperContext
     ? `${systemPrompt}\n\n<paper>\n${paperContext}\n</paper>`
     : systemPrompt;
 
   const openaiTools = toOpenAITools(tools);
-  const baseUrl = openAiCompatibleChatCompletionsUrl(provider);
+  const baseUrl = openAiCompatibleChatCompletionsUrl(provider, options?.customOpenAiBaseUrl);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
   };
-  if (provider === "openrouter") {
-    headers["HTTP-Referer"] = OPENROUTER_HTTP_REFERER;
-    headers["X-Title"] = OPENROUTER_APP_TITLE;
-  }
 
   const apiMessages: Array<Record<string, unknown>> = [
     { role: "system", content: systemContent },
@@ -91,7 +95,7 @@ export async function runOpenAIAgentLoop(
         model,
         messages: apiMessages,
         tools: openaiTools,
-        stream: true,
+        stream: useStreaming,
       }),
     });
 
@@ -101,13 +105,35 @@ export async function runOpenAIAgentLoop(
       throw new Error(parseApiErrorMessage(errText, `${label} API error: ${response.status}`));
     }
 
-    if (!response.body) {
-      throw new Error(`No response body from ${providerApiErrorLabel(provider)}`);
-    }
+    let textContent: string;
+    let toolCalls: OpenAIToolCall[];
+    let finishReason: string;
 
-    const { textContent, toolCalls, finishReason } = await parseOpenAISSE(
-      response.body, emit,
-    );
+    if (!useStreaming) {
+      const data = (await response.json()) as {
+        choices?: Array<{
+          finish_reason?: string;
+          message?: { content?: string; tool_calls?: OpenAIToolCall[] };
+        }>;
+      };
+      const choice = data.choices?.[0];
+      textContent = choice?.message?.content ?? "";
+      toolCalls = choice?.message?.tool_calls ?? [];
+      finishReason = choice?.finish_reason ?? "stop";
+
+      if (textContent) {
+        emit({ type: "text_delta", text: textContent });
+      }
+    } else {
+      if (!response.body) {
+        throw new Error(`No response body from ${providerApiErrorLabel(provider)}`);
+      }
+
+      const parsed = await parseOpenAISSE(response.body, emit);
+      textContent = parsed.textContent;
+      toolCalls = parsed.toolCalls;
+      finishReason = parsed.finishReason;
+    }
 
     if (finishReason !== "tool_calls" || toolCalls.length === 0) break;
 

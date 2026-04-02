@@ -8,7 +8,12 @@ import {
   Send,
   AlertTriangle,
 } from "lucide-react";
-import { PROVIDER_META, type Model } from "@/lib/models";
+import {
+  PROVIDER_META,
+  isInferenceProviderType,
+  type Model,
+} from "@/lib/models";
+import { getInferenceProfile } from "@/lib/keys";
 import type { Annotation } from "@/lib/annotations";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -408,8 +413,10 @@ export default function ChatPanel({
       {selectedModel && !chat.hasKeyForModel && (
         <div className="mx-3 mb-2 px-3 py-2.5 rounded-md border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span>
-            {PROVIDER_META[selectedModel.provider].keyHint} required to send
-            messages.
+            {isInferenceProviderType(selectedModel.provider) &&
+            selectedModel.profileId
+              ? `Configure “${getInferenceProfile(selectedModel.profileId)?.label ?? "inference"}” in Settings to send messages.`
+              : `${PROVIDER_META[selectedModel.provider as keyof typeof PROVIDER_META].label} API key required to send messages.`}
           </span>
           <Button
             type="button"

@@ -1,15 +1,16 @@
 import { NextRequest } from "next/server";
 import {
   invalidApiProviderMessage,
+  isAnthropicMessagesProvider,
   isProvider,
   openAiCompatibleChatCompletionsUrl,
-  OPENROUTER_APP_TITLE,
-  OPENROUTER_HTTP_REFERER,
   providerApiErrorLabel,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import type { GenerateRequest } from "@/lib/explore";
+import { isInferenceProviderType } from "@/lib/models";
+import { getInferenceProfile } from "@/lib/server/store";
 
 const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
 
@@ -26,14 +27,8 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const { model, provider, apiKey, prompt, paperContext } = body;
-
-  if (!apiKey || typeof apiKey !== "string") {
-    return jsonError(
-      "API key is required. Manage API keys in the app to add one.",
-      401,
-    );
-  }
+  const { model, provider, apiKey, apiBaseUrl, profileId, prompt, paperContext } =
+    body;
 
   if (!isProvider(provider)) {
     return jsonError(invalidApiProviderMessage(), 400);
@@ -53,17 +48,44 @@ export async function POST(req: NextRequest) {
     return jsonError("Request payload too large.", 413);
   }
 
+  let effectiveApiKey = typeof apiKey === "string" ? apiKey : "";
+  let effectiveBaseUrl =
+    typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
+
+  if (isInferenceProviderType(provider)) {
+    if (!profileId || typeof profileId !== "string" || !profileId.trim()) {
+      return jsonError("profileId is required for inference providers.", 400);
+    }
+    const prof = getInferenceProfile(profileId.trim());
+    if (!prof) {
+      return jsonError("Unknown inference profile.", 404);
+    }
+    if (prof.kind !== provider) {
+      return jsonError("Inference profile does not match provider type.", 400);
+    }
+    if (!prof.apiKey?.trim() || !prof.baseUrl?.trim()) {
+      return jsonError("Inference profile is missing API key or base URL.", 400);
+    }
+    effectiveApiKey = prof.apiKey;
+    effectiveBaseUrl = prof.baseUrl.trim();
+  } else if (!effectiveApiKey.trim()) {
+    return jsonError(
+      "API key is required. Manage API keys in the app to add one.",
+      401,
+    );
+  }
+
   try {
-    const content =
-      provider === "anthropic"
-        ? await generateAnthropic(model, apiKey, prompt, paperContext)
-        : await generateOpenAICompatible(
-            model,
-            apiKey,
-            prompt,
-            paperContext,
-            provider as OpenAiCompatibleProvider,
-          );
+    const content = isAnthropicMessagesProvider(provider)
+      ? await generateAnthropic(model, effectiveApiKey, prompt, paperContext)
+      : await generateOpenAICompatible(
+          model,
+          effectiveApiKey,
+          prompt,
+          paperContext,
+          provider as OpenAiCompatibleProvider,
+          provider === "openai_compatible" ? effectiveBaseUrl : undefined,
+        );
 
     return new Response(JSON.stringify({ content }), {
       headers: { "Content-Type": "application/json" },
@@ -114,8 +136,9 @@ async function generateOpenAICompatible(
   prompt: string,
   paperContext: string | undefined,
   provider: OpenAiCompatibleProvider,
+  customOpenAiBaseUrl?: string,
 ): Promise<string> {
-  const baseUrl = openAiCompatibleChatCompletionsUrl(provider);
+  const baseUrl = openAiCompatibleChatCompletionsUrl(provider, customOpenAiBaseUrl);
 
   const systemContent = paperContext
     ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
@@ -125,11 +148,6 @@ async function generateOpenAICompatible(
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
   };
-
-  if (provider === "openrouter") {
-    headers["HTTP-Referer"] = OPENROUTER_HTTP_REFERER;
-    headers["X-Title"] = OPENROUTER_APP_TITLE;
-  }
 
   const response = await fetch(baseUrl, {
     method: "POST",

@@ -1,8 +1,16 @@
+import type { Model } from "@/lib/models";
+import { isInferenceProviderType } from "@/lib/models";
 import {
   clearApiKey as clearApiKeyRemote,
   getApiKey as getApiKeyCached,
+  getInferenceProfile as getInferenceProfileCached,
+  getInferenceProfiles as getInferenceProfilesCached,
   getSavedSelectedModel as getSavedSelectedModelCached,
   hasAnySavedApiKey as hasAnySavedApiKeyCached,
+  isBuiltinProviderReady as isBuiltinProviderReadyCached,
+  isModelReady as isModelReadyCached,
+  isProviderReady as isProviderReadyCached,
+  saveInferenceProfiles as saveInferenceProfilesRemote,
   saveSelectedModel as saveSelectedModelRemote,
   setApiKey as setApiKeyRemote,
 } from "@/lib/client-data";
@@ -11,6 +19,39 @@ export { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
 
 export function getApiKey(provider: import("./models").Provider): string | null {
   return getApiKeyCached(provider);
+}
+
+export function getInferenceProfiles(): import("./models").InferenceProviderProfile[] {
+  return getInferenceProfilesCached();
+}
+
+export function getInferenceProfile(
+  id: string,
+): import("./models").InferenceProviderProfile | undefined {
+  return getInferenceProfileCached(id);
+}
+
+/** Credentials for chat/generate when using an inference profile. */
+export function resolveInferenceCredentials(
+  model: Model,
+): { apiKey: string; baseUrl: string } | null {
+  if (!isInferenceProviderType(model.provider) || !model.profileId) return null;
+  const p = getInferenceProfileCached(model.profileId);
+  if (!p?.apiKey?.trim() || !p?.baseUrl?.trim()) return null;
+  return { apiKey: p.apiKey.trim(), baseUrl: p.baseUrl.trim() };
+}
+
+export function isBuiltinProviderReady(provider: import("./models").Provider): boolean {
+  return isBuiltinProviderReadyCached(provider);
+}
+
+export function isModelReady(model: Model): boolean {
+  return isModelReadyCached(model);
+}
+
+/** Built-in providers only (not inference). */
+export function isProviderReady(provider: import("./models").Provider): boolean {
+  return isProviderReadyCached(provider);
 }
 
 export function hasAnySavedApiKey(): boolean {
@@ -22,6 +63,12 @@ export async function setApiKey(
   key: string,
 ): Promise<void> {
   return setApiKeyRemote(provider, key);
+}
+
+export async function saveInferenceProfiles(
+  profiles: import("./models").InferenceProviderProfile[],
+): Promise<void> {
+  return saveInferenceProfilesRemote(profiles);
 }
 
 export async function clearApiKey(
@@ -39,3 +86,5 @@ export async function saveSelectedModel(
 export function getSavedSelectedModel(): import("./models").Model | null {
   return getSavedSelectedModelCached();
 }
+
+export { isInferenceProviderType } from "@/lib/models";

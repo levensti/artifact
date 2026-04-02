@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Model } from "@/lib/models";
-import { getApiKey } from "@/lib/keys";
+import { isInferenceProviderType } from "@/lib/models";
+import { getApiKey, isModelReady } from "@/lib/keys";
 import { loadExplore } from "@/lib/client-data";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 
@@ -41,7 +42,7 @@ export function useAnalysis({
   const canRun =
     !!selectedModel &&
     !!paperContext.trim() &&
-    !!getApiKey(selectedModel.provider);
+    isModelReady(selectedModel);
 
   // Reset when reviewId changes; restore "done" if explore data exists
   useEffect(() => {
@@ -65,8 +66,10 @@ export function useAnalysis({
 
   const trigger = useCallback((): boolean => {
     if (!selectedModel || !paperContext.trim()) return false;
-    const apiKey = getApiKey(selectedModel.provider);
-    if (!apiKey) return false;
+    if (!isModelReady(selectedModel)) return false;
+    const apiKey = isInferenceProviderType(selectedModel.provider)
+      ? ""
+      : (getApiKey(selectedModel.provider) ?? "");
 
     abortRef.current?.abort();
     const controller = new AbortController();

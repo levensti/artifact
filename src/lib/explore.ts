@@ -6,7 +6,11 @@ export type ExploreProvider = Provider;
 export interface GenerateRequest {
   model: string;
   provider: ExploreProvider;
-  apiKey: string;
+  apiKey?: string;
+  /** Required for inference providers; server loads key and base URL. */
+  profileId?: string;
+  /** @deprecated use profileId for inference */
+  apiBaseUrl?: string;
   prompt: string;
   paperContext?: string;
 }
