@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import type { Model } from "@/lib/models";
-import { getApiKey } from "@/lib/keys";
+import { getApiKey, isInferenceProviderType, isModelReady } from "@/lib/keys";
 import type { Prerequisite } from "@/lib/explore";
 import { savePrerequisites } from "@/lib/client-data";
 import { useExploreData } from "@/hooks/use-explore-data";
@@ -21,7 +21,6 @@ import { saveDeepDive } from "@/lib/deep-dives";
 
 async function generateStudyMarkdown(
   model: Model,
-  apiKey: string,
   prompt: string,
   paperContext: string,
 ): Promise<string> {
@@ -31,7 +30,9 @@ async function generateStudyMarkdown(
     body: JSON.stringify({
       model: model.modelId,
       provider: model.provider,
-      apiKey,
+      ...(isInferenceProviderType(model.provider)
+        ? { profileId: model.profileId }
+        : { apiKey: getApiKey(model.provider)! }),
       prompt,
       paperContext,
     }),
@@ -70,9 +71,8 @@ export default function LearningEmbed({
       setStudyItem(item);
       if (item.explanation) return;
       if (!selectedModel) return;
-      const apiKey = getApiKey(selectedModel.provider);
       const snapshot = prereqData;
-      if (!apiKey || !snapshot) return;
+      if (!isModelReady(selectedModel) || !snapshot) return;
 
       setLoadingTopicId(item.id);
       try {
@@ -96,7 +96,6 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
 
         const explanation = await generateStudyMarkdown(
           selectedModel,
-          apiKey,
           divePrompt,
           paperContext,
         );

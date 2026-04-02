@@ -49,7 +49,7 @@ Progress appears live in the Assistant tab as each phase runs.
 
 **Privacy** — All data lives in your browser's `localStorage`. No accounts, no telemetry, no server-side storage. API calls go directly from your browser to the model provider. Safe for pre-publication work.
 
-**Multi-model** — Bring your own keys for Anthropic, OpenAI, xAI, or OpenRouter and switch between the frontier models from a single model selector.
+**Multi-model** — Bring your own keys for Anthropic, OpenAI, xAI, or any OpenAI/Anthropic-compatible provider (e.g. Fireworks, OpenRouter, Sail) and switch between models from a single model selector.
 
 ## Contributing
 
@@ -67,7 +67,7 @@ npm run build    # Type-check + production build
 - **Markdown** — react-markdown, remark-gfm, remark-math, rehype-katex
 - **Graph** — d3-force for layout, custom SVG rendering
 - **Styling** — Tailwind CSS 4, shadcn/ui components
-- **AI** — Anthropic, OpenAI, and OpenRouter APIs (streaming chat + structured generation)
+- **AI** — Anthropic, OpenAI, and OpenAI/Anthropic-compatible APIs (streaming chat + structured generation)
 
 <details>
 <summary>Project structure</summary>

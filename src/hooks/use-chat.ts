@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Model } from "@/lib/models";
-import { getApiKey, hasAnySavedApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
+import {
+  getApiKey,
+  hasAnySavedApiKey,
+  isInferenceProviderType,
+  isModelReady,
+  KEYS_UPDATED_EVENT,
+} from "@/lib/keys";
 import {
   loadMessages,
   saveMessages,
@@ -264,7 +270,7 @@ export function useChat({
 
   const hasSavedKeys = hasAnySavedApiKey();
   const hasKeyForModel =
-    selectedModel != null && !!getApiKey(selectedModel.provider);
+    selectedModel != null && isModelReady(selectedModel);
 
   /* ---------------------------------------------------------------- */
   /*  Main chat submit                                                 */
@@ -275,8 +281,7 @@ export function useChat({
       const trimmed = text.trim();
       if (!trimmed || isStreaming || !selectedModel) return;
 
-      const apiKey = getApiKey(selectedModel.provider);
-      if (!apiKey) return;
+      if (!isModelReady(selectedModel)) return;
 
       setError(null);
       setLastFailedRequest(null);
@@ -313,7 +318,9 @@ export function useChat({
             })),
             model: selectedModel.modelId,
             provider: selectedModel.provider,
-            apiKey,
+            ...(isInferenceProviderType(selectedModel.provider)
+              ? { profileId: selectedModel.profileId }
+              : { apiKey: getApiKey(selectedModel.provider)! }),
             paperContext,
             paperTitle,
             arxivId,
@@ -402,8 +409,7 @@ export function useChat({
       if (!trimmed || isStreaming || !selectedModel || !chatThreadAnnotationId)
         return;
 
-      const apiKey = getApiKey(selectedModel.provider);
-      if (!apiKey) return;
+      if (!isModelReady(selectedModel)) return;
 
       const ann = await getAnnotation(reviewId, chatThreadAnnotationId);
       if (!ann || ann.kind !== "ask_ai") return;
@@ -454,7 +460,9 @@ export function useChat({
             messages: historyForApi,
             model: selectedModel.modelId,
             provider: selectedModel.provider,
-            apiKey,
+            ...(isInferenceProviderType(selectedModel.provider)
+              ? { profileId: selectedModel.profileId }
+              : { apiKey: getApiKey(selectedModel.provider)! }),
             paperContext,
             paperTitle,
             arxivId,

@@ -3,9 +3,9 @@ import "server-only";
 import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
-import type { Provider } from "@/lib/models";
+import type { InferenceProviderProfile, Provider } from "@/lib/models";
 import type { Model } from "@/lib/models";
-import { PROVIDER_ORDER } from "@/lib/models";
+import { BUILTIN_PROVIDER_ORDER, isInferenceProviderType } from "@/lib/models";
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
@@ -29,6 +29,9 @@ function getDb(): Database.Database {
   }
   return dbInstance;
 }
+
+const INFERENCE_PROFILES_KEY = "inference_profiles";
+
 
 function initSchema(db: Database.Database) {
   db.exec(`
@@ -196,7 +199,10 @@ export function getMessages(reviewId: string): ChatMessage[] {
   try {
     return JSON.parse(row.payload) as ChatMessage[];
   } catch (err) {
-    console.warn(`[store] Failed to parse messages for review ${reviewId}:`, err);
+    console.warn(
+      `[store] Failed to parse messages for review ${reviewId}:`,
+      err,
+    );
     return [];
   }
 }
@@ -221,7 +227,10 @@ export function getAnnotations(reviewId: string): Annotation[] {
   try {
     return JSON.parse(row.payload) as Annotation[];
   } catch (err) {
-    console.warn(`[store] Failed to parse annotations for review ${reviewId}:`, err);
+    console.warn(
+      `[store] Failed to parse annotations for review ${reviewId}:`,
+      err,
+    );
     return [];
   }
 }
@@ -278,7 +287,10 @@ export function getPrerequisites(reviewId: string): PrerequisitesData | null {
   try {
     return JSON.parse(row.payload) as PrerequisitesData;
   } catch (err) {
-    console.warn(`[store] Failed to parse prerequisites for review ${reviewId}:`, err);
+    console.warn(
+      `[store] Failed to parse prerequisites for review ${reviewId}:`,
+      err,
+    );
     return null;
   }
 }
@@ -303,7 +315,10 @@ export function getGraphData(reviewId: string): GraphData | null {
   try {
     return JSON.parse(row.payload) as GraphData;
   } catch (err) {
-    console.warn(`[store] Failed to parse graph data for review ${reviewId}:`, err);
+    console.warn(
+      `[store] Failed to parse graph data for review ${reviewId}:`,
+      err,
+    );
     return null;
   }
 }
@@ -355,18 +370,41 @@ export function clearGlobalKnowledgeGraph(): void {
 
 /* ── Settings (API keys + selected model) ── */
 
+function parseInferenceProfiles(
+  db: Database.Database,
+): InferenceProviderProfile[] {
+  const row = db
+    .prepare(`SELECT value FROM app_kv WHERE key = ?`)
+    .get(INFERENCE_PROFILES_KEY) as { value: string } | undefined;
+  if (!row?.value) return [];
+  try {
+    const parsed = JSON.parse(row.value) as unknown;
+    return Array.isArray(parsed) ? (parsed as InferenceProviderProfile[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getInferenceProfile(
+  id: string,
+): InferenceProviderProfile | undefined {
+  return parseInferenceProfiles(getDb()).find((p) => p.id === id);
+}
+
 export function getSettings(): {
   keys: Partial<Record<Provider, string>>;
+  inferenceProfiles: InferenceProviderProfile[];
   selectedModel: Model | null;
 } {
   const db = getDb();
   const keys: Partial<Record<Provider, string>> = {};
-  for (const p of PROVIDER_ORDER) {
+  for (const p of BUILTIN_PROVIDER_ORDER) {
     const row = db
       .prepare(`SELECT value FROM app_kv WHERE key = ?`)
       .get(`api_key:${p}`) as { value: string } | undefined;
     if (row?.value) keys[p] = row.value;
   }
+  const inferenceProfiles = parseInferenceProfiles(db);
   const modelRow = db
     .prepare(`SELECT value FROM app_kv WHERE key = ?`)
     .get("selected_model") as { value: string } | undefined;
@@ -379,7 +417,15 @@ export function getSettings(): {
       selectedModel = null;
     }
   }
-  return { keys, selectedModel };
+  if (selectedModel && isInferenceProviderType(selectedModel.provider)) {
+    if (
+      !selectedModel.profileId ||
+      !inferenceProfiles.some((p) => p.id === selectedModel!.profileId)
+    ) {
+      selectedModel = null;
+    }
+  }
+  return { keys, inferenceProfiles, selectedModel };
 }
 
 export function setApiKey(provider: Provider, key: string): void {
@@ -393,6 +439,16 @@ export function setApiKey(provider: Provider, key: string): void {
 export function clearApiKey(provider: Provider): void {
   const db = getDb();
   db.prepare(`DELETE FROM app_kv WHERE key = ?`).run(`api_key:${provider}`);
+}
+
+export function setInferenceProfiles(
+  profiles: InferenceProviderProfile[],
+): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO app_kv (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(INFERENCE_PROFILES_KEY, JSON.stringify(profiles));
 }
 
 export function setSelectedModel(model: Model | null): void {
@@ -409,6 +465,7 @@ export function setSelectedModel(model: Model | null): void {
 
 export function patchSettings(patch: {
   keys?: Partial<Record<Provider, string | null>>;
+  inferenceProfiles?: InferenceProviderProfile[] | null;
   selectedModel?: Model | null;
 }): void {
   if (patch.keys) {
@@ -422,6 +479,12 @@ export function patchSettings(patch: {
         setApiKey(p, v);
       }
     }
+  }
+  if (
+    patch.inferenceProfiles !== undefined &&
+    patch.inferenceProfiles !== null
+  ) {
+    setInferenceProfiles(patch.inferenceProfiles);
   }
   if ("selectedModel" in patch) {
     setSelectedModel(patch.selectedModel ?? null);

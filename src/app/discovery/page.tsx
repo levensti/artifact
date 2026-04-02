@@ -20,6 +20,7 @@ import {
   KEYS_UPDATED_EVENT,
   getApiKey,
   getSavedSelectedModel,
+  isModelReady,
 } from "@/lib/keys";
 import { FALLBACK_MODELS, type Model } from "@/lib/models";
 import type { GraphNode } from "@/lib/explore";
@@ -105,7 +106,7 @@ export default function DiscoveryPage() {
 
   const generationModel: Model | null = (() => {
     const saved = getSavedSelectedModel();
-    if (saved && getApiKey(saved.provider)) return saved;
+    if (saved) return saved;
     return FALLBACK_MODELS.find((m) => !!getApiKey(m.provider)) ?? null;
   })();
 
@@ -129,9 +130,10 @@ export default function DiscoveryPage() {
         router.push("/settings");
         return;
       }
-      const apiKey = getApiKey(model.provider);
-      if (!apiKey) {
-        setGenerationError("Missing API key for the selected model.");
+      if (!isModelReady(model)) {
+        setGenerationError(
+          "Missing API credentials for the selected model (key or base URL).",
+        );
         router.push("/settings");
         return;
       }
@@ -155,7 +157,7 @@ export default function DiscoveryPage() {
           paperTitle: node.title,
           paperContext,
           model,
-          apiKey,
+          apiKey: getApiKey(model.provider) ?? "",
           onProgress: setGenerationProgress,
         });
         const after = getGlobalGraphData();
