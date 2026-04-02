@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   getApiKey,
   setApiKey,
@@ -77,14 +76,6 @@ function ProviderRow({ provider, placeholder }: ProviderRowProps) {
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <h3 className="text-sm font-semibold">{meta.label}</h3>
-        {hasKey && (
-          <Badge
-            variant="outline"
-            className="text-[10px] font-medium text-muted-foreground border-border gap-1 py-0 h-5"
-          >
-            Key saved
-          </Badge>
-        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2">
@@ -165,7 +156,23 @@ function InferenceProfileCard({
     setSupportsStreaming(profile.supportsStreaming !== false);
   }, [profile]);
 
+  const [urlError, setUrlError] = useState("");
+
+  const isValidUrl = (url: string): boolean => {
+    try {
+      const u = new URL(url);
+      return u.protocol === "https:" || u.protocol === "http:";
+    } catch {
+      return false;
+    }
+  };
+
   const handleSave = () => {
+    if (!isValidUrl(baseUrl.trim())) {
+      setUrlError("Enter a valid URL (e.g. https://api.example.com/v1)");
+      return;
+    }
+    setUrlError("");
     onUpdate({
       label: label.trim(),
       baseUrl: baseUrl.trim(),
@@ -196,12 +203,16 @@ function InferenceProfileCard({
         <Input
           type="url"
           value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
+          onChange={(e) => {
+            setBaseUrl(e.target.value);
+            setUrlError("");
+          }}
           placeholder={basePlaceholder}
-          className="text-xs h-8"
+          className={`text-xs h-8${urlError ? " border-destructive" : ""}`}
           autoComplete="off"
           spellCheck={false}
         />
+        {urlError && <p className="text-[10px] text-destructive">{urlError}</p>}
       </div>
 
       <div className="relative">

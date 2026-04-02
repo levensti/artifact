@@ -123,7 +123,7 @@ export default function ModelSelector({
               job.kind === "builtin"
                 ? {
                     provider: job.provider,
-                    apiKey: getApiKey(job.provider)!,
+                    apiKey: getApiKey(job.provider) ?? "",
                   }
                 : {
                     provider: job.profile.kind,

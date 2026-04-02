@@ -126,6 +126,9 @@ export async function POST(req: NextRequest) {
     if (prof.kind !== provider) {
       return jsonError("Inference profile does not match provider type.", 400);
     }
+    if (!prof.apiKey?.trim() || !prof.baseUrl?.trim()) {
+      return jsonError("Inference profile is missing API key or base URL.", 400);
+    }
     effectiveApiKey = prof.apiKey;
     effectiveBaseUrl = prof.baseUrl.trim();
     profileSupportsStreaming = prof.supportsStreaming !== false;

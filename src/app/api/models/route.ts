@@ -48,6 +48,9 @@ export async function POST(req: NextRequest) {
     if (!prof || prof.kind !== provider) {
       return jsonError("Invalid or unknown inference profile.", 400);
     }
+    if (!prof.apiKey?.trim() || !prof.baseUrl?.trim()) {
+      return jsonError("Inference profile is missing API key or base URL.", 400);
+    }
     effectiveKey = prof.apiKey;
     effectiveBase = prof.baseUrl.trim();
   } else {

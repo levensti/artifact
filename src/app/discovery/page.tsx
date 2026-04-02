@@ -21,8 +21,9 @@ import {
   getApiKey,
   getSavedSelectedModel,
   isModelReady,
+  isBuiltinProviderReady,
 } from "@/lib/keys";
-import { FALLBACK_MODELS, type Model } from "@/lib/models";
+import { FALLBACK_MODELS, isInferenceProviderType, type Model } from "@/lib/models";
 import type { GraphNode } from "@/lib/explore";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 
@@ -107,7 +108,7 @@ export default function DiscoveryPage() {
   const generationModel: Model | null = (() => {
     const saved = getSavedSelectedModel();
     if (saved) return saved;
-    return FALLBACK_MODELS.find((m) => !!getApiKey(m.provider)) ?? null;
+    return FALLBACK_MODELS.find((m) => isBuiltinProviderReady(m.provider)) ?? null;
   })();
 
   const canGenerate = !!generationModel;
@@ -157,7 +158,7 @@ export default function DiscoveryPage() {
           paperTitle: node.title,
           paperContext,
           model,
-          apiKey: getApiKey(model.provider) ?? "",
+          apiKey: isInferenceProviderType(model.provider) ? "" : (getApiKey(model.provider) ?? ""),
           onProgress: setGenerationProgress,
         });
         const after = getGlobalGraphData();
