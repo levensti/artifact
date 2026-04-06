@@ -11,18 +11,13 @@ import {
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type {
-  GlobalGraphData,
-  GraphData,
-  PrerequisitesData,
-} from "@/lib/explore";
-import { mergeGlobalGraphSession } from "@/lib/explore-merge";
+import type { WikiArticle } from "@/lib/wiki";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
   DEEP_DIVES_UPDATED_EVENT,
-  EXPLORE_UPDATED_EVENT,
   KEYS_UPDATED_EVENT,
+  WIKI_UPDATED_EVENT,
 } from "@/lib/storage-events";
 
 async function apiJson<T>(
@@ -65,15 +60,11 @@ let settingsCache: SettingsCache = {
   inferenceProfiles: [],
   selectedModel: null,
 };
-let globalGraphCache: GlobalGraphData | null = null;
 let deepDivesCache: DeepDiveSession[] = [];
+let wikiArticlesCache: WikiArticle[] = [];
 
 const messagesCache = new Map<string, ChatMessage[]>();
 const annotationsCache = new Map<string, Annotation[]>();
-const exploreCache = new Map<
-  string,
-  { prerequisites: PrerequisitesData | null; graph: GraphData | null }
->();
 
 export function isDataHydrated(): boolean {
   return hydrated;
@@ -86,21 +77,20 @@ export async function hydrateClientStore(): Promise<void> {
     const boot = await apiJson<{
       reviews: PaperReview[];
       settings: SettingsCache;
-      globalGraph: GlobalGraphData | null;
       deepDives: DeepDiveSession[];
+      wikiArticles: WikiArticle[];
     }>("/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
-    globalGraphCache = boot.globalGraph;
     deepDivesCache = boot.deepDives;
+    wikiArticlesCache = boot.wikiArticles ?? [];
     messagesCache.clear();
     annotationsCache.clear();
-    exploreCache.clear();
     hydrated = true;
     window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
     window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
-    window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
     window.dispatchEvent(new Event(DEEP_DIVES_UPDATED_EVENT));
+    window.dispatchEvent(new Event(WIKI_UPDATED_EVENT));
   })();
   return hydratePromise;
 }
@@ -216,117 +206,43 @@ export async function saveDeepDive(
   return session;
 }
 
-/* ── Explore ── */
+/* ── Wiki articles ── */
 
-export async function loadExplore(
-  reviewId: string,
-): Promise<{
-  prerequisites: PrerequisitesData | null;
-  graph: GraphData | null;
-}> {
-  if (!reviewId?.trim()) {
-    return { prerequisites: null, graph: null };
+export function getWikiArticlesSnapshot(): WikiArticle[] {
+  return wikiArticlesCache;
+}
+
+export function getWikiArticle(slug: string): WikiArticle | undefined {
+  return wikiArticlesCache.find((a) => a.slug === slug);
+}
+
+export async function refreshWikiArticles(): Promise<void> {
+  wikiArticlesCache = await apiJson<WikiArticle[]>("/wiki");
+  window.dispatchEvent(new Event(WIKI_UPDATED_EVENT));
+}
+
+export async function saveWikiArticle(article: WikiArticle): Promise<void> {
+  await apiJson(`/wiki/${encodeURIComponent(article.slug)}`, {
+    method: "PUT",
+    body: JSON.stringify(article),
+  });
+  const idx = wikiArticlesCache.findIndex((a) => a.slug === article.slug);
+  if (idx >= 0) {
+    wikiArticlesCache = [
+      ...wikiArticlesCache.slice(0, idx),
+      article,
+      ...wikiArticlesCache.slice(idx + 1),
+    ];
+  } else {
+    wikiArticlesCache = [...wikiArticlesCache, article];
   }
-  const cached = exploreCache.get(reviewId);
-  if (cached) return cached;
-  const data = await apiJson<{
-    prerequisites: PrerequisitesData | null;
-    graph: GraphData | null;
-  }>(`/explore/${encodeURIComponent(reviewId)}`);
-  exploreCache.set(reviewId, data);
-  return data;
+  window.dispatchEvent(new Event(WIKI_UPDATED_EVENT));
 }
 
-export function getExploreCached(reviewId: string): {
-  prerequisites: PrerequisitesData | null;
-  graph: GraphData | null;
-} | undefined {
-  return exploreCache.get(reviewId);
-}
-
-export async function savePrerequisites(
-  reviewId: string,
-  prerequisites: PrerequisitesData,
-): Promise<void> {
-  const prev = exploreCache.get(reviewId) ?? {
-    prerequisites: null,
-    graph: null,
-  };
-  const next = { ...prev, prerequisites };
-  exploreCache.set(reviewId, next);
-  await apiJson(`/explore/${encodeURIComponent(reviewId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ prerequisites }),
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-}
-
-export async function saveGraphData(
-  reviewId: string,
-  graph: GraphData,
-): Promise<void> {
-  const prev = exploreCache.get(reviewId) ?? {
-    prerequisites: null,
-    graph: null,
-  };
-  const next = { ...prev, graph };
-  exploreCache.set(reviewId, next);
-  await apiJson(`/explore/${encodeURIComponent(reviewId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ graph }),
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-}
-
-export async function mergeSessionGraphIntoGlobal(
-  anchorReviewId: string,
-  graph: GraphData,
-): Promise<void> {
-  const next = mergeGlobalGraphSession(
-    anchorReviewId,
-    graph,
-    globalGraphCache,
-  );
-  globalGraphCache = next;
-  await apiJson("/explore/global", {
-    method: "PUT",
-    body: JSON.stringify(next),
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-}
-
-export function getGlobalGraphData(): GlobalGraphData | null {
-  return globalGraphCache;
-}
-
-export async function refreshGlobalGraph(): Promise<void> {
-  globalGraphCache = await apiJson<GlobalGraphData | null>("/explore/global");
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-}
-
-/**
- * Invalidate the client-side explore cache for a review so the next
- * read re-fetches from the server. Used after the assistant's
- * save_to_knowledge_graph tool writes directly to the DB.
- */
-export function invalidateExploreCache(reviewId: string): void {
-  exploreCache.delete(reviewId);
-  globalGraphCache = null;
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-}
-
-export async function clearExploreData(reviewId: string): Promise<void> {
-  exploreCache.delete(reviewId);
-  await apiJson(`/explore/${encodeURIComponent(reviewId)}`, {
-    method: "DELETE",
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-}
-
-export async function clearGlobalKnowledgeGraph(): Promise<void> {
-  globalGraphCache = null;
-  await apiJson("/explore/global", { method: "DELETE" });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+export async function deleteWikiArticle(slug: string): Promise<void> {
+  await apiJson(`/wiki/${encodeURIComponent(slug)}`, { method: "DELETE" });
+  wikiArticlesCache = wikiArticlesCache.filter((a) => a.slug !== slug);
+  window.dispatchEvent(new Event(WIKI_UPDATED_EVENT));
 }
 
 /* ── Settings / keys ── */

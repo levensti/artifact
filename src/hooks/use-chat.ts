@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Model } from "@/lib/models";
 import {
   getApiKey,
@@ -15,10 +15,10 @@ import {
   type ChatAssistantBlock,
   type ChatMessage,
 } from "@/lib/reviews";
-import { invalidateExploreCache } from "@/lib/client-data";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
+import { runWikiCompilation } from "@/lib/wiki-compile";
 
 /* ------------------------------------------------------------------ */
 /*  Agent step types (used during streaming for progressive rendering) */
@@ -235,6 +235,42 @@ export function useChat({
     threadAnnotationId: string | null;
   } | null>(null);
 
+  // Debounced wiki compilation: fires 5s after last successful chat response
+  const wikiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleWikiCompilation = useCallback(() => {
+    if (wikiTimerRef.current) clearTimeout(wikiTimerRef.current);
+    wikiTimerRef.current = setTimeout(() => {
+      if (!selectedModel || !paperContext.trim()) {
+        console.log("[wiki-compile] Skipped: no model or paper context");
+        return;
+      }
+      const apiKey = isInferenceProviderType(selectedModel.provider)
+        ? ""
+        : (getApiKey(selectedModel.provider) ?? "");
+      console.log("[wiki-compile] Starting compilation for:", paperTitle);
+      runWikiCompilation({
+        reviewId,
+        paperTitle,
+        paperContext,
+        model: selectedModel,
+        apiKey,
+      })
+        .then((count) => {
+          console.log(`[wiki-compile] Done: ${count} articles written`);
+        })
+        .catch((err) => {
+          console.warn("[wiki-compile] Failed:", err);
+        });
+    }, 5_000);
+  }, [selectedModel, paperContext, reviewId, paperTitle]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (wikiTimerRef.current) clearTimeout(wikiTimerRef.current);
+    };
+  }, []);
+
   // Load messages on review change
   useEffect(() => {
     let cancelled = false;
@@ -359,17 +395,9 @@ export function useChat({
           ),
         );
 
-        // If the assistant saved to the knowledge graph, invalidate cache
-        // so the Discovery tab picks up the new data.
-        const touchedGraph = steps.some(
-          (s) =>
-            s.kind === "tool_call" &&
-            s.name === "save_to_knowledge_graph" &&
-            s.output,
-        );
-        if (touchedGraph) {
-          invalidateExploreCache(reviewId);
-        }
+        // Schedule wiki compilation (debounced — waits 5s after last response)
+        console.log("[wiki] Chat response complete, scheduling wiki compilation");
+        scheduleWikiCompilation();
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
@@ -396,6 +424,7 @@ export function useChat({
       paperTitle,
       arxivId,
       reviewId,
+      scheduleWikiCompilation,
     ],
   );
 
@@ -497,6 +526,10 @@ export function useChat({
         setThreadStream(thread);
         await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
+
+        // Schedule wiki compilation (debounced — waits 5s after last response)
+        console.log("[wiki] Thread response complete, scheduling wiki compilation");
+        scheduleWikiCompilation();
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
@@ -527,6 +560,7 @@ export function useChat({
       paperTitle,
       paperContext,
       onAnnotationsPersist,
+      scheduleWikiCompilation,
     ],
   );
 

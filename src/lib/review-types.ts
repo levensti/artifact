@@ -23,7 +23,6 @@ export interface ToolCallBlock {
 export type ChatAssistantBlock =
   | TextSegmentBlock
   | ToolCallBlock
-  | { type: "learning_embed"; reviewId: string }
   | { type: "arxiv_hits"; query: string; results: ArxivSearchResult[] };
 
 export interface ChatMessage {

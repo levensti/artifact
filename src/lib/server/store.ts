@@ -9,11 +9,7 @@ import { BUILTIN_PROVIDER_ORDER, isInferenceProviderType } from "@/lib/models";
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type {
-  GlobalGraphData,
-  GraphData,
-  PrerequisitesData,
-} from "@/lib/explore";
+import type { WikiArticle } from "@/lib/wiki";
 
 const DB_PATH = path.join(process.cwd(), "data", "artifact.db");
 
@@ -67,27 +63,25 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS explore_prerequisites (
-      review_id TEXT PRIMARY KEY,
-      payload TEXT NOT NULL,
-      FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS explore_graphs (
-      review_id TEXT PRIMARY KEY,
-      payload TEXT NOT NULL,
-      FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS global_graph (
-      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-      payload TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS app_kv (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS wiki_articles (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      content_md TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      source_review_ids TEXT NOT NULL DEFAULT '[]',
+      related_slugs TEXT NOT NULL DEFAULT '[]',
+      generated_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_slug ON wiki_articles(slug);
+    CREATE INDEX IF NOT EXISTS idx_wiki_category ON wiki_articles(category);
   `);
   migrateDeepDivesReviewFk(db);
   migrateReviewsLocalPdf(db);
@@ -312,98 +306,6 @@ export function insertDeepDive(session: DeepDiveSession): void {
   });
 }
 
-/* ── Explore (per review) ── */
-
-export function getPrerequisites(reviewId: string): PrerequisitesData | null {
-  const db = getDb();
-  const row = db
-    .prepare(`SELECT payload FROM explore_prerequisites WHERE review_id = ?`)
-    .get(reviewId) as { payload: string } | undefined;
-  if (!row) return null;
-  try {
-    return JSON.parse(row.payload) as PrerequisitesData;
-  } catch (err) {
-    console.warn(
-      `[store] Failed to parse prerequisites for review ${reviewId}:`,
-      err,
-    );
-    return null;
-  }
-}
-
-export function setPrerequisites(
-  reviewId: string,
-  data: PrerequisitesData,
-): void {
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO explore_prerequisites (review_id, payload) VALUES (?, ?)
-     ON CONFLICT(review_id) DO UPDATE SET payload = excluded.payload`,
-  ).run(reviewId, JSON.stringify(data));
-}
-
-export function getGraphData(reviewId: string): GraphData | null {
-  const db = getDb();
-  const row = db
-    .prepare(`SELECT payload FROM explore_graphs WHERE review_id = ?`)
-    .get(reviewId) as { payload: string } | undefined;
-  if (!row) return null;
-  try {
-    return JSON.parse(row.payload) as GraphData;
-  } catch (err) {
-    console.warn(
-      `[store] Failed to parse graph data for review ${reviewId}:`,
-      err,
-    );
-    return null;
-  }
-}
-
-export function setGraphData(reviewId: string, graph: GraphData): void {
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO explore_graphs (review_id, payload) VALUES (?, ?)
-     ON CONFLICT(review_id) DO UPDATE SET payload = excluded.payload`,
-  ).run(reviewId, JSON.stringify(graph));
-}
-
-export function clearExploreData(reviewId: string): void {
-  const db = getDb();
-  db.prepare(`DELETE FROM explore_prerequisites WHERE review_id = ?`).run(
-    reviewId,
-  );
-  db.prepare(`DELETE FROM explore_graphs WHERE review_id = ?`).run(reviewId);
-}
-
-/* ── Global graph ── */
-
-export function getGlobalGraphData(): GlobalGraphData | null {
-  const db = getDb();
-  const row = db
-    .prepare(`SELECT payload FROM global_graph WHERE singleton = 1`)
-    .get() as { payload: string } | undefined;
-  if (!row) return null;
-  try {
-    return JSON.parse(row.payload) as GlobalGraphData;
-  } catch (err) {
-    console.warn("[store] Failed to parse global graph data:", err);
-    return null;
-  }
-}
-
-export function setGlobalGraphData(data: GlobalGraphData): void {
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO global_graph (singleton, payload) VALUES (1, ?)
-     ON CONFLICT(singleton) DO UPDATE SET payload = excluded.payload`,
-  ).run(JSON.stringify(data));
-}
-
-export function clearGlobalKnowledgeGraph(): void {
-  const db = getDb();
-  db.prepare(`DELETE FROM global_graph WHERE singleton = 1`).run();
-}
-
 /* ── Settings (API keys + selected model) ── */
 
 function parseInferenceProfiles(
@@ -527,13 +429,81 @@ export function patchSettings(patch: {
   }
 }
 
+/* ── Wiki articles ── */
+
+function rowToWikiArticle(row: Record<string, unknown>): WikiArticle {
+  return {
+    id: row.id as string,
+    slug: row.slug as string,
+    title: row.title as string,
+    category: row.category as string,
+    contentMd: row.content_md as string,
+    summary: row.summary as string,
+    sourceReviewIds: JSON.parse((row.source_review_ids as string) || "[]"),
+    relatedSlugs: JSON.parse((row.related_slugs as string) || "[]"),
+    generatedAt: row.generated_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function listWikiArticles(): WikiArticle[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT * FROM wiki_articles ORDER BY category, title`,
+    )
+    .all() as Record<string, unknown>[];
+  return rows.map(rowToWikiArticle);
+}
+
+export function getWikiArticle(slug: string): WikiArticle | undefined {
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT * FROM wiki_articles WHERE slug = ?`)
+    .get(slug) as Record<string, unknown> | undefined;
+  return row ? rowToWikiArticle(row) : undefined;
+}
+
+export function upsertWikiArticle(article: WikiArticle): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO wiki_articles (id, slug, title, category, content_md, summary, source_review_ids, related_slugs, generated_at, updated_at)
+     VALUES (@id, @slug, @title, @category, @content_md, @summary, @source_review_ids, @related_slugs, @generated_at, @updated_at)
+     ON CONFLICT(slug) DO UPDATE SET
+       title = excluded.title,
+       category = excluded.category,
+       content_md = excluded.content_md,
+       summary = excluded.summary,
+       source_review_ids = excluded.source_review_ids,
+       related_slugs = excluded.related_slugs,
+       updated_at = excluded.updated_at`,
+  ).run({
+    id: article.id,
+    slug: article.slug,
+    title: article.title,
+    category: article.category,
+    content_md: article.contentMd,
+    summary: article.summary,
+    source_review_ids: JSON.stringify(article.sourceReviewIds),
+    related_slugs: JSON.stringify(article.relatedSlugs),
+    generated_at: article.generatedAt,
+    updated_at: article.updatedAt,
+  });
+}
+
+export function deleteWikiArticle(slug: string): boolean {
+  const db = getDb();
+  const result = db.prepare(`DELETE FROM wiki_articles WHERE slug = ?`).run(slug);
+  return result.changes > 0;
+}
+
 /* ── Bootstrap ── */
 
 export function getBootstrap() {
   return {
     reviews: listReviews(),
     settings: getSettings(),
-    globalGraph: getGlobalGraphData(),
     deepDives: listDeepDives(),
+    wikiArticles: listWikiArticles(),
   };
 }

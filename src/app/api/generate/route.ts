@@ -8,8 +8,19 @@ import {
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
-import type { GenerateRequest } from "@/lib/explore";
 import { isInferenceProviderType } from "@/lib/models";
+import type { Provider } from "@/lib/models";
+
+interface GenerateRequest {
+  model: string;
+  provider: Provider;
+  apiKey?: string;
+  profileId?: string;
+  /** @deprecated use profileId for inference */
+  apiBaseUrl?: string;
+  prompt: string;
+  paperContext?: string;
+}
 import { getInferenceProfile } from "@/lib/server/store";
 
 const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.

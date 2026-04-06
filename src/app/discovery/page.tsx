@@ -1,194 +1,193 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Compass } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  ReactFlow,
+  type Node,
+  type Edge,
+  type NodeMouseHandler,
+  Background,
+  Controls,
+  useNodesState,
+  useEdgesState,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { BookOpen, Compass } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
-import RelatedWorksGraph from "@/components/related-works-graph";
 import {
   hydrateClientStore,
-  getGlobalGraphData,
-  getReviewsSnapshot,
+  getWikiArticlesSnapshot,
 } from "@/lib/client-data";
-import { globalGraphToGraphData, EXPLORE_UPDATED_EVENT } from "@/lib/explore";
-import {
-  normalizeArxivId,
-  REVIEWS_UPDATED_EVENT,
-  createOrGetReview,
-} from "@/lib/reviews";
-import {
-  KEYS_UPDATED_EVENT,
-  getApiKey,
-  getSavedSelectedModel,
-  isModelReady,
-  isBuiltinProviderReady,
-} from "@/lib/keys";
-import { FALLBACK_MODELS, isInferenceProviderType, type Model } from "@/lib/models";
-import type { GraphNode } from "@/lib/explore";
-import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
+import { WIKI_UPDATED_EVENT } from "@/lib/wiki";
+import type { WikiArticle } from "@/lib/wiki";
+
+/* ── Category colors ── */
+
+const CATEGORY_BG: Record<string, string> = {
+  concepts: "#3b82f6",
+  methods: "#10b981",
+  architectures: "#8b5cf6",
+  datasets: "#f59e0b",
+  comparisons: "#f43f5e",
+  theory: "#06b6d4",
+};
+
+function categoryColor(cat: string): string {
+  return CATEGORY_BG[cat] ?? "#6b7280";
+}
+
+/* ── Layout: simple circle/grid ── */
+
+function layoutArticles(articles: WikiArticle[]): Node[] {
+  const count = articles.length;
+  if (count === 0) return [];
+
+  // Arrange in a circle for small counts, grid for larger
+  if (count <= 12) {
+    const radius = Math.max(180, count * 30);
+    const cx = 400;
+    const cy = 300;
+    return articles.map((a, i) => {
+      const angle = (2 * Math.PI * i) / count - Math.PI / 2;
+      return {
+        id: a.slug,
+        position: {
+          x: cx + radius * Math.cos(angle) - 70,
+          y: cy + radius * Math.sin(angle) - 20,
+        },
+        data: { label: a.title, article: a },
+        style: {
+          background: categoryColor(a.category),
+          color: "#fff",
+          border: "none",
+          borderRadius: "8px",
+          padding: "8px 14px",
+          fontSize: "12px",
+          fontWeight: 500,
+          maxWidth: "160px",
+          textAlign: "center" as const,
+          cursor: "pointer",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+        },
+      };
+    });
+  }
+
+  // Grid layout for larger counts
+  const cols = Math.ceil(Math.sqrt(count));
+  return articles.map((a, i) => ({
+    id: a.slug,
+    position: {
+      x: (i % cols) * 220 + 50,
+      y: Math.floor(i / cols) * 100 + 50,
+    },
+    data: { label: a.title, article: a },
+    style: {
+      background: categoryColor(a.category),
+      color: "#fff",
+      border: "none",
+      borderRadius: "8px",
+      padding: "8px 14px",
+      fontSize: "12px",
+      fontWeight: 500,
+      maxWidth: "160px",
+      textAlign: "center" as const,
+      cursor: "pointer",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+    },
+  }));
+}
+
+function buildEdges(articles: WikiArticle[]): Edge[] {
+  const slugSet = new Set(articles.map((a) => a.slug));
+  const edges: Edge[] = [];
+  const seen = new Set<string>();
+
+  for (const a of articles) {
+    for (const related of a.relatedSlugs) {
+      if (!slugSet.has(related)) continue;
+      const key = [a.slug, related].sort().join("↔");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({
+        id: `${a.slug}-${related}`,
+        source: a.slug,
+        target: related,
+        style: { stroke: "#94a3b8", strokeWidth: 1.5, opacity: 0.5 },
+        animated: false,
+      });
+    }
+  }
+  return edges;
+}
+
+/* ── Legend ── */
+
+function CategoryLegend({ categories }: { categories: string[] }) {
+  if (categories.length === 0) return null;
+  return (
+    <div className="absolute bottom-4 left-4 z-10 flex flex-wrap gap-2 rounded-lg border border-border bg-background/90 backdrop-blur-sm px-3 py-2">
+      {categories.map((cat) => (
+        <div key={cat} className="flex items-center gap-1.5">
+          <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: categoryColor(cat) }}
+          />
+          <span className="text-[10px] text-muted-foreground capitalize">
+            {cat}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Page ── */
 
 export default function DiscoveryPage() {
   const [ready, setReady] = useState(false);
   const [version, setVersion] = useState(0);
-  const [isGeneratingNodeId, setIsGeneratingNodeId] = useState<string | null>(
-    null,
-  );
-  const [generationProgress, setGenerationProgress] = useState<string | null>(
-    null,
-  );
-  const [generationError, setGenerationError] = useState<string | null>(null);
-  const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     void hydrateClientStore().then(() => setReady(true));
     const bump = () => setVersion((v) => v + 1);
-    window.addEventListener(EXPLORE_UPDATED_EVENT, bump);
-    window.addEventListener(REVIEWS_UPDATED_EVENT, bump);
-    window.addEventListener(KEYS_UPDATED_EVENT, bump);
+    window.addEventListener(WIKI_UPDATED_EVENT, bump);
     return () => {
-      window.removeEventListener(EXPLORE_UPDATED_EVENT, bump);
-      window.removeEventListener(REVIEWS_UPDATED_EVENT, bump);
-      window.removeEventListener(KEYS_UPDATED_EVENT, bump);
+      window.removeEventListener(WIKI_UPDATED_EVENT, bump);
     };
   }, []);
 
-  // Consume version to trigger re-render
   void version;
 
-  const reviewedPapers = useMemo(() => {
+  const articles = useMemo(() => {
     void version;
-    return ready ? getReviewsSnapshot() : [];
+    return ready ? getWikiArticlesSnapshot() : [];
   }, [ready, version]);
 
-  const globalRaw = ready ? getGlobalGraphData() : null;
-  const globalGraph = globalGraphToGraphData(globalRaw);
-
-  const reviewedArxivIds = useMemo(() => {
-    if (!ready) return new Set<string>();
-    return new Set(reviewedPapers.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)));
-  }, [ready, reviewedPapers]);
-
-  const graph = useMemo(() => {
-    if (globalGraph && globalGraph.nodes.length > 0) return globalGraph;
-    if (reviewedPapers.length === 0) return null;
-
-    return {
-      nodes: reviewedPapers.map((r) => ({
-        id: r.id,
-        title: r.title,
-        authors: [],
-        abstract: "",
-        arxivId: r.arxivId ?? r.id,
-        publishedDate: r.createdAt,
-        categories: [],
-        isCurrent: true,
-      })),
-      edges: [],
-      keywords: [],
-      generatedAt: new Date().toISOString(),
-      modelUsed: "seeded-from-reviews",
-    };
-  }, [globalGraph, reviewedPapers]);
-
-  const readCount = useMemo(
-    () =>
-      graph
-        ? graph.nodes.filter((n) =>
-            reviewedArxivIds.has(normalizeArxivId(n.arxivId)),
-          ).length
-        : 0,
-    [graph, reviewedArxivIds],
+  const categories = useMemo(
+    () => [...new Set(articles.map((a) => a.category))].sort(),
+    [articles],
   );
-  const unreadCount = graph ? Math.max(0, graph.nodes.length - readCount) : 0;
 
-  const generationModel: Model | null = (() => {
-    const saved = getSavedSelectedModel();
-    if (saved) return saved;
-    return FALLBACK_MODELS.find((m) => isBuiltinProviderReady(m.provider)) ?? null;
-  })();
+  const initialNodes = useMemo(() => layoutArticles(articles), [articles]);
+  const initialEdges = useMemo(() => buildEdges(articles), [articles]);
 
-  const canGenerate = !!generationModel;
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
+  // Sync nodes/edges when articles change
   useEffect(() => {
-    if (!toastMessage) return;
-    const t = window.setTimeout(() => setToastMessage(null), 5000);
-    return () => window.clearTimeout(t);
-  }, [toastMessage]);
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
-  const handleGenerateFromNode = useCallback(
-    async (node: GraphNode) => {
-      if (isGeneratingNodeId) return;
-
-      const model = generationModel;
-      if (!model) {
-        setGenerationError(
-          "Add an API key and select a model in Settings first.",
-        );
-        router.push("/settings");
-        return;
-      }
-      if (!isModelReady(model)) {
-        setGenerationError(
-          "Missing API credentials for the selected model (key or base URL).",
-        );
-        router.push("/settings");
-        return;
-      }
-
-      setGenerationError(null);
-      setIsGeneratingNodeId(node.id);
-      setGenerationProgress("Starting analysis…");
-
-      try {
-        const beforeIds = new Set(
-          (graph?.nodes ?? []).map((n) => normalizeArxivId(n.arxivId)),
-        );
-        const review = await createOrGetReview(node.arxivId, node.title);
-        const paperContext = [node.title, node.abstract]
-          .filter((x) => typeof x === "string" && x.trim().length > 0)
-          .join("\n\n");
-
-        await runPaperExploreAnalysis({
-          reviewId: review.id,
-          arxivId: node.arxivId,
-          paperTitle: node.title,
-          paperContext,
-          model,
-          apiKey: isInferenceProviderType(model.provider) ? "" : (getApiKey(model.provider) ?? ""),
-          onProgress: setGenerationProgress,
-        });
-        const after = getGlobalGraphData();
-        const newlyAdded = (after?.nodes ?? []).filter(
-          (n) => !beforeIds.has(normalizeArxivId(n.arxivId)),
-        );
-        if (newlyAdded.length > 0) {
-          setHighlightedNodeIds(new Set(newlyAdded.map((n) => n.id)));
-          setToastMessage(
-            `Found ${newlyAdded.length} new work${newlyAdded.length === 1 ? "" : "s"}.`,
-          );
-          setTimeout(() => setHighlightedNodeIds(new Set()), 8000);
-        } else {
-          setToastMessage("No new works discovered this run.");
-        }
-        setGenerationProgress("Done. Discover graph updated.");
-      } catch (err) {
-        setGenerationError(
-          err instanceof Error
-            ? err.message
-            : "Failed to generate related works.",
-        );
-      } finally {
-        setTimeout(() => {
-          setIsGeneratingNodeId(null);
-          setGenerationProgress(null);
-        }, 900);
-      }
+  const onNodeClick: NodeMouseHandler = useCallback(
+    (_event, node) => {
+      router.push(`/wiki?article=${encodeURIComponent(node.id)}`);
     },
-    [generationModel, isGeneratingNodeId, router, graph],
+    [router],
   );
 
   if (!ready) {
@@ -201,7 +200,7 @@ export default function DiscoveryPage() {
     );
   }
 
-  if (!graph || graph.nodes.length === 0) {
+  if (articles.length === 0) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full px-6 bg-background">
@@ -215,19 +214,19 @@ export default function DiscoveryPage() {
                   Discover
                 </h1>
                 <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                  Map your research frontier
+                  Your knowledge map, compiled from papers
                 </p>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-                You have not reviewed any papers yet. Start your first review,
-                then grow this space into a living map of ideas, methods, and
-                connections as you explore with the assistant.
+                Your knowledge wiki is empty. Start reviewing papers and
+                chatting with the assistant — concept articles will be
+                compiled automatically and appear here as an interactive map.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-muted-foreground/70 text-xs">
-              <span>From first paper to research map</span>
+              <span>LLM-compiled concepts</span>
               <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-              <span>Assistant-guided discovery</span>
+              <span>Cross-paper synthesis</span>
               <span className="size-0.5 rounded-full bg-muted-foreground/35" />
               <span>Built as you learn</span>
             </div>
@@ -245,40 +244,35 @@ export default function DiscoveryPage() {
           <h1 className="text-sm font-semibold tracking-tight text-foreground">
             Discover
           </h1>
-          <span className="ml-1 rounded-full bg-muted px-2 py-px text-[10px] tabular-nums text-muted-foreground font-medium">
-            {readCount} read
-          </span>
           <span className="rounded-full bg-muted px-2 py-px text-[10px] tabular-nums text-muted-foreground font-medium">
-            {unreadCount} unread
+            {articles.length} concept{articles.length !== 1 ? "s" : ""}
           </span>
+          <button
+            type="button"
+            onClick={() => router.push("/wiki")}
+            className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <BookOpen className="size-3.5" />
+            Browse wiki
+          </button>
         </header>
-        <div className="flex-1 min-h-0 p-3">
-          {toastMessage && (
-            <div className="mb-2 flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-900">
-              <CheckCircle2 className="size-3.5 shrink-0" />
-              <span>{toastMessage}</span>
-              <button
-                type="button"
-                className="ml-auto text-emerald-900/70 hover:text-emerald-900"
-                onClick={() => setToastMessage(null)}
-                aria-label="Dismiss notification"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-          <RelatedWorksGraph
-            graph={graph}
-            workspace
-            reviewedArxivIds={reviewedArxivIds}
-            onGenerateRelated={handleGenerateFromNode}
-            isGeneratingNodeId={isGeneratingNodeId}
-            generationProgress={generationProgress}
-            generationError={generationError}
-            canGenerate={canGenerate}
-            onOpenSettings={() => router.push("/settings")}
-            highlightedNodeIds={highlightedNodeIds}
-          />
+        <div className="flex-1 min-h-0 relative">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            fitView
+            fitViewOptions={{ padding: 0.3 }}
+            proOptions={{ hideAttribution: true }}
+            minZoom={0.3}
+            maxZoom={2}
+          >
+            <Background gap={20} size={1} />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+          <CategoryLegend categories={categories} />
         </div>
       </div>
     </DashboardLayout>

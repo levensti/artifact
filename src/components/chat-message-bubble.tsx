@@ -5,7 +5,6 @@ import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
 import type { AnnotationMessage } from "@/lib/annotations";
 import MarkdownMessage from "./markdown-message";
-import LearningEmbed from "./learning-embed";
 import {
   ThinkingIndicator,
   ToolCallStep,
@@ -76,7 +75,8 @@ export function hasInterleavedBlocks(blocks: ChatAssistantBlock[]): boolean {
   );
 }
 
-export function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: BlockCtx) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function renderInterleavedBlocks(blocks: ChatAssistantBlock[], _ctx: BlockCtx) {
   return blocks.map((block, i) => {
     if (block.type === "text_segment") {
       return block.content ? (
@@ -90,18 +90,6 @@ export function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: Block
           name={block.name}
           input={block.input}
           output={block.output}
-        />
-      );
-    }
-    if (block.type === "learning_embed") {
-      return (
-        <LearningEmbed
-          key={`le-${i}`}
-          reviewId={block.reviewId}
-          arxivId={ctx.arxivId}
-          paperTitle={ctx.paperTitle}
-          paperContext={ctx.paperContext}
-          selectedModel={ctx.selectedModel}
         />
       );
     }
