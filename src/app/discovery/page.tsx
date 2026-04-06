@@ -69,7 +69,7 @@ export default function DiscoveryPage() {
 
   const reviewedArxivIds = useMemo(() => {
     if (!ready) return new Set<string>();
-    return new Set(reviewedPapers.map((r) => normalizeArxivId(r.arxivId)));
+    return new Set(reviewedPapers.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)));
   }, [ready, reviewedPapers]);
 
   const graph = useMemo(() => {
@@ -82,7 +82,7 @@ export default function DiscoveryPage() {
         title: r.title,
         authors: [],
         abstract: "",
-        arxivId: r.arxivId,
+        arxivId: r.arxivId ?? r.id,
         publishedDate: r.createdAt,
         categories: [],
         isCurrent: true,

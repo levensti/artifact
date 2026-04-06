@@ -19,7 +19,8 @@ export interface TextSelectionInfo {
 }
 
 interface PdfViewerProps {
-  url: string;
+  /** The URL to load the PDF from. Passed directly to react-pdf. */
+  pdfUrl: string;
   onTextExtracted: (text: string) => void;
   onTextSelected: (info: TextSelectionInfo) => void;
   onSelectionCleared: () => void;
@@ -30,7 +31,7 @@ interface PdfViewerProps {
 }
 
 export default function PdfViewer({
-  url,
+  pdfUrl,
   onTextExtracted,
   onTextSelected,
   onSelectionCleared,
@@ -45,7 +46,6 @@ export default function PdfViewer({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const proxyUrl = `/api/pdf?url=${encodeURIComponent(url)}`;
 
   const extractText = useCallback(
     async (pdf: PDFDocumentProxy) => {
@@ -261,12 +261,12 @@ export default function PdfViewer({
           </div>
         )}
         <Document
-          file={proxyUrl}
+          file={pdfUrl}
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={(err) => {
             console.error("PDF load error:", err);
             setLoading(false);
-            setLoadError("Failed to load PDF. Check that the arXiv URL is valid.");
+            setLoadError("Failed to load PDF. Check that the URL or file path is valid.");
           }}
           loading={null}
           className="flex flex-col items-center gap-2 py-4"
