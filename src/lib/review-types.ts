@@ -39,7 +39,10 @@ export interface ChatMessage {
 export interface PaperReview {
   id: string;
   title: string;
-  arxivId: string;
+  /** arXiv paper ID. Null for locally-uploaded PDFs. */
+  arxivId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Absolute filesystem path for local PDFs. Null for arXiv papers. */
+  pdfPath: string | null;
 }

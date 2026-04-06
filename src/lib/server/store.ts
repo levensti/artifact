@@ -90,6 +90,7 @@ function initSchema(db: Database.Database) {
     );
   `);
   migrateDeepDivesReviewFk(db);
+  migrateReviewsLocalPdf(db);
 }
 
 /** Older DBs created deep_dives without a FK; recreate so DELETE FROM reviews cascades. */
@@ -132,13 +133,47 @@ function migrateDeepDivesReviewFk(db: Database.Database) {
   `);
 }
 
+/** Add pdf_path column and make arxiv_id nullable for local PDF support. */
+function migrateReviewsLocalPdf(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(reviews)`).all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  const hasPdfPath = cols.some((c) => c.name === "pdf_path");
+  if (!hasPdfPath) {
+    db.exec(`ALTER TABLE reviews ADD COLUMN pdf_path TEXT`);
+  }
+  // SQLite doesn't support ALTER COLUMN, but we need arxiv_id to be nullable.
+  // Recreate the table if arxiv_id is still NOT NULL.
+  const arxivCol = cols.find((c) => c.name === "arxiv_id");
+  if (arxivCol && arxivCol.notnull === 1) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE reviews__new (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        arxiv_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        pdf_path TEXT
+      );
+      INSERT INTO reviews__new (id, title, arxiv_id, created_at, updated_at, pdf_path)
+        SELECT id, title, arxiv_id, created_at, updated_at, pdf_path FROM reviews;
+      DROP TABLE reviews;
+      ALTER TABLE reviews__new RENAME TO reviews;
+      CREATE INDEX IF NOT EXISTS idx_reviews_arxiv ON reviews(arxiv_id);
+      COMMIT;
+    `);
+  }
+}
+
 /* ── Reviews ── */
 
 export function listReviews(): PaperReview[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
        FROM reviews ORDER BY datetime(created_at) DESC`,
     )
     .all() as PaperReview[];
@@ -149,7 +184,7 @@ export function getReview(id: string): PaperReview | undefined {
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
        FROM reviews WHERE id = ?`,
     )
     .get(id) as PaperReview | undefined;
@@ -160,7 +195,7 @@ export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
        FROM reviews WHERE lower(arxiv_id) = lower(?)`,
     )
     .all(arxivId) as PaperReview[];
@@ -170,14 +205,15 @@ export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
 export function insertReview(review: PaperReview): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO reviews (id, title, arxiv_id, created_at, updated_at)
-     VALUES (@id, @title, @arxiv_id, @created_at, @updated_at)`,
+    `INSERT INTO reviews (id, title, arxiv_id, created_at, updated_at, pdf_path)
+     VALUES (@id, @title, @arxiv_id, @created_at, @updated_at, @pdf_path)`,
   ).run({
     id: review.id,
     title: review.title,
     arxiv_id: review.arxivId,
     created_at: review.createdAt,
     updated_at: review.updatedAt,
+    pdf_path: review.pdfPath ?? null,
   });
 }
 

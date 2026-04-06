@@ -30,6 +30,14 @@ import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
 
+/** Build the API URL to load the PDF for a given review. */
+function pdfUrlForReview(review: import("@/lib/reviews").PaperReview): string {
+  if (review.pdfPath) {
+    return `/api/pdf?path=${encodeURIComponent(review.pdfPath)}`;
+  }
+  return `/api/pdf?url=${encodeURIComponent(arxivPdfUrl(review.arxivId!))}`;
+}
+
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
   ssr: false,
   loading: () => (
@@ -277,7 +285,7 @@ export default function ReviewPage() {
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             <PdfViewer
-              url={arxivPdfUrl(review.arxivId)}
+              pdfUrl={pdfUrlForReview(review)}
               onTextExtracted={setPaperText}
               onTextSelected={handleTextSelected}
               onSelectionCleared={handleSelectionCleared}
@@ -315,7 +323,7 @@ export default function ReviewPage() {
         >
           <RightPanel
             reviewId={review.id}
-            arxivId={review.arxivId}
+            arxivId={review.arxivId ?? ""}
             paperTitle={review.title}
             paperContext={paperText}
             annotations={annotations}

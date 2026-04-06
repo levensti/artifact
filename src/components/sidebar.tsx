@@ -112,7 +112,7 @@ export default function Sidebar({
   }, [reviews]);
 
   const unreadDiscoverCount = useMemo(() => {
-    const reviewed = new Set(reviews.map((r) => normalizeArxivId(r.arxivId)));
+    const reviewed = new Set(reviews.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)));
     return globalIds.filter((id) => !reviewed.has(normalizeArxivId(id))).length;
   }, [reviews, globalIds]);
 

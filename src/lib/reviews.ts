@@ -1,5 +1,6 @@
 import {
   createReview as createReviewRemote,
+  createLocalPdfReview as createLocalPdfReviewRemote,
   getReview as getReviewCached,
   getReviewsSnapshot,
   loadMessages,
@@ -35,10 +36,17 @@ export async function createReview(
   return createReviewRemote(arxivId, title);
 }
 
+export async function createLocalPdfReview(
+  pdfPath: string,
+  title: string,
+): Promise<PaperReview> {
+  return createLocalPdfReviewRemote(pdfPath, title);
+}
+
 export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
   const key = normalizeArxivId(arxivId);
   return getReviewsSnapshot().find(
-    (r) => normalizeArxivId(r.arxivId) === key,
+    (r) => r.arxivId != null && normalizeArxivId(r.arxivId) === key,
   );
 }
 

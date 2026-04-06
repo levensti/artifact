@@ -13,16 +13,35 @@ export function GET() {
 }
 
 export async function POST(req: Request) {
-  let body: { arxivId?: string; title?: string };
+  let body: { arxivId?: string; title?: string; pdfPath?: string };
   try {
     body = await req.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const arxivRaw = body.arxivId;
+
   const title = typeof body.title === "string" ? body.title : "";
+  const pdfPath = typeof body.pdfPath === "string" ? body.pdfPath.trim() : null;
+
+  // Local PDF review
+  if (pdfPath) {
+    const now = new Date().toISOString();
+    const review: PaperReview = {
+      id: crypto.randomUUID(),
+      title: title || pdfPath.split("/").pop()?.replace(/\.pdf$/i, "") || "Local PDF",
+      arxivId: null,
+      createdAt: now,
+      updatedAt: now,
+      pdfPath,
+    };
+    insertReview(review);
+    return Response.json(review);
+  }
+
+  // arXiv review
+  const arxivRaw = body.arxivId;
   if (!arxivRaw || typeof arxivRaw !== "string") {
-    return Response.json({ error: "arxivId is required" }, { status: 400 });
+    return Response.json({ error: "arxivId or pdfPath is required" }, { status: 400 });
   }
   const canonical = normalizeArxivId(arxivRaw);
   const existing = getReviewByArxivId(canonical);
@@ -36,6 +55,7 @@ export async function POST(req: Request) {
     arxivId: canonical,
     createdAt: now,
     updatedAt: now,
+    pdfPath: null,
   };
   insertReview(review);
   return Response.json(review);
