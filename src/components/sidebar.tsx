@@ -112,7 +112,9 @@ export default function Sidebar({
   }, [reviews]);
 
   const unreadDiscoverCount = useMemo(() => {
-    const reviewed = new Set(reviews.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)));
+    const reviewed = new Set(
+      reviews.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)),
+    );
     return globalIds.filter((id) => !reviewed.has(normalizeArxivId(id))).length;
   }, [reviews, globalIds]);
 
@@ -196,7 +198,7 @@ export default function Sidebar({
                 />
                 <p className="px-1 text-xs leading-relaxed text-muted-foreground">
                   No papers yet. Start a review from an arXiv link to read,
-                  annotate, and explore with the assistant.
+                  annotate, and explore with your assistant.
                 </p>
               </div>
             )}

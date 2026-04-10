@@ -1,11 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ChevronRight,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { ChevronRight, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -72,7 +68,7 @@ export default function AnnotationList({
 
           <p className="px-2 text-xs leading-relaxed text-muted-foreground/70">
             Highlight any passage to add a note or start a deeper conversation
-            with the assistant.
+            with your assistant.
           </p>
         </div>
       </div>
