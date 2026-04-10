@@ -14,22 +14,22 @@ export default function Home() {
   return (
     <DashboardLayout>
       <div className="flex items-center justify-center h-full px-6 bg-background">
-        <div className="max-w-md text-center space-y-8">
-          <div className="mx-auto size-16 rounded-lg border border-border bg-card shadow-sm flex items-center justify-center">
-            <BookOpen size={28} className="text-primary" strokeWidth={1.5} />
+        <div className="max-w-lg text-center space-y-6">
+          <div className="mx-auto size-20 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/8 to-primary/3 shadow-lg shadow-primary/10 flex items-center justify-center icon-glow">
+            <BookOpen size={34} className="text-primary drop-shadow-sm" strokeWidth={1.5} />
           </div>
           <div className="space-y-3">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
               Artifact
             </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-104 mx-auto">
+            <p className="text-base text-muted-foreground/80 leading-relaxed max-w-sm mx-auto">
               Read arXiv papers with full-text context, annotate, and chat with
               an AI assistant.
             </p>
           </div>
           <Button
             onClick={() => setShowNewReview(true)}
-            className="gap-2 h-10 px-5 rounded-lg"
+            className="gap-2.5 h-11 px-7 rounded-xl shadow-md shadow-primary/15 text-sm font-semibold tracking-wide"
           >
             Start a review
             <ArrowRight size={15} strokeWidth={2} />

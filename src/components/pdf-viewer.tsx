@@ -196,8 +196,8 @@ export default function PdfViewer({
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/40 px-4 backdrop-blur-sm">
-        <div className="flex h-8 items-center gap-0.5">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-4 backdrop-blur-md">
+        <div className="flex h-8 items-center gap-0.5 rounded-full bg-muted/60 px-1">
           <Button
             variant="ghost"
             size="icon"
@@ -208,7 +208,7 @@ export default function PdfViewer({
           >
             <ChevronUp size={14} />
           </Button>
-          <span className="min-w-[56px] text-center text-xs font-medium tabular-nums leading-none text-muted-foreground">
+          <span className="min-w-[56px] text-center text-xs font-semibold tabular-nums leading-none text-foreground/70">
             {currentPage} / {numPages || "—"}
           </span>
           <Button
@@ -222,7 +222,7 @@ export default function PdfViewer({
             <ChevronDown size={14} />
           </Button>
         </div>
-        <div className="flex h-8 items-center gap-0.5">
+        <div className="flex h-8 items-center gap-0.5 rounded-full bg-muted/60 px-1">
           <Button
             variant="ghost"
             size="icon"
@@ -232,7 +232,7 @@ export default function PdfViewer({
           >
             <ZoomOut size={14} />
           </Button>
-          <span className="min-w-[40px] text-center text-xs font-medium tabular-nums leading-none text-muted-foreground">
+          <span className="min-w-[40px] text-center text-xs font-semibold tabular-nums leading-none text-foreground/70">
             {Math.round(scale * 100)}%
           </span>
           <Button

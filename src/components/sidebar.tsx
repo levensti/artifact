@@ -127,14 +127,14 @@ export default function Sidebar({
         <div className="shrink-0 space-y-2 border-b border-sidebar-border px-2.5 pb-3 pt-2.5">
           <div className="flex min-h-10 items-start justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-start gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/8 text-primary/70">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/15 to-primary/6 text-primary shadow-sm shadow-primary/10">
                 <FileText
                   className="size-[18px] text-primary/70"
                   strokeWidth={1.75}
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="block text-lg font-semibold tracking-tight leading-none text-foreground">
+                <span className="block text-lg font-bold tracking-tight leading-none text-foreground">
                   Artifact
                 </span>
                 <p className="mt-1 text-[11px] font-medium leading-snug tracking-wide text-muted-foreground">
@@ -170,8 +170,8 @@ export default function Sidebar({
             className={cn(
               "flex w-full min-h-10 items-center gap-2 rounded-lg px-0 pr-1.5 py-0 text-left text-sm font-medium transition-colors duration-150",
               pathname === "/discovery"
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                ? "bg-sidebar-accent/40 text-sidebar-accent-foreground border-l-[3px] border-l-primary"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-[3px] border-l-transparent",
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center">
@@ -179,7 +179,7 @@ export default function Sidebar({
             </span>
             <span>Discover</span>
             {unreadDiscoverCount > 0 ? (
-              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-primary/20 bg-primary/10 px-1.5 text-[10px] font-medium leading-none text-primary tabular-nums">
+              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold leading-none text-primary tabular-nums shadow-sm shadow-primary/10">
                 {unreadDiscoverCount}
               </span>
             ) : null}
@@ -202,7 +202,7 @@ export default function Sidebar({
             )}
             {grouped.map((group) => (
               <div key={group.label} className="mb-4 last:mb-0">
-                <p className="pb-1.5 text-xs font-medium text-muted-foreground">
+                <p className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                   {group.label}
                 </p>
                 <div className="space-y-0.5">
@@ -221,8 +221,8 @@ export default function Sidebar({
                         className={cn(
                           "flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-colors duration-150",
                           isActive
-                            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                            ? "bg-sidebar-accent/40 font-medium text-sidebar-accent-foreground border-l-[3px] border-l-primary"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-[3px] border-l-transparent",
                         )}
                       >
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center">

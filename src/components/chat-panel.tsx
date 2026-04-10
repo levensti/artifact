@@ -89,13 +89,13 @@ function ChatInput({
   };
 
   return (
-    <div className="p-3 border-t border-border shrink-0 bg-muted/20">
+    <div className="p-3 shrink-0 bg-gradient-to-t from-background via-background to-transparent">
       <div
         className={cn(
-          "flex items-end gap-2 rounded-md border transition-[box-shadow,border-color,background-color] duration-200",
+          "flex items-end gap-2 rounded-xl border transition-[box-shadow,border-color,background-color] duration-200",
           inputLocked
             ? "border-amber-500/35 bg-amber-500/5"
-            : "bg-card border-border focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-ring/40",
+            : "bg-card border-border shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 focus-within:shadow-md focus-within:shadow-primary/5",
         )}
       >
         <textarea
@@ -122,7 +122,7 @@ function ChatInput({
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 m-1 text-muted-foreground hover:text-primary"
+          className="size-8 m-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
           onClick={sendMessage}
           disabled={
             inputLocked || !selectedModel || !input.trim() || isStreaming
@@ -144,7 +144,7 @@ function ChatInput({
           )}
         </Button>
       </div>
-      <div className="mt-2 space-y-1.5">
+      <div className="mt-1.5 space-y-0.5">
         {inputLocked ? (
           <p className="px-1 text-center text-[11px] leading-snug text-amber-700/90">
             Chat is locked until you add an API key.
@@ -156,7 +156,7 @@ function ChatInput({
               : "Messages apply to the whole paper."}
           </p>
         )}
-        <p className="px-1 text-center text-xs leading-snug text-muted-foreground/70">
+        <p className="px-1 text-center text-[10px] leading-snug text-muted-foreground/50">
           {selectedModel
             ? `${selectedModel.label} · Shift+Enter new line`
             : hasSavedKeys
@@ -322,8 +322,8 @@ export default function ChatPanel({
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
       {!hideHeader && (
-        <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-          <span className="text-sm font-semibold tracking-tight text-foreground">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-gradient-to-r from-background to-primary/[0.03] px-4">
+          <span className="text-sm font-bold tracking-tight text-foreground">
             Assistant
           </span>
           <ModelSelector selected={selectedModel} onSelect={setSelectedModel} />

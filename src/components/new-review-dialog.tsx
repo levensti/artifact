@@ -230,7 +230,7 @@ export default function NewReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Start a review</DialogTitle>
           <DialogDescription>
@@ -243,14 +243,14 @@ export default function NewReviewDialog({
         </DialogHeader>
 
         {/* Mode toggle */}
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <div className="flex gap-0.5 rounded-xl bg-muted/70 p-1 border border-border/40">
           <button
             type="button"
             onClick={() => { setMode("arxiv"); setError(null); }}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === "arxiv"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             }`}
           >
             <Globe size={13} />
@@ -261,8 +261,8 @@ export default function NewReviewDialog({
             onClick={() => { setMode("web"); setError(null); }}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === "web"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             }`}
           >
             <Globe size={13} />
@@ -273,8 +273,8 @@ export default function NewReviewDialog({
             onClick={() => { setMode("local"); setError(null); }}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === "local"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             }`}
           >
             <FileText size={13} />
@@ -327,7 +327,7 @@ export default function NewReviewDialog({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading}
-                className="w-full rounded-md border-2 border-dashed border-border px-4 py-6 text-center transition-colors hover:border-primary/40 hover:bg-muted/50 disabled:opacity-50"
+                className="w-full rounded-xl border-2 border-dashed border-border/70 px-4 py-8 text-center transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.03] hover:shadow-inner disabled:opacity-50"
               >
                 {selectedFile ? (
                   <div className="flex items-center justify-center gap-2">

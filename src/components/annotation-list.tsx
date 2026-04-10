@@ -225,7 +225,7 @@ function AnnotationCard({
           : undefined
       }
       className={cn(
-        "overflow-hidden rounded-xl border bg-card transition-all duration-150",
+        "overflow-hidden rounded-xl border bg-card transition-all duration-200 hover:shadow-md hover:shadow-primary/5",
         onActivate && "cursor-pointer",
         isActive
           ? isAskAi
@@ -241,7 +241,7 @@ function AnnotationCard({
       {isAskAi ? (
         <>
           <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
-            <span className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-md bg-sky-500/12 px-1.5 py-0.5 text-[10px] font-semibold leading-tight tracking-tight text-sky-900 dark:text-sky-100">
+            <span className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-lg bg-gradient-to-r from-sky-500/15 to-sky-400/8 px-2 py-1 text-[10px] font-semibold leading-tight tracking-tight text-sky-800 shadow-sm shadow-sky-500/10 dark:text-sky-100">
               <Sparkles className="size-3 shrink-0" strokeWidth={2} />
               Dive deeper
             </span>
@@ -271,7 +271,7 @@ function AnnotationCard({
             </div>
           </div>
 
-          <div className="mx-3.5 mt-3 rounded-xl border border-border/60 bg-muted/25 px-4 py-3">
+          <div className="mx-3.5 mt-3 rounded-xl border border-border/40 bg-gradient-to-br from-muted/20 to-muted/5 px-4 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               From the paper
             </p>
@@ -306,7 +306,7 @@ function AnnotationCard({
         <>
           <div className="flex items-start gap-2.5 px-3 pt-2.5 pb-2.5">
             <div
-              className="mt-0.5 w-0.5 min-h-9 shrink-0 self-stretch rounded-full transition-colors duration-150"
+              className="mt-0.5 w-[3px] min-h-9 shrink-0 self-stretch rounded-full transition-all duration-200"
               style={{
                 backgroundColor:
                   isActive || isHovered
