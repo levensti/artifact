@@ -45,9 +45,9 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-merriweather), Merriweather, Georgia, serif;
   --font-mono: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-reading: var(--font-source-serif), "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-reading: var(--font-merriweather), Merriweather, Georgia, serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

@@ -233,7 +233,7 @@ export default function Sidebar({
                             strokeWidth={1.75}
                           />
                         </span>
-                        <TextTooltip label={review.title} side="right" triggerClassName="font-reading" />
+                        <TextTooltip label={review.title} side="right" />
                       </div>
                     );
                   })}
