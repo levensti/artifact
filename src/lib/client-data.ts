@@ -144,6 +144,18 @@ export async function createLocalPdfReview(
   return review;
 }
 
+export async function createWebReview(
+  sourceUrl: string,
+  title: string,
+): Promise<PaperReview> {
+  const review = await apiJson<PaperReview>("/reviews", {
+    method: "POST",
+    body: JSON.stringify({ sourceUrl, title }),
+  });
+  await refreshReviews();
+  return review;
+}
+
 /* ── Messages ── */
 
 export async function loadMessages(reviewId: string): Promise<ChatMessage[]> {

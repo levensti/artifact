@@ -17,6 +17,7 @@ interface RightPanelProps {
   onAnnotationsPersist: () => void;
   selectedModel: Model | null;
   onModelChange: (model: Model | null) => void;
+  sourceUrl?: string | null;
 }
 
 /**
@@ -34,6 +35,7 @@ export default function RightPanel({
   onAnnotationsPersist,
   selectedModel,
   onModelChange,
+  sourceUrl,
 }: RightPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -66,6 +68,7 @@ export default function RightPanel({
           hideHeader
           selectedModel={selectedModel}
           onModelChange={onModelChange}
+          sourceUrl={sourceUrl}
         />
       </div>
     </div>

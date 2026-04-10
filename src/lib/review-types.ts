@@ -35,14 +35,16 @@ export interface ChatMessage {
   blocks?: ChatAssistantBlock[];
 }
 
-/** A saved paper review session: PDF + replayable Q&A. */
+/** A saved paper review session: PDF / web page + replayable Q&A. */
 export interface PaperReview {
   id: string;
   title: string;
-  /** arXiv paper ID. Null for locally-uploaded PDFs. */
+  /** arXiv paper ID. Null for locally-uploaded PDFs and web pages. */
   arxivId: string | null;
   createdAt: string;
   updatedAt: string;
-  /** Absolute filesystem path for local PDFs. Null for arXiv papers. */
+  /** Absolute filesystem path for local PDFs. Null for arXiv papers and web pages. */
   pdfPath: string | null;
+  /** Source URL for arbitrary web pages. Null for arXiv papers and local PDFs. */
+  sourceUrl: string | null;
 }

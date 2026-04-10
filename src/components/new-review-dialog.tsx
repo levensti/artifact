@@ -15,13 +15,14 @@ import { Input } from "@/components/ui/input";
 import {
   createOrGetReview,
   createLocalPdfReview,
+  createWebReview,
   getReviewByArxivId,
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
 import { extractArxivId } from "@/lib/utils";
 
-type SourceMode = "arxiv" | "local";
+type SourceMode = "arxiv" | "local" | "web";
 
 interface NewReviewDialogProps {
   open: boolean;
@@ -36,6 +37,7 @@ export default function NewReviewDialog({
 }: NewReviewDialogProps) {
   const [mode, setMode] = useState<SourceMode>("arxiv");
   const [url, setUrl] = useState("");
+  const [webUrl, setWebUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -139,10 +141,64 @@ export default function NewReviewDialog({
     }
   };
 
+  const handleSubmitWeb = async () => {
+    setError(null);
+
+    const trimmed = webUrl.trim();
+    if (!trimmed) {
+      setError("Please enter a URL");
+      return;
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      setError("Enter a valid URL (e.g. https://example.com/article)");
+      return;
+    }
+
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      setError("Only http and https URLs are supported");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Fetch page metadata to get the title
+      let pageTitle = parsed.hostname;
+      try {
+        const res = await fetch(
+          `/api/web-content?url=${encodeURIComponent(trimmed)}`,
+        );
+        if (res.ok) {
+          const data: { title?: string } = await res.json();
+          if (typeof data.title === "string" && data.title.trim()) {
+            pageTitle = data.title.trim();
+          }
+        } else {
+          const data = await res.json().catch(() => ({ error: "Failed to fetch" }));
+          setError(data.error || "Could not load this page");
+          return;
+        }
+      } catch {
+        /* keep fallback title */
+      }
+
+      const review = await createWebReview(trimmed, pageTitle);
+      setWebUrl("");
+      onCreated(review.id);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === "arxiv") {
       await handleSubmitArxiv();
+    } else if (mode === "web") {
+      await handleSubmitWeb();
     } else {
       await handleSubmitLocal();
     }
@@ -151,6 +207,7 @@ export default function NewReviewDialog({
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setUrl("");
+      setWebUrl("");
       setSelectedFile(null);
       setError(null);
       setLoading(false);
@@ -165,7 +222,11 @@ export default function NewReviewDialog({
   };
 
   const canSubmit =
-    mode === "arxiv" ? url.trim().length > 0 : selectedFile !== null;
+    mode === "arxiv"
+      ? url.trim().length > 0
+      : mode === "web"
+        ? webUrl.trim().length > 0
+        : selectedFile !== null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -175,7 +236,9 @@ export default function NewReviewDialog({
           <DialogDescription>
             {mode === "arxiv"
               ? "Paste a link to any arXiv paper."
-              : "Select a PDF from your computer."}
+              : mode === "web"
+                ? "Paste a link to any web page."
+                : "Select a PDF from your computer."}
           </DialogDescription>
         </DialogHeader>
 
@@ -192,6 +255,18 @@ export default function NewReviewDialog({
           >
             <Globe size={13} />
             arXiv link
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("web"); setError(null); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === "web"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Globe size={13} />
+            Web URL
           </button>
           <button
             type="button"
@@ -227,6 +302,17 @@ export default function NewReviewDialog({
                 </p>
               )}
             </>
+          ) : mode === "web" ? (
+            <Input
+              value={webUrl}
+              onChange={(e) => {
+                setWebUrl(e.target.value);
+                setError(null);
+              }}
+              placeholder="https://example.com/article"
+              autoFocus
+              disabled={loading}
+            />
           ) : (
             <>
               <input

@@ -91,6 +91,7 @@ function initSchema(db: Database.Database) {
   `);
   migrateDeepDivesReviewFk(db);
   migrateReviewsLocalPdf(db);
+  migrateReviewsSourceUrl(db);
 }
 
 /** Older DBs created deep_dives without a FK; recreate so DELETE FROM reviews cascades. */
@@ -167,13 +168,24 @@ function migrateReviewsLocalPdf(db: Database.Database) {
   }
 }
 
+/** Add source_url column for arbitrary web page reviews. */
+function migrateReviewsSourceUrl(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(reviews)`).all() as Array<{
+    name: string;
+  }>;
+  const hasSourceUrl = cols.some((c) => c.name === "source_url");
+  if (!hasSourceUrl) {
+    db.exec(`ALTER TABLE reviews ADD COLUMN source_url TEXT`);
+  }
+}
+
 /* ── Reviews ── */
 
 export function listReviews(): PaperReview[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath, source_url AS sourceUrl
        FROM reviews ORDER BY datetime(created_at) DESC`,
     )
     .all() as PaperReview[];
@@ -184,7 +196,7 @@ export function getReview(id: string): PaperReview | undefined {
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath, source_url AS sourceUrl
        FROM reviews WHERE id = ?`,
     )
     .get(id) as PaperReview | undefined;
@@ -195,7 +207,7 @@ export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath, source_url AS sourceUrl
        FROM reviews WHERE lower(arxiv_id) = lower(?)`,
     )
     .all(arxivId) as PaperReview[];
@@ -205,8 +217,8 @@ export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
 export function insertReview(review: PaperReview): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO reviews (id, title, arxiv_id, created_at, updated_at, pdf_path)
-     VALUES (@id, @title, @arxiv_id, @created_at, @updated_at, @pdf_path)`,
+    `INSERT INTO reviews (id, title, arxiv_id, created_at, updated_at, pdf_path, source_url)
+     VALUES (@id, @title, @arxiv_id, @created_at, @updated_at, @pdf_path, @source_url)`,
   ).run({
     id: review.id,
     title: review.title,
@@ -214,6 +226,7 @@ export function insertReview(review: PaperReview): void {
     created_at: review.createdAt,
     updated_at: review.updatedAt,
     pdf_path: review.pdfPath ?? null,
+    source_url: review.sourceUrl ?? null,
   });
 }
 

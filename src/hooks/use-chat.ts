@@ -190,6 +190,7 @@ interface UseChatOptions {
   selectedModel: Model | null;
   chatThreadAnnotationId: string | null;
   onAnnotationsPersist: () => void;
+  sourceUrl?: string | null;
 }
 
 export interface UseChatReturn {
@@ -219,6 +220,7 @@ export function useChat({
   selectedModel,
   chatThreadAnnotationId,
   onAnnotationsPersist,
+  sourceUrl,
 }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -325,6 +327,7 @@ export function useChat({
             paperTitle,
             arxivId,
             reviewId,
+            ...(sourceUrl ? { sourceUrl } : {}),
           }),
         });
 
@@ -396,6 +399,7 @@ export function useChat({
       paperTitle,
       arxivId,
       reviewId,
+      sourceUrl,
     ],
   );
 
@@ -445,9 +449,13 @@ export function useChat({
       setStreamingMsgId(assistantMsg.id);
       setAgentSteps([]);
 
-      const historyForApi = threadWithUser.map((m) => ({
+      // Prepend the highlighted passage so the LLM knows what the thread is about.
+      const highlightPreamble = ann.highlightText
+        ? `[The user highlighted this passage for discussion:]\n"${ann.highlightText}"\n\n`
+        : "";
+      const historyForApi = threadWithUser.map((m, i) => ({
         role: m.role,
-        content: m.content,
+        content: i === 0 && m.role === "user" ? highlightPreamble + m.content : m.content,
       }));
 
       let steps: AgentStep[] = [];
@@ -467,6 +475,7 @@ export function useChat({
             paperTitle,
             arxivId,
             reviewId,
+            ...(sourceUrl ? { sourceUrl } : {}),
           }),
         });
 
@@ -527,6 +536,7 @@ export function useChat({
       paperTitle,
       paperContext,
       onAnnotationsPersist,
+      sourceUrl,
     ],
   );
 
