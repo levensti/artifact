@@ -449,9 +449,13 @@ export function useChat({
       setStreamingMsgId(assistantMsg.id);
       setAgentSteps([]);
 
-      const historyForApi = threadWithUser.map((m) => ({
+      // Prepend the highlighted passage so the LLM knows what the thread is about.
+      const highlightPreamble = ann.highlightText
+        ? `[The user highlighted this passage for discussion:]\n"${ann.highlightText}"\n\n`
+        : "";
+      const historyForApi = threadWithUser.map((m, i) => ({
         role: m.role,
-        content: m.content,
+        content: i === 0 && m.role === "user" ? highlightPreamble + m.content : m.content,
       }));
 
       let steps: AgentStep[] = [];
