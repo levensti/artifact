@@ -190,6 +190,7 @@ interface UseChatOptions {
   selectedModel: Model | null;
   chatThreadAnnotationId: string | null;
   onAnnotationsPersist: () => void;
+  sourceUrl?: string | null;
 }
 
 export interface UseChatReturn {
@@ -219,6 +220,7 @@ export function useChat({
   selectedModel,
   chatThreadAnnotationId,
   onAnnotationsPersist,
+  sourceUrl,
 }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -325,6 +327,7 @@ export function useChat({
             paperTitle,
             arxivId,
             reviewId,
+            ...(sourceUrl ? { sourceUrl } : {}),
           }),
         });
 
@@ -396,6 +399,7 @@ export function useChat({
       paperTitle,
       arxivId,
       reviewId,
+      sourceUrl,
     ],
   );
 
@@ -467,6 +471,7 @@ export function useChat({
             paperTitle,
             arxivId,
             reviewId,
+            ...(sourceUrl ? { sourceUrl } : {}),
           }),
         });
 
@@ -527,6 +532,7 @@ export function useChat({
       paperTitle,
       paperContext,
       onAnnotationsPersist,
+      sourceUrl,
     ],
   );
 

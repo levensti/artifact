@@ -41,6 +41,7 @@ interface ChatPanelProps {
   onExternalPromptConsumed?: () => void;
   selectedModel?: Model | null;
   onModelChange?: (model: Model | null) => void;
+  sourceUrl?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -198,6 +199,7 @@ export default function ChatPanel({
   onExternalPromptConsumed,
   selectedModel: externalModel,
   onModelChange,
+  sourceUrl,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const [internalModel, setInternalModel] = useState<Model | null>(null);
@@ -214,6 +216,7 @@ export default function ChatPanel({
     selectedModel,
     chatThreadAnnotationId,
     onAnnotationsPersist,
+    sourceUrl,
   });
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);

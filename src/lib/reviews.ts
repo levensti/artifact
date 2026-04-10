@@ -1,6 +1,7 @@
 import {
   createReview as createReviewRemote,
   createLocalPdfReview as createLocalPdfReviewRemote,
+  createWebReview as createWebReviewRemote,
   getReview as getReviewCached,
   getReviewsSnapshot,
   loadMessages,
@@ -41,6 +42,13 @@ export async function createLocalPdfReview(
   title: string,
 ): Promise<PaperReview> {
   return createLocalPdfReviewRemote(pdfPath, title);
+}
+
+export async function createWebReview(
+  sourceUrl: string,
+  title: string,
+): Promise<PaperReview> {
+  return createWebReviewRemote(sourceUrl, title);
 }
 
 export function getReviewByArxivId(arxivId: string): PaperReview | undefined {

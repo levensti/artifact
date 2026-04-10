@@ -30,8 +30,9 @@ import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
 
-/** Build the API URL to load the PDF for a given review. */
-function pdfUrlForReview(review: import("@/lib/reviews").PaperReview): string {
+/** Build the API URL to load the PDF for a given review. Returns null for web reviews. */
+function pdfUrlForReview(review: import("@/lib/reviews").PaperReview): string | null {
+  if (review.sourceUrl) return null;
   if (review.pdfPath) {
     return `/api/pdf?path=${encodeURIComponent(review.pdfPath)}`;
   }
@@ -44,6 +45,16 @@ const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
     <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
       <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
       Loading PDF viewer…
+    </div>
+  ),
+});
+
+const WebViewer = dynamic(() => import("@/components/web-viewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
+      <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+      Loading page…
     </div>
   ),
 });
@@ -284,28 +295,37 @@ export default function ReviewPage() {
       <div className="flex h-full overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
-            <PdfViewer
-              pdfUrl={pdfUrlForReview(review)}
-              onTextExtracted={setPaperText}
-              onTextSelected={handleTextSelected}
-              onSelectionCleared={handleSelectionCleared}
-              annotations={annotations}
-              activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
-              hoveredAnnotationId={hoveredAnnotationId}
-              onAnnotationClick={handleAnnotationClick}
-            />
+            {review.sourceUrl ? (
+              <WebViewer
+                sourceUrl={review.sourceUrl}
+                onTextExtracted={setPaperText}
+              />
+            ) : (
+              <PdfViewer
+                pdfUrl={pdfUrlForReview(review)!}
+                onTextExtracted={setPaperText}
+                onTextSelected={handleTextSelected}
+                onSelectionCleared={handleSelectionCleared}
+                annotations={annotations}
+                activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
+                hoveredAnnotationId={hoveredAnnotationId}
+                onAnnotationClick={handleAnnotationClick}
+              />
+            )}
           </div>
 
-          <NotesRail
-            reviewId={review.id}
-            annotations={annotations}
-            activeAnnotationId={activeAnnotationId}
-            hoveredAnnotationId={hoveredAnnotationId}
-            onAnnotationsChanged={refreshAnnotations}
-            onHighlightClick={handleHighlightClick}
-            onAnnotationHover={setHoveredAnnotationId}
-            onAnnotationSelect={handleAnnotationSelect}
-          />
+          {!review.sourceUrl && (
+            <NotesRail
+              reviewId={review.id}
+              annotations={annotations}
+              activeAnnotationId={activeAnnotationId}
+              hoveredAnnotationId={hoveredAnnotationId}
+              onAnnotationsChanged={refreshAnnotations}
+              onHighlightClick={handleHighlightClick}
+              onAnnotationHover={setHoveredAnnotationId}
+              onAnnotationSelect={handleAnnotationSelect}
+            />
+          )}
         </div>
 
         <div
@@ -332,6 +352,7 @@ export default function ReviewPage() {
             onAnnotationsPersist={refreshAnnotations}
             selectedModel={selectedModel}
             onModelChange={handleModelChange}
+            sourceUrl={review.sourceUrl}
           />
         </div>
       </div>

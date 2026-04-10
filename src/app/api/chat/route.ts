@@ -48,13 +48,15 @@ interface ChatRequest {
   paperTitle?: string;
   arxivId?: string;
   reviewId?: string;
+  /** Set when the review is for an arbitrary web page rather than a paper/PDF. */
+  sourceUrl?: string;
 }
 
 /* ------------------------------------------------------------------ */
 /*  System prompt                                                      */
 /* ------------------------------------------------------------------ */
 
-const SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a paper reading tool. You have deep expertise across all academic fields — machine learning, mathematics, physics, biology, and beyond.
+const PAPER_SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a paper reading tool. You have deep expertise across all academic fields — machine learning, mathematics, physics, biology, and beyond.
 
 Your mission: help the user deeply understand the paper they are reading and the ideas surrounding it. You can explain, search, discover, and connect ideas.
 
@@ -74,6 +76,31 @@ Guidelines:
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
 - When you find related papers (especially for "related work" or "prerequisite" queries), use save_to_knowledge_graph to persist them so the user can explore the relationship map in the Discovery tab
 - Use tools when they add value, but don't force tool use for simple questions you can answer directly from the paper context`;
+
+const WEB_SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a reading and analysis tool. You have deep expertise across all domains — technology, science, business, humanities, and beyond.
+
+Your mission: help the user deeply understand the web page they are reading, explore related topics, and connect ideas.
+
+Capabilities:
+- You have the full extracted text of the web page in context (when available)
+- You can search arXiv to find academic papers related to the content
+- You can search the web to find additional sources, context, and related material
+- You can rank and filter search results to find the most relevant ones
+- You can save related papers to the knowledge graph so they persist in the Discovery tab for later exploration
+
+Guidelines:
+- Reference specific passages, claims, or sections from the page when relevant
+- Use LaTeX notation for math when applicable (wrapped in $ or $$)
+- When asked about related research, proactively use your search tools — don't just rely on your training data
+- When explaining technical concepts, consider searching for authoritative explanations to ground your answer
+- Be precise and dense with insight — readers value depth over verbosity
+- When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
+- When you find related papers, use save_to_knowledge_graph to persist them so the user can explore the relationship map in the Discovery tab
+- Use tools when they add value, but don't force tool use for simple questions you can answer directly from the page context`;
+
+function getSystemPrompt(sourceUrl?: string): string {
+  return sourceUrl ? WEB_SYSTEM_PROMPT : PAPER_SYSTEM_PROMPT;
+}
 
 /* ------------------------------------------------------------------ */
 /*  POST handler                                                       */
@@ -98,6 +125,7 @@ export async function POST(req: NextRequest) {
     paperTitle,
     arxivId,
     reviewId,
+    sourceUrl,
   } = body;
 
   if (!isProvider(provider)) {
@@ -138,6 +166,7 @@ export async function POST(req: NextRequest) {
 
   const tools = getAllTools();
   const toolContext: ToolContext = { paperContext, paperTitle, arxivId, reviewId };
+  const systemPrompt = getSystemPrompt(sourceUrl);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -156,7 +185,7 @@ export async function POST(req: NextRequest) {
             messages,
             model,
             effectiveApiKey,
-            SYSTEM_PROMPT,
+            systemPrompt,
             paperContext,
             tools,
             toolContext,
@@ -167,7 +196,7 @@ export async function POST(req: NextRequest) {
             messages,
             model,
             effectiveApiKey,
-            SYSTEM_PROMPT,
+            systemPrompt,
             paperContext,
             provider as OpenAiCompatibleProvider,
             tools,
