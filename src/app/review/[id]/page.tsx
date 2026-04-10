@@ -299,6 +299,12 @@ export default function ReviewPage() {
               <WebViewer
                 sourceUrl={review.sourceUrl}
                 onTextExtracted={setPaperText}
+                onTextSelected={handleTextSelected}
+                onSelectionCleared={handleSelectionCleared}
+                annotations={annotations}
+                activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
+                hoveredAnnotationId={hoveredAnnotationId}
+                onAnnotationClick={handleAnnotationClick}
               />
             ) : (
               <PdfViewer
@@ -314,18 +320,16 @@ export default function ReviewPage() {
             )}
           </div>
 
-          {!review.sourceUrl && (
-            <NotesRail
-              reviewId={review.id}
-              annotations={annotations}
-              activeAnnotationId={activeAnnotationId}
-              hoveredAnnotationId={hoveredAnnotationId}
-              onAnnotationsChanged={refreshAnnotations}
-              onHighlightClick={handleHighlightClick}
-              onAnnotationHover={setHoveredAnnotationId}
-              onAnnotationSelect={handleAnnotationSelect}
-            />
-          )}
+          <NotesRail
+            reviewId={review.id}
+            annotations={annotations}
+            activeAnnotationId={activeAnnotationId}
+            hoveredAnnotationId={hoveredAnnotationId}
+            onAnnotationsChanged={refreshAnnotations}
+            onHighlightClick={handleHighlightClick}
+            onAnnotationHover={setHoveredAnnotationId}
+            onAnnotationSelect={handleAnnotationSelect}
+          />
         </div>
 
         <div
