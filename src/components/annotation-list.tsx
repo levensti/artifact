@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
-  Highlighter,
-  MessageSquareQuote,
   Sparkles,
-  StickyNote,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,50 +70,10 @@ export default function AnnotationList({
             </p>
           </div>
 
-          <div className="space-y-0.5">
-            {[
-              {
-                icon: StickyNote,
-                label: "Add note",
-                desc: "Attach a margin note to any passage",
-              },
-              {
-                icon: MessageSquareQuote,
-                label: "Dive deeper",
-                desc: "Start a threaded Q&A on a selection",
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="flex min-h-14 items-start gap-2.5 rounded-lg px-2 py-2.5"
-              >
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8">
-                  <item.icon
-                    className="size-4 text-primary/60"
-                    strokeWidth={1.8}
-                  />
-                </div>
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className="text-[13px] font-semibold leading-snug text-foreground/80">
-                    {item.label}
-                  </p>
-                  <p className="line-clamp-2 text-xs leading-snug text-muted-foreground/70">
-                    {item.desc}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 flex items-start gap-2 px-2">
-            <Highlighter
-              className="mt-0.5 size-3 shrink-0 text-muted-foreground/35"
-              strokeWidth={1.5}
-            />
-            <span className="text-[10px] leading-snug text-muted-foreground/45 not-italic">
-              Select text in the PDF to see options
-            </span>
-          </div>
+          <p className="px-2 text-xs leading-relaxed text-muted-foreground/70">
+            Highlight any passage to add a note or start a deeper conversation
+            with the assistant.
+          </p>
         </div>
       </div>
     );
