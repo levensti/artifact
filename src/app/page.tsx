@@ -19,7 +19,7 @@ export default function Home() {
             <BookOpen size={34} className="text-primary drop-shadow-sm" strokeWidth={1.5} />
           </div>
           <div className="space-y-3">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            <h1 className="font-display text-3xl tracking-tight text-foreground">
               Artifact
             </h1>
             <p className="text-base text-muted-foreground/80 leading-relaxed max-w-sm mx-auto">
