@@ -5,16 +5,18 @@ import {
   getReviewsSnapshot,
   loadMessages,
   saveMessages,
+  saveSummary,
 } from "@/lib/client-data";
 import type {
   ChatAssistantBlock,
   ChatMessage,
   PaperReview,
+  PaperSummary,
 } from "@/lib/review-types";
 
 export { REVIEWS_UPDATED_EVENT } from "@/lib/storage-events";
 
-export type { ChatAssistantBlock, ChatMessage, PaperReview };
+export type { ChatAssistantBlock, ChatMessage, PaperReview, PaperSummary };
 
 export function getReviews(): PaperReview[] {
   return getReviewsSnapshot();
@@ -60,4 +62,4 @@ export async function createOrGetReview(
   return createReview(arxivId, title);
 }
 
-export { loadMessages, saveMessages };
+export { loadMessages, saveMessages, saveSummary };

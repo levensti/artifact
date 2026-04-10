@@ -6,7 +6,10 @@ import {
   Compass,
   FilePlus,
   FileText,
+  Moon,
+  Search,
   Settings,
+  Sun,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
@@ -56,12 +59,14 @@ interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   onOpenSettings: () => void;
+  onOpenSearch?: () => void;
 }
 
 export default function Sidebar({
   collapsed,
   onToggle,
   onOpenSettings,
+  onOpenSearch,
 }: SidebarProps) {
   const reviewsJson = useSyncExternalStore(
     subscribeReviews,
@@ -79,7 +84,30 @@ export default function Sidebar({
     };
   }, [reviewsJson]);
   const [showNewReview, setShowNewReview] = useState(false);
+  const [isDark, setIsDark] = useState(false);
   const router = useRouter();
+
+  // Sync dark mode with localStorage and <html> class
+  useState(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem("artifact-theme");
+    if (stored === "dark") {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    }
+  });
+
+  const toggleDark = () => {
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("artifact-theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("artifact-theme", "light");
+    }
+  };
   const pathname = usePathname();
 
   const handleReviewCreated = (reviewId: string) => {
@@ -166,11 +194,25 @@ export default function Sidebar({
           </button>
           <button
             type="button"
+            onClick={() => onOpenSearch?.()}
+            title="Search papers and notes (Cmd+K)"
+            className="flex w-full min-h-10 items-center gap-2 rounded-lg px-0 py-0 text-left text-sm font-medium text-sidebar-foreground transition-colors duration-150 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              <Search className="size-4 opacity-50" strokeWidth={1.75} />
+            </span>
+            <span className="flex-1">Search</span>
+            <kbd className="mr-2 hidden sm:inline-flex h-5 items-center rounded border border-sidebar-border bg-sidebar-accent/50 px-1 text-[10px] font-medium text-muted-foreground">
+              {"\u2318"}K
+            </kbd>
+          </button>
+          <button
+            type="button"
             onClick={() => router.push("/discovery")}
             className={cn(
-              "flex w-full min-h-10 items-center gap-2 rounded-lg px-0 pr-1.5 py-0 text-left text-sm font-medium transition-colors duration-150",
+              "relative flex w-full min-h-10 items-center gap-2 rounded-lg px-0 pr-1.5 py-0 text-left text-sm font-medium transition-colors duration-150",
               pathname === "/discovery"
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2.5px] before:rounded-full before:bg-primary"
                 : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
             )}
           >
@@ -219,9 +261,9 @@ export default function Sidebar({
                             router.push(`/review/${review.id}`);
                         }}
                         className={cn(
-                          "flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-colors duration-150",
+                          "relative flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-all duration-150",
                           isActive
-                            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2.5px] before:rounded-full before:bg-primary"
                             : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                         )}
                       >
@@ -241,7 +283,7 @@ export default function Sidebar({
           </ScrollArea>
         </TooltipProvider>
 
-        <div className="border-t border-sidebar-border px-2.5 py-2 shrink-0">
+        <div className="border-t border-sidebar-border px-2.5 py-2 shrink-0 space-y-0.5" style={{ boxShadow: "0 -1px 3px 0 rgb(0 0 0 / 0.03)" }}>
           <button
             type="button"
             onClick={onOpenSettings}
@@ -251,6 +293,20 @@ export default function Sidebar({
               <Settings className="size-4" strokeWidth={1.75} />
             </span>
             Manage API keys
+          </button>
+          <button
+            type="button"
+            onClick={toggleDark}
+            className="flex w-full min-h-10 items-center gap-2 rounded-lg px-0 py-0 text-sm transition-colors duration-150 text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              {isDark ? (
+                <Sun className="size-4" strokeWidth={1.75} />
+              ) : (
+                <Moon className="size-4" strokeWidth={1.75} />
+              )}
+            </span>
+            {isDark ? "Light mode" : "Dark mode"}
           </button>
         </div>
       </aside>

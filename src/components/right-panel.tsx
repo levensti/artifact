@@ -37,7 +37,7 @@ export default function RightPanel({
 }: RightPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3" style={{ boxShadow: "var(--shadow-panel)" }}>
         <div className="flex min-w-0 items-center gap-2">
           <Sparkles
             className="size-4 shrink-0 text-primary"

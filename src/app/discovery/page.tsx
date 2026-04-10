@@ -240,7 +240,7 @@ export default function DiscoveryPage() {
   return (
     <DashboardLayout>
       <div className="flex h-full flex-col overflow-hidden bg-background">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4" style={{ boxShadow: "var(--shadow-panel)" }}>
           <Compass className="size-4 text-primary" strokeWidth={2} />
           <h1 className="text-sm font-semibold tracking-tight text-foreground">
             Discover

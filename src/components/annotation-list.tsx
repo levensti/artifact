@@ -224,18 +224,22 @@ function AnnotationCard({
             }
           : undefined
       }
+      style={{ boxShadow: "var(--shadow-panel)" }}
       className={cn(
-        "overflow-hidden rounded-xl border bg-card transition-all duration-150",
+        "group/ann overflow-hidden rounded-xl border bg-card transition-all duration-150",
         onActivate && "cursor-pointer",
+        isAskAi && "border-l-[2.5px]",
         isActive
           ? isAskAi
-            ? "border-sky-500/35 ring-1 ring-sky-500/10"
+            ? "border-sky-500/35 border-l-sky-500/60 ring-1 ring-sky-500/10"
             : "border-primary/40 ring-1 ring-primary/15"
           : isHovered
             ? isAskAi
-              ? "border-sky-500/28"
+              ? "border-sky-500/28 border-l-sky-500/45"
               : "border-primary/25"
-            : "border-border",
+            : isAskAi
+              ? "border-border border-l-sky-400/40"
+              : "border-border",
       )}
     >
       {isAskAi ? (
@@ -259,7 +263,7 @@ function AnnotationCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground/60 hover:text-destructive"
+                className="size-7 text-muted-foreground/60 hover:text-destructive opacity-0 group-hover/ann:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -338,7 +342,7 @@ function AnnotationCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-5 text-muted-foreground/50 hover:text-destructive"
+                className="size-5 text-muted-foreground/50 hover:text-destructive opacity-0 group-hover/ann:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();

@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       createdAt: now,
       updatedAt: now,
       pdfPath,
+      summary: null,
     };
     insertReview(review);
     return Response.json(review);
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
     createdAt: now,
     updatedAt: now,
     pdfPath: null,
+    summary: null,
   };
   insertReview(review);
   return Response.json(review);

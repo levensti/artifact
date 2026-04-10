@@ -8,7 +8,7 @@ import {
   BUILTIN_PROVIDER_ORDER,
   isInferenceProviderType,
 } from "@/lib/models";
-import type { PaperReview, ChatMessage } from "@/lib/review-types";
+import type { PaperReview, PaperSummary, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type {
@@ -142,6 +142,22 @@ export async function createLocalPdfReview(
   });
   await refreshReviews();
   return review;
+}
+
+export async function saveSummary(
+  reviewId: string,
+  summary: PaperSummary | null,
+): Promise<PaperReview> {
+  const updated = await apiJson<PaperReview>(
+    `/reviews/${encodeURIComponent(reviewId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ summary }),
+    },
+  );
+  reviewsCache = reviewsCache.map((r) => (r.id === reviewId ? updated : r));
+  window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
+  return updated;
 }
 
 /* ── Messages ── */

@@ -7,6 +7,7 @@ import type { Provider } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import Sidebar from "./sidebar";
 import SettingsDialog from "./settings-dialog";
+import CommandPalette from "./command-palette";
 import { SettingsOpenerProvider } from "./settings-opener-context";
 import DataHydration from "./data-hydration";
 
@@ -22,6 +23,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsFocusProvider, setSettingsFocusProvider] =
     useState<Provider | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_KEY);
@@ -38,6 +40,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // Cmd+K / Ctrl+K to open search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const openSettings = useCallback((options?: { provider?: Provider }) => {
@@ -77,6 +91,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             collapsed={collapsed}
             onToggle={toggle}
             onOpenSettings={() => openSettings()}
+            onOpenSearch={() => setSearchOpen(true)}
           />
         </Suspense>
         <main className="flex-1 min-w-0 overflow-hidden">{children}</main>
@@ -84,6 +99,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           open={settingsOpen}
           onOpenChange={handleSettingsOpenChange}
           focusProvider={settingsFocusProvider}
+        />
+        <CommandPalette
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
         />
       </div>
     </SettingsOpenerProvider>

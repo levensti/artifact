@@ -88,7 +88,7 @@ function ChatInput({
   };
 
   return (
-    <div className="p-3 border-t border-border shrink-0 bg-muted/20">
+    <div className="p-3 border-t border-border shrink-0 bg-muted/20" style={{ boxShadow: "0 -1px 3px 0 rgb(0 0 0 / 0.03)" }}>
       <div
         className={cn(
           "flex items-end gap-2 rounded-md border transition-[box-shadow,border-color,background-color] duration-200",

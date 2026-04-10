@@ -32,7 +32,11 @@
   --input: #d5ccc7;
   --ring: #333333;             /* graphite */
 
-  --reader-mat: #f0ebe8;
+  --reader-mat: #ece6e2;
+
+  --shadow-panel: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --shadow-elevated: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --shadow-inset: inset 0 1px 2px 0 rgb(0 0 0 / 0.04);
 
   --sidebar: #f5f1ef;
   --sidebar-foreground: #28262b;
@@ -44,9 +48,50 @@
   --sidebar-ring: #333333;
 }
 
+/* Dark palette — Charcoal & Espresso */
+.dark {
+  --background: #1c1a1e;
+  --foreground: #e8e3df;
+  --card: #252328;
+  --card-foreground: #e8e3df;
+  --popover: #252328;
+  --popover-foreground: #e8e3df;
+
+  --primary: #d5ccc7;
+  --primary-foreground: #1c1a1e;
+  --primary-muted: color-mix(in srgb, var(--primary) 75%, var(--foreground));
+
+  --secondary: #2e2b30;
+  --secondary-foreground: #e8e3df;
+  --muted: #2e2b30;
+  --muted-foreground: #8a837d;
+  --accent: #3a373d;
+  --accent-foreground: #e8e3df;
+
+  --destructive: #ef4444;
+  --border: #3a373d;
+  --input: #3a373d;
+  --ring: #d5ccc7;
+
+  --reader-mat: #161418;
+
+  --shadow-panel: 0 1px 3px 0 rgb(0 0 0 / 0.15), 0 1px 2px -1px rgb(0 0 0 / 0.12);
+  --shadow-elevated: 0 4px 6px -1px rgb(0 0 0 / 0.2), 0 2px 4px -2px rgb(0 0 0 / 0.15);
+  --shadow-inset: inset 0 1px 2px 0 rgb(0 0 0 / 0.12);
+
+  --sidebar: #211f24;
+  --sidebar-foreground: #e8e3df;
+  --sidebar-primary: #d5ccc7;
+  --sidebar-primary-foreground: #1c1a1e;
+  --sidebar-accent: #2e2b30;
+  --sidebar-accent-foreground: #e8e3df;
+  --sidebar-border: #3a373d;
+  --sidebar-ring: #d5ccc7;
+}
+
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
   --font-reading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -74,6 +119,10 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --shadow-panel: var(--shadow-panel);
+  --shadow-elevated: var(--shadow-elevated);
+  --shadow-inset: var(--shadow-inset);
+  --color-reader-mat: var(--reader-mat);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -114,17 +163,22 @@
   font-family: var(--font-reading);
   font-size: 0.9375rem;
   line-height: 1.65;
+  letter-spacing: -0.01em;
 }
 .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 {
   font-family: var(--font-sans);
   font-weight: 600;
-  margin-top: 1em;
+  margin-top: 1.25em;
   margin-bottom: 0.5em;
   color: var(--foreground);
   letter-spacing: -0.02em;
 }
-.chat-markdown h1 { font-size: 1.0625rem; }
-.chat-markdown h2 { font-size: 0.9875rem; }
+.chat-markdown h1 {
+  font-size: 1.1rem;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.chat-markdown h2 { font-size: 1rem; }
 .chat-markdown h3 { font-size: 0.9375rem; }
 .chat-markdown p { margin-bottom: 0.625em; }
 .chat-markdown ul, .chat-markdown ol { margin-bottom: 0.625em; padding-left: 1.25em; }
@@ -134,10 +188,11 @@
 .chat-markdown code {
   font-family: var(--font-mono);
   background: var(--muted);
-  padding: 0.12em 0.4em;
+  padding: 0.15em 0.4em;
   border-radius: 4px;
-  font-size: 0.84em;
+  font-size: 0.82em;
   color: color-mix(in srgb, var(--primary) 72%, var(--foreground));
+  letter-spacing: 0;
 }
 .chat-markdown pre {
   font-family: var(--font-mono);
@@ -147,7 +202,9 @@
   overflow-x: auto;
   margin-bottom: 0.625em;
   border: 1px solid var(--border);
-  font-size: 0.8125rem;
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  line-height: 1.55;
 }
 .chat-markdown pre code { background: none; padding: 0; color: var(--secondary-foreground); }
 .chat-markdown blockquote {
@@ -182,8 +239,35 @@
   to { opacity: 1; }
 }
 
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Chat message entrance animation */
+.chat-message-enter {
+  animation: chatMessageIn 0.2s ease-out both;
+}
+
+@keyframes chatMessageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Subtle button press */
+.btn-press:active {
+  transform: scale(0.97);
+  transition: transform 0.08s ease;
+}
+
 @layer base {
   * { @apply border-border outline-ring/50; }
-  body { @apply bg-background text-foreground antialiased; }
+  body { @apply bg-background text-foreground antialiased; letter-spacing: -0.01em; }
   html { @apply font-sans; }
 }

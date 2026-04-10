@@ -6,7 +6,7 @@ import Database from "better-sqlite3";
 import type { InferenceProviderProfile, Provider } from "@/lib/models";
 import type { Model } from "@/lib/models";
 import { BUILTIN_PROVIDER_ORDER, isInferenceProviderType } from "@/lib/models";
-import type { PaperReview, ChatMessage } from "@/lib/review-types";
+import type { PaperReview, PaperSummary, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type {
@@ -91,6 +91,7 @@ function initSchema(db: Database.Database) {
   `);
   migrateDeepDivesReviewFk(db);
   migrateReviewsLocalPdf(db);
+  migrateReviewsSummary(db);
 }
 
 /** Older DBs created deep_dives without a FK; recreate so DELETE FROM reviews cascades. */
@@ -167,39 +168,66 @@ function migrateReviewsLocalPdf(db: Database.Database) {
   }
 }
 
+/** Add summary column to reviews for knowledge tracking. */
+function migrateReviewsSummary(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(reviews)`).all() as Array<{
+    name: string;
+  }>;
+  const hasSummary = cols.some((c) => c.name === "summary");
+  if (!hasSummary) {
+    db.exec(`ALTER TABLE reviews ADD COLUMN summary TEXT`);
+  }
+}
+
 /* ── Reviews ── */
+
+function parseReviewRow(row: Record<string, unknown>): PaperReview {
+  let summary: PaperSummary | null = null;
+  if (typeof row.summary === "string") {
+    try { summary = JSON.parse(row.summary) as PaperSummary; } catch { /* ignore */ }
+  }
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    arxivId: (row.arxivId as string) ?? null,
+    createdAt: row.createdAt as string,
+    updatedAt: row.updatedAt as string,
+    pdfPath: (row.pdfPath as string) ?? null,
+    summary,
+  };
+}
 
 export function listReviews(): PaperReview[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath, summary
        FROM reviews ORDER BY datetime(created_at) DESC`,
     )
-    .all() as PaperReview[];
-  return rows;
+    .all() as Record<string, unknown>[];
+  return rows.map(parseReviewRow);
 }
 
 export function getReview(id: string): PaperReview | undefined {
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath, summary
        FROM reviews WHERE id = ?`,
     )
-    .get(id) as PaperReview | undefined;
-  return row;
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? parseReviewRow(row) : undefined;
 }
 
 export function getReviewByArxivId(arxivId: string): PaperReview | undefined {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath
+      `SELECT id, title, arxiv_id AS arxivId, created_at AS createdAt, updated_at AS updatedAt, pdf_path AS pdfPath, summary
        FROM reviews WHERE lower(arxiv_id) = lower(?)`,
     )
-    .all(arxivId) as PaperReview[];
-  return rows[0];
+    .all(arxivId) as Record<string, unknown>[];
+  return rows[0] ? parseReviewRow(rows[0]) : undefined;
 }
 
 export function insertReview(review: PaperReview): void {
@@ -215,6 +243,13 @@ export function insertReview(review: PaperReview): void {
     updated_at: review.updatedAt,
     pdf_path: review.pdfPath ?? null,
   });
+}
+
+export function setSummary(reviewId: string, summary: PaperSummary | null): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE reviews SET summary = ?, updated_at = ? WHERE id = ?`,
+  ).run(summary ? JSON.stringify(summary) : null, new Date().toISOString(), reviewId);
 }
 
 /** Deletes the review and cascades to messages, annotations, explore rows, and deep_dives. */
@@ -525,6 +560,102 @@ export function patchSettings(patch: {
   if ("selectedModel" in patch) {
     setSelectedModel(patch.selectedModel ?? null);
   }
+}
+
+/* ── Search ── */
+
+export interface SearchResult {
+  type: "review" | "annotation" | "prerequisite";
+  reviewId: string;
+  reviewTitle: string;
+  text: string;
+  /** For annotations: the highlight text; for prereqs: the topic */
+  context?: string;
+}
+
+export function searchAll(query: string, limit = 20): SearchResult[] {
+  const db = getDb();
+  const q = `%${query.toLowerCase()}%`;
+  const results: SearchResult[] = [];
+
+  // Search review titles
+  const reviews = db
+    .prepare(
+      `SELECT id, title, arxiv_id AS arxivId FROM reviews WHERE lower(title) LIKE ? LIMIT ?`,
+    )
+    .all(q, limit) as Array<{ id: string; title: string; arxivId: string }>;
+  for (const r of reviews) {
+    results.push({
+      type: "review",
+      reviewId: r.id,
+      reviewTitle: r.title,
+      text: r.title,
+    });
+  }
+
+  // Search annotations
+  const annRows = db
+    .prepare(
+      `SELECT ra.review_id, r.title AS review_title, ra.payload
+       FROM review_annotations ra
+       JOIN reviews r ON r.id = ra.review_id
+       WHERE lower(ra.payload) LIKE ?
+       LIMIT ?`,
+    )
+    .all(q, limit) as Array<{ review_id: string; review_title: string; payload: string }>;
+  for (const row of annRows) {
+    try {
+      const anns = JSON.parse(row.payload) as Annotation[];
+      for (const a of anns) {
+        const matchText = a.highlightText?.toLowerCase().includes(query.toLowerCase())
+          ? a.highlightText
+          : a.note?.toLowerCase().includes(query.toLowerCase())
+            ? a.note
+            : null;
+        if (matchText) {
+          results.push({
+            type: "annotation",
+            reviewId: row.review_id,
+            reviewTitle: row.review_title,
+            text: matchText,
+            context: a.highlightText,
+          });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Search prerequisites
+  const prereqRows = db
+    .prepare(
+      `SELECT ep.review_id, r.title AS review_title, ep.payload
+       FROM explore_prerequisites ep
+       JOIN reviews r ON r.id = ep.review_id
+       WHERE lower(ep.payload) LIKE ?
+       LIMIT ?`,
+    )
+    .all(q, limit) as Array<{ review_id: string; review_title: string; payload: string }>;
+  for (const row of prereqRows) {
+    try {
+      const data = JSON.parse(row.payload) as PrerequisitesData;
+      for (const p of data.prerequisites) {
+        if (
+          p.topic.toLowerCase().includes(query.toLowerCase()) ||
+          p.description.toLowerCase().includes(query.toLowerCase())
+        ) {
+          results.push({
+            type: "prerequisite",
+            reviewId: row.review_id,
+            reviewTitle: row.review_title,
+            text: p.topic,
+            context: p.description,
+          });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  return results.slice(0, limit);
 }
 
 /* ── Bootstrap ── */

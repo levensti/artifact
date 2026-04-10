@@ -1,8 +1,11 @@
 "use client";
 
-import { StickyNote } from "lucide-react";
+import { useState } from "react";
+import { StickyNote, List } from "lucide-react";
 import AnnotationList from "@/components/annotation-list";
+import TableOfContents, { type TocEntry } from "@/components/table-of-contents";
 import type { Annotation } from "@/lib/annotations";
+import { cn } from "@/lib/utils";
 
 interface NotesRailProps {
   reviewId: string;
@@ -13,7 +16,11 @@ interface NotesRailProps {
   onHighlightClick: (pageNumber: number) => void;
   onAnnotationHover: (annotationId: string | null) => void;
   onAnnotationSelect: (id: string) => void;
+  tocEntries?: TocEntry[];
+  currentPage?: number;
 }
+
+type RailTab = "notes" | "sections";
 
 export default function NotesRail({
   reviewId,
@@ -24,40 +31,75 @@ export default function NotesRail({
   onHighlightClick,
   onAnnotationHover,
   onAnnotationSelect,
+  tocEntries = [],
+  currentPage = 1,
 }: NotesRailProps) {
+  const [tab, setTab] = useState<RailTab>("notes");
   const count = annotations.length;
+  const hasToc = tocEntries.length > 0;
 
   return (
     <aside className="flex h-full min-h-0 w-[min(280px,32vw)] min-w-[220px] shrink-0 flex-col border-l border-border bg-muted/15">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <StickyNote
-            className="size-4 shrink-0 text-primary"
-            strokeWidth={2}
-            aria-hidden
-          />
-          <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+      <header className="shrink-0 border-b border-border bg-background" style={{ boxShadow: "var(--shadow-panel)" }}>
+        <div className="flex h-12 items-center gap-0 px-1">
+          <button
+            type="button"
+            onClick={() => setTab("notes")}
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150",
+              tab === "notes"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            )}
+          >
+            <StickyNote className="size-3.5" strokeWidth={2} />
             Notes
-          </span>
+            {count > 0 && (
+              <span className="tabular-nums text-[10px] text-muted-foreground">
+                {count}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("sections")}
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150",
+              tab === "sections"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            )}
+          >
+            <List className="size-3.5" strokeWidth={2} />
+            Sections
+            {hasToc && (
+              <span className="tabular-nums text-[10px] text-muted-foreground">
+                {tocEntries.length}
+              </span>
+            )}
+          </button>
         </div>
-        {count > 0 ? (
-          <span className="shrink-0 tabular-nums text-xs font-medium text-muted-foreground">
-            {count}
-          </span>
-        ) : null}
       </header>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <AnnotationList
-          reviewId={reviewId}
-          annotations={annotations}
-          activeAnnotationId={activeAnnotationId}
-          hoveredAnnotationId={hoveredAnnotationId}
-          onAnnotationsChanged={onAnnotationsChanged}
-          onHighlightClick={onHighlightClick}
-          onAnnotationHover={onAnnotationHover}
-          onAnnotationSelect={onAnnotationSelect}
-          density="rail"
-        />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {tab === "notes" ? (
+          <AnnotationList
+            reviewId={reviewId}
+            annotations={annotations}
+            activeAnnotationId={activeAnnotationId}
+            hoveredAnnotationId={hoveredAnnotationId}
+            onAnnotationsChanged={onAnnotationsChanged}
+            onHighlightClick={onHighlightClick}
+            onAnnotationHover={onAnnotationHover}
+            onAnnotationSelect={onAnnotationSelect}
+            density="rail"
+          />
+        ) : (
+          <TableOfContents
+            entries={tocEntries}
+            currentPage={currentPage}
+            onNavigate={onHighlightClick}
+          />
+        )}
       </div>
     </aside>
   );

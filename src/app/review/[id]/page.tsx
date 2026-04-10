@@ -13,6 +13,7 @@ import { GripVertical, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel from "@/components/right-panel";
 import NotesRail from "@/components/notes-rail";
+import { extractTocEntries, type TocEntry } from "@/components/table-of-contents";
 import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
 import { hydrateClientStore } from "@/lib/client-data";
@@ -79,6 +80,8 @@ export default function ReviewPage() {
   }, [clientReady, params.id]);
 
   const [paperText, setPaperText] = useState("");
+  const [tocEntries, setTocEntries] = useState<TocEntry[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(
     null,
   );
@@ -147,6 +150,11 @@ export default function ReviewPage() {
       ? chatThreadAnnotationId
       : null;
   }, [annotations, chatThreadAnnotationId]);
+
+  const handleTextExtracted = useCallback((text: string) => {
+    setPaperText(text);
+    setTocEntries(extractTocEntries(text));
+  }, []);
 
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
     setSelectionInfo(info);
@@ -286,13 +294,14 @@ export default function ReviewPage() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             <PdfViewer
               pdfUrl={pdfUrlForReview(review)}
-              onTextExtracted={setPaperText}
+              onTextExtracted={handleTextExtracted}
               onTextSelected={handleTextSelected}
               onSelectionCleared={handleSelectionCleared}
               annotations={annotations}
               activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
               hoveredAnnotationId={hoveredAnnotationId}
               onAnnotationClick={handleAnnotationClick}
+              onPageChange={setCurrentPage}
             />
           </div>
 
@@ -305,15 +314,17 @@ export default function ReviewPage() {
             onHighlightClick={handleHighlightClick}
             onAnnotationHover={setHoveredAnnotationId}
             onAnnotationSelect={handleAnnotationSelect}
+            tocEntries={tocEntries}
+            currentPage={currentPage}
           />
         </div>
 
         <div
           onMouseDown={handleMouseDown}
-          className={`relative w-1 cursor-col-resize flex items-center justify-center shrink-0 transition-colors ${isDragging ? "bg-primary/30" : "bg-border/80 hover:bg-muted-foreground/25"}`}
+          className={`group/resize relative w-px cursor-col-resize flex items-center justify-center shrink-0 transition-colors duration-200 ${isDragging ? "bg-primary/30 w-0.5" : "bg-border/60 hover:bg-primary/20 hover:w-0.5"}`}
         >
-          <div className="absolute p-0.5 rounded-md bg-card border border-border/90 opacity-0 hover:opacity-100 transition-opacity shadow-sm">
-            <GripVertical size={10} className="text-muted-foreground" />
+          <div className="absolute p-0.5 rounded-md bg-card border border-border/80 opacity-0 group-hover/resize:opacity-100 transition-opacity duration-200 shadow-sm">
+            <GripVertical size={10} className="text-muted-foreground/70" />
           </div>
         </div>
 

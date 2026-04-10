@@ -28,6 +28,7 @@ interface PdfViewerProps {
   activeAnnotationId?: string | null;
   hoveredAnnotationId?: string | null;
   onAnnotationClick?: (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => void;
+  onPageChange?: (page: number) => void;
 }
 
 export default function PdfViewer({
@@ -39,6 +40,7 @@ export default function PdfViewer({
   activeAnnotationId,
   hoveredAnnotationId,
   onAnnotationClick,
+  onPageChange,
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -176,6 +178,7 @@ export default function PdfViewer({
           }
         });
         setCurrentPage(closestPage);
+        onPageChange?.(closestPage);
       });
     };
 
@@ -184,7 +187,7 @@ export default function PdfViewer({
       container.removeEventListener("scroll", handleScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [numPages]);
+  }, [numPages, onPageChange]);
 
   const goToPage = (page: number) => {
     const container = containerRef.current;
@@ -248,7 +251,7 @@ export default function PdfViewer({
       </div>
 
       {/* PDF content */}
-      <div ref={containerRef} data-pdf-container className="flex-1 overflow-auto">
+      <div ref={containerRef} data-pdf-container className="flex-1 overflow-auto" style={{ boxShadow: "inset 0 2px 8px 0 rgb(0 0 0 / 0.04)" }}>
         {loading && !loadError && (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="animate-spin text-primary" size={28} />

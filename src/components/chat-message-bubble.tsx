@@ -135,7 +135,7 @@ export function ChatMessageBubble({
 }) {
   if (msg.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end chat-message-enter">
         <div className="max-w-[88%] rounded-md px-3 py-2.5 text-sm leading-relaxed border border-border border-l-2 border-l-primary/50 bg-secondary text-foreground">
           <div className="whitespace-pre-wrap">{msg.content}</div>
         </div>
