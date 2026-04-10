@@ -4,50 +4,50 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Warm palette — Graphite & Dust */
+/* Quiet Precision — cool neutrals + blue-slate */
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
-  --background: #f0ebe8;       /* light warm gray (derived) */
-  --foreground: #28262b;       /* shadow grey */
-  --card: #f5f1ef;             /* lighter warm gray (derived) */
-  --card-foreground: #28262b;
-  --popover: #f5f1ef;
-  --popover-foreground: #28262b;
+  --background: #f8f9fa;         /* cool paper white */
+  --foreground: #1a1d21;         /* cool near-black */
+  --card: #ffffff;               /* pure white cards */
+  --card-foreground: #1a1d21;
+  --popover: #ffffff;
+  --popover-foreground: #1a1d21;
 
-  --primary: #333333;          /* graphite */
+  --primary: #3b5998;            /* blue-slate */
   --primary-foreground: #ffffff;
   --primary-muted: color-mix(in srgb, var(--primary) 82%, var(--foreground));
 
-  --secondary: #e8e3df;        /* mid warm gray (derived) */
-  --secondary-foreground: #28262b;
-  --muted: #e8e3df;
-  --muted-foreground: #a9a29c; /* silver */
-  --accent: #d5ccc7;           /* dust grey */
-  --accent-foreground: #28262b;
+  --secondary: #f0f1f3;          /* light cool gray */
+  --secondary-foreground: #1a1d21;
+  --muted: #eceef0;
+  --muted-foreground: #6b7280;   /* medium cool gray */
+  --accent: #e8ebef;             /* cool hover state */
+  --accent-foreground: #1a1d21;
 
   --destructive: #dc2626;
-  --border: #d5ccc7;           /* dust grey */
-  --input: #d5ccc7;
-  --ring: #333333;             /* graphite */
+  --border: #e2e5e9;             /* cool subtle border */
+  --input: #dde0e4;
+  --ring: #3b5998;               /* match primary */
 
-  --reader-mat: #f0ebe8;
+  --reader-mat: #f2f3f5;
 
-  --sidebar: #f5f1ef;
-  --sidebar-foreground: #28262b;
-  --sidebar-primary: #333333;
+  --sidebar: #f4f5f7;
+  --sidebar-foreground: #1a1d21;
+  --sidebar-primary: #3b5998;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8e3df;
-  --sidebar-accent-foreground: #28262b;
-  --sidebar-border: #d5ccc7;
-  --sidebar-ring: #333333;
+  --sidebar-accent: #e8ebef;
+  --sidebar-accent-foreground: #1a1d21;
+  --sidebar-border: #e2e5e9;
+  --sidebar-ring: #3b5998;
 }
 
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-reading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-reading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -180,6 +180,15 @@
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes subtlePulseGlow {
+  0%, 100% { box-shadow: 0 0 15px 2px color-mix(in srgb, var(--primary) 18%, transparent); }
+  50% { box-shadow: 0 0 25px 6px color-mix(in srgb, var(--primary) 28%, transparent); }
+}
+
+.icon-glow {
+  animation: subtlePulseGlow 4s ease-in-out infinite;
 }
 
 @layer base {

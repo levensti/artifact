@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowUpRight,
   BookOpen,
   BrainCircuit,
   Globe,
@@ -67,7 +66,7 @@ export default function ChatEmptyState({
         </p>
       </div>
 
-      <div className="space-y-0.5">
+      <div className="grid grid-cols-2 gap-2">
         {STARTERS.map((s) => (
           <button
             key={s.label}
@@ -75,27 +74,23 @@ export default function ChatEmptyState({
             disabled={!canSend}
             onClick={() => onSend(s.prompt)}
             className={cn(
-              "group flex min-h-14 w-full items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-all duration-150",
+              "group flex min-h-[4.5rem] w-full flex-col items-start gap-2 rounded-xl border border-border/60 bg-card px-3.5 py-3 text-left transition-all duration-200 shadow-sm",
               canSend
-                ? "cursor-pointer hover:bg-foreground/4 active:bg-foreground/6"
+                ? "cursor-pointer hover:border-primary/30 hover:shadow-md hover:shadow-primary/5 active:shadow-sm"
                 : "cursor-not-allowed opacity-50",
             )}
           >
-            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5 transition-colors group-hover:border-border/70 group-hover:bg-foreground/8">
-              <s.icon className="size-3 text-foreground/45" strokeWidth={1.8} />
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 transition-colors group-hover:bg-primary/14">
+              <s.icon className="size-4 text-primary/60" strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="text-xs font-medium leading-snug text-foreground/70 transition-colors group-hover:text-foreground/90">
+              <p className="text-[13px] font-semibold leading-snug text-foreground/80 transition-colors group-hover:text-foreground">
                 {s.label}
               </p>
-              <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground/80">
+              <p className="line-clamp-2 text-xs leading-snug text-muted-foreground/70">
                 {s.desc}
               </p>
             </div>
-            <ArrowUpRight
-              className="mt-1 size-3 shrink-0 text-muted-foreground/0 transition-all duration-150 group-hover:text-muted-foreground/50"
-              strokeWidth={2}
-            />
           </button>
         ))}
       </div>

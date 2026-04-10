@@ -23,7 +23,11 @@ import {
   isModelReady,
   isBuiltinProviderReady,
 } from "@/lib/keys";
-import { FALLBACK_MODELS, isInferenceProviderType, type Model } from "@/lib/models";
+import {
+  FALLBACK_MODELS,
+  isInferenceProviderType,
+  type Model,
+} from "@/lib/models";
 import type { GraphNode } from "@/lib/explore";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 
@@ -69,7 +73,11 @@ export default function DiscoveryPage() {
 
   const reviewedArxivIds = useMemo(() => {
     if (!ready) return new Set<string>();
-    return new Set(reviewedPapers.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)));
+    return new Set(
+      reviewedPapers
+        .filter((r) => r.arxivId)
+        .map((r) => normalizeArxivId(r.arxivId!)),
+    );
   }, [ready, reviewedPapers]);
 
   const graph = useMemo(() => {
@@ -108,7 +116,9 @@ export default function DiscoveryPage() {
   const generationModel: Model | null = (() => {
     const saved = getSavedSelectedModel();
     if (saved) return saved;
-    return FALLBACK_MODELS.find((m) => isBuiltinProviderReady(m.provider)) ?? null;
+    return (
+      FALLBACK_MODELS.find((m) => isBuiltinProviderReady(m.provider)) ?? null
+    );
   })();
 
   const canGenerate = !!generationModel;
@@ -158,7 +168,9 @@ export default function DiscoveryPage() {
           paperTitle: node.title,
           paperContext,
           model,
-          apiKey: isInferenceProviderType(model.provider) ? "" : (getApiKey(model.provider) ?? ""),
+          apiKey: isInferenceProviderType(model.provider)
+            ? ""
+            : (getApiKey(model.provider) ?? ""),
           onProgress: setGenerationProgress,
         });
         const after = getGlobalGraphData();
@@ -221,7 +233,7 @@ export default function DiscoveryPage() {
               <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
                 You have not reviewed any papers yet. Start your first review,
                 then grow this space into a living map of ideas, methods, and
-                connections as you explore with the assistant.
+                connections as you explore with your assistant.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-muted-foreground/70 text-xs">

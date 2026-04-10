@@ -28,8 +28,8 @@ export default function NotesRail({
   const count = annotations.length;
 
   return (
-    <aside className="flex h-full min-h-0 w-[min(280px,32vw)] min-w-[220px] shrink-0 flex-col border-l border-border bg-muted/15">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3">
+    <aside className="flex h-full min-h-0 w-[min(280px,32vw)] min-w-[220px] shrink-0 flex-col border-l border-border bg-muted/10 shadow-[-4px_0_12px_-4px_rgba(0,0,0,0.04)]">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-gradient-to-r from-background to-primary/[0.03] px-4">
         <div className="flex min-w-0 items-center gap-2">
           <StickyNote
             className="size-4 shrink-0 text-primary"
@@ -41,7 +41,7 @@ export default function NotesRail({
           </span>
         </div>
         {count > 0 ? (
-          <span className="shrink-0 tabular-nums text-xs font-medium text-muted-foreground">
+          <span className="shrink-0 tabular-nums text-[10px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
             {count}
           </span>
         ) : null}

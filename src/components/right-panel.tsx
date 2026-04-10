@@ -39,14 +39,14 @@ export default function RightPanel({
 }: RightPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-gradient-to-r from-background to-primary/[0.03] px-4">
         <div className="flex min-w-0 items-center gap-2">
           <Sparkles
-            className="size-4 shrink-0 text-primary"
+            className="size-4 shrink-0 text-primary drop-shadow-sm"
             strokeWidth={2}
             aria-hidden
           />
-          <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+          <span className="truncate text-sm font-bold tracking-tight text-foreground">
             Assistant
           </span>
         </div>

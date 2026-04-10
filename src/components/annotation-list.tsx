@@ -1,14 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ChevronRight,
-  Highlighter,
-  MessageSquareQuote,
-  Sparkles,
-  StickyNote,
-  Trash2,
-} from "lucide-react";
+import { ChevronRight, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -73,50 +66,10 @@ export default function AnnotationList({
             </p>
           </div>
 
-          <div className="space-y-0.5">
-            {[
-              {
-                icon: StickyNote,
-                label: "Add note",
-                desc: "Attach a margin note to any passage",
-              },
-              {
-                icon: MessageSquareQuote,
-                label: "Dive deeper",
-                desc: "Start a threaded Q&A on a selection",
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="flex min-h-14 items-start gap-2.5 rounded-lg px-2 py-2.5"
-              >
-                <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5">
-                  <item.icon
-                    className="size-3 text-foreground/45"
-                    strokeWidth={1.8}
-                  />
-                </div>
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className="text-xs font-medium leading-snug text-foreground/70">
-                    {item.label}
-                  </p>
-                  <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground/80">
-                    {item.desc}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 flex items-start gap-2 px-2">
-            <Highlighter
-              className="mt-0.5 size-3 shrink-0 text-muted-foreground/35"
-              strokeWidth={1.5}
-            />
-            <span className="text-[10px] leading-snug text-muted-foreground/45 not-italic">
-              Select text in the PDF to see options
-            </span>
-          </div>
+          <p className="px-2 text-xs leading-relaxed text-muted-foreground/70">
+            Highlight any passage to add a note or start a deeper conversation
+            with your assistant.
+          </p>
         </div>
       </div>
     );
@@ -225,7 +178,7 @@ function AnnotationCard({
           : undefined
       }
       className={cn(
-        "overflow-hidden rounded-xl border bg-card transition-all duration-150",
+        "overflow-hidden rounded-xl border bg-card transition-all duration-200 hover:shadow-md hover:shadow-primary/5",
         onActivate && "cursor-pointer",
         isActive
           ? isAskAi
@@ -241,7 +194,7 @@ function AnnotationCard({
       {isAskAi ? (
         <>
           <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
-            <span className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-md bg-sky-500/12 px-1.5 py-0.5 text-[10px] font-semibold leading-tight tracking-tight text-sky-900 dark:text-sky-100">
+            <span className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-lg bg-gradient-to-r from-sky-500/15 to-sky-400/8 px-2 py-1 text-[10px] font-semibold leading-tight tracking-tight text-sky-800 shadow-sm shadow-sky-500/10 dark:text-sky-100">
               <Sparkles className="size-3 shrink-0" strokeWidth={2} />
               Dive deeper
             </span>
@@ -271,7 +224,7 @@ function AnnotationCard({
             </div>
           </div>
 
-          <div className="mx-3.5 mt-3 rounded-xl border border-border/60 bg-muted/25 px-4 py-3">
+          <div className="mx-3.5 mt-3 rounded-xl border border-border/40 bg-gradient-to-br from-muted/20 to-muted/5 px-4 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               From the paper
             </p>
@@ -306,7 +259,7 @@ function AnnotationCard({
         <>
           <div className="flex items-start gap-2.5 px-3 pt-2.5 pb-2.5">
             <div
-              className="mt-0.5 w-0.5 min-h-9 shrink-0 self-stretch rounded-full transition-colors duration-150"
+              className="mt-0.5 w-[3px] min-h-9 shrink-0 self-stretch rounded-full transition-all duration-200"
               style={{
                 backgroundColor:
                   isActive || isHovered
