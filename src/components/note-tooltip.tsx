@@ -49,7 +49,7 @@ export default function NoteTooltip({
       className="fixed z-50 animate-in fade-in slide-in-from-bottom-1 duration-100"
       style={{ top: `${top}px`, left: `${left}px` }}
     >
-      <div className="w-56 bg-card border border-border rounded-lg shadow-md shadow-stone-900/10 overflow-hidden">
+      <div className="w-56 bg-card border border-border rounded-lg shadow-md shadow-slate-900/10 overflow-hidden">
         {annotation.note ? (
           <p className="px-3 py-2.5 text-sm text-foreground leading-relaxed line-clamp-4">
             {annotation.note}

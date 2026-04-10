@@ -15,11 +15,11 @@ import { paperMatchesQuery, type PositionedNode } from "./graph-layout";
 /* ------------------------------------------------------------------ */
 
 export const EDGE_COLORS: Record<RelationshipType, string> = {
-  "builds-upon": "#7c6d66",
-  extends: "#a07f64",
-  "similar-approach": "#8d8c77",
-  prerequisite: "#5c6f4d",
-  "contrasts-with": "#9e6b6b",
+  "builds-upon": "#5b7aa6",
+  extends: "#6b8cbe",
+  "similar-approach": "#708a7a",
+  prerequisite: "#4a7a5c",
+  "contrasts-with": "#a06070",
 };
 
 export function isRenderableRelationship(rel: string): rel is RelationshipType {

@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Artifact",
@@ -14,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} h-full`}>
+    <html lang="en" className={`${GeistSans.variable} ${inter.variable} h-full`}>
       <body className="h-full overflow-hidden">{children}</body>
     </html>
   );

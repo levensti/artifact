@@ -15,7 +15,7 @@ export default function Home() {
     <DashboardLayout>
       <div className="flex items-center justify-center h-full px-6 bg-background">
         <div className="max-w-md text-center space-y-8">
-          <div className="mx-auto size-16 rounded-xl border border-border bg-card flex items-center justify-center">
+          <div className="mx-auto size-16 rounded-lg border border-border bg-card shadow-sm flex items-center justify-center">
             <BookOpen size={28} className="text-primary" strokeWidth={1.5} />
           </div>
           <div className="space-y-3">

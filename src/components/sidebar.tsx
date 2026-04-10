@@ -127,9 +127,9 @@ export default function Sidebar({
         <div className="shrink-0 space-y-2 border-b border-sidebar-border px-2.5 pb-3 pt-2.5">
           <div className="flex min-h-10 items-start justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-start gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/70 text-muted-foreground">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/8 text-primary/70">
                 <FileText
-                  className="size-[18px] text-foreground/80"
+                  className="size-[18px] text-primary/70"
                   strokeWidth={1.75}
                 />
               </div>
@@ -179,7 +179,7 @@ export default function Sidebar({
             </span>
             <span>Discover</span>
             {unreadDiscoverCount > 0 ? (
-              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-border bg-muted px-1.5 text-[10px] font-medium leading-none text-foreground/80 tabular-nums">
+              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-primary/20 bg-primary/10 px-1.5 text-[10px] font-medium leading-none text-primary tabular-nums">
                 {unreadDiscoverCount}
               </span>
             ) : null}

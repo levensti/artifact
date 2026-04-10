@@ -22,7 +22,7 @@ export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionP
         transform: "translateX(-50%)",
       }}
     >
-      <div className="flex items-center gap-1 bg-card border border-border rounded-lg shadow-md shadow-stone-900/15 p-1">
+      <div className="flex items-center gap-1 bg-card border border-border rounded-lg shadow-md shadow-slate-900/12 p-1">
         <Button
           size="sm"
           variant="ghost"

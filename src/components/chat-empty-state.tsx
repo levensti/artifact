@@ -81,7 +81,7 @@ export default function ChatEmptyState({
                 : "cursor-not-allowed opacity-50",
             )}
           >
-            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5 transition-colors group-hover:border-border/70 group-hover:bg-foreground/8">
+            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/6 transition-colors group-hover:border-primary/25 group-hover:bg-primary/10">
               <s.icon className="size-3 text-foreground/45" strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1 space-y-0.5">
