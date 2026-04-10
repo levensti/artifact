@@ -90,17 +90,17 @@ export default function AnnotationList({
                 key={item.label}
                 className="flex min-h-14 items-start gap-2.5 rounded-lg px-2 py-2.5"
               >
-                <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border/50 bg-foreground/5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8">
                   <item.icon
-                    className="size-3 text-foreground/45"
+                    className="size-4 text-primary/60"
                     strokeWidth={1.8}
                   />
                 </div>
                 <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className="text-xs font-medium leading-snug text-foreground/70">
+                  <p className="text-[13px] font-semibold leading-snug text-foreground/80">
                     {item.label}
                   </p>
-                  <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground/80">
+                  <p className="line-clamp-2 text-xs leading-snug text-muted-foreground/70">
                     {item.desc}
                   </p>
                 </div>
