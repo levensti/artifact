@@ -136,7 +136,7 @@ export default function Sidebar({
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="block font-display text-lg tracking-tight leading-none text-foreground">
+                <span className="block text-lg font-bold tracking-wide leading-none text-foreground">
                   Artifact
                 </span>
                 <p className="mt-1 text-[11px] font-medium leading-snug tracking-wide text-muted-foreground">
@@ -233,7 +233,7 @@ export default function Sidebar({
                             strokeWidth={1.75}
                           />
                         </span>
-                        <TextTooltip label={review.title} side="right" />
+                        <TextTooltip label={review.title} side="right" triggerClassName="font-reading" />
                       </div>
                     );
                   })}

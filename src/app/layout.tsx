@@ -1,18 +1,11 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
-import { Source_Serif_4, Instrument_Serif } from "next/font/google";
+import { Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
 const sourceSerif = Source_Serif_4({
   subsets: ["latin"],
   variable: "--font-source-serif",
-  display: "swap",
-});
-
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-instrument-serif",
   display: "swap",
 });
 
@@ -28,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${sourceSerif.variable} ${instrumentSerif.variable} h-full`}>
+    <html lang="en" className={`${GeistSans.variable} ${sourceSerif.variable} h-full`}>
       <body className="h-full overflow-hidden">{children}</body>
     </html>
   );
