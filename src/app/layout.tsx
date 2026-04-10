@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
-import { Merriweather } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const merriweather = Merriweather({
-  weight: ["300", "400", "700"],
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-merriweather",
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -22,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${merriweather.variable} h-full`}>
+    <html lang="en" className={`${GeistSans.variable} ${inter.variable} h-full`}>
       <body className="h-full overflow-hidden">{children}</body>
     </html>
   );
