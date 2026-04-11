@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  Compass,
+  BookOpen,
   FilePlus,
   FileText,
   Settings,
@@ -11,12 +11,11 @@ import {
 } from "lucide-react";
 import {
   getReviews,
-  normalizeArxivId,
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import { getGlobalGraphData } from "@/lib/client-data";
-import { EXPLORE_UPDATED_EVENT } from "@/lib/explore";
+import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
+import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,20 +33,20 @@ function localDateKeyFromIso(iso: string): string {
 function subscribeReviews(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-  window.addEventListener(EXPLORE_UPDATED_EVENT, onStoreChange);
+  window.addEventListener(WIKI_UPDATED_EVENT, onStoreChange);
   return () => {
     window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-    window.removeEventListener(EXPLORE_UPDATED_EVENT, onStoreChange);
+    window.removeEventListener(WIKI_UPDATED_EVENT, onStoreChange);
   };
 }
 
 function reviewsSnapshot() {
-  const globalIds = (getGlobalGraphData()?.nodes ?? []).map((n) => n.arxivId);
-  return JSON.stringify({ reviews: getReviews(), globalIds });
+  const wikiPages = getWikiCacheSnapshot() ?? [];
+  return JSON.stringify({ reviews: getReviews(), wikiPageCount: wikiPages.length });
 }
 
 function reviewsServerSnapshot() {
-  return JSON.stringify({ reviews: [], globalIds: [] });
+  return JSON.stringify({ reviews: [], wikiPageCount: 0 });
 }
 
 interface SidebarProps {
@@ -66,19 +65,24 @@ export default function Sidebar({
     reviewsSnapshot,
     reviewsServerSnapshot,
   );
-  const { reviews, globalIds } = useMemo(() => {
+  const { reviews, wikiPageCount } = useMemo(() => {
     const parsed = JSON.parse(reviewsJson) as {
       reviews: PaperReview[];
-      globalIds: string[];
+      wikiPageCount: number;
     };
     return {
       reviews: parsed.reviews ?? [],
-      globalIds: parsed.globalIds ?? [],
+      wikiPageCount: parsed.wikiPageCount ?? 0,
     };
   }, [reviewsJson]);
   const [showNewReview, setShowNewReview] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+
+  // Ensure wiki cache is populated so the snapshot picks up page counts
+  useEffect(() => {
+    void loadWikiPages();
+  }, []);
 
   const handleReviewCreated = (reviewId: string) => {
     setShowNewReview(false);
@@ -109,12 +113,7 @@ export default function Sidebar({
     });
   }, [reviews]);
 
-  const unreadDiscoverCount = useMemo(() => {
-    const reviewed = new Set(
-      reviews.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)),
-    );
-    return globalIds.filter((id) => !reviewed.has(normalizeArxivId(id))).length;
-  }, [reviews, globalIds]);
+  // Wiki page count comes from the snapshot (no extra memo needed)
 
   return (
     <>
@@ -166,21 +165,21 @@ export default function Sidebar({
           </button>
           <button
             type="button"
-            onClick={() => router.push("/discovery")}
+            onClick={() => router.push("/wiki")}
             className={cn(
               "flex w-full min-h-10 items-center gap-2 rounded-lg px-0 pr-1.5 py-0 text-left text-sm font-medium transition-colors duration-150",
-              pathname === "/discovery"
+              pathname === "/wiki"
                 ? "bg-sidebar-accent/40 text-sidebar-accent-foreground border-l-[3px] border-l-primary"
                 : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-[3px] border-l-transparent",
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-              <Compass className="size-4 opacity-50" strokeWidth={1.75} />
+              <BookOpen className="size-4 opacity-50" strokeWidth={1.75} />
             </span>
-            <span>Discover</span>
-            {unreadDiscoverCount > 0 ? (
+            <span>Knowledge Base</span>
+            {wikiPageCount > 0 ? (
               <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold leading-none text-primary tabular-nums shadow-sm shadow-primary/10">
-                {unreadDiscoverCount}
+                {wikiPageCount}
               </span>
             ) : null}
           </button>
