@@ -52,6 +52,8 @@ export default function PdfViewer({
       try {
         const pages: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
+          // Guard against destroyed document (e.g. component unmounted or URL changed)
+          if (!pdf || typeof pdf.getPage !== "function") return;
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
           const strings = content.items
@@ -61,7 +63,11 @@ export default function PdfViewer({
         }
         onTextExtracted(pages.join("\n\n"));
       } catch (err) {
-        console.error("Failed to extract text:", err);
+        // Suppress errors from destroyed documents during navigation
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes("Cannot read properties of null")) {
+          console.error("Failed to extract text:", err);
+        }
       }
     },
     [onTextExtracted],

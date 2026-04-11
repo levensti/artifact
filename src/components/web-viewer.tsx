@@ -200,7 +200,7 @@ export default function WebViewer({
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/40 px-4 backdrop-blur-sm">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/40 px-4 backdrop-blur-sm">
         <div className="flex items-center gap-2 min-w-0">
           {siteName && (
             <span className="text-xs font-medium text-muted-foreground truncate">
