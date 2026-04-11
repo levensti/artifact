@@ -244,13 +244,19 @@ export default function ReviewPage() {
     }
   }, [tooltip]);
 
-  const handleHighlightClick = useCallback((pageNumber: number) => {
-    const container = document.querySelector("[data-pdf-container]");
-    if (!container) return;
-    const target = container.querySelector(
-      `[data-page-number="${pageNumber}"]`,
-    );
-    target?.scrollIntoView({ behavior: "smooth" });
+  const handleHighlightClick = useCallback((annotationId: string, pageNumber: number) => {
+    // Try PDF container first
+    const pdfContainer = document.querySelector("[data-pdf-container]");
+    if (pdfContainer) {
+      const target = pdfContainer.querySelector(
+        `[data-page-number="${pageNumber}"]`,
+      );
+      target?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    // Fall back to web viewer highlight overlay
+    const highlight = document.querySelector(`[data-annotation-id="${annotationId}"]`);
+    highlight?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
   const handleMouseDown = useCallback(() => {

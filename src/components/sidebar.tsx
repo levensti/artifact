@@ -8,7 +8,6 @@ import {
   FileText,
   Settings,
   PanelLeftClose,
-  PanelLeft,
 } from "lucide-react";
 import {
   getReviews,
@@ -247,18 +246,6 @@ export default function Sidebar({
           </button>
         </div>
       </aside>
-
-      {collapsed && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="fixed left-2 top-2 z-40 size-8 border-border bg-background"
-          onClick={onToggle}
-          title="Expand sidebar"
-        >
-          <PanelLeft size={14} />
-        </Button>
-      )}
 
       <NewReviewDialog
         open={showNewReview}

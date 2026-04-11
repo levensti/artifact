@@ -4,7 +4,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { Suspense, useCallback, useEffect, useState } from "react";
 import type { Provider } from "@/lib/models";
+import { PanelLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import Sidebar from "./sidebar";
 import SettingsDialog from "./settings-dialog";
 import { SettingsOpenerProvider } from "./settings-opener-context";
@@ -79,7 +81,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             onOpenSettings={() => openSettings()}
           />
         </Suspense>
-        <main className="flex-1 min-w-0 overflow-hidden">{children}</main>
+        {collapsed && (
+          <div className="flex h-14 shrink-0 items-center border-r border-border bg-background px-1.5">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8 border-border"
+              onClick={toggle}
+              title="Expand sidebar"
+            >
+              <PanelLeft size={14} />
+            </Button>
+          </div>
+        )}
+        <main className="flex-1 min-w-0 overflow-hidden">
+          {children}
+        </main>
         <SettingsDialog
           open={settingsOpen}
           onOpenChange={handleSettingsOpenChange}

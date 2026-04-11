@@ -254,6 +254,7 @@ export default function WebViewer({
               return ann.anchorRects.map((r, ri) => (
                 <div
                   key={`hl-${ann.id}-${ri}`}
+                  {...(ri === 0 ? { "data-annotation-id": ann.id } : {})}
                   className="absolute pointer-events-none transition-[background-color,box-shadow] duration-150"
                   style={{
                     left: `${r.x * 100}%`,

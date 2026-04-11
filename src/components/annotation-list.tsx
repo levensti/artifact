@@ -16,7 +16,7 @@ interface AnnotationListProps {
   activeAnnotationId: string | null;
   hoveredAnnotationId: string | null;
   onAnnotationsChanged: () => void;
-  onHighlightClick: (pageNumber: number) => void;
+  onHighlightClick: (annotationId: string, pageNumber: number) => void;
   onAnnotationHover: (annotationId: string | null) => void;
   /** Narrow notes rail (beside PDF) uses tighter empty state */
   density?: "default" | "rail";
@@ -88,7 +88,7 @@ export default function AnnotationList({
             isHovered={ann.id === hoveredAnnotationId}
             onMouseEnter={() => onAnnotationHover(ann.id)}
             onMouseLeave={() => onAnnotationHover(null)}
-            onPageClick={() => onHighlightClick(ann.pageNumber)}
+            onPageClick={() => onHighlightClick(ann.id, ann.pageNumber)}
             onDelete={() => {
               void deleteAnnotation(reviewId, ann.id).then(() =>
                 onAnnotationsChanged(),
@@ -162,24 +162,24 @@ function AnnotationCard({
   return (
     <div
       ref={ref}
-      role={onActivate ? "button" : undefined}
-      tabIndex={onActivate ? 0 : undefined}
+      role="button"
+      tabIndex={0}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      onClick={onActivate}
-      onKeyDown={
-        onActivate
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onActivate();
-              }
-            }
-          : undefined
-      }
+      onClick={() => {
+        onPageClick();
+        onActivate?.();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPageClick();
+          onActivate?.();
+        }
+      }}
       className={cn(
         "overflow-hidden rounded-xl border bg-card transition-all duration-200 hover:shadow-md hover:shadow-primary/5",
-        onActivate && "cursor-pointer",
+        "cursor-pointer",
         isActive
           ? isAskAi
             ? "border-sky-500/35 ring-1 ring-sky-500/10"
@@ -198,30 +198,18 @@ function AnnotationCard({
               <Sparkles className="size-3 shrink-0" strokeWidth={2} />
               Dive deeper
             </span>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPageClick();
-                }}
-                className="rounded-md bg-muted/80 px-2 py-1 text-[10px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent"
-              >
-                p.{annotation.pageNumber}
-              </button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground/60 hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                title="Delete thread"
-              >
-                <Trash2 size={12} />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0 text-muted-foreground/60 hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              title="Delete thread"
+            >
+              <Trash2 size={12} />
+            </Button>
           </div>
 
           <div className="mx-3.5 mt-3 rounded-xl border border-border/40 bg-gradient-to-br from-muted/20 to-muted/5 px-4 py-3">
@@ -277,30 +265,18 @@ function AnnotationCard({
                 </p>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-1 pt-px">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPageClick();
-                }}
-                className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent"
-              >
-                p.{annotation.pageNumber}
-              </button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-5 text-muted-foreground/50 hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                title="Delete note"
-              >
-                <Trash2 size={10} />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-5 shrink-0 text-muted-foreground/50 hover:text-destructive pt-px"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              title="Delete note"
+            >
+              <Trash2 size={10} />
+            </Button>
           </div>
         </>
       )}

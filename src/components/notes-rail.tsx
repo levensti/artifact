@@ -10,7 +10,7 @@ interface NotesRailProps {
   activeAnnotationId: string | null;
   hoveredAnnotationId: string | null;
   onAnnotationsChanged: () => void;
-  onHighlightClick: (pageNumber: number) => void;
+  onHighlightClick: (annotationId: string, pageNumber: number) => void;
   onAnnotationHover: (annotationId: string | null) => void;
   onAnnotationSelect: (id: string) => void;
 }
