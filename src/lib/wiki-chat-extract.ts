@@ -114,7 +114,7 @@ For each extracted item, return:
 - content: full markdown content for the wiki page (150-400 words), using [[slug]] cross-references where relevant
 
 Return a JSON array. Return an empty array [] if nothing is wiki-worthy.
-No markdown fences, no extra text — ONLY the JSON array.`;
+No markdown fences, no extra text \u2014 ONLY the JSON array.`;
 
   const response = await fetch("/api/generate", {
     method: "POST",
@@ -127,7 +127,7 @@ No markdown fences, no extra text — ONLY the JSON array.`;
         : { apiKey }),
       prompt:
         prompt +
-        "\n\nReminder: respond with ONLY valid JSON exactly as specified—no markdown, no prose outside the JSON.",
+        "\n\nReminder: respond with ONLY valid JSON exactly as specified\u2014no markdown, no prose outside the JSON.",
       paperContext: "",
     }),
   });

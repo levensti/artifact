@@ -71,7 +71,7 @@ async function generateStructured(
   paperContext: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const augmented = `${prompt}\n\nReminder: respond with ONLY valid JSON exactly as specified—no markdown, no prose outside the JSON.`;
+  const augmented = `${prompt}\n\nReminder: respond with ONLY valid JSON exactly as specified\u2014no markdown, no prose outside the JSON.`;
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -250,9 +250,9 @@ async function rebuildIndexPage(): Promise<void> {
         .split("\n")
         .find((l) => l.trim() && !l.startsWith("#"));
       const excerpt = firstLine
-        ? firstLine.trim().slice(0, 100) + (firstLine.length > 100 ? "…" : "")
+        ? firstLine.trim().slice(0, 100) + (firstLine.length > 100 ? "\u2026" : "")
         : "";
-      content += `- [[${p.slug}]] — ${excerpt}\n`;
+      content += `- [[${p.slug}]] \u2014 ${excerpt}\n`;
     }
     content += "\n";
   }
