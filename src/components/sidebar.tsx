@@ -219,10 +219,10 @@ export default function Sidebar({
                             router.push(`/review/${review.id}`);
                         }}
                         className={cn(
-                          "w-full cursor-pointer rounded-lg px-2.5 py-2 text-left text-xs leading-relaxed transition-colors duration-150",
+                          "w-full cursor-pointer rounded-r-lg px-2.5 py-2 text-left text-xs leading-relaxed transition-colors duration-150 border-l-[3px]",
                           isActive
-                            ? "bg-sidebar-accent/40 font-medium text-sidebar-accent-foreground border-l-[3px] border-l-primary"
-                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-[3px] border-l-transparent",
+                            ? "bg-sidebar-accent/40 font-medium text-sidebar-accent-foreground border-l-primary"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-transparent",
                         )}
                       >
                         {review.title}
