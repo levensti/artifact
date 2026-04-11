@@ -205,7 +205,7 @@ export default function Sidebar({
                 <p className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                   {group.label}
                 </p>
-                <div className="space-y-1 border-l-[2px] border-l-border/40">
+                <div className="border-l-[2px] border-l-border/40">
                   {group.items.map((review) => {
                     const isActive = pathname === `/review/${review.id}`;
                     return (
@@ -219,7 +219,7 @@ export default function Sidebar({
                             router.push(`/review/${review.id}`);
                         }}
                         className={cn(
-                          "w-full cursor-pointer rounded-r-lg px-2.5 py-2 -ml-[2px] text-left text-xs leading-relaxed transition-colors duration-150 border-l-[2px]",
+                          "w-full cursor-pointer rounded-r-lg px-2.5 py-2.5 -ml-[2px] text-left text-xs leading-relaxed transition-colors duration-150 border-l-[2px] border-b border-b-border/30 last:border-b-0",
                           isActive
                             ? "bg-sidebar-accent/40 font-medium text-sidebar-accent-foreground border-l-primary"
                             : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-transparent",
