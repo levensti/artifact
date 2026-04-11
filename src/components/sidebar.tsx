@@ -21,7 +21,6 @@ import { EXPLORE_UPDATED_EVENT } from "@/lib/explore";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { TextTooltip, TooltipProvider } from "@/components/ui/tooltip";
 import NewReviewDialog from "./new-review-dialog";
 
 /** YYYY-MM-DD in the user's local timezone (do not use UTC from toISOString). */
@@ -188,7 +187,6 @@ export default function Sidebar({
           </button>
         </div>
 
-        <TooltipProvider delay={100}>
           <ScrollArea className="flex-1 px-2.5 py-2">
             {grouped.length === 0 && (
               <div className="py-10 text-center">
@@ -221,19 +219,13 @@ export default function Sidebar({
                             router.push(`/review/${review.id}`);
                         }}
                         className={cn(
-                          "flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-lg px-0 py-0 text-left text-sm leading-snug transition-colors duration-150",
+                          "w-full cursor-pointer rounded-lg px-2.5 py-2 text-left text-xs leading-relaxed transition-colors duration-150",
                           isActive
                             ? "bg-sidebar-accent/40 font-medium text-sidebar-accent-foreground border-l-[3px] border-l-primary"
                             : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-[3px] border-l-transparent",
                         )}
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-                          <FileText
-                            className="size-4 opacity-40"
-                            strokeWidth={1.75}
-                          />
-                        </span>
-                        <TextTooltip label={review.title} side="right" />
+                        {review.title}
                       </div>
                     );
                   })}
@@ -241,7 +233,6 @@ export default function Sidebar({
               </div>
             ))}
           </ScrollArea>
-        </TooltipProvider>
 
         <div className="border-t border-sidebar-border px-2.5 py-2 shrink-0">
           <button
