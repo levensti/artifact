@@ -10,6 +10,8 @@ import { arxivSearchTool } from "./arxiv-search";
 import { webSearchTool } from "./web-search";
 import { rankResultsTool } from "./rank-results";
 import { saveToGraphTool } from "./save-to-graph";
+import { queryWikiTool } from "./query-wiki";
+import { updateWikiTool } from "./update-wiki";
 
 /* ------------------------------------------------------------------ */
 /*  Register tools here                                                */
@@ -20,6 +22,8 @@ const ALL_TOOLS: ToolDefinition[] = [
   webSearchTool,
   rankResultsTool,
   saveToGraphTool,
+  queryWikiTool,
+  updateWikiTool,
 ];
 
 /* ------------------------------------------------------------------ */
