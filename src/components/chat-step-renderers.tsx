@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  BookOpen,
   BrainCircuit,
   Check,
   ChevronDown,
@@ -28,6 +29,14 @@ const TOOL_LABELS: Record<string, [string, string]> = {
     "Saving to knowledge graph",
     "Saved to knowledge graph",
   ],
+  update_knowledge_base: [
+    "Updating knowledge base",
+    "Updated knowledge base",
+  ],
+  query_knowledge_base: [
+    "Searching knowledge base",
+    "Searched knowledge base",
+  ],
 };
 
 function toolLabel(name: string, done: boolean): string {
@@ -41,6 +50,8 @@ const TOOL_ICONS: Record<string, typeof Search> = {
   web_search: Search,
   rank_results: Wrench,
   save_to_knowledge_graph: Network,
+  update_knowledge_base: BookOpen,
+  query_knowledge_base: Search,
 };
 
 /* ------------------------------------------------------------------ */
@@ -141,7 +152,7 @@ export function ToolCallStep({
       </button>
       {open && output && (
         <div className="border-t border-border/40 px-2.5 py-2 max-h-[180px] overflow-y-auto bg-muted/5">
-          {name === "save_to_knowledge_graph" ? (
+          {(name === "save_to_knowledge_graph" || name === "update_knowledge_base" || name === "query_knowledge_base") ? (
             <div className="text-[11px] leading-relaxed text-muted-foreground/80">
               <MarkdownMessage content={output} />
             </div>

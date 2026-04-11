@@ -3,20 +3,15 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  Compass,
+  BookOpen,
   FilePlus,
   FileText,
   Settings,
   PanelLeftClose,
 } from "lucide-react";
-import {
-  getReviews,
-  normalizeArxivId,
-  REVIEWS_UPDATED_EVENT,
-  type PaperReview,
-} from "@/lib/reviews";
-import { getGlobalGraphData } from "@/lib/client-data";
-import { EXPLORE_UPDATED_EVENT } from "@/lib/explore";
+import { getReviews, REVIEWS_UPDATED_EVENT, type PaperReview } from "@/lib/reviews";
+import { getWikiPageCount } from "@/lib/client-data";
+import { KB_UPDATED_EVENT } from "@/lib/storage-events";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,20 +29,20 @@ function localDateKeyFromIso(iso: string): string {
 function subscribeReviews(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-  window.addEventListener(EXPLORE_UPDATED_EVENT, onStoreChange);
+  window.addEventListener(KB_UPDATED_EVENT, onStoreChange);
   return () => {
     window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-    window.removeEventListener(EXPLORE_UPDATED_EVENT, onStoreChange);
+    window.removeEventListener(KB_UPDATED_EVENT, onStoreChange);
   };
 }
 
 function reviewsSnapshot() {
-  const globalIds = (getGlobalGraphData()?.nodes ?? []).map((n) => n.arxivId);
-  return JSON.stringify({ reviews: getReviews(), globalIds });
+  const kbCount = getWikiPageCount();
+  return JSON.stringify({ reviews: getReviews(), kbCount });
 }
 
 function reviewsServerSnapshot() {
-  return JSON.stringify({ reviews: [], globalIds: [] });
+  return JSON.stringify({ reviews: [], kbCount: 0 });
 }
 
 interface SidebarProps {
@@ -66,14 +61,14 @@ export default function Sidebar({
     reviewsSnapshot,
     reviewsServerSnapshot,
   );
-  const { reviews, globalIds } = useMemo(() => {
+  const { reviews, kbCount } = useMemo(() => {
     const parsed = JSON.parse(reviewsJson) as {
       reviews: PaperReview[];
-      globalIds: string[];
+      kbCount: number;
     };
     return {
       reviews: parsed.reviews ?? [],
-      globalIds: parsed.globalIds ?? [],
+      kbCount: parsed.kbCount ?? 0,
     };
   }, [reviewsJson]);
   const [showNewReview, setShowNewReview] = useState(false);
@@ -108,13 +103,6 @@ export default function Sidebar({
       return { label, items: byDate.get(dateKey)! };
     });
   }, [reviews]);
-
-  const unreadDiscoverCount = useMemo(() => {
-    const reviewed = new Set(
-      reviews.filter((r) => r.arxivId).map((r) => normalizeArxivId(r.arxivId!)),
-    );
-    return globalIds.filter((id) => !reviewed.has(normalizeArxivId(id))).length;
-  }, [reviews, globalIds]);
 
   return (
     <>
@@ -166,21 +154,21 @@ export default function Sidebar({
           </button>
           <button
             type="button"
-            onClick={() => router.push("/discovery")}
+            onClick={() => router.push("/kb")}
             className={cn(
               "flex w-full min-h-10 items-center gap-2 rounded-lg px-0 pr-1.5 py-0 text-left text-sm font-medium transition-colors duration-150",
-              pathname === "/discovery"
+              pathname.startsWith("/kb")
                 ? "bg-sidebar-accent/40 text-sidebar-accent-foreground border-l-[3px] border-l-primary"
                 : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-[3px] border-l-transparent",
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-              <Compass className="size-4 opacity-50" strokeWidth={1.75} />
+              <BookOpen className="size-4 opacity-50" strokeWidth={1.75} />
             </span>
-            <span>Discover</span>
-            {unreadDiscoverCount > 0 ? (
+            <span>Knowledge Base</span>
+            {kbCount > 0 ? (
               <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold leading-none text-primary tabular-nums shadow-sm shadow-primary/10">
-                {unreadDiscoverCount}
+                {kbCount}
               </span>
             ) : null}
           </button>

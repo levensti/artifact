@@ -5,6 +5,7 @@ import type { Model } from "@/lib/models";
 import type { Annotation } from "@/lib/annotations";
 import ChatPanel from "./chat-panel";
 import ModelSelector from "./model-selector";
+import KbIngestButton from "./kb-ingest-button";
 
 interface RightPanelProps {
   reviewId: string;
@@ -50,7 +51,13 @@ export default function RightPanel({
             Assistant
           </span>
         </div>
-        <div className="min-w-0 shrink-0">
+        <div className="flex items-center gap-2 min-w-0 shrink-0">
+          <KbIngestButton
+            reviewId={reviewId}
+            paperTitle={paperTitle}
+            paperContext={paperContext}
+            selectedModel={selectedModel}
+          />
           <ModelSelector selected={selectedModel} onSelect={onModelChange} />
         </div>
       </header>

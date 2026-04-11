@@ -14,6 +14,11 @@ import type {
   GraphData,
   PrerequisitesData,
 } from "@/lib/explore";
+import type {
+  WikiPage,
+  WikiPageSource,
+  KbLogEntry,
+} from "@/lib/kb-types";
 
 const DB_PATH = path.join(process.cwd(), "data", "artifact.db");
 
@@ -87,6 +92,42 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS app_kv (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS wiki_pages (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      page_type TEXT NOT NULL,
+      tags TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_pages_slug ON wiki_pages(slug);
+    CREATE INDEX IF NOT EXISTS idx_wiki_pages_type ON wiki_pages(page_type);
+
+    CREATE TABLE IF NOT EXISTS wiki_page_sources (
+      page_id TEXT NOT NULL,
+      review_id TEXT NOT NULL,
+      contributed_at TEXT NOT NULL,
+      PRIMARY KEY (page_id, review_id),
+      FOREIGN KEY (page_id) REFERENCES wiki_pages(id) ON DELETE CASCADE,
+      FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS kb_log (
+      id TEXT PRIMARY KEY,
+      action TEXT NOT NULL,
+      description TEXT NOT NULL,
+      affected_page_ids TEXT NOT NULL DEFAULT '[]',
+      review_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_kb_log_created ON kb_log(created_at);
+
+    CREATE TABLE IF NOT EXISTS kb_messages (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      payload TEXT NOT NULL
     );
   `);
   migrateDeepDivesReviewFk(db);
@@ -540,6 +581,202 @@ export function patchSettings(patch: {
   }
 }
 
+/* ── Wiki pages (Knowledge Base) ── */
+
+export function listWikiPages(): WikiPage[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, slug, title, content, page_type AS pageType, tags,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM wiki_pages ORDER BY datetime(updated_at) DESC`,
+    )
+    .all() as (Omit<WikiPage, "tags"> & { tags: string })[];
+  return rows.map((r) => ({ ...r, tags: safeParseTags(r.tags) }));
+}
+
+export function getWikiPageBySlug(slug: string): WikiPage | undefined {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT id, slug, title, content, page_type AS pageType, tags,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM wiki_pages WHERE slug = ?`,
+    )
+    .get(slug) as (Omit<WikiPage, "tags"> & { tags: string }) | undefined;
+  if (!row) return undefined;
+  return { ...row, tags: safeParseTags(row.tags) };
+}
+
+export function getWikiPageById(id: string): WikiPage | undefined {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT id, slug, title, content, page_type AS pageType, tags,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM wiki_pages WHERE id = ?`,
+    )
+    .get(id) as (Omit<WikiPage, "tags"> & { tags: string }) | undefined;
+  if (!row) return undefined;
+  return { ...row, tags: safeParseTags(row.tags) };
+}
+
+export function searchWikiPages(query: string, limit = 20): WikiPage[] {
+  const db = getDb();
+  const pattern = `%${query}%`;
+  const rows = db
+    .prepare(
+      `SELECT id, slug, title, content, page_type AS pageType, tags,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM wiki_pages
+       WHERE title LIKE ? OR content LIKE ? OR tags LIKE ?
+       ORDER BY datetime(updated_at) DESC
+       LIMIT ?`,
+    )
+    .all(pattern, pattern, pattern, limit) as (Omit<WikiPage, "tags"> & { tags: string })[];
+  return rows.map((r) => ({ ...r, tags: safeParseTags(r.tags) }));
+}
+
+export function countWikiPages(): number {
+  const db = getDb();
+  const row = db.prepare(`SELECT COUNT(*) AS cnt FROM wiki_pages`).get() as { cnt: number };
+  return row.cnt;
+}
+
+export function upsertWikiPage(page: WikiPage): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO wiki_pages (id, slug, title, content, page_type, tags, created_at, updated_at)
+     VALUES (@id, @slug, @title, @content, @page_type, @tags, @created_at, @updated_at)
+     ON CONFLICT(id) DO UPDATE SET
+       slug = excluded.slug,
+       title = excluded.title,
+       content = excluded.content,
+       page_type = excluded.page_type,
+       tags = excluded.tags,
+       updated_at = excluded.updated_at`,
+  ).run({
+    id: page.id,
+    slug: page.slug,
+    title: page.title,
+    content: page.content,
+    page_type: page.pageType,
+    tags: JSON.stringify(page.tags),
+    created_at: page.createdAt,
+    updated_at: page.updatedAt,
+  });
+}
+
+export function deleteWikiPage(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare(`DELETE FROM wiki_pages WHERE id = ?`).run(id);
+  return result.changes > 0;
+}
+
+function safeParseTags(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/* ── Wiki page sources ── */
+
+export function getWikiPageSources(pageId: string): WikiPageSource[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT page_id AS pageId, review_id AS reviewId, contributed_at AS contributedAt
+       FROM wiki_page_sources WHERE page_id = ?`,
+    )
+    .all(pageId) as WikiPageSource[];
+}
+
+export function getSourcesForReview(reviewId: string): WikiPageSource[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT page_id AS pageId, review_id AS reviewId, contributed_at AS contributedAt
+       FROM wiki_page_sources WHERE review_id = ?`,
+    )
+    .all(reviewId) as WikiPageSource[];
+}
+
+export function addWikiPageSource(pageId: string, reviewId: string): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO wiki_page_sources (page_id, review_id, contributed_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(page_id, review_id) DO UPDATE SET contributed_at = excluded.contributed_at`,
+  ).run(pageId, reviewId, new Date().toISOString());
+}
+
+/* ── KB log ── */
+
+export function listKbLog(limit = 50): KbLogEntry[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, action, description, affected_page_ids AS affectedPageIds,
+              review_id AS reviewId, created_at AS createdAt
+       FROM kb_log ORDER BY datetime(created_at) DESC LIMIT ?`,
+    )
+    .all(limit) as (Omit<KbLogEntry, "affectedPageIds"> & { affectedPageIds: string })[];
+  return rows.map((r) => ({
+    ...r,
+    affectedPageIds: safeParseStringArray(r.affectedPageIds),
+  }));
+}
+
+export function insertKbLog(entry: KbLogEntry): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO kb_log (id, action, description, affected_page_ids, review_id, created_at)
+     VALUES (@id, @action, @description, @affected_page_ids, @review_id, @created_at)`,
+  ).run({
+    id: entry.id,
+    action: entry.action,
+    description: entry.description,
+    affected_page_ids: JSON.stringify(entry.affectedPageIds),
+    review_id: entry.reviewId ?? null,
+    created_at: entry.createdAt,
+  });
+}
+
+function safeParseStringArray(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/* ── KB messages (singleton) ── */
+
+export function getKbMessages(): ChatMessage[] {
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT payload FROM kb_messages WHERE singleton = 1`)
+    .get() as { payload: string } | undefined;
+  if (!row) return [];
+  try {
+    return JSON.parse(row.payload) as ChatMessage[];
+  } catch {
+    return [];
+  }
+}
+
+export function setKbMessages(messages: ChatMessage[]): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO kb_messages (singleton, payload) VALUES (1, ?)
+     ON CONFLICT(singleton) DO UPDATE SET payload = excluded.payload`,
+  ).run(JSON.stringify(messages));
+}
+
 /* ── Bootstrap ── */
 
 export function getBootstrap() {
@@ -548,5 +785,6 @@ export function getBootstrap() {
     settings: getSettings(),
     globalGraph: getGlobalGraphData(),
     deepDives: listDeepDives(),
+    wikiPageCount: countWikiPages(),
   };
 }

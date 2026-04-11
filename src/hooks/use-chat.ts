@@ -15,7 +15,7 @@ import {
   type ChatAssistantBlock,
   type ChatMessage,
 } from "@/lib/reviews";
-import { invalidateExploreCache } from "@/lib/client-data";
+import { invalidateExploreCache, invalidateKbCache } from "@/lib/client-data";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
@@ -372,6 +372,17 @@ export function useChat({
         );
         if (touchedGraph) {
           invalidateExploreCache(reviewId);
+        }
+
+        // If the assistant updated the KB, invalidate cache
+        const touchedKb = steps.some(
+          (s) =>
+            s.kind === "tool_call" &&
+            s.name === "update_knowledge_base" &&
+            s.output,
+        );
+        if (touchedKb) {
+          invalidateKbCache();
         }
       } catch (err) {
         const message =

@@ -50,6 +50,8 @@ interface ChatRequest {
   reviewId?: string;
   /** Set when the review is for an arbitrary web page rather than a paper/PDF. */
   sourceUrl?: string;
+  /** Chat mode: "paper" (default), "web", or "kb" for Knowledge Base chat. */
+  chatMode?: "paper" | "web" | "kb";
 }
 
 /* ------------------------------------------------------------------ */
@@ -75,7 +77,12 @@ Guidelines:
 - Be precise and dense with insight — researchers value depth over verbosity
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
 - When you find related papers (especially for "related work" or "prerequisite" queries), use save_to_knowledge_graph to persist them so the user can explore the relationship map in the Discovery tab
-- Use tools when they add value, but don't force tool use for simple questions you can answer directly from the paper context`;
+- Use tools when they add value, but don't force tool use for simple questions you can answer directly from the paper context
+- You have access to the user's Knowledge Base — a personal wiki of compiled concepts, methods, and results from everything they've read
+- Use query_knowledge_base to check what the user already knows before explaining a topic from scratch
+- Use update_knowledge_base to save important concepts, methods, or insights as you encounter them in conversation
+- When creating KB pages, use [[slug]] syntax for cross-references to other KB pages
+- Prefer updating existing pages over creating duplicates — check first with query_knowledge_base`;
 
 const WEB_SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a reading and analysis tool. You have deep expertise across all domains — technology, science, business, humanities, and beyond.
 
@@ -96,9 +103,34 @@ Guidelines:
 - Be precise and dense with insight — readers value depth over verbosity
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
 - When you find related papers, use save_to_knowledge_graph to persist them so the user can explore the relationship map in the Discovery tab
-- Use tools when they add value, but don't force tool use for simple questions you can answer directly from the page context`;
+- Use tools when they add value, but don't force tool use for simple questions you can answer directly from the page context
+- You have access to the user's Knowledge Base — a personal wiki of compiled concepts, methods, and results from everything they've read
+- Use query_knowledge_base to check what the user already knows before explaining a topic from scratch
+- Use update_knowledge_base to save important concepts, methods, or insights as you encounter them in conversation
+- When creating KB pages, use [[slug]] syntax for cross-references to other KB pages
+- Prefer updating existing pages over creating duplicates — check first with query_knowledge_base`;
 
-function getSystemPrompt(sourceUrl?: string): string {
+const KB_SYSTEM_PROMPT = `You are a knowledge base librarian and research assistant. You maintain and query the user's personal Knowledge Base — a wiki of compiled concepts, methods, results, and paper summaries built from their research reading.
+
+Capabilities:
+- You can search the KB to answer questions about what the user has learned
+- You can create new wiki pages for topics, concepts, methods, and results
+- You can update existing pages with corrections, clarifications, or new connections
+- You can find gaps, contradictions, and opportunities to strengthen the KB
+- You can search arXiv and the web to enrich KB pages with new information
+
+Guidelines:
+- When answering questions, always check the KB first via query_knowledge_base
+- Synthesize across multiple KB pages when the user asks cross-cutting questions
+- When updating pages, preserve existing content and add new information with clear attribution
+- Use [[slug]] syntax for cross-references between pages
+- Use LaTeX notation for math (wrapped in $ or $$)
+- Be a disciplined librarian: maintain consistency, flag contradictions, keep pages well-organized
+- When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
+- Use tools when they add value, but don't force tool use for simple questions you can answer from the KB`;
+
+function getSystemPrompt(sourceUrl?: string, chatMode?: string): string {
+  if (chatMode === "kb") return KB_SYSTEM_PROMPT;
   return sourceUrl ? WEB_SYSTEM_PROMPT : PAPER_SYSTEM_PROMPT;
 }
 
@@ -126,6 +158,7 @@ export async function POST(req: NextRequest) {
     arxivId,
     reviewId,
     sourceUrl,
+    chatMode,
   } = body;
 
   if (!isProvider(provider)) {
@@ -166,7 +199,7 @@ export async function POST(req: NextRequest) {
 
   const tools = getAllTools();
   const toolContext: ToolContext = { paperContext, paperTitle, arxivId, reviewId };
-  const systemPrompt = getSystemPrompt(sourceUrl);
+  const systemPrompt = getSystemPrompt(sourceUrl, chatMode);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({

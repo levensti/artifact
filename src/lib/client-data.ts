@@ -16,6 +16,7 @@ import type {
   GraphData,
   PrerequisitesData,
 } from "@/lib/explore";
+import type { WikiPage, KbLogEntry } from "@/lib/kb-types";
 import { mergeGlobalGraphSession } from "@/lib/explore-merge";
 import {
   REVIEWS_UPDATED_EVENT,
@@ -23,6 +24,7 @@ import {
   DEEP_DIVES_UPDATED_EVENT,
   EXPLORE_UPDATED_EVENT,
   KEYS_UPDATED_EVENT,
+  KB_UPDATED_EVENT,
 } from "@/lib/storage-events";
 
 async function apiJson<T>(
@@ -75,6 +77,11 @@ const exploreCache = new Map<
   { prerequisites: PrerequisitesData | null; graph: GraphData | null }
 >();
 
+let wikiPagesCache: WikiPage[] | null = null;
+let wikiPageCountCache = 0;
+let kbLogCache: KbLogEntry[] | null = null;
+let kbMessagesCache: ChatMessage[] | null = null;
+
 export function isDataHydrated(): boolean {
   return hydrated;
 }
@@ -88,19 +95,25 @@ export async function hydrateClientStore(): Promise<void> {
       settings: SettingsCache;
       globalGraph: GlobalGraphData | null;
       deepDives: DeepDiveSession[];
+      wikiPageCount?: number;
     }>("/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
     globalGraphCache = boot.globalGraph;
     deepDivesCache = boot.deepDives;
+    wikiPageCountCache = boot.wikiPageCount ?? 0;
     messagesCache.clear();
     annotationsCache.clear();
     exploreCache.clear();
+    wikiPagesCache = null;
+    kbLogCache = null;
+    kbMessagesCache = null;
     hydrated = true;
     window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
     window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
     window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
     window.dispatchEvent(new Event(DEEP_DIVES_UPDATED_EVENT));
+    window.dispatchEvent(new Event(KB_UPDATED_EVENT));
   })();
   return hydratePromise;
 }
@@ -431,4 +444,88 @@ export function getSavedSelectedModel(): Model | null {
 export async function refreshSettingsFromServer(): Promise<void> {
   settingsCache = await apiJson<SettingsCache>("/settings");
   window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+}
+
+/* ── Knowledge Base ── */
+
+export function getWikiPageCount(): number {
+  return wikiPageCountCache;
+}
+
+export async function loadWikiPages(): Promise<WikiPage[]> {
+  if (wikiPagesCache) return wikiPagesCache;
+  wikiPagesCache = await apiJson<WikiPage[]>("/kb");
+  wikiPageCountCache = wikiPagesCache.length;
+  return wikiPagesCache;
+}
+
+export function getWikiPagesSnapshot(): WikiPage[] {
+  return wikiPagesCache ?? [];
+}
+
+export async function loadWikiPage(
+  slug: string,
+): Promise<(WikiPage & { sources?: { pageId: string; reviewId: string; contributedAt: string }[] }) | null> {
+  const data = await apiJson<WikiPage & { sources?: { pageId: string; reviewId: string; contributedAt: string }[] }>(
+    `/kb/${encodeURIComponent(slug)}`,
+  ).catch(() => null);
+  return data;
+}
+
+export async function saveWikiPage(page: Partial<WikiPage> & { slug: string; title: string }): Promise<WikiPage> {
+  const saved = await apiJson<WikiPage>("/kb", {
+    method: "POST",
+    body: JSON.stringify(page),
+  });
+  wikiPagesCache = null;
+  wikiPageCountCache++;
+  window.dispatchEvent(new Event(KB_UPDATED_EVENT));
+  return saved;
+}
+
+export async function updateWikiPage(slug: string, patch: Partial<WikiPage>): Promise<WikiPage> {
+  const updated = await apiJson<WikiPage>(
+    `/kb/${encodeURIComponent(slug)}`,
+    { method: "PUT", body: JSON.stringify(patch) },
+  );
+  wikiPagesCache = null;
+  window.dispatchEvent(new Event(KB_UPDATED_EVENT));
+  return updated;
+}
+
+export async function deleteWikiPageClient(slug: string): Promise<void> {
+  await apiJson(`/kb/${encodeURIComponent(slug)}`, { method: "DELETE" });
+  wikiPagesCache = null;
+  wikiPageCountCache = Math.max(0, wikiPageCountCache - 1);
+  window.dispatchEvent(new Event(KB_UPDATED_EVENT));
+}
+
+export async function searchWikiPagesClient(query: string): Promise<WikiPage[]> {
+  return apiJson<WikiPage[]>(`/kb/search?q=${encodeURIComponent(query)}`);
+}
+
+export async function loadKbLog(limit = 50): Promise<KbLogEntry[]> {
+  if (kbLogCache) return kbLogCache;
+  kbLogCache = await apiJson<KbLogEntry[]>(`/kb/log?limit=${limit}`);
+  return kbLogCache;
+}
+
+export function invalidateKbCache(): void {
+  wikiPagesCache = null;
+  kbLogCache = null;
+  window.dispatchEvent(new Event(KB_UPDATED_EVENT));
+}
+
+export async function loadKbMessages(): Promise<ChatMessage[]> {
+  if (kbMessagesCache) return kbMessagesCache;
+  kbMessagesCache = await apiJson<ChatMessage[]>("/kb/messages");
+  return kbMessagesCache;
+}
+
+export async function saveKbMessages(messages: ChatMessage[]): Promise<void> {
+  kbMessagesCache = messages;
+  await apiJson("/kb/messages", {
+    method: "PUT",
+    body: JSON.stringify(messages),
+  });
 }
