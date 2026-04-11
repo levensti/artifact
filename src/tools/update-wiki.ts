@@ -27,7 +27,7 @@ export const updateWikiTool: ToolDefinition = {
   description:
     "Create or update a page in the persistent knowledge base wiki. Use this to save explanations, concept definitions, paper summaries, and method descriptions so they persist across sessions. " +
     "Use [[slug]] syntax in content to cross-reference other knowledge base pages. " +
-    "If a page with the given slug already exists, it will be overwritten — read it first with query_knowledge_base if you want to preserve existing content.",
+    "If a page with the given slug already exists, it will be overwritten \u2014 read it first with query_knowledge_base if you want to preserve existing content.",
   parameters: {
     type: "object",
     properties: {

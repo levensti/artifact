@@ -55,7 +55,7 @@ export const queryWikiTool: ToolDefinition = {
           .replace(/\n+/g, " ")
           .trim()
           .slice(0, 300);
-        return `- **[[${p.slug}]]** (${p.pageType}) — ${p.title}\n  ${excerpt}${excerpt.length >= 300 ? "…" : ""}`;
+        return `- **[[${p.slug}]]** (${p.pageType}) \u2014 ${p.title}\n  ${excerpt}${excerpt.length >= 300 ? "\u2026" : ""}`;
       });
 
       return `Found ${results.length} knowledge base page${results.length !== 1 ? "s" : ""} matching "${query}":\n\n${formatted.join("\n\n")}\n\nUse slug parameter to read a full page.`;
