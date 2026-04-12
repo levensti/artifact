@@ -98,7 +98,9 @@ export default function ReviewPage() {
     typeof window !== "undefined" && window.innerWidth < 1280 ? 360 : 440,
   );
   const [isDragging, setIsDragging] = useState(false);
-  const [narrowViewport, setNarrowViewport] = useState(false);
+  const [narrowViewport, setNarrowViewport] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 1280,
+  );
   const [notesOpen, setNotesOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const notesOverlayRef = useRef<HTMLDivElement>(null);
@@ -107,7 +109,6 @@ export default function ReviewPage() {
   // Auto-collapse side panels on narrow viewports
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1279px)");
-    setNarrowViewport(mq.matches);
     const handler = (e: MediaQueryListEvent) => {
       setNarrowViewport(e.matches);
       if (e.matches) {
