@@ -5,11 +5,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { GripVertical, Loader2 } from "lucide-react";
+import { GripVertical, Loader2, MessageSquare, StickyNote, X } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel from "@/components/right-panel";
 import NotesRail from "@/components/notes-rail";
@@ -93,8 +94,55 @@ export default function ReviewPage() {
   const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(
     null,
   );
-  const [panelWidth, setPanelWidth] = useState(440);
+  const [panelWidth, setPanelWidth] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 1280 ? 360 : 440,
+  );
   const [isDragging, setIsDragging] = useState(false);
+  const [narrowViewport, setNarrowViewport] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 1280,
+  );
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const notesOverlayRef = useRef<HTMLDivElement>(null);
+  const assistantOverlayRef = useRef<HTMLDivElement>(null);
+
+  // Auto-collapse side panels on narrow viewports
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1279px)");
+    const handler = (e: MediaQueryListEvent) => {
+      setNarrowViewport(e.matches);
+      if (e.matches) {
+        setNotesOpen(false);
+        setAssistantOpen(false);
+      }
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  // Close overlay panels when clicking outside
+  useEffect(() => {
+    if (!narrowViewport) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        notesOpen &&
+        notesOverlayRef.current &&
+        !notesOverlayRef.current.contains(e.target as Node)
+      ) {
+        setNotesOpen(false);
+      }
+      if (
+        assistantOpen &&
+        assistantOverlayRef.current &&
+        !assistantOverlayRef.current.contains(e.target as Node)
+      ) {
+        setAssistantOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [narrowViewport, notesOpen, assistantOpen]);
+
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   /** Passage threads (Dive deeper) / selection: which annotation thread is open in chat */
   const [chatThreadAnnotationId, setChatThreadAnnotationId] = useState<
@@ -266,7 +314,7 @@ export default function ReviewPage() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = window.innerWidth - e.clientX;
-      const minWidth = 380;
+      const minWidth = 320;
       setPanelWidth(Math.max(minWidth, Math.min(980, newWidth)));
     };
 
@@ -298,9 +346,10 @@ export default function ReviewPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex h-full overflow-hidden">
+      <div className="relative flex h-full overflow-hidden">
+        {/* Main content: paper viewer + inline notes rail (when wide) */}
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
+          <div className="flex min-h-0 min-w-[300px] flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             {review.sourceUrl ? (
               <WebViewer
                 sourceUrl={review.sourceUrl}
@@ -326,45 +375,141 @@ export default function ReviewPage() {
             )}
           </div>
 
-          <NotesRail
-            reviewId={review.id}
-            annotations={annotations}
-            activeAnnotationId={activeAnnotationId}
-            hoveredAnnotationId={hoveredAnnotationId}
-            onAnnotationsChanged={refreshAnnotations}
-            onHighlightClick={handleHighlightClick}
-            onAnnotationHover={setHoveredAnnotationId}
-            onAnnotationSelect={handleAnnotationSelect}
-          />
+          {/* Inline notes rail — only when viewport is wide */}
+          {!narrowViewport && (
+            <NotesRail
+              reviewId={review.id}
+              annotations={annotations}
+              activeAnnotationId={activeAnnotationId}
+              hoveredAnnotationId={hoveredAnnotationId}
+              onAnnotationsChanged={refreshAnnotations}
+              onHighlightClick={handleHighlightClick}
+              onAnnotationHover={setHoveredAnnotationId}
+              onAnnotationSelect={handleAnnotationSelect}
+            />
+          )}
         </div>
 
-        <div
-          onMouseDown={handleMouseDown}
-          className={`relative w-1 cursor-col-resize flex items-center justify-center shrink-0 transition-colors ${isDragging ? "bg-primary/30" : "bg-border/80 hover:bg-muted-foreground/25"}`}
-        >
-          <div className="absolute p-0.5 rounded-md bg-card border border-border/90 opacity-0 hover:opacity-100 transition-opacity shadow-sm">
-            <GripVertical size={10} className="text-muted-foreground" />
+        {/* Inline drag handle + right panel — only when viewport is wide */}
+        {!narrowViewport && (
+          <>
+            <div
+              onMouseDown={handleMouseDown}
+              className={`relative w-1 cursor-col-resize flex items-center justify-center shrink-0 transition-colors ${isDragging ? "bg-primary/30" : "bg-border/80 hover:bg-muted-foreground/25"}`}
+            >
+              <div className="absolute p-0.5 rounded-md bg-card border border-border/90 opacity-0 hover:opacity-100 transition-opacity shadow-sm">
+                <GripVertical size={10} className="text-muted-foreground" />
+              </div>
+            </div>
+
+            <div
+              className="flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background"
+              style={{ width: `${panelWidth}px` }}
+            >
+              <RightPanel
+                reviewId={review.id}
+                arxivId={review.arxivId ?? ""}
+                paperTitle={review.title}
+                paperContext={paperText}
+                annotations={annotations}
+                chatThreadAnnotationId={effectiveChatThreadAnnotationId}
+                onChatThreadChange={setChatThreadAnnotationId}
+                onAnnotationsPersist={refreshAnnotations}
+                selectedModel={selectedModel}
+                onModelChange={handleModelChange}
+                sourceUrl={review.sourceUrl}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Toggle buttons — only when viewport is narrow */}
+        {narrowViewport && (
+          <div className="absolute bottom-4 right-4 z-30 flex flex-col gap-2">
+            <button
+              onClick={() => { setNotesOpen((v) => !v); setAssistantOpen(false); }}
+              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium shadow-lg border transition-colors ${notesOpen ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"}`}
+              title="Toggle notes"
+            >
+              <StickyNote size={16} />
+              <span className="hidden sm:inline">Notes</span>
+              {annotations.length > 0 && (
+                <span className={`text-xs tabular-nums rounded-full px-1.5 py-0.5 ${notesOpen ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                  {annotations.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => { setAssistantOpen((v) => !v); setNotesOpen(false); }}
+              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium shadow-lg border transition-colors ${assistantOpen ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"}`}
+              title="Toggle assistant"
+            >
+              <MessageSquare size={16} />
+              <span className="hidden sm:inline">Assistant</span>
+            </button>
           </div>
-        </div>
+        )}
 
-        <div
-          className="flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background"
-          style={{ width: `${panelWidth}px` }}
-        >
-          <RightPanel
-            reviewId={review.id}
-            arxivId={review.arxivId ?? ""}
-            paperTitle={review.title}
-            paperContext={paperText}
-            annotations={annotations}
-            chatThreadAnnotationId={effectiveChatThreadAnnotationId}
-            onChatThreadChange={setChatThreadAnnotationId}
-            onAnnotationsPersist={refreshAnnotations}
-            selectedModel={selectedModel}
-            onModelChange={handleModelChange}
-            sourceUrl={review.sourceUrl}
+        {/* Overlay backdrop */}
+        {narrowViewport && (notesOpen || assistantOpen) && (
+          <div
+            className="absolute inset-0 z-30 bg-black/20"
+            onClick={() => { setNotesOpen(false); setAssistantOpen(false); }}
           />
-        </div>
+        )}
+
+        {/* Overlay notes rail */}
+        {narrowViewport && notesOpen && (
+          <div
+            ref={notesOverlayRef}
+            className="absolute right-0 top-0 bottom-0 z-40 w-[min(320px,85vw)] animate-in slide-in-from-right duration-200 shadow-2xl"
+          >
+            <button
+              onClick={() => setNotesOpen(false)}
+              className="absolute top-3 right-3 z-50 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <X size={16} />
+            </button>
+            <NotesRail
+              reviewId={review.id}
+              annotations={annotations}
+              activeAnnotationId={activeAnnotationId}
+              hoveredAnnotationId={hoveredAnnotationId}
+              onAnnotationsChanged={refreshAnnotations}
+              onHighlightClick={handleHighlightClick}
+              onAnnotationHover={setHoveredAnnotationId}
+              onAnnotationSelect={handleAnnotationSelect}
+            />
+          </div>
+        )}
+
+        {/* Overlay assistant panel */}
+        {narrowViewport && assistantOpen && (
+          <div
+            ref={assistantOverlayRef}
+            className="absolute right-0 top-0 bottom-0 z-40 flex w-[min(440px,90vw)] flex-col overflow-hidden border-l border-border/80 bg-background animate-in slide-in-from-right duration-200 shadow-2xl"
+          >
+            <button
+              onClick={() => setAssistantOpen(false)}
+              className="absolute top-3 right-3 z-50 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <X size={16} />
+            </button>
+            <RightPanel
+              reviewId={review.id}
+              arxivId={review.arxivId ?? ""}
+              paperTitle={review.title}
+              paperContext={paperText}
+              annotations={annotations}
+              chatThreadAnnotationId={effectiveChatThreadAnnotationId}
+              onChatThreadChange={setChatThreadAnnotationId}
+              onAnnotationsPersist={refreshAnnotations}
+              selectedModel={selectedModel}
+              onModelChange={handleModelChange}
+              sourceUrl={review.sourceUrl}
+            />
+          </div>
+        )}
       </div>
 
       {selectionInfo && (
