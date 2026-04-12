@@ -196,3 +196,18 @@
   body { @apply bg-background text-foreground antialiased; }
   html { @apply font-sans; }
 }
+
+/* Safe areas for notched phones and home indicators */
+.safe-area-p {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.safe-area-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.safe-area-b {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

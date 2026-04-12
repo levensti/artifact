@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -30,6 +30,16 @@ interface PdfViewerProps {
   onAnnotationClick?: (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => void;
 }
 
+const H_PADDING = 16;
+
+function clientXY(e: MouseEvent | TouchEvent): { x: number; y: number } {
+  if ("changedTouches" in e && e.changedTouches[0]) {
+    return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+  }
+  const m = e as MouseEvent;
+  return { x: m.clientX, y: m.clientY };
+}
+
 export default function PdfViewer({
   pdfUrl,
   onTextExtracted,
@@ -42,17 +52,36 @@ export default function PdfViewer({
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [scale, setScale] = useState(1.2);
+  /** Multiplier on fit-to-width (1 = page width matches column). */
+  const [zoomMul, setZoomMul] = useState(1);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      setContainerWidth(w > 0 ? w : 0);
+    });
+    ro.observe(el);
+    setContainerWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  const fitWidth = Math.max(0, containerWidth - H_PADDING);
+  const pageWidth = Math.max(
+    120,
+    Math.floor(fitWidth * Math.min(3, Math.max(0.5, zoomMul))),
+  );
 
   const extractText = useCallback(
     async (pdf: PDFDocumentProxy) => {
       try {
         const pages: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
-          // Guard against destroyed document (e.g. component unmounted or URL changed)
           if (!pdf || typeof pdf.getPage !== "function") return;
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
@@ -63,7 +92,6 @@ export default function PdfViewer({
         }
         onTextExtracted(pages.join("\n\n"));
       } catch (err) {
-        // Suppress errors from destroyed documents during navigation
         const msg = err instanceof Error ? err.message : String(err);
         if (!msg.includes("Cannot read properties of null")) {
           console.error("Failed to extract text:", err);
@@ -89,26 +117,29 @@ export default function PdfViewer({
     const container = containerRef.current;
     if (!container) return;
 
-    const handleMouseUp = (e: MouseEvent) => {
+    const handlePointerUp = (e: MouseEvent | TouchEvent) => {
       const selection = window.getSelection();
       const text = selection?.toString().trim();
       if (selection && text && text.length > 0 && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
 
-        // Find the page element containing the selection
         let node: Node | null = range.startContainer;
         let pageEl: Element | null = null;
         while (node) {
           if (node instanceof Element) {
             const pn = node.closest("[data-page-number]");
-            if (pn) { pageEl = pn; break; }
+            if (pn) {
+              pageEl = pn;
+              break;
+            }
           }
           node = node.parentNode;
         }
-        const pageNumber = pageEl ? parseInt(pageEl.getAttribute("data-page-number") || "1") : 1;
+        const pageNumber = pageEl
+          ? parseInt(pageEl.getAttribute("data-page-number") || "1", 10)
+          : 1;
 
-        // Compute normalized rects relative to the page element
         const anchorRects: { x: number; y: number; w: number; h: number }[] = [];
         if (pageEl) {
           const pageRect = pageEl.getBoundingClientRect();
@@ -128,22 +159,23 @@ export default function PdfViewer({
       } else {
         onSelectionCleared();
 
-        // Check if the click landed on an annotation highlight
         if (onAnnotationClick) {
-          const target = e.target as Element;
+          const { x: cx, y: cy } = clientXY(e);
+          const target = (e.target as Element) || document.elementFromPoint(cx, cy);
+          if (!target) return;
           const pageEl = target.closest("[data-page-number]");
           if (pageEl) {
             const pageRect = pageEl.getBoundingClientRect();
-            const nx = (e.clientX - pageRect.left) / pageRect.width;
-            const ny = (e.clientY - pageRect.top) / pageRect.height;
-            const pageNum = parseInt(pageEl.getAttribute("data-page-number") || "0");
+            const nx = (cx - pageRect.left) / pageRect.width;
+            const ny = (cy - pageRect.top) / pageRect.height;
+            const pageNum = parseInt(pageEl.getAttribute("data-page-number") || "0", 10);
 
             for (const ann of annotations) {
               if (ann.pageNumber !== pageNum) continue;
               for (const r of ann.anchorRects) {
                 if (nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h) {
                   onAnnotationClick(ann.id, {
-                    clickY: e.clientY,
+                    clickY: cy,
                     highlightRight: pageRect.left + (r.x + r.w) * pageRect.width,
                     pageRight: pageRect.right,
                   });
@@ -156,8 +188,12 @@ export default function PdfViewer({
       }
     };
 
-    container.addEventListener("mouseup", handleMouseUp);
-    return () => container.removeEventListener("mouseup", handleMouseUp);
+    container.addEventListener("mouseup", handlePointerUp);
+    container.addEventListener("touchend", handlePointerUp, { passive: true });
+    return () => {
+      container.removeEventListener("mouseup", handlePointerUp);
+      container.removeEventListener("touchend", handlePointerUp);
+    };
   }, [onTextSelected, onSelectionCleared, annotations, onAnnotationClick]);
 
   useEffect(() => {
@@ -178,7 +214,7 @@ export default function PdfViewer({
           const distance = Math.abs(el.getBoundingClientRect().top - containerTop);
           if (distance < closestDistance) {
             closestDistance = distance;
-            closestPage = parseInt(el.getAttribute("data-page-number") || "1");
+            closestPage = parseInt(el.getAttribute("data-page-number") || "1", 10);
           }
         });
         setCurrentPage(closestPage);
@@ -199,28 +235,30 @@ export default function PdfViewer({
     target?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const zoomOut = () => setZoomMul((z) => Math.max(0.5, Math.round((z - 0.12) * 100) / 100));
+  const zoomIn = () => setZoomMul((z) => Math.min(3, Math.round((z + 0.12) * 100) / 100));
+
   return (
     <div className="flex flex-col h-full bg-transparent">
-      {/* Toolbar */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-4 backdrop-blur-md">
-        <div className="flex h-8 items-center gap-0.5 rounded-full bg-muted/60 px-1">
+      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-2 sm:px-4 backdrop-blur-md safe-area-x">
+        <div className="flex h-7 sm:h-8 items-center gap-0.5 rounded-full bg-muted/60 px-0.5 sm:px-1">
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
+            className="size-6 sm:size-7"
             onClick={() => currentPage > 1 && goToPage(currentPage - 1)}
             disabled={currentPage <= 1}
             title="Previous page"
           >
             <ChevronUp size={14} />
           </Button>
-          <span className="min-w-[56px] text-center text-xs font-semibold tabular-nums leading-none text-foreground/70">
+          <span className="min-w-[52px] sm:min-w-[56px] text-center text-[11px] sm:text-xs font-semibold tabular-nums leading-none text-foreground/70">
             {currentPage} / {numPages || "—"}
           </span>
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
+            className="size-6 sm:size-7"
             onClick={() => currentPage < numPages && goToPage(currentPage + 1)}
             disabled={currentPage >= numPages}
             title="Next page"
@@ -228,24 +266,24 @@ export default function PdfViewer({
             <ChevronDown size={14} />
           </Button>
         </div>
-        <div className="flex h-8 items-center gap-0.5 rounded-full bg-muted/60 px-1">
+        <div className="flex h-7 sm:h-8 items-center gap-0.5 rounded-full bg-muted/60 px-0.5 sm:px-1">
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
-            onClick={() => setScale((s) => Math.max(0.5, s - 0.2))}
+            className="size-6 sm:size-7"
+            onClick={zoomOut}
             title="Zoom out"
           >
             <ZoomOut size={14} />
           </Button>
-          <span className="min-w-[40px] text-center text-xs font-semibold tabular-nums leading-none text-foreground/70">
-            {Math.round(scale * 100)}%
+          <span className="min-w-[36px] sm:min-w-[40px] text-center text-[11px] sm:text-xs font-semibold tabular-nums leading-none text-foreground/70">
+            {Math.round(zoomMul * 100)}%
           </span>
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
-            onClick={() => setScale((s) => Math.min(3, s + 0.2))}
+            className="size-6 sm:size-7"
+            onClick={zoomIn}
             title="Zoom in"
           >
             <ZoomIn size={14} />
@@ -253,10 +291,9 @@ export default function PdfViewer({
         </div>
       </div>
 
-      {/* PDF content */}
-      <div ref={containerRef} data-pdf-container className="flex-1 overflow-auto">
+      <div ref={containerRef} data-pdf-container className="flex-1 overflow-auto min-h-0">
         {loading && !loadError && (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-full min-h-[200px]">
             <Loader2 className="animate-spin text-primary" size={28} />
           </div>
         )}
@@ -275,7 +312,7 @@ export default function PdfViewer({
             setLoadError("Failed to load PDF. Check that the URL or file path is valid.");
           }}
           loading={null}
-          className="flex flex-col items-center gap-2 py-4"
+          className="flex flex-col items-center gap-2 py-3 sm:py-4 px-2"
         >
           {Array.from({ length: numPages }, (_, i) => {
             const pageNum = i + 1;
@@ -284,7 +321,7 @@ export default function PdfViewer({
               <div key={pageNum} className="relative">
                 <Page
                   pageNumber={pageNum}
-                  scale={scale}
+                  width={containerWidth > 0 ? pageWidth : 400}
                   className="shadow-md"
                   loading={null}
                 />
@@ -292,7 +329,6 @@ export default function PdfViewer({
                   const isActive = ann.id === activeAnnotationId;
                   const isHovered = ann.id === hoveredAnnotationId;
                   const isAskAi = ann.kind === "ask_ai";
-                  /* Notes: amber marker. Dive deeper (ask_ai): sky tint so threads are distinct */
                   const backgroundColor = isAskAi
                     ? isActive
                       ? "rgba(96, 165, 250, 0.48)"
