@@ -155,8 +155,8 @@ export default function RelatedWorksGraph({
             className="max-w-[min(96vw,1300px)] w-[96vw] h-[92vh] p-0 overflow-hidden"
             showCloseButton={false}
           >
-            <div className="h-full flex">
-              <div className="flex-1 flex flex-col min-h-0 p-4">
+            <div className="h-full flex flex-col lg:flex-row min-h-0">
+              <div className="flex-1 flex flex-col min-h-0 p-4 min-w-0">
                 <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <DialogTitle className="text-base font-semibold">
                     Related Works
@@ -198,7 +198,7 @@ export default function RelatedWorksGraph({
                 </div>
               </div>
               {resolvedSelectedNodeId && (
-                <div className="w-[340px] border-l border-border bg-card/50 p-4 overflow-y-auto">
+                <div className="w-full max-h-[40dvh] lg:max-h-none lg:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-card/50 p-4 overflow-y-auto">
                   <GraphDetailPanel {...detailPanelProps} />
                 </div>
               )}
@@ -213,9 +213,9 @@ export default function RelatedWorksGraph({
   const showPanel = resolvedSelectedNodeId != null;
 
   return (
-    <div className="flex h-full min-h-0 w-full rounded-lg border border-border overflow-hidden bg-background">
+    <div className="flex h-full min-h-0 w-full flex-col md:flex-row rounded-lg border border-border overflow-hidden bg-background">
       {/* Graph area */}
-      <div className="relative h-full min-h-0 min-w-0 flex-1">
+      <div className="relative h-full min-h-[min(50dvh,380px)] md:min-h-0 min-w-0 flex-1 md:flex-1">
         <GraphCanvas
           graph={graph}
           width={canvasW}
@@ -246,7 +246,7 @@ export default function RelatedWorksGraph({
       {/* Slide-in detail panel */}
       {showPanel && (
         <div
-          className="w-[320px] shrink-0 border-l border-border bg-card overflow-y-auto"
+          className="w-full max-h-[min(45dvh,360px)] md:max-h-none md:h-auto md:w-[320px] shrink-0 border-t md:border-t-0 md:border-l border-border bg-card overflow-y-auto"
           style={{ animation: "slideInRight 180ms ease-out" }}
         >
           <div className="flex items-center justify-between p-3 pb-0">

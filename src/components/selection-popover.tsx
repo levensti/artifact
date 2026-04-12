@@ -10,12 +10,16 @@ interface SelectionPopoverProps {
 }
 
 export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionPopoverProps) {
-  const left = rect.left + rect.width / 2;
-  const top = Math.min(rect.bottom + 8, window.innerHeight - 50);
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const pad = 8;
+  const centerX = rect.left + rect.width / 2;
+  const left = Math.min(vw - pad, Math.max(pad, centerX));
+  const top = Math.min(rect.bottom + 8, vh - 50);
 
   return (
     <div
-      className="fixed z-50 animate-in fade-in slide-in-from-bottom-1 duration-150"
+      className="fixed z-50 animate-in fade-in slide-in-from-bottom-1 duration-150 max-w-[calc(100vw-1rem)]"
       style={{
         top: `${top}px`,
         left: `${left}px`,

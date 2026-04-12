@@ -52,12 +52,15 @@ function reviewsServerSnapshot() {
 
 interface SidebarProps {
   collapsed: boolean;
+  /** Narrow screens: `overlay` = fixed drawer; `inline` = flex column (or w-0 when collapsed). */
+  presentation?: "inline" | "overlay";
   onToggle: () => void;
   onOpenSettings: () => void;
 }
 
 export default function Sidebar({
   collapsed,
+  presentation = "inline",
   onToggle,
   onOpenSettings,
 }: SidebarProps) {
@@ -120,8 +123,12 @@ export default function Sidebar({
     <>
       <aside
         className={cn(
-          "flex flex-col h-full bg-sidebar border-r border-sidebar-border transition-sidebar shrink-0 overflow-hidden",
-          collapsed ? "w-0 border-r-0" : "w-[272px]",
+          "flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden",
+          presentation === "overlay"
+            ? "fixed inset-y-0 left-0 z-40 w-[min(272px,85vw)] shrink-0 shadow-xl shadow-black/10 safe-area-x"
+            : "shrink-0 transition-sidebar",
+          presentation === "inline" &&
+            (collapsed ? "w-0 border-r-0" : "w-[272px]"),
         )}
       >
         <div className="shrink-0 space-y-2 border-b border-sidebar-border px-2.5 pb-3 pt-2.5">

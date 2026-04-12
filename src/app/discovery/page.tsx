@@ -252,7 +252,7 @@ export default function DiscoveryPage() {
   return (
     <DashboardLayout>
       <div className="flex h-full flex-col overflow-hidden bg-background">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-3 sm:px-4 py-1.5 sm:py-0 safe-area-x">
           <Compass className="size-4 text-primary" strokeWidth={2} />
           <h1 className="text-sm font-semibold tracking-tight text-foreground">
             Discover

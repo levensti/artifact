@@ -455,7 +455,7 @@ export default function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="flex max-h-[min(560px,85vh)] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+        className="flex max-h-[min(720px,min(90dvh,85vh))] w-[min(100vw-1rem,32rem)] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg safe-area-p"
       >
         <DialogHeader className="shrink-0 border-b border-border/70 px-4 pt-4 pb-3 text-left">
           <div className="flex items-center gap-2.5">

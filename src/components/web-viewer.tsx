@@ -135,7 +135,15 @@ export default function WebViewer({
     const content = contentRef.current;
     if (!container || !content || (!onTextSelected && !onSelectionCleared)) return;
 
-    const handleMouseUp = (e: MouseEvent) => {
+    const pointerClient = (e: MouseEvent | TouchEvent) => {
+      if ("changedTouches" in e && e.changedTouches[0]) {
+        return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+      }
+      const m = e as MouseEvent;
+      return { x: m.clientX, y: m.clientY };
+    };
+
+    const handlePointerUp = (e: MouseEvent | TouchEvent) => {
       const sel = window.getSelection();
       const text = sel?.toString().trim();
       if (!text || !sel || sel.rangeCount === 0) {
@@ -143,15 +151,16 @@ export default function WebViewer({
 
         // Check if click landed on an annotation highlight
         if (onAnnotationClick) {
+          const { x: cx, y: cy } = pointerClient(e);
           const contentRect = content.getBoundingClientRect();
-          const nx = (e.clientX - contentRect.left) / contentRect.width;
-          const ny = (e.clientY - contentRect.top) / contentRect.height;
+          const nx = (cx - contentRect.left) / contentRect.width;
+          const ny = (cy - contentRect.top) / contentRect.height;
           for (const ann of annotations) {
             if (ann.pageNumber !== 1) continue;
             for (const r of ann.anchorRects) {
               if (nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h) {
                 onAnnotationClick(ann.id, {
-                  clickY: e.clientY,
+                  clickY: cy,
                   highlightRight: contentRect.left + (r.x + r.w) * contentRect.width,
                   pageRight: contentRect.right,
                 });
@@ -190,8 +199,12 @@ export default function WebViewer({
       });
     };
 
-    container.addEventListener("mouseup", handleMouseUp);
-    return () => container.removeEventListener("mouseup", handleMouseUp);
+    container.addEventListener("mouseup", handlePointerUp);
+    container.addEventListener("touchend", handlePointerUp, { passive: true });
+    return () => {
+      container.removeEventListener("mouseup", handlePointerUp);
+      container.removeEventListener("touchend", handlePointerUp);
+    };
   }, [htmlContent, onTextSelected, onSelectionCleared, onAnnotationClick, annotations]);
 
   // Filter annotations for this "page"
@@ -200,7 +213,7 @@ export default function WebViewer({
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/40 px-4 backdrop-blur-sm">
+      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border bg-background/40 px-3 sm:px-4 backdrop-blur-sm safe-area-x">
         <div className="flex items-center gap-2 min-w-0">
           {siteName && (
             <span className="text-xs font-medium text-muted-foreground truncate">
@@ -233,7 +246,7 @@ export default function WebViewer({
           </div>
         )}
         {htmlContent && (
-          <div ref={contentRef} className="relative max-w-3xl mx-auto px-8 py-8">
+          <div ref={contentRef} className="relative w-full max-w-3xl mx-auto px-4 py-6 sm:px-8 sm:py-8">
             <HtmlContent html={htmlContent} title={title} />
             {/* Annotation highlight overlays */}
             {pageAnnotations.map((ann) => {

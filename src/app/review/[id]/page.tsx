@@ -349,7 +349,7 @@ export default function ReviewPage() {
       <div className="relative flex h-full overflow-hidden">
         {/* Main content: paper viewer + inline notes rail (when wide) */}
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div className="flex min-h-0 min-w-[300px] flex-1 flex-col overflow-hidden bg-(--reader-mat)">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             {review.sourceUrl ? (
               <WebViewer
                 sourceUrl={review.sourceUrl}
@@ -425,7 +425,7 @@ export default function ReviewPage() {
 
         {/* Toggle buttons — only when viewport is narrow */}
         {narrowViewport && (
-          <div className="absolute bottom-4 right-4 z-30 flex flex-col gap-2">
+          <div className="absolute z-30 flex flex-col gap-2 bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-[max(1rem,env(safe-area-inset-right,0px))]">
             <button
               onClick={() => { setNotesOpen((v) => !v); setAssistantOpen(false); }}
               className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium shadow-lg border transition-colors ${notesOpen ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"}`}
