@@ -27,7 +27,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_KEY);
-    if (stored === "true") setCollapsed(true);
+    if (stored === "true") {
+      setCollapsed(true);
+    } else if (window.innerWidth < 1024) {
+      setCollapsed(true);
+    }
+  }, []);
+
+  // Auto-collapse sidebar when viewport becomes narrow
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        setCollapsed(true);
+        localStorage.setItem(SIDEBAR_KEY, "true");
+      }
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
   }, []);
 
   useEffect(() => {

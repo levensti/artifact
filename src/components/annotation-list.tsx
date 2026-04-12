@@ -256,11 +256,11 @@ function AnnotationCard({
               }}
             />
             <div className="min-w-0 flex-1 pt-px">
-              <p className="text-xs italic leading-snug text-muted-foreground line-clamp-3">
+              <p className="text-xs italic leading-normal text-muted-foreground line-clamp-3">
                 &ldquo;{annotation.highlightText}&rdquo;
               </p>
               {annotation.note && !isActive && (
-                <p className="mt-1.5 line-clamp-2 text-sm leading-snug text-foreground">
+                <p className="mt-1.5 line-clamp-2 text-sm leading-normal text-foreground">
                   {annotation.note}
                 </p>
               )}

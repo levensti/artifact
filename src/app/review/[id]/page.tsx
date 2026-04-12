@@ -93,7 +93,9 @@ export default function ReviewPage() {
   const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(
     null,
   );
-  const [panelWidth, setPanelWidth] = useState(440);
+  const [panelWidth, setPanelWidth] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 1280 ? 360 : 440,
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   /** Passage threads (Dive deeper) / selection: which annotation thread is open in chat */
@@ -266,7 +268,7 @@ export default function ReviewPage() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = window.innerWidth - e.clientX;
-      const minWidth = 380;
+      const minWidth = 320;
       setPanelWidth(Math.max(minWidth, Math.min(980, newWidth)));
     };
 
@@ -300,7 +302,7 @@ export default function ReviewPage() {
     <DashboardLayout>
       <div className="flex h-full overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
+          <div className="flex min-h-0 min-w-[300px] flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             {review.sourceUrl ? (
               <WebViewer
                 sourceUrl={review.sourceUrl}
