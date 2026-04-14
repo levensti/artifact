@@ -8,7 +8,10 @@
 import type { Model } from "@/lib/models";
 import { isInferenceProviderType } from "@/lib/models";
 import type { WikiPageType } from "@/lib/wiki";
-import { saveWikiPage, invalidateWikiCache } from "@/lib/client-data";
+import {
+  finalizeWikiIngest,
+  type WikiFinalizePage,
+} from "@/lib/client-data";
 import { beginWikiIngest, endWikiIngest } from "@/lib/wiki-status";
 
 /* ── Rate limiting ── */
@@ -156,7 +159,7 @@ No markdown fences, no extra text \u2014 ONLY the JSON array.`;
   if (!Array.isArray(pages) || pages.length === 0) return;
 
   const validTypes = new Set(["concept", "method", "entity"]);
-  let saved = 0;
+  const finalizePages: WikiFinalizePage[] = [];
 
   for (const page of pages) {
     if (!page.slug || !page.title || !page.content || !page.pageType) continue;
@@ -165,17 +168,23 @@ No markdown fences, no extra text \u2014 ONLY the JSON array.`;
     const slug = toSlug(page.slug);
     if (!slug) continue;
 
-    await saveWikiPage({
+    finalizePages.push({
       slug,
       title: page.title,
       content: page.content,
       pageType: page.pageType,
-      reviewId,
+      source: { reviewId },
     });
-    saved++;
   }
 
-  if (saved > 0) {
-    invalidateWikiCache();
-  }
+  if (finalizePages.length === 0) return;
+
+  await finalizeWikiIngest({
+    pages: finalizePages,
+    logEntry: {
+      kind: "chat-extract",
+      label: paperTitle ? `From chat: ${paperTitle}` : "From chat",
+    },
+    rebuildIndex: true,
+  });
 }

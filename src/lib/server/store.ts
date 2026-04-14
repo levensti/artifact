@@ -94,6 +94,9 @@ function initSchema(db: Database.Database) {
   migrateReviewsLocalPdf(db);
   migrateReviewsSourceUrl(db);
   migrateWikiPages(db);
+  migrateWikiBacklinks(db);
+  migrateWikiPageSourcesPassage(db);
+  migrateWikiRevisions(db);
 }
 
 /** Older DBs created deep_dives without a FK; recreate so DELETE FROM reviews cascades. */
@@ -601,22 +604,52 @@ export function upsertWikiPage(page: {
 }): void {
   const db = getDb();
   const now = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
-     VALUES (@id, @slug, @title, @content, @page_type, @now, @now)
-     ON CONFLICT(slug) DO UPDATE SET
-       title = excluded.title,
-       content = excluded.content,
-       page_type = excluded.page_type,
-       updated_at = excluded.updated_at`,
-  ).run({
-    id: page.id,
-    slug: page.slug,
-    title: page.title,
-    content: page.content,
-    page_type: page.pageType,
-    now,
+  // Wrap in a transaction so the page write, revision snapshot, and
+  // backlink rebuild are atomic even when called outside wikiIngestFinalize.
+  const tx = db.transaction(() => {
+    const existing = db
+      .prepare(`SELECT id, content FROM wiki_pages WHERE slug = ?`)
+      .get(page.slug) as { id: string; content: string } | undefined;
+
+    if (existing && existing.content !== page.content) {
+      db.prepare(
+        `INSERT INTO wiki_page_revisions (page_id, slug, title, content, page_type, saved_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(
+        existing.id,
+        page.slug,
+        page.title,
+        existing.content,
+        page.pageType,
+        now,
+      );
+    }
+
+    db.prepare(
+      `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
+       VALUES (@id, @slug, @title, @content, @page_type, @now, @now)
+       ON CONFLICT(slug) DO UPDATE SET
+         title = excluded.title,
+         content = excluded.content,
+         page_type = excluded.page_type,
+         updated_at = excluded.updated_at`,
+    ).run({
+      id: page.id,
+      slug: page.slug,
+      title: page.title,
+      content: page.content,
+      page_type: page.pageType,
+      now,
+    });
+
+    // Resolve the id the page ended up with (existing wins on conflict).
+    const finalId =
+      (db
+        .prepare(`SELECT id FROM wiki_pages WHERE slug = ?`)
+        .get(page.slug) as { id: string } | undefined)?.id ?? page.id;
+    rebuildBacklinksFor(db, finalId, page.content);
   });
+  tx();
 }
 
 export function deleteWikiPage(id: string): void {
@@ -663,6 +696,363 @@ export function getWikiPageCount(): number {
     .prepare(`SELECT COUNT(*) AS cnt FROM wiki_pages WHERE page_type NOT IN ('index', 'log')`)
     .get() as { cnt: number };
   return row.cnt;
+}
+
+/* ── Wiki backlinks + revisions + source-passages (Tier 2/3) ── */
+
+/**
+ * Add the `wiki_page_backlinks` table: stores every `[[slug]]` reference
+ * found in page content so we can render "Referenced in" cheaply AND
+ * detect broken references during lint. Target is stored as slug (not id)
+ * so we still track dangling refs after a target is deleted.
+ */
+function migrateWikiBacklinks(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wiki_page_backlinks (
+      source_id TEXT NOT NULL,
+      target_slug TEXT NOT NULL,
+      PRIMARY KEY (source_id, target_slug),
+      FOREIGN KEY (source_id) REFERENCES wiki_pages(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_backlinks_target ON wiki_page_backlinks(target_slug);
+  `);
+}
+
+/** Attach the originating passage to each (page, review) source row. */
+function migrateWikiPageSourcesPassage(db: Database.Database) {
+  const cols = db
+    .prepare(`PRAGMA table_info(wiki_page_sources)`)
+    .all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "passage")) {
+    db.exec(`ALTER TABLE wiki_page_sources ADD COLUMN passage TEXT`);
+  }
+  if (!cols.some((c) => c.name === "added_at")) {
+    db.exec(`ALTER TABLE wiki_page_sources ADD COLUMN added_at TEXT`);
+  }
+}
+
+/** Append-only revision history so diff-on-update has data to show. */
+function migrateWikiRevisions(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wiki_page_revisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      page_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      page_type TEXT NOT NULL,
+      saved_at TEXT NOT NULL,
+      FOREIGN KEY (page_id) REFERENCES wiki_pages(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_revisions_page ON wiki_page_revisions(page_id, saved_at);
+  `);
+}
+
+/** Extract `[[slug]]` tokens from markdown. Case-insensitive, deduped. */
+function extractWikiLinks(content: string): string[] {
+  const out = new Set<string>();
+  const re = /\[\[([a-z0-9][a-z0-9-]{0,79})\]\]/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    out.add(m[1].toLowerCase());
+  }
+  return [...out];
+}
+
+/** Rebuild the `wiki_page_backlinks` rows for a single source page. */
+function rebuildBacklinksFor(
+  db: Database.Database,
+  pageId: string,
+  content: string,
+): void {
+  db.prepare(`DELETE FROM wiki_page_backlinks WHERE source_id = ?`).run(pageId);
+  const targets = extractWikiLinks(content);
+  if (targets.length === 0) return;
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO wiki_page_backlinks (source_id, target_slug) VALUES (?, ?)`,
+  );
+  for (const t of targets) insert.run(pageId, t);
+}
+
+export interface WikiBacklink {
+  sourceSlug: string;
+  sourceTitle: string;
+  sourcePageType: WikiPageType;
+}
+
+export function getWikiBacklinks(slug: string): WikiBacklink[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT p.slug AS sourceSlug, p.title AS sourceTitle, p.page_type AS sourcePageType
+       FROM wiki_page_backlinks bl
+       JOIN wiki_pages p ON p.id = bl.source_id
+       WHERE bl.target_slug = ?
+       ORDER BY p.title`,
+    )
+    .all(slug) as WikiBacklink[];
+}
+
+export interface WikiPageSource {
+  reviewId: string;
+  reviewTitle: string | null;
+  reviewArxivId: string | null;
+  passage: string | null;
+  addedAt: string | null;
+}
+
+export function getWikiPageSources(slug: string): WikiPageSource[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT s.review_id AS reviewId,
+              r.title AS reviewTitle,
+              r.arxiv_id AS reviewArxivId,
+              s.passage AS passage,
+              s.added_at AS addedAt
+       FROM wiki_page_sources s
+       JOIN wiki_pages p ON p.id = s.page_id
+       LEFT JOIN reviews r ON r.id = s.review_id
+       WHERE p.slug = ?
+       ORDER BY datetime(COALESCE(s.added_at, r.created_at, '')) DESC`,
+    )
+    .all(slug) as WikiPageSource[];
+}
+
+export interface WikiRevisionSummary {
+  id: number;
+  savedAt: string;
+  contentLength: number;
+}
+
+export function listWikiRevisions(slug: string): WikiRevisionSummary[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT rev.id AS id, rev.saved_at AS savedAt, LENGTH(rev.content) AS contentLength
+       FROM wiki_page_revisions rev
+       JOIN wiki_pages p ON p.id = rev.page_id
+       WHERE p.slug = ?
+       ORDER BY rev.id DESC
+       LIMIT 20`,
+    )
+    .all(slug) as WikiRevisionSummary[];
+}
+
+export function getWikiRevision(
+  id: number,
+): { id: number; slug: string; title: string; content: string; savedAt: string } | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT id, slug, title, content, saved_at AS savedAt FROM wiki_page_revisions WHERE id = ?`,
+    )
+    .get(id) as
+    | { id: number; slug: string; title: string; content: string; savedAt: string }
+    | undefined;
+  return row ?? null;
+}
+
+/* ── Atomic wiki-ingest finalize (T2.1) ── */
+
+export interface IngestFinalizeInput {
+  /** Pages to upsert in a single transaction. */
+  pages: Array<{
+    slug: string;
+    title: string;
+    content: string;
+    pageType: WikiPageType;
+    /** If set, also record a (page, review) source row with passage/addedAt. */
+    source?: {
+      reviewId: string;
+      passage?: string;
+    };
+  }>;
+  /** Short human label for the log entry. If omitted, no log is appended. */
+  logEntry?: {
+    label: string;
+    /** e.g. "ingest", "update", "chat-extract". Defaults to "ingest". */
+    kind?: string;
+  };
+  /** Whether to rebuild the knowledge-base index page after this batch. */
+  rebuildIndex?: boolean;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  paper: "Papers",
+  concept: "Concepts",
+  method: "Methods",
+  entity: "Entities",
+  graph: "Knowledge Graphs",
+};
+
+function buildIndexContent(db: Database.Database): string {
+  const rows = db
+    .prepare(
+      `SELECT slug, title, content, page_type AS pageType, updated_at AS updatedAt
+       FROM wiki_pages
+       WHERE page_type NOT IN ('index', 'log')
+       ORDER BY page_type, title`,
+    )
+    .all() as Array<{
+    slug: string;
+    title: string;
+    content: string;
+    pageType: string;
+    updatedAt: string;
+  }>;
+  if (rows.length === 0) return "";
+
+  const grouped = new Map<string, typeof rows>();
+  for (const p of rows) {
+    const list = grouped.get(p.pageType) ?? [];
+    list.push(p);
+    grouped.set(p.pageType, list);
+  }
+
+  let content = "# Knowledge Base Index\n\n";
+  content += `*${rows.length} pages across ${grouped.size} categories*\n\n`;
+  for (const [type, pages] of grouped) {
+    content += `## ${TYPE_LABELS[type] ?? type}\n\n`;
+    for (const p of pages) {
+      const firstLine = p.content
+        .split("\n")
+        .find((l) => l.trim() && !l.startsWith("#"));
+      const excerpt = firstLine
+        ? firstLine.trim().slice(0, 100) + (firstLine.length > 100 ? "…" : "")
+        : "";
+      content += `- [[${p.slug}]] — ${excerpt}\n`;
+    }
+    content += "\n";
+  }
+  return content;
+}
+
+function appendLogEntry(
+  db: Database.Database,
+  kind: string,
+  label: string,
+  now: string,
+): void {
+  const date = now.slice(0, 10);
+  const time = now.slice(11, 16);
+  const entry = `- \`${date} ${time}\` **${kind}** — ${label}\n`;
+
+  const existing = db
+    .prepare(`SELECT id, content FROM wiki_pages WHERE slug = 'log'`)
+    .get() as { id: string; content: string } | undefined;
+
+  if (existing) {
+    db.prepare(
+      `UPDATE wiki_pages SET content = ?, updated_at = ? WHERE id = ?`,
+    ).run(existing.content + entry, now, existing.id);
+  } else {
+    const header = `# Knowledge Base Log\n\nChronological record of knowledge base operations.\n\n`;
+    db.prepare(
+      `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
+       VALUES (?, 'log', 'Knowledge Base Log', ?, 'log', ?, ?)`,
+    ).run(crypto.randomUUID(), header + entry, now, now);
+  }
+}
+
+/**
+ * Run a wiki-ingest batch atomically on the server:
+ *   1. Upsert every page (new or updated) → also records a revision snapshot.
+ *   2. Rebuild backlinks for each upserted page.
+ *   3. Link sources (passage + added_at) if provided.
+ *   4. Rebuild the `index` page from the freshly-committed state.
+ *   5. Append a log entry.
+ *
+ * All of this runs inside a single better-sqlite3 transaction, which
+ * makes it safe against concurrent ingests. The `index` page can no
+ * longer be clobbered by a slower parallel ingest because the SELECT +
+ * UPSERT happen in a single serialized write window.
+ */
+export function wikiIngestFinalize(
+  input: IngestFinalizeInput,
+): { savedSlugs: string[] } {
+  const db = getDb();
+  const savedSlugs: string[] = [];
+
+  const tx = db.transaction((batch: IngestFinalizeInput) => {
+    const now = new Date().toISOString();
+
+    for (const page of batch.pages) {
+      if (!page.slug || !page.title || !page.content || !page.pageType) continue;
+
+      const existing = db
+        .prepare(`SELECT id, content FROM wiki_pages WHERE slug = ?`)
+        .get(page.slug) as { id: string; content: string } | undefined;
+
+      const id = existing?.id ?? crypto.randomUUID();
+
+      // Save revision snapshot BEFORE overwriting (only if content changed)
+      if (existing && existing.content !== page.content) {
+        db.prepare(
+          `INSERT INTO wiki_page_revisions (page_id, slug, title, content, page_type, saved_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run(id, page.slug, page.title, existing.content, page.pageType, now);
+      }
+
+      if (existing) {
+        db.prepare(
+          `UPDATE wiki_pages
+             SET title = ?, content = ?, page_type = ?, updated_at = ?
+           WHERE id = ?`,
+        ).run(page.title, page.content, page.pageType, now, id);
+      } else {
+        db.prepare(
+          `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(id, page.slug, page.title, page.content, page.pageType, now, now);
+      }
+
+      rebuildBacklinksFor(db, id, page.content);
+
+      if (page.source) {
+        db.prepare(
+          `INSERT INTO wiki_page_sources (page_id, review_id, passage, added_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(page_id, review_id) DO UPDATE SET
+             passage = COALESCE(excluded.passage, wiki_page_sources.passage),
+             added_at = COALESCE(wiki_page_sources.added_at, excluded.added_at)`,
+        ).run(id, page.source.reviewId, page.source.passage ?? null, now);
+      }
+
+      savedSlugs.push(page.slug);
+    }
+
+    if (batch.rebuildIndex) {
+      const indexContent = buildIndexContent(db);
+      if (indexContent) {
+        const existingIndex = db
+          .prepare(`SELECT id FROM wiki_pages WHERE slug = 'index'`)
+          .get() as { id: string } | undefined;
+        if (existingIndex) {
+          db.prepare(
+            `UPDATE wiki_pages SET title = ?, content = ?, page_type = 'index', updated_at = ? WHERE id = ?`,
+          ).run("Knowledge Base Index", indexContent, now, existingIndex.id);
+        } else {
+          db.prepare(
+            `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
+             VALUES (?, 'index', 'Knowledge Base Index', ?, 'index', ?, ?)`,
+          ).run(crypto.randomUUID(), indexContent, now, now);
+        }
+      }
+    }
+
+    if (batch.logEntry) {
+      appendLogEntry(
+        db,
+        batch.logEntry.kind ?? "ingest",
+        batch.logEntry.label,
+        now,
+      );
+    }
+  });
+
+  tx(input);
+  return { savedSlugs };
 }
 
 /* ── Bootstrap ── */

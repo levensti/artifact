@@ -493,6 +493,103 @@ export function invalidateWikiCache(): void {
   notifyWikiUpdated();
 }
 
+/* ── Wiki finalize / enriched metadata helpers ─────────────────── */
+
+export interface WikiFinalizePage {
+  slug: string;
+  title: string;
+  content: string;
+  pageType: WikiPageType;
+  source?: { reviewId: string; passage?: string };
+}
+
+export interface WikiFinalizeInput {
+  pages: WikiFinalizePage[];
+  logEntry?: { label: string; kind?: string };
+  rebuildIndex?: boolean;
+}
+
+/**
+ * Atomically finalize a wiki-ingest batch on the server: upserts every
+ * page, rebuilds backlinks + index, and appends the log — all inside a
+ * single SQLite transaction. Use this instead of calling `saveWikiPage`
+ * in a loop when the writes form a logical unit (paper ingest, chat
+ * extract). Fire WIKI_UPDATED_EVENT on success.
+ */
+export async function finalizeWikiIngest(
+  input: WikiFinalizeInput,
+): Promise<{ savedSlugs: string[] }> {
+  const res = await apiJson<{ savedSlugs: string[] }>("/wiki/finalize", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  wikiPagesCache = null;
+  wikiPagesInflight = null;
+  for (const page of input.pages) {
+    if (page.source?.reviewId) {
+      wikiIngestedCache.set(page.source.reviewId, true);
+    }
+  }
+  notifyWikiUpdated();
+  return res;
+}
+
+export interface WikiBacklink {
+  sourceSlug: string;
+  sourceTitle: string;
+  sourcePageType: WikiPageType;
+}
+
+export interface WikiPageSource {
+  reviewId: string;
+  reviewTitle: string | null;
+  reviewArxivId: string | null;
+  passage: string | null;
+  addedAt: string | null;
+}
+
+export interface WikiRevisionSummary {
+  id: number;
+  savedAt: string;
+  contentLength: number;
+}
+
+export interface WikiPageMetadata {
+  backlinks: WikiBacklink[];
+  sources: WikiPageSource[];
+  revisions: WikiRevisionSummary[];
+}
+
+/** Fetch backlinks, sources, and revisions for a page. */
+export async function loadWikiPageMetadata(
+  slug: string,
+): Promise<WikiPageMetadata> {
+  return apiJson<WikiPageMetadata>(
+    `/wiki/${encodeURIComponent(slug)}/backlinks`,
+  );
+}
+
+export interface WikiRevision {
+  id: number;
+  slug: string;
+  title: string;
+  content: string;
+  savedAt: string;
+}
+
+/** Fetch a single historical revision by id. */
+export async function loadWikiRevision(id: number): Promise<WikiRevision | null> {
+  try {
+    return await apiJson<WikiRevision>(`/wiki/revisions/${id}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+      return null;
+    }
+    throw err;
+  }
+}
+
 /* ── Settings / keys ── */
 
 export function getApiKey(provider: Provider): string | null {

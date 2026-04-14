@@ -7,15 +7,14 @@
 
 import type { Model } from "@/lib/models";
 import { isInferenceProviderType } from "@/lib/models";
-import type { WikiPageType } from "@/lib/wiki";
+import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import {
   checkWikiIngested,
-  loadWikiPage,
   loadWikiPages,
-  saveWikiPage,
-  updateWikiPage,
-  invalidateWikiCache,
+  finalizeWikiIngest,
+  type WikiFinalizePage,
 } from "@/lib/client-data";
+import { loadWikiSchema } from "@/lib/wiki-schema-client";
 
 /* ── JSON parsing helpers (same pattern as explore-analysis.ts) ── */
 
@@ -111,7 +110,82 @@ interface GeneratedPage {
   title: string;
   pageType: WikiPageType;
   content: string;
-  summary: string;
+  summary?: string;
+  /** Optional supporting quote from the paper that justifies this page. */
+  passage?: string;
+  /**
+   * Optional: if the model wants to UPDATE an existing page, it supplies
+   * the full replacement content here and sets `update: true`. Otherwise
+   * we treat this as a new page.
+   */
+  update?: boolean;
+}
+
+/* ── Retrieval: pick pages relevant to the incoming paper ── */
+
+/** Tokenize text into lowercase word stems for lightweight scoring. */
+function tokenize(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 4),
+  );
+}
+
+/** Score a wiki page against a query-text token bag. */
+function relevanceScore(page: WikiPage, queryTokens: Set<string>): number {
+  const titleTokens = tokenize(page.title);
+  const contentSample = page.content.slice(0, 600);
+  const contentTokens = tokenize(contentSample);
+  let score = 0;
+  for (const t of queryTokens) {
+    if (titleTokens.has(t)) score += 3;
+    if (contentTokens.has(t)) score += 1;
+  }
+  return score;
+}
+
+interface PageSnippet {
+  slug: string;
+  title: string;
+  pageType: string;
+  excerpt: string;
+}
+
+/** Return up to `limit` existing wiki pages most related to the paper. */
+async function fetchRelevantExistingPages(
+  paperTitle: string,
+  paperText: string,
+  limit = 20,
+): Promise<PageSnippet[]> {
+  try {
+    const all = await loadWikiPages();
+    const content = all.filter(
+      (p) => p.pageType !== "index" && p.pageType !== "log",
+    );
+    if (content.length === 0) return [];
+    const queryTokens = tokenize(paperTitle + " " + paperText.slice(0, 2000));
+    const scored = content
+      .map((p) => ({ page: p, score: relevanceScore(p, queryTokens) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+    return scored.map(({ page }) => ({
+      slug: page.slug,
+      title: page.title,
+      pageType: page.pageType,
+      excerpt:
+        page.content
+          .split("\n")
+          .find((l) => l.trim() && !l.startsWith("#"))
+          ?.trim()
+          .slice(0, 180) ?? "",
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /* ── Main ingest function ── */
@@ -136,152 +210,81 @@ export async function runWikiIngest(
   const ingested = await checkWikiIngested(reviewId);
   if (ingested) return;
 
-  // Generate wiki pages from paper
-  const prompt = `You are building a persistent knowledge base wiki from an academic paper. The full paper text is in your context.
+  // Retrieval: pull existing pages relevant to this paper so the LLM can
+  // extend them instead of creating parallel duplicates.
+  const relevant = await fetchRelevantExistingPages(paperTitle, paperText);
+  const existingSection = relevant.length
+    ? `\n\nExisting knowledge base pages that may be relevant — prefer UPDATING these with \`update: true\` and emitting the full replacement content when the paper adds to them, instead of creating parallel duplicate pages:\n\n${relevant
+        .map((p) => `- [[${p.slug}]] (${p.pageType}) — ${p.title}: ${p.excerpt}`)
+        .join("\n")}`
+    : "";
+
+  const schema = await loadWikiSchema();
+
+  const prompt = `You are maintaining a persistent Karpathy-style knowledge base wiki. The full paper text is in your context.
 
 Paper title: ${JSON.stringify(paperTitle)}
 ${arxivId ? `arXiv ID: ${arxivId}` : ""}
+${existingSection}
 
-Generate wiki pages as a JSON array. For each page, include:
+${schema}
+
+Generate a JSON array of up to 15 wiki-page operations. For each entry, include:
 - slug: a URL-friendly identifier (lowercase, hyphens, no spaces)
 - title: human-readable page title
 - pageType: one of "paper", "concept", "method", "entity"
-- content: full markdown content for the page. Use [[slug]] syntax to cross-reference other pages you're creating.
+- content: full markdown content for the page. Use [[slug]] syntax to cross-reference OTHER pages (either ones you're creating in this batch, or existing slugs from the list above).
 - summary: one sentence for the index
+- passage: OPTIONAL — a short exact quote from the paper (≤180 chars) that motivates this page. Stored as provenance.
+- update: OPTIONAL — set to true if this entry REPLACES an existing page from the "Existing knowledge base pages" list above with the full rewritten content. Omit or false for new pages.
 
-Generate the following pages:
-1. ONE "paper" page summarizing this paper (slug should be based on the paper title or arxiv ID). Include: key contributions, methodology overview, main results, and limitations.
-2. 3-6 "concept" or "method" pages for the most important technical ideas, techniques, or mathematical concepts in the paper. Each page should explain the concept clearly and note how this paper uses it.
+What to generate:
+1. ONE "paper" page summarizing this paper. Include: key contributions, methodology overview, main results, and limitations. Cross-reference the concept/method pages you create.
+2. 3-8 NEW "concept" / "method" / "entity" pages for technical ideas not yet in the wiki.
+3. 0-6 UPDATED pages from the "Existing knowledge base pages" list where this paper adds meaningful new information. Use \`update: true\` and emit the FULL rewritten content (don't return diffs).
 
 Rules:
-- Content should be thorough but concise (200-500 words per page)
-- Use LaTeX notation ($..$ or $$..$$) for math where appropriate
-- Cross-reference between pages using [[slug]] links
-- Each page should be self-contained and useful on its own
+- Keep each page tight (150-400 words). Cross-reference liberally with [[slug]].
+- Use LaTeX ($..$, $$..$$) for math where appropriate.
+- Include a \`passage\` when you can cite a short supporting quote.
 
-Return ONLY a JSON array of page objects. No markdown fences, no extra text.`;
+Return ONLY a JSON array. No markdown fences, no extra text.`;
 
   const raw = await generateStructured(model, apiKey, prompt, paperText, signal);
   const pages = parseJson<GeneratedPage[]>(raw, []);
 
   if (!Array.isArray(pages) || pages.length === 0) return;
 
-  // Validate and save each page
-  const savedSlugs: Array<{ slug: string; title: string; pageType: string; summary: string }> = [];
+  const validTypes = new Set(["paper", "concept", "method", "entity"]);
+  const finalizePages: WikiFinalizePage[] = [];
 
   for (const page of pages) {
     if (!page.slug || !page.title || !page.content || !page.pageType) continue;
-
     const slug = toSlug(page.slug);
     if (!slug) continue;
-
-    const validTypes = new Set(["paper", "concept", "method", "entity"]);
-    const pageType = validTypes.has(page.pageType) ? page.pageType : "concept";
-
-    // Check if page already exists
-    const existing = await loadWikiPage(slug);
-    if (existing) {
-      // Merge: append new info under a section header
-      const mergedContent =
-        existing.content +
-        `\n\n---\n\n## From: ${paperTitle}\n\n${page.content}`;
-      await updateWikiPage(slug, { content: mergedContent });
-    } else {
-      await saveWikiPage({
-        slug,
-        title: page.title,
-        content: page.content,
-        pageType: pageType as WikiPageType,
-        reviewId,
-      });
-    }
-
-    savedSlugs.push({
+    const pageType = validTypes.has(page.pageType)
+      ? (page.pageType as WikiPageType)
+      : ("concept" as WikiPageType);
+    finalizePages.push({
       slug,
       title: page.title,
+      content: page.content,
       pageType,
-      summary: page.summary || page.title,
+      source: {
+        reviewId,
+        passage: page.passage?.slice(0, 280),
+      },
     });
   }
 
-  if (savedSlugs.length === 0) return;
+  if (finalizePages.length === 0) return;
 
-  // Update index page
-  await rebuildIndexPage();
-
-  // Append to log page
-  await appendToLog(paperTitle);
-
-  invalidateWikiCache();
-}
-
-/* ── Index page ── */
-
-async function rebuildIndexPage(): Promise<void> {
-  const allPages = await loadWikiPages();
-  const contentPages = allPages.filter(
-    (p) => p.pageType !== "index" && p.pageType !== "log",
-  );
-
-  if (contentPages.length === 0) return;
-
-  const grouped = new Map<string, typeof contentPages>();
-  for (const p of contentPages) {
-    const list = grouped.get(p.pageType) ?? [];
-    list.push(p);
-    grouped.set(p.pageType, list);
-  }
-
-  const typeLabels: Record<string, string> = {
-    paper: "Papers",
-    concept: "Concepts",
-    method: "Methods",
-    entity: "Entities",
-    graph: "Knowledge Graphs",
-  };
-
-  let content = "# Knowledge Base Index\n\n";
-  content += `*${contentPages.length} pages across ${grouped.size} categories*\n\n`;
-
-  for (const [type, pages] of grouped) {
-    content += `## ${typeLabels[type] ?? type}\n\n`;
-    for (const p of pages) {
-      const firstLine = p.content
-        .split("\n")
-        .find((l) => l.trim() && !l.startsWith("#"));
-      const excerpt = firstLine
-        ? firstLine.trim().slice(0, 100) + (firstLine.length > 100 ? "\u2026" : "")
-        : "";
-      content += `- [[${p.slug}]] \u2014 ${excerpt}\n`;
-    }
-    content += "\n";
-  }
-
-  await saveWikiPage({
-    slug: "index",
-    title: "Knowledge Base Index",
-    content,
-    pageType: "index",
+  await finalizeWikiIngest({
+    pages: finalizePages,
+    logEntry: {
+      kind: "ingest",
+      label: paperTitle,
+    },
+    rebuildIndex: true,
   });
-}
-
-/* ── Log page ── */
-
-async function appendToLog(paperTitle: string): Promise<void> {
-  const date = new Date().toISOString().slice(0, 10);
-  const entry = `## [${date}] ingest | ${paperTitle}\n\n`;
-
-  const existing = await loadWikiPage("log");
-  if (existing) {
-    await updateWikiPage("log", {
-      content: existing.content + entry,
-    });
-  } else {
-    await saveWikiPage({
-      slug: "log",
-      title: "Knowledge Base Log",
-      content: `# Knowledge Base Log\n\nChronological record of knowledge base operations.\n\n${entry}`,
-      pageType: "log",
-    });
-  }
 }
