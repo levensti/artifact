@@ -255,6 +255,18 @@ export default function ChatPanel({
     }
   }, [chatThreadAnnotationId, activeThreadAnn, onChatThreadChange]);
 
+  // Escape key exits thread back to main conversation
+  useEffect(() => {
+    if (!chatThreadAnnotationId) return;
+    const handle = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onChatThreadChange(null);
+      }
+    };
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [chatThreadAnnotationId, onChatThreadChange]);
+
   // Scroll to top on new thread
   useEffect(() => {
     if (!chatThreadAnnotationId) return;
