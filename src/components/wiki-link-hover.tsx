@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { BookOpen, AlertCircle } from "lucide-react";
@@ -82,12 +82,8 @@ export default function WikiLinkHover({
       .finally(() => setLoading(false));
   }, [slug]);
 
-  // Kick off the load when the trigger is mounted. Cheap and the
-  // client cache makes repeated hovers free.
-  useEffect(() => {
-    const t = window.setTimeout(ensureLoaded, 250);
-    return () => window.clearTimeout(t);
-  }, [ensureLoaded]);
+  // Load lazily on hover/focus only. Rendering a long markdown doc with
+  // dozens of [[slug]] chips shouldn't fan out a fetch per chip on mount.
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {

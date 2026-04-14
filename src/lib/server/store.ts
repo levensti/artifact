@@ -15,6 +15,7 @@ import type {
   PrerequisitesData,
 } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
+import { extractWikiLinkSlugs } from "@/lib/wiki-link-transform";
 
 const DB_PATH = path.join(process.cwd(), "data", "artifact.db");
 
@@ -608,9 +609,16 @@ export function upsertWikiPage(page: {
   // backlink rebuild are atomic even when called outside wikiIngestFinalize.
   const tx = db.transaction(() => {
     const existing = db
-      .prepare(`SELECT id, content FROM wiki_pages WHERE slug = ?`)
-      .get(page.slug) as { id: string; content: string } | undefined;
+      .prepare(
+        `SELECT id, title, content, page_type AS pageType FROM wiki_pages WHERE slug = ?`,
+      )
+      .get(page.slug) as
+      | { id: string; title: string; content: string; pageType: WikiPageType }
+      | undefined;
 
+    // Archive the OLD title + content + type, not the incoming values —
+    // otherwise a historical revision rendered standalone would show the
+    // current title next to the old body.
     if (existing && existing.content !== page.content) {
       db.prepare(
         `INSERT INTO wiki_page_revisions (page_id, slug, title, content, page_type, saved_at)
@@ -618,9 +626,9 @@ export function upsertWikiPage(page: {
       ).run(
         existing.id,
         page.slug,
-        page.title,
+        existing.title,
         existing.content,
-        page.pageType,
+        existing.pageType,
         now,
       );
     }
@@ -748,17 +756,6 @@ function migrateWikiRevisions(db: Database.Database) {
   `);
 }
 
-/** Extract `[[slug]]` tokens from markdown. Case-insensitive, deduped. */
-function extractWikiLinks(content: string): string[] {
-  const out = new Set<string>();
-  const re = /\[\[([a-z0-9][a-z0-9-]{0,79})\]\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    out.add(m[1].toLowerCase());
-  }
-  return [...out];
-}
-
 /** Rebuild the `wiki_page_backlinks` rows for a single source page. */
 function rebuildBacklinksFor(
   db: Database.Database,
@@ -766,7 +763,7 @@ function rebuildBacklinksFor(
   content: string,
 ): void {
   db.prepare(`DELETE FROM wiki_page_backlinks WHERE source_id = ?`).run(pageId);
-  const targets = extractWikiLinks(content);
+  const targets = extractWikiLinkSlugs(content);
   if (targets.length === 0) return;
   const insert = db.prepare(
     `INSERT OR IGNORE INTO wiki_page_backlinks (source_id, target_slug) VALUES (?, ?)`,
@@ -981,17 +978,29 @@ export function wikiIngestFinalize(
       if (!page.slug || !page.title || !page.content || !page.pageType) continue;
 
       const existing = db
-        .prepare(`SELECT id, content FROM wiki_pages WHERE slug = ?`)
-        .get(page.slug) as { id: string; content: string } | undefined;
+        .prepare(
+          `SELECT id, title, content, page_type AS pageType FROM wiki_pages WHERE slug = ?`,
+        )
+        .get(page.slug) as
+        | { id: string; title: string; content: string; pageType: WikiPageType }
+        | undefined;
 
       const id = existing?.id ?? crypto.randomUUID();
 
-      // Save revision snapshot BEFORE overwriting (only if content changed)
+      // Save the PREVIOUS snapshot (old title + old content + old type)
+      // before overwriting. Skips when content is unchanged.
       if (existing && existing.content !== page.content) {
         db.prepare(
           `INSERT INTO wiki_page_revisions (page_id, slug, title, content, page_type, saved_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
-        ).run(id, page.slug, page.title, existing.content, page.pageType, now);
+        ).run(
+          id,
+          page.slug,
+          existing.title,
+          existing.content,
+          existing.pageType,
+          now,
+        );
       }
 
       if (existing) {

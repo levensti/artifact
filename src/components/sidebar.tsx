@@ -8,6 +8,7 @@ import {
   FileText,
   Settings,
   PanelLeftClose,
+  AlertCircle,
 } from "lucide-react";
 import {
   getReviews,
@@ -17,7 +18,9 @@ import {
 import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
 import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import {
+  getWikiIngestError,
   getWikiIngestSnapshot,
+  reportWikiIngestError,
   subscribeWikiStatus,
 } from "@/lib/wiki-status";
 import { cn } from "@/lib/utils";
@@ -90,6 +93,11 @@ export default function Sidebar({
     getWikiIngestSnapshot,
     getWikiIngestSnapshot,
   );
+  const ingestError = useSyncExternalStore(
+    subscribeWikiStatus,
+    getWikiIngestError,
+    () => null,
+  );
   const ingestActive = activeIngests.length > 0;
   const ingestLabel = useMemo(() => {
     if (activeIngests.length === 0) return null;
@@ -105,7 +113,10 @@ export default function Sidebar({
 
   // Ensure wiki cache is populated so the snapshot picks up page counts
   useEffect(() => {
-    void loadWikiPages();
+    void loadWikiPages().catch(() => {
+      // Sidebar polls on a cadence via WIKI_UPDATED_EVENT — failures here
+      // are non-fatal and would otherwise pollute devtools with noise.
+    });
   }, []);
 
   const handleReviewCreated = (reviewId: string) => {
@@ -227,6 +238,25 @@ export default function Sidebar({
               </span>
             ) : null}
           </button>
+          {ingestError ? (
+            <div
+              className="mx-1 mt-1 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[10px] leading-snug text-destructive"
+              role="status"
+            >
+              <AlertCircle className="mt-px size-3 shrink-0" strokeWidth={2} />
+              <span className="min-w-0 flex-1 truncate" title={ingestError}>
+                Ingest failed — {ingestError}
+              </span>
+              <button
+                type="button"
+                onClick={() => reportWikiIngestError(null)}
+                className="shrink-0 opacity-60 hover:opacity-100"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <ScrollArea className="flex-1 px-2.5 py-2">

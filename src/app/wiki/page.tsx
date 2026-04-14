@@ -16,7 +16,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { hydrateClientStore, loadWikiPages } from "@/lib/client-data";
 import type { WikiPage } from "@/lib/wiki";
 import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
-import { runWikiLint, type WikiLintReport } from "@/lib/wiki-lint";
+import { lintPages, runWikiLint, type WikiLintReport } from "@/lib/wiki-lint";
+import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
 
 const TYPE_ORDER: Record<string, number> = {
@@ -66,26 +67,12 @@ function parseLog(content: string): LogEntry[] {
   return out.reverse();
 }
 
-function formatRelative(whenStr: string): string {
-  // whenStr is "YYYY-MM-DD HH:MM"
-  const iso = whenStr.replace(" ", "T") + ":00Z";
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return whenStr;
-  const diff = Date.now() - then;
-  const mins = Math.round(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return whenStr;
-}
-
 export default function WikiBrowsePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("all");
@@ -100,21 +87,49 @@ export default function WikiBrowsePage() {
   }, []);
 
   useEffect(() => {
-    void hydrateClientStore().then(async () => {
-      await refreshPages();
-      setReady(true);
-    });
-    const handler = () => void refreshPages();
+    let cancelled = false;
+    void (async () => {
+      try {
+        await hydrateClientStore();
+        if (cancelled) return;
+        await refreshPages();
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(
+          err instanceof Error ? err.message : "Failed to load wiki.",
+        );
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    })();
+    const handler = () =>
+      void refreshPages().catch(() => {
+        /* ignore — header badge will still update on next event */
+      });
     window.addEventListener(WIKI_UPDATED_EVENT, handler);
-    return () => window.removeEventListener(WIKI_UPDATED_EVENT, handler);
-  }, [refreshPages]);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(WIKI_UPDATED_EVENT, handler);
+    };
+  }, [refreshPages, reloadTick]);
 
-  // Refresh lint report whenever the wiki changes (cheap — pure fn).
+  // Refresh lint report whenever the wiki changes. `runWikiLint` just
+  // wraps `lintPages` around a fetch, so if the fetch fails we still
+  // have the in-memory pages to lint locally — never leave the Health
+  // tab stuck on "Running lint…".
   useEffect(() => {
     if (!ready) return;
+    let cancelled = false;
     void runWikiLint()
-      .then(setLint)
-      .catch(() => setLint(null));
+      .then((r) => {
+        if (!cancelled) setLint(r);
+      })
+      .catch(() => {
+        if (!cancelled) setLint(lintPages(pages));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [ready, pages]);
 
   const handleNavigate = useCallback(
@@ -196,6 +211,35 @@ export default function WikiBrowsePage() {
       <DashboardLayout>
         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
           Loading…
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError && pages.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center px-6">
+          <div className="max-w-md space-y-4 text-center">
+            <AlertTriangle className="mx-auto size-8 text-amber-600" />
+            <div className="space-y-1">
+              <h1 className="text-base font-semibold text-foreground">
+                Could not load the knowledge base
+              </h1>
+              <p className="text-xs text-muted-foreground">{loadError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setLoadError(null);
+                setReady(false);
+                setReloadTick((t) => t + 1);
+              }}
+              className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -495,6 +539,36 @@ export default function WikiBrowsePage() {
           {selectedPage ? (
             <div className="max-w-3xl mx-auto px-8 py-6">
               <WikiPageView page={selectedPage} onNavigate={handleNavigate} />
+            </div>
+          ) : selectedSlug ? (
+            <div className="flex items-center justify-center h-full px-6">
+              <div className="text-center space-y-3 max-w-sm">
+                <AlertTriangle
+                  className="mx-auto size-8 text-amber-500/60"
+                  strokeWidth={1.5}
+                />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                      [[{selectedSlug}]]
+                    </code>{" "}
+                    isn&apos;t in the wiki yet
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    It may be created on a future ingest. In the meantime,
+                    browse the other pages in the sidebar.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push("/wiki", { scroll: false })
+                  }
+                  className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                >
+                  Back to knowledge base
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-full px-6">

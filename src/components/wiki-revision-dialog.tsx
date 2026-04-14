@@ -184,6 +184,12 @@ export default function WikiRevisionDialog({
                   <span className="text-emerald-600">+{addedCount}</span>
                   <span className="text-rose-600">−{removedCount}</span>
                 </div>
+                {addedCount === 0 && removedCount === 0 ? (
+                  <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-4 text-center text-[11px] text-muted-foreground">
+                    No changes since this revision — the current page is
+                    identical to this snapshot.
+                  </div>
+                ) : null}
                 <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
                   {diff.map((line, idx) => (
                     <div

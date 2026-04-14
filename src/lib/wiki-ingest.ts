@@ -15,51 +15,8 @@ import {
   type WikiFinalizePage,
 } from "@/lib/client-data";
 import { loadWikiSchema } from "@/lib/wiki-schema-client";
-
-/* ── JSON parsing helpers (same pattern as explore-analysis.ts) ── */
-
-function stripCodeFences(raw: string): string {
-  return raw
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/m, "")
-    .trim();
-}
-
-function extractJsonSubstring(s: string): string {
-  const startObj = s.indexOf("{");
-  const startArr = s.indexOf("[");
-  let start = -1;
-  if (startObj === -1) start = startArr;
-  else if (startArr === -1) start = startObj;
-  else start = Math.min(startObj, startArr);
-  if (start === -1) return s;
-
-  const openChar = s[start];
-  const closeChar = openChar === "{" ? "}" : "]";
-  let depth = 0;
-  for (let i = start; i < s.length; i++) {
-    if (s[i] === openChar) depth++;
-    else if (s[i] === closeChar) {
-      depth--;
-      if (depth === 0) return s.slice(start, i + 1);
-    }
-  }
-  return s;
-}
-
-function parseJson<T>(raw: string, fallback: T): T {
-  const cleaned = stripCodeFences(raw);
-  const candidates = [cleaned, extractJsonSubstring(cleaned)];
-  for (const blob of candidates) {
-    try {
-      return JSON.parse(blob) as T;
-    } catch {
-      /* try next */
-    }
-  }
-  return fallback;
-}
+import { parseJson } from "@/lib/json-parse";
+import { toSlug } from "@/lib/slug";
 
 /* ── LLM call helper ── */
 
@@ -91,16 +48,6 @@ async function generateStructured(
   }
   const data = await response.json();
   return String(data.content ?? "");
-}
-
-/* ── Slug helper ── */
-
-function toSlug(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
 }
 
 /* ── Types for LLM output ── */

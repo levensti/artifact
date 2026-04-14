@@ -13,59 +13,14 @@ import {
   type WikiFinalizePage,
 } from "@/lib/client-data";
 import { beginWikiIngest, endWikiIngest } from "@/lib/wiki-status";
+import { parseJson } from "@/lib/json-parse";
+import { toSlug } from "@/lib/slug";
 
 /* ── Rate limiting ── */
 
 const lastExtractTime = new Map<string, number>();
 const RATE_LIMIT_MS = 60_000;
-
-/* ── JSON parsing helpers ── */
-
-function stripCodeFences(raw: string): string {
-  return raw
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/m, "")
-    .trim();
-}
-
-function extractJsonSubstring(s: string): string {
-  const startArr = s.indexOf("[");
-  if (startArr === -1) return s;
-
-  let depth = 0;
-  for (let i = startArr; i < s.length; i++) {
-    if (s[i] === "[") depth++;
-    else if (s[i] === "]") {
-      depth--;
-      if (depth === 0) return s.slice(startArr, i + 1);
-    }
-  }
-  return s;
-}
-
-function parseJson<T>(raw: string, fallback: T): T {
-  const cleaned = stripCodeFences(raw);
-  const candidates = [cleaned, extractJsonSubstring(cleaned)];
-  for (const blob of candidates) {
-    try {
-      return JSON.parse(blob) as T;
-    } catch {
-      /* try next */
-    }
-  }
-  return fallback;
-}
-
-/* ── Slug helper ── */
-
-function toSlug(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
+const INGEST_TIMEOUT_MS = 120_000;
 
 /* ── Types ── */
 
@@ -92,24 +47,34 @@ export async function extractWikiFromResponse(
   // Guard: response too short
   if (opts.responseText.length < 300) return;
 
-  // Guard: rate limit per review
+  // Guard: rate limit per review. Only commit the timestamp on success
+  // so a transient failure doesn't block a retry for a full minute.
   const lastTime = lastExtractTime.get(opts.reviewId) ?? 0;
   if (Date.now() - lastTime < RATE_LIMIT_MS) return;
-  lastExtractTime.set(opts.reviewId, Date.now());
 
   const statusToken = beginWikiIngest({
     kind: "chat-extract",
     label: opts.paperTitle ? `From chat: ${opts.paperTitle}` : "From chat",
   });
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    INGEST_TIMEOUT_MS,
+  );
   try {
-    await runExtract(opts);
+    await runExtract(opts, controller.signal);
+    lastExtractTime.set(opts.reviewId, Date.now());
+  } catch {
+    // Silent — ambient operation.
   } finally {
+    clearTimeout(timeout);
     endWikiIngest(statusToken);
   }
 }
 
 async function runExtract(
   opts: ExtractWikiFromResponseOptions,
+  signal: AbortSignal,
 ): Promise<void> {
   const { responseText, paperTitle, reviewId, model, apiKey } = opts;
 
@@ -137,6 +102,7 @@ No markdown fences, no extra text \u2014 ONLY the JSON array.`;
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal,
     body: JSON.stringify({
       model: model.modelId,
       provider: model.provider,

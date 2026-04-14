@@ -18,7 +18,7 @@
  *   );
  */
 
-export const WIKI_INGEST_UPDATED_EVENT = "paper-copilot-wiki-ingest-updated";
+const WIKI_INGEST_UPDATED_EVENT = "paper-copilot-wiki-ingest-updated";
 
 export type WikiIngestKind = "paper" | "chat-extract" | "lint" | "other";
 
@@ -33,6 +33,7 @@ export interface WikiIngestTask {
 let nextId = 1;
 const active = new Map<number, WikiIngestTask>();
 let snapshot: WikiIngestTask[] = [];
+let lastError: string | null = null;
 
 function recomputeSnapshot(): void {
   // Return a stable-identity snapshot so useSyncExternalStore works.
@@ -81,7 +82,16 @@ export function subscribeWikiStatus(onChange: () => void): () => void {
   return () => window.removeEventListener(WIKI_INGEST_UPDATED_EVENT, onChange);
 }
 
-/** Convenience: how many ingests are currently running? */
-export function getActiveIngestCount(): number {
-  return snapshot.length;
+/**
+ * Record a recent ambient-ingest failure so the sidebar can surface it.
+ * Pass `null` to dismiss. Errors don't block future ingests.
+ */
+export function reportWikiIngestError(message: string | null): void {
+  lastError = message;
+  notify();
+}
+
+/** Snapshot of the most recent ingest error, or null. */
+export function getWikiIngestError(): string | null {
+  return lastError;
 }

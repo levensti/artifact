@@ -14,6 +14,7 @@ import {
   loadWikiPageMetadata,
   type WikiPageMetadata,
 } from "@/lib/client-data";
+import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
 import MarkdownMessage from "./markdown-message";
 import { Badge } from "@/components/ui/badge";
@@ -39,24 +40,6 @@ const TYPE_ICON_COLOR: Record<string, string> = {
 interface WikiPageViewProps {
   page: WikiPage;
   onNavigate: (slug: string) => void;
-}
-
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return iso;
-  const diff = Date.now() - then;
-  const mins = Math.round(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 export default function WikiPageView({ page, onNavigate }: WikiPageViewProps) {

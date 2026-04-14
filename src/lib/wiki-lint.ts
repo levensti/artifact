@@ -11,6 +11,7 @@
 
 import type { WikiPage } from "@/lib/wiki";
 import { loadWikiPages } from "@/lib/client-data";
+import { extractWikiLinkSlugs } from "@/lib/wiki-link-transform";
 
 export interface WikiLintBrokenRef {
   sourceSlug: string;
@@ -50,7 +51,6 @@ export interface WikiLintReport {
 
 const STALE_DAYS = 30;
 const STUB_WORD_LIMIT = 60;
-const LINK_RE = /\[\[([a-z0-9][a-z0-9-]{0,79})\]\]/gi;
 
 function wordCount(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
@@ -79,13 +79,8 @@ export function lintPages(pages: WikiPage[]): WikiLintReport {
   const inbound = new Map<string, number>();
 
   for (const p of contentPages) {
-    LINK_RE.lastIndex = 0;
-    const seen = new Set<string>();
-    let m: RegExpExecArray | null;
-    while ((m = LINK_RE.exec(p.content)) !== null) {
-      const target = m[1].toLowerCase();
-      if (seen.has(target)) continue;
-      seen.add(target);
+    const targets = extractWikiLinkSlugs(p.content);
+    for (const target of targets) {
       if (!slugIndex.has(target)) {
         brokenRefs.push({
           sourceSlug: p.slug,

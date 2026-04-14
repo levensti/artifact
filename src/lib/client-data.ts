@@ -51,7 +51,6 @@ async function apiJson<T>(
   return res.json() as Promise<T>;
 }
 
-let hydrated = false;
 let hydratePromise: Promise<void> | null = null;
 
 let reviewsCache: PaperReview[] = [];
@@ -77,10 +76,6 @@ const exploreCache = new Map<
   { prerequisites: PrerequisitesData | null; graph: GraphData | null }
 >();
 
-export function isDataHydrated(): boolean {
-  return hydrated;
-}
-
 export async function hydrateClientStore(): Promise<void> {
   if (typeof window === "undefined") return;
   if (hydratePromise) return hydratePromise;
@@ -98,7 +93,6 @@ export async function hydrateClientStore(): Promise<void> {
     messagesCache.clear();
     annotationsCache.clear();
     exploreCache.clear();
-    hydrated = true;
     window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
     window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
     window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
@@ -353,6 +347,10 @@ export async function clearGlobalKnowledgeGraph(): Promise<void> {
 
 let wikiPagesCache: WikiPage[] | null = null;
 let wikiPagesInflight: Promise<WikiPage[]> | null = null;
+// Generation counter — bumped by `invalidateWikiCache()` so an in-flight
+// fetch started before the invalidation doesn't overwrite the fresh
+// cache with stale data when it eventually resolves.
+let wikiCacheGeneration = 0;
 const wikiIngestedCache = new Map<string, boolean>();
 
 function notifyWikiUpdated(): void {
@@ -386,14 +384,18 @@ export function getWikiCacheSnapshot(): WikiPage[] | null {
 export async function loadWikiPages(): Promise<WikiPage[]> {
   if (wikiPagesCache) return wikiPagesCache;
   if (wikiPagesInflight) return wikiPagesInflight;
+  const gen = wikiCacheGeneration;
   wikiPagesInflight = (async () => {
     try {
       const list = await apiJson<WikiPage[]>("/wiki");
+      // If someone called `invalidateWikiCache()` while this fetch was
+      // in flight, the response is stale — drop it on the floor.
+      if (gen !== wikiCacheGeneration) return list;
       wikiPagesCache = list;
       notifyWikiUpdated();
       return list;
     } finally {
-      wikiPagesInflight = null;
+      if (gen === wikiCacheGeneration) wikiPagesInflight = null;
     }
   })();
   return wikiPagesInflight;
@@ -488,6 +490,7 @@ export async function checkWikiIngested(reviewId: string): Promise<boolean> {
  * pipelines after they finish writing so readers re-fetch fresh data.
  */
 export function invalidateWikiCache(): void {
+  wikiCacheGeneration++;
   wikiPagesCache = null;
   wikiPagesInflight = null;
   notifyWikiUpdated();
@@ -523,6 +526,7 @@ export async function finalizeWikiIngest(
     method: "POST",
     body: JSON.stringify(input),
   });
+  wikiCacheGeneration++;
   wikiPagesCache = null;
   wikiPagesInflight = null;
   for (const page of input.pages) {
