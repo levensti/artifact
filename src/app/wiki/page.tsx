@@ -2,13 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { BookOpen, Search, FileText } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  BookOpen,
+  FileText,
+  Search,
+  Shield,
+} from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import WikiPageView from "@/components/wiki-page-view";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { hydrateClientStore, loadWikiPages } from "@/lib/client-data";
 import type { WikiPage } from "@/lib/wiki";
 import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
+import { runWikiLint, type WikiLintReport } from "@/lib/wiki-lint";
 import { cn } from "@/lib/utils";
 
 const TYPE_ORDER: Record<string, number> = {
@@ -27,17 +35,65 @@ const TYPE_LABELS: Record<string, string> = {
   graph: "Graphs",
 };
 
+const FILTERS: Array<{ key: string; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "paper", label: "Papers" },
+  { key: "concept", label: "Concepts" },
+  { key: "method", label: "Methods" },
+  { key: "entity", label: "Entities" },
+];
+
+type SortMode = "recent" | "alpha";
+
+/**
+ * Parses `log.md` append-only content into a structured timeline.
+ * Lines in the log have format: `- \`DATE TIME\` **kind** — label`
+ */
+interface LogEntry {
+  when: string;
+  kind: string;
+  label: string;
+}
+
+function parseLog(content: string): LogEntry[] {
+  const out: LogEntry[] = [];
+  const re = /^-\s*`([\d\-: ]+)`\s*\*\*([^*]+)\*\*\s*[—-]\s*(.+)$/;
+  for (const line of content.split("\n")) {
+    const m = re.exec(line.trim());
+    if (!m) continue;
+    out.push({ when: m[1].trim(), kind: m[2].trim(), label: m[3].trim() });
+  }
+  return out.reverse();
+}
+
+function formatRelative(whenStr: string): string {
+  // whenStr is "YYYY-MM-DD HH:MM"
+  const iso = whenStr.replace(" ", "T") + ":00Z";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return whenStr;
+  const diff = Date.now() - then;
+  const mins = Math.round(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return whenStr;
+}
+
 export default function WikiBrowsePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [search, setSearch] = useState("");
-  // Derive selected slug directly from URL state — avoids a cascading
-  // setState effect and keeps URL as the single source of truth.
+  const [filter, setFilter] = useState<string>("all");
+  const [sort, setSort] = useState<SortMode>("recent");
+  const [tab, setTab] = useState<"pages" | "activity" | "health">("pages");
+  const [lint, setLint] = useState<WikiLintReport | null>(null);
   const selectedSlug = searchParams.get("page");
 
-  // Load pages
   const refreshPages = useCallback(async () => {
     const list = await loadWikiPages();
     setPages(list);
@@ -53,6 +109,14 @@ export default function WikiBrowsePage() {
     return () => window.removeEventListener(WIKI_UPDATED_EVENT, handler);
   }, [refreshPages]);
 
+  // Refresh lint report whenever the wiki changes (cheap — pure fn).
+  useEffect(() => {
+    if (!ready) return;
+    void runWikiLint()
+      .then(setLint)
+      .catch(() => setLint(null));
+  }, [ready, pages]);
+
   const handleNavigate = useCallback(
     (slug: string) => {
       router.push(`/wiki?page=${encodeURIComponent(slug)}`, { scroll: false });
@@ -60,27 +124,52 @@ export default function WikiBrowsePage() {
     [router],
   );
 
-  // Filter out index/log from main listing
   const contentPages = useMemo(
     () => pages.filter((p) => p.pageType !== "index" && p.pageType !== "log"),
     [pages],
   );
 
-  // Search filter
-  const filteredPages = useMemo(() => {
-    if (!search.trim()) return contentPages;
-    const q = search.toLowerCase();
-    return contentPages.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.content.toLowerCase().includes(q),
-    );
-  }, [contentPages, search]);
+  const logEntries = useMemo(() => {
+    const logPage = pages.find((p) => p.slug === "log");
+    if (!logPage) return [];
+    return parseLog(logPage.content);
+  }, [pages]);
 
-  // Group by type
-  const grouped = useMemo(() => {
+  const filteredPages = useMemo(() => {
+    let list = contentPages;
+    if (filter !== "all") {
+      list = list.filter((p) => p.pageType === filter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.content.toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [contentPages, search, filter]);
+
+  const sortedPages = useMemo(() => {
+    const list = [...filteredPages];
+    if (sort === "recent") {
+      list.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+    } else {
+      list.sort((a, b) => a.title.localeCompare(b.title));
+    }
+    return list;
+  }, [filteredPages, sort]);
+
+  const grouped = useMemo<ReadonlyArray<readonly [string, WikiPage[]]>>(() => {
+    if (sort === "recent") {
+      return [["all", sortedPages] as const];
+    }
     const map = new Map<string, WikiPage[]>();
-    for (const p of filteredPages) {
+    for (const p of sortedPages) {
       const list = map.get(p.pageType) ?? [];
       list.push(p);
       map.set(p.pageType, list);
@@ -88,18 +177,25 @@ export default function WikiBrowsePage() {
     return [...map.entries()].sort(
       (a, b) => (TYPE_ORDER[a[0]] ?? 99) - (TYPE_ORDER[b[0]] ?? 99),
     );
-  }, [filteredPages]);
+  }, [sortedPages, sort]);
 
   const selectedPage = useMemo(
     () => pages.find((p) => p.slug === selectedSlug) ?? null,
     [pages, selectedSlug],
   );
 
+  const healthIssueCount = lint
+    ? lint.brokenRefs.length +
+      lint.orphans.length +
+      lint.stale.length +
+      lint.stubs.length
+    : 0;
+
   if (!ready) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-          Loading\u2026
+          Loading…
         </div>
       </DashboardLayout>
     );
@@ -144,8 +240,8 @@ export default function WikiBrowsePage() {
   return (
     <DashboardLayout>
       <div className="flex h-full overflow-hidden bg-background">
-        {/* Left panel \u2014 page list */}
-        <aside className="flex h-full w-[280px] min-w-[240px] shrink-0 flex-col border-r border-border">
+        {/* Left panel — page list / activity / health */}
+        <aside className="flex h-full w-[300px] min-w-[260px] shrink-0 flex-col border-r border-border">
           <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
             <BookOpen className="size-4 text-primary" strokeWidth={2} />
             <h1 className="text-sm font-semibold tracking-tight text-foreground">
@@ -156,59 +252,249 @@ export default function WikiBrowsePage() {
             </span>
           </header>
 
-          <div className="px-3 py-2 border-b border-border">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-ring/20">
-              <Search className="size-3.5 text-muted-foreground shrink-0" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search pages\u2026"
-                className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
-              />
-            </div>
+          <div className="flex border-b border-border text-[11px] font-medium">
+            {[
+              { k: "pages", label: "Pages", icon: FileText },
+              { k: "activity", label: "Activity", icon: Activity },
+              { k: "health", label: "Health", icon: Shield },
+            ].map(({ k, label, icon: Icon }) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setTab(k as "pages" | "activity" | "health")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1 py-2 transition-colors relative",
+                  tab === k
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3" />
+                {label}
+                {k === "health" && healthIssueCount > 0 ? (
+                  <span className="ml-0.5 rounded-full bg-amber-500/20 text-amber-700 px-1 text-[9px] font-semibold">
+                    {healthIssueCount}
+                  </span>
+                ) : null}
+                {tab === k ? (
+                  <span className="absolute inset-x-0 bottom-0 h-[2px] bg-primary" />
+                ) : null}
+              </button>
+            ))}
           </div>
 
-          <ScrollArea className="flex-1">
-            <div className="px-2 py-2 space-y-3">
-              {grouped.map(([type, typePages]) => (
-                <div key={type}>
-                  <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    {TYPE_LABELS[type] ?? type}
-                  </p>
-                  <div className="space-y-0.5">
-                    {typePages.map((page) => (
+          {tab === "pages" && (
+            <>
+              <div className="px-3 py-2 border-b border-border space-y-2">
+                <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-ring/20">
+                  <Search className="size-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search pages…"
+                    className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {FILTERS.map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setFilter(f.key)}
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                        filter === f.key
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                  <div className="ml-auto flex gap-0.5 rounded-full border border-border bg-card p-0.5">
+                    {(["recent", "alpha"] as const).map((s) => (
                       <button
-                        key={page.id}
+                        key={s}
                         type="button"
-                        onClick={() => handleNavigate(page.slug)}
+                        onClick={() => setSort(s)}
                         className={cn(
-                          "w-full text-left rounded-md px-2.5 py-2 text-xs transition-colors",
-                          selectedSlug === page.slug
-                            ? "bg-primary/10 text-foreground font-medium"
-                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                          "rounded-full px-2 py-px text-[9px] font-semibold uppercase tracking-wider transition-colors",
+                          sort === s
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground",
                         )}
                       >
-                        <span className="line-clamp-2 leading-relaxed">
-                          {page.title}
-                        </span>
+                        {s === "recent" ? "Recent" : "A-Z"}
                       </button>
                     ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
+              </div>
+
+              <ScrollArea className="flex-1">
+                <div className="px-2 py-2 space-y-3">
+                  {grouped.map(([type, typePages]) => (
+                    <div key={type}>
+                      {sort === "alpha" ? (
+                        <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                          {TYPE_LABELS[type] ?? type}
+                        </p>
+                      ) : null}
+                      <div className="space-y-0.5">
+                        {typePages.map((page) => (
+                          <button
+                            key={page.id}
+                            type="button"
+                            onClick={() => handleNavigate(page.slug)}
+                            className={cn(
+                              "w-full text-left rounded-md px-2.5 py-2 text-xs transition-colors",
+                              selectedSlug === page.slug
+                                ? "bg-primary/10 text-foreground font-medium"
+                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                            )}
+                          >
+                            <span className="line-clamp-2 leading-relaxed">
+                              {page.title}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {sortedPages.length === 0 ? (
+                    <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                      No pages match.
+                    </p>
+                  ) : null}
+                </div>
+              </ScrollArea>
+            </>
+          )}
+
+          {tab === "activity" && (
+            <ScrollArea className="flex-1">
+              <div className="px-3 py-3 space-y-0.5">
+                {logEntries.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                    No activity yet.
+                  </p>
+                ) : (
+                  logEntries.map((e, idx) => (
+                    <div
+                      key={idx}
+                      className="flex gap-2 border-l-2 border-l-primary/30 pl-3 py-1.5 text-[11px]"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-foreground leading-tight truncate">
+                          <span className="font-medium">{e.kind}</span> —{" "}
+                          {e.label}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {formatRelative(e.when)}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          )}
+
+          {tab === "health" && (
+            <ScrollArea className="flex-1">
+              <div className="px-3 py-3 space-y-4 text-[11px]">
+                {!lint ? (
+                  <p className="text-muted-foreground">Running lint…</p>
+                ) : healthIssueCount === 0 ? (
+                  <p className="text-emerald-600 flex items-center gap-1">
+                    <Shield className="size-3" />
+                    All {lint.totalPages} pages healthy
+                  </p>
+                ) : (
+                  <>
+                    {lint.brokenRefs.length > 0 && (
+                      <HealthSection
+                        label={`Broken refs (${lint.brokenRefs.length})`}
+                      >
+                        {lint.brokenRefs.map((b) => (
+                          <button
+                            key={`${b.sourceSlug}→${b.targetSlug}`}
+                            type="button"
+                            onClick={() => handleNavigate(b.sourceSlug)}
+                            className="block w-full text-left py-0.5 hover:text-foreground"
+                          >
+                            <span className="text-muted-foreground">
+                              {b.sourceTitle}
+                            </span>{" "}
+                            →{" "}
+                            <code className="text-rose-600 text-[10px]">
+                              [[{b.targetSlug}]]
+                            </code>
+                          </button>
+                        ))}
+                      </HealthSection>
+                    )}
+                    {lint.orphans.length > 0 && (
+                      <HealthSection label={`Orphans (${lint.orphans.length})`}>
+                        {lint.orphans.map((o) => (
+                          <button
+                            key={o.slug}
+                            type="button"
+                            onClick={() => handleNavigate(o.slug)}
+                            className="block w-full text-left py-0.5 text-muted-foreground hover:text-foreground"
+                          >
+                            {o.title}
+                          </button>
+                        ))}
+                      </HealthSection>
+                    )}
+                    {lint.stubs.length > 0 && (
+                      <HealthSection label={`Stubs (${lint.stubs.length})`}>
+                        {lint.stubs.map((s) => (
+                          <button
+                            key={s.slug}
+                            type="button"
+                            onClick={() => handleNavigate(s.slug)}
+                            className="block w-full text-left py-0.5 text-muted-foreground hover:text-foreground"
+                          >
+                            {s.title}
+                            <span className="ml-1 text-[9px] opacity-60">
+                              {s.wordCount} words
+                            </span>
+                          </button>
+                        ))}
+                      </HealthSection>
+                    )}
+                    {lint.stale.length > 0 && (
+                      <HealthSection label={`Stale (${lint.stale.length})`}>
+                        {lint.stale.map((s) => (
+                          <button
+                            key={s.slug}
+                            type="button"
+                            onClick={() => handleNavigate(s.slug)}
+                            className="block w-full text-left py-0.5 text-muted-foreground hover:text-foreground"
+                          >
+                            {s.title}
+                            <span className="ml-1 text-[9px] opacity-60">
+                              {s.ageDays}d old
+                            </span>
+                          </button>
+                        ))}
+                      </HealthSection>
+                    )}
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          )}
         </aside>
 
-        {/* Right panel \u2014 page content */}
+        {/* Right panel — page content */}
         <main className="flex-1 min-w-0 overflow-y-auto">
           {selectedPage ? (
             <div className="max-w-3xl mx-auto px-8 py-6">
-              <WikiPageView
-                page={selectedPage}
-                onNavigate={handleNavigate}
-              />
+              <WikiPageView page={selectedPage} onNavigate={handleNavigate} />
             </div>
           ) : (
             <div className="flex items-center justify-center h-full px-6">
@@ -223,5 +509,23 @@ export default function WikiBrowsePage() {
         </main>
       </div>
     </DashboardLayout>
+  );
+}
+
+function HealthSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-1">
+      <h3 className="flex items-center gap-1 font-semibold uppercase tracking-wider text-[10px] text-amber-700">
+        <AlertTriangle className="size-3" strokeWidth={2} />
+        {label}
+      </h3>
+      <div className="pl-3 space-y-0">{children}</div>
+    </section>
   );
 }
