@@ -16,6 +16,7 @@ import {
   type ChatMessage,
 } from "@/lib/reviews";
 import { invalidateExploreCache } from "@/lib/client-data";
+import { extractWikiFromResponse } from "@/lib/wiki-chat-extract";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
@@ -373,6 +374,24 @@ export function useChat({
         if (touchedGraph) {
           invalidateExploreCache(reviewId);
         }
+
+        // Ambient: extract any wiki-worthy concepts from the assistant's
+        // response in the background. Fire-and-forget — never blocks the
+        // UI and silently rate-limits itself per review.
+        if (content && selectedModel && isModelReady(selectedModel)) {
+          const apiKey = isInferenceProviderType(selectedModel.provider)
+            ? ""
+            : (getApiKey(selectedModel.provider) ?? "");
+          void extractWikiFromResponse({
+            responseText: content,
+            paperTitle,
+            reviewId,
+            model: selectedModel,
+            apiKey,
+          }).catch(() => {
+            /* ambient: ignore */
+          });
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
@@ -506,6 +525,22 @@ export function useChat({
         setThreadStream(thread);
         await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
+
+        // Ambient wiki extraction from thread replies as well.
+        if (content && selectedModel && isModelReady(selectedModel)) {
+          const apiKey = isInferenceProviderType(selectedModel.provider)
+            ? ""
+            : (getApiKey(selectedModel.provider) ?? "");
+          void extractWikiFromResponse({
+            responseText: content,
+            paperTitle,
+            reviewId,
+            model: selectedModel,
+            apiKey,
+          }).catch(() => {
+            /* ambient: ignore */
+          });
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";

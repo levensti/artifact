@@ -16,6 +16,10 @@ import {
 } from "@/lib/reviews";
 import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
 import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
+import {
+  getWikiIngestSnapshot,
+  subscribeWikiStatus,
+} from "@/lib/wiki-status";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -78,6 +82,23 @@ export default function Sidebar({
       wikiPageCount: parsed.wikiPageCount ?? 0,
     };
   }, [reviewsJson]);
+
+  // Ambient ingest status — shows a pulsing dot + label beside the
+  // Knowledge Base button whenever a background wiki operation is in flight.
+  const activeIngests = useSyncExternalStore(
+    subscribeWikiStatus,
+    getWikiIngestSnapshot,
+    getWikiIngestSnapshot,
+  );
+  const ingestActive = activeIngests.length > 0;
+  const ingestLabel = useMemo(() => {
+    if (activeIngests.length === 0) return null;
+    if (activeIngests.length === 1) {
+      const only = activeIngests[0];
+      return only.kind === "paper" ? "Reading…" : "Syncing…";
+    }
+    return `${activeIngests.length} running`;
+  }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
@@ -173,6 +194,11 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => router.push("/wiki")}
+            title={
+              ingestActive
+                ? `Knowledge base: ${wikiPageCount} pages · ${ingestLabel}`
+                : `Knowledge base: ${wikiPageCount} pages`
+            }
             className={cn(
               "flex w-full min-h-10 items-center gap-2 rounded-lg px-0 pr-1.5 py-0 text-left text-sm font-medium transition-colors duration-150",
               pathname === "/wiki"
@@ -180,10 +206,21 @@ export default function Sidebar({
                 : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-[3px] border-l-transparent",
             )}
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+            <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
               <BookOpen className="size-4 opacity-50" strokeWidth={1.75} />
+              {ingestActive ? (
+                <span
+                  aria-hidden
+                  className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
+                />
+              ) : null}
             </span>
-            <span>Knowledge Base</span>
+            <span className="flex-1 truncate">Knowledge Base</span>
+            {ingestActive ? (
+              <span className="ml-1 text-[10px] font-medium italic text-primary/80 animate-pulse">
+                {ingestLabel}
+              </span>
+            ) : null}
             {wikiPageCount > 0 ? (
               <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold leading-none text-primary tabular-nums shadow-sm shadow-primary/10">
                 {wikiPageCount}

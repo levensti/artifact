@@ -33,9 +33,9 @@ export default function WikiBrowsePage() {
   const [ready, setReady] = useState(false);
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [search, setSearch] = useState("");
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(
-    searchParams.get("page"),
-  );
+  // Derive selected slug directly from URL state — avoids a cascading
+  // setState effect and keeps URL as the single source of truth.
+  const selectedSlug = searchParams.get("page");
 
   // Load pages
   const refreshPages = useCallback(async () => {
@@ -53,17 +53,8 @@ export default function WikiBrowsePage() {
     return () => window.removeEventListener(WIKI_UPDATED_EVENT, handler);
   }, [refreshPages]);
 
-  // Sync URL param
-  useEffect(() => {
-    const slugFromUrl = searchParams.get("page");
-    if (slugFromUrl && slugFromUrl !== selectedSlug) {
-      setSelectedSlug(slugFromUrl);
-    }
-  }, [searchParams, selectedSlug]);
-
   const handleNavigate = useCallback(
     (slug: string) => {
-      setSelectedSlug(slug);
       router.push(`/wiki?page=${encodeURIComponent(slug)}`, { scroll: false });
     },
     [router],

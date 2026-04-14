@@ -11,6 +11,7 @@ import { isInferenceProviderType } from "@/lib/models";
 import { isModelReady, getApiKey } from "@/lib/keys";
 import { checkWikiIngested } from "@/lib/client-data";
 import { runWikiIngest } from "@/lib/wiki-ingest";
+import { beginWikiIngest, endWikiIngest } from "@/lib/wiki-status";
 
 interface UseAutoWikiIngestOptions {
   reviewId: string;
@@ -38,6 +39,7 @@ export function useAutoWikiIngest({
     let cancelled = false;
 
     void (async () => {
+      let token: number | null = null;
       try {
         const ingested = await checkWikiIngested(reviewId);
         if (ingested || cancelled) return;
@@ -47,6 +49,11 @@ export function useAutoWikiIngest({
         const apiKey = isInferenceProviderType(selectedModel.provider)
           ? ""
           : (getApiKey(selectedModel.provider) ?? "");
+
+        token = beginWikiIngest({
+          kind: "paper",
+          label: paperTitle || "Paper",
+        });
 
         await runWikiIngest({
           reviewId,
@@ -58,6 +65,8 @@ export function useAutoWikiIngest({
         });
       } catch {
         // Silent — ambient operation, failures don't disrupt reading
+      } finally {
+        if (token !== null) endWikiIngest(token);
       }
     })();
 

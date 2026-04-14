@@ -17,12 +17,14 @@ import type {
   PrerequisitesData,
 } from "@/lib/explore";
 import { mergeGlobalGraphSession } from "@/lib/explore-merge";
+import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
   DEEP_DIVES_UPDATED_EVENT,
   EXPLORE_UPDATED_EVENT,
   KEYS_UPDATED_EVENT,
+  WIKI_UPDATED_EVENT,
 } from "@/lib/storage-events";
 
 async function apiJson<T>(
@@ -339,6 +341,156 @@ export async function clearGlobalKnowledgeGraph(): Promise<void> {
   globalGraphCache = null;
   await apiJson("/explore/global", { method: "DELETE" });
   window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+}
+
+/* ── Wiki (ambient knowledge base) ──────────────────────────────── */
+/**
+ * Client bridge to the SQLite-backed /api/data/wiki/* routes. The cache
+ * is optimistic: mutations update local state immediately and dispatch
+ * WIKI_UPDATED_EVENT so `useSyncExternalStore` subscribers (sidebar,
+ * browse page) re-render without waiting for the next fetch.
+ */
+
+let wikiPagesCache: WikiPage[] | null = null;
+let wikiPagesInflight: Promise<WikiPage[]> | null = null;
+const wikiIngestedCache = new Map<string, boolean>();
+
+function notifyWikiUpdated(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(WIKI_UPDATED_EVENT));
+}
+
+function upsertWikiPageInCache(page: WikiPage): void {
+  if (!wikiPagesCache) {
+    wikiPagesCache = [page];
+    return;
+  }
+  const idx = wikiPagesCache.findIndex((p) => p.slug === page.slug);
+  if (idx >= 0) {
+    wikiPagesCache = [
+      ...wikiPagesCache.slice(0, idx),
+      page,
+      ...wikiPagesCache.slice(idx + 1),
+    ];
+  } else {
+    wikiPagesCache = [...wikiPagesCache, page];
+  }
+}
+
+/** Synchronous snapshot for useSyncExternalStore. null until first load. */
+export function getWikiCacheSnapshot(): WikiPage[] | null {
+  return wikiPagesCache;
+}
+
+/** Fetch all wiki pages (cached). Safe to call repeatedly. */
+export async function loadWikiPages(): Promise<WikiPage[]> {
+  if (wikiPagesCache) return wikiPagesCache;
+  if (wikiPagesInflight) return wikiPagesInflight;
+  wikiPagesInflight = (async () => {
+    try {
+      const list = await apiJson<WikiPage[]>("/wiki");
+      wikiPagesCache = list;
+      notifyWikiUpdated();
+      return list;
+    } finally {
+      wikiPagesInflight = null;
+    }
+  })();
+  return wikiPagesInflight;
+}
+
+/** Fetch a single wiki page by slug, or null if it doesn't exist. */
+export async function loadWikiPage(slug: string): Promise<WikiPage | null> {
+  if (!slug?.trim()) return null;
+  // Prefer cache if we have a full list.
+  if (wikiPagesCache) {
+    const hit = wikiPagesCache.find((p) => p.slug === slug);
+    if (hit) return hit;
+  }
+  try {
+    const page = await apiJson<WikiPage>(
+      `/wiki/${encodeURIComponent(slug)}`,
+    );
+    upsertWikiPageInCache(page);
+    return page;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export interface SaveWikiPageInput {
+  slug: string;
+  title: string;
+  content: string;
+  pageType: WikiPageType;
+  /** Optional: link this page to a review/paper as a source. */
+  reviewId?: string;
+}
+
+/** Create or upsert a wiki page. Always dispatches WIKI_UPDATED_EVENT. */
+export async function saveWikiPage(
+  input: SaveWikiPageInput,
+): Promise<WikiPage> {
+  const page = await apiJson<WikiPage>("/wiki", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  upsertWikiPageInCache(page);
+  if (input.reviewId) wikiIngestedCache.set(input.reviewId, true);
+  notifyWikiUpdated();
+  return page;
+}
+
+/** Partial update of an existing wiki page. */
+export async function updateWikiPage(
+  slug: string,
+  patch: { title?: string; content?: string; pageType?: WikiPageType },
+): Promise<WikiPage> {
+  const page = await apiJson<WikiPage>(
+    `/wiki/${encodeURIComponent(slug)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    },
+  );
+  upsertWikiPageInCache(page);
+  notifyWikiUpdated();
+  return page;
+}
+
+/** Delete a wiki page by slug. */
+export async function deleteWikiPage(slug: string): Promise<void> {
+  await apiJson(`/wiki/${encodeURIComponent(slug)}`, { method: "DELETE" });
+  if (wikiPagesCache) {
+    wikiPagesCache = wikiPagesCache.filter((p) => p.slug !== slug);
+  }
+  notifyWikiUpdated();
+}
+
+/** Has this review already been ingested into the wiki? */
+export async function checkWikiIngested(reviewId: string): Promise<boolean> {
+  if (!reviewId?.trim()) return false;
+  const cached = wikiIngestedCache.get(reviewId);
+  if (cached !== undefined) return cached;
+  const res = await apiJson<{ ingested: boolean }>(
+    `/wiki/check?reviewId=${encodeURIComponent(reviewId)}`,
+  );
+  wikiIngestedCache.set(reviewId, res.ingested);
+  return res.ingested;
+}
+
+/**
+ * Clear local wiki cache and notify subscribers. Used by ingest
+ * pipelines after they finish writing so readers re-fetch fresh data.
+ */
+export function invalidateWikiCache(): void {
+  wikiPagesCache = null;
+  wikiPagesInflight = null;
+  notifyWikiUpdated();
 }
 
 /* ── Settings / keys ── */

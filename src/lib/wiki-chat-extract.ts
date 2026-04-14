@@ -9,6 +9,7 @@ import type { Model } from "@/lib/models";
 import { isInferenceProviderType } from "@/lib/models";
 import type { WikiPageType } from "@/lib/wiki";
 import { saveWikiPage, invalidateWikiCache } from "@/lib/client-data";
+import { beginWikiIngest, endWikiIngest } from "@/lib/wiki-status";
 
 /* ── Rate limiting ── */
 
@@ -85,15 +86,29 @@ export interface ExtractWikiFromResponseOptions {
 export async function extractWikiFromResponse(
   opts: ExtractWikiFromResponseOptions,
 ): Promise<void> {
-  const { responseText, paperTitle, reviewId, model, apiKey } = opts;
-
   // Guard: response too short
-  if (responseText.length < 300) return;
+  if (opts.responseText.length < 300) return;
 
   // Guard: rate limit per review
-  const lastTime = lastExtractTime.get(reviewId) ?? 0;
+  const lastTime = lastExtractTime.get(opts.reviewId) ?? 0;
   if (Date.now() - lastTime < RATE_LIMIT_MS) return;
-  lastExtractTime.set(reviewId, Date.now());
+  lastExtractTime.set(opts.reviewId, Date.now());
+
+  const statusToken = beginWikiIngest({
+    kind: "chat-extract",
+    label: opts.paperTitle ? `From chat: ${opts.paperTitle}` : "From chat",
+  });
+  try {
+    await runExtract(opts);
+  } finally {
+    endWikiIngest(statusToken);
+  }
+}
+
+async function runExtract(
+  opts: ExtractWikiFromResponseOptions,
+): Promise<void> {
+  const { responseText, paperTitle, reviewId, model, apiKey } = opts;
 
   const prompt = `You are analyzing an assistant response from a paper review conversation to extract knowledge worth preserving in a wiki.
 
