@@ -14,6 +14,7 @@ import type {
   GraphData,
   PrerequisitesData,
 } from "@/lib/explore";
+import type { WikiPage, WikiPageType } from "@/lib/wiki";
 
 const DB_PATH = path.join(process.cwd(), "data", "artifact.db");
 
@@ -92,6 +93,7 @@ function initSchema(db: Database.Database) {
   migrateDeepDivesReviewFk(db);
   migrateReviewsLocalPdf(db);
   migrateReviewsSourceUrl(db);
+  migrateWikiPages(db);
 }
 
 /** Older DBs created deep_dives without a FK; recreate so DELETE FROM reviews cascades. */
@@ -538,6 +540,129 @@ export function patchSettings(patch: {
   if ("selectedModel" in patch) {
     setSelectedModel(patch.selectedModel ?? null);
   }
+}
+
+/* ── Wiki pages ── */
+
+/** Add wiki_pages and wiki_page_sources tables (idempotent migration). */
+function migrateWikiPages(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wiki_pages (
+      id TEXT PRIMARY KEY,
+      slug TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      page_type TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_slug ON wiki_pages(slug);
+    CREATE INDEX IF NOT EXISTS idx_wiki_type ON wiki_pages(page_type);
+
+    CREATE TABLE IF NOT EXISTS wiki_page_sources (
+      page_id TEXT NOT NULL,
+      review_id TEXT NOT NULL,
+      PRIMARY KEY (page_id, review_id),
+      FOREIGN KEY (page_id) REFERENCES wiki_pages(id) ON DELETE CASCADE,
+      FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+    );
+  `);
+}
+
+export function listWikiPages(): WikiPage[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT id, slug, title, content, page_type AS pageType,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM wiki_pages ORDER BY datetime(updated_at) DESC`,
+    )
+    .all() as WikiPage[];
+}
+
+export function getWikiPageBySlug(slug: string): WikiPage | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT id, slug, title, content, page_type AS pageType,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM wiki_pages WHERE slug = ?`,
+    )
+    .get(slug) as WikiPage | undefined;
+  return row ?? null;
+}
+
+export function upsertWikiPage(page: {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  pageType: WikiPageType;
+}): void {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
+     VALUES (@id, @slug, @title, @content, @page_type, @now, @now)
+     ON CONFLICT(slug) DO UPDATE SET
+       title = excluded.title,
+       content = excluded.content,
+       page_type = excluded.page_type,
+       updated_at = excluded.updated_at`,
+  ).run({
+    id: page.id,
+    slug: page.slug,
+    title: page.title,
+    content: page.content,
+    page_type: page.pageType,
+    now,
+  });
+}
+
+export function deleteWikiPage(id: string): void {
+  const db = getDb();
+  db.prepare(`DELETE FROM wiki_pages WHERE id = ?`).run(id);
+}
+
+export function addWikiPageSource(pageId: string, reviewId: string): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO wiki_page_sources (page_id, review_id) VALUES (?, ?)
+     ON CONFLICT DO NOTHING`,
+  ).run(pageId, reviewId);
+}
+
+export function hasWikiSourcesForReview(reviewId: string): boolean {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT 1 FROM wiki_page_sources WHERE review_id = ? LIMIT 1`,
+    )
+    .get(reviewId);
+  return !!row;
+}
+
+export function searchWikiPages(query: string): WikiPage[] {
+  const db = getDb();
+  const pattern = `%${query}%`;
+  return db
+    .prepare(
+      `SELECT id, slug, title, content, page_type AS pageType,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM wiki_pages
+       WHERE title LIKE ? OR content LIKE ?
+       ORDER BY datetime(updated_at) DESC
+       LIMIT 20`,
+    )
+    .all(pattern, pattern) as WikiPage[];
+}
+
+export function getWikiPageCount(): number {
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT COUNT(*) AS cnt FROM wiki_pages WHERE page_type NOT IN ('index', 'log')`)
+    .get() as { cnt: number };
+  return row.cnt;
 }
 
 /* ── Bootstrap ── */
