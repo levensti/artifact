@@ -21,11 +21,19 @@ npm install
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000), add API keys under Settings, then open a paper by arXiv ID, paste an arbitrary paper or web URL, or upload a local PDF—the reader loads it directly in the browser.
+Open [localhost:3000](http://localhost:3000) and add your API keys under Settings.
 
 ## Using Artifact
 
-Open a paper (or web page) to get the content next to Assistant, Notes, and Explore. Read and ask with selection-scoped questions; run **Analyze** once per source to fill prerequisites, related candidates, and the shared graph. Use **Discovery** to browse how analyzed papers relate and what to open next, and check the **Journal** for an ambient wiki that captures what you've learned across sessions and feeds it back into chat.
+**Open anything.** Artifact reads from multiple sources so you can work with whatever you have in front of you:
+
+- **arXiv ID** — paste an ID like `2401.12345` and the paper loads straight from arXiv.
+- **Paper or web URL** — drop in any paper link or arbitrary web page; the content is cleaned and rendered alongside the assistant.
+- **Local PDF upload** — pick a PDF from your machine and it's stored locally in your browser (IndexedDB), ready to read and query.
+
+Once a source is open, you get the content next to Assistant, Notes, and Explore. Ask selection-scoped questions, and run **Analyze** once per source to fill prerequisites, related candidates, and the shared graph. Use **Discovery** to browse how analyzed papers relate and what to open next.
+
+**Ambient Journal.** As you read and chat, Artifact quietly builds a personal wiki of what you're learning. The **Journal** captures key concepts, definitions, and connections across sessions, then feeds that context back into future chats so the assistant remembers what you already know — without you having to re-explain or re-link anything.
 
 ![Knowledge graph — related papers mapped across sessions](docs/knowledge-graph.png)
 
