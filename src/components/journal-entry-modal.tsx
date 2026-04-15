@@ -7,9 +7,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { BookMarked, Check, Loader2, Pencil, Sparkles, X } from "lucide-react";
+import { BookMarked, Check, Loader2, Pencil, Share2, Sparkles, X } from "lucide-react";
 import type { WikiPage } from "@/lib/wiki";
 import { updateWikiPage } from "@/lib/client-data";
+import { exportWikiToFile } from "@/lib/client/sharing/export-wiki";
 import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
 import MarkdownMessage from "./markdown-message";
@@ -30,6 +31,9 @@ export default function JournalEntryModal({
   const [draftTitle, setDraftTitle] = useState(page.title);
   const [draftContent, setDraftContent] = useState(page.content);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [shareStatus, setShareStatus] = useState<
+    "idle" | "sharing" | "error"
+  >("idle");
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -114,6 +118,19 @@ export default function JournalEntryModal({
   const isDigest = page.pageType === "digest";
   const updatedLabel = formatRelative(page.updatedAt);
 
+  const handleShare = async () => {
+    setShareStatus("sharing");
+    try {
+      // Default depth 1: bundle this page plus directly-linked pages so a
+      // recipient can follow at least one hop of [[slug]] references.
+      await exportWikiToFile(page.slug, { depth: 1 });
+      setShareStatus("idle");
+    } catch {
+      setShareStatus("error");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4 py-8"
@@ -144,6 +161,27 @@ export default function JournalEntryModal({
 
             <div className="ml-auto flex items-center gap-2">
               {isEditing ? <SaveIndicator status={saveStatus} /> : null}
+              {!isEditing ? (
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  disabled={shareStatus === "sharing"}
+                  title={
+                    shareStatus === "error"
+                      ? "Failed to export — try again"
+                      : "Export this entry as a shareable file"
+                  }
+                  aria-label="Share entry"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:text-foreground disabled:opacity-50"
+                >
+                  {shareStatus === "sharing" ? (
+                    <Loader2 className="size-3 animate-spin" strokeWidth={2} />
+                  ) : (
+                    <Share2 className="size-3" strokeWidth={2} />
+                  )}
+                  Share
+                </button>
+              ) : null}
               {isEditing ? (
                 <button
                   type="button"

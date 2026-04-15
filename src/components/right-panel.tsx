@@ -50,7 +50,7 @@ export default function RightPanel({
             Assistant
           </span>
         </div>
-        <div className="min-w-0 shrink-0">
+        <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           <ModelSelector selected={selectedModel} onSelect={onModelChange} />
         </div>
       </header>
