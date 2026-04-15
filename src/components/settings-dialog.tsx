@@ -34,7 +34,7 @@ interface ProviderRowProps {
   docsUrl: string;
 }
 
-function ProviderRow({ provider, placeholder }: ProviderRowProps) {
+export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
   const meta = PROVIDER_META[provider];
   const [value, setValue] = useState(() => getApiKey(provider) ?? "");
   const [visible, setVisible] = useState(false);

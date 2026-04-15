@@ -2,10 +2,11 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, Search, Terminal } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import JournalCard, { type JournalEntry } from "@/components/journal-card";
 import JournalEntryModal from "@/components/journal-entry-modal";
+import JournalImportModal from "@/components/journal-import-modal";
 import {
   getSavedSelectedModel,
   hydrateClientStore,
@@ -16,6 +17,13 @@ import type { WikiPage } from "@/lib/wiki";
 import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import { localDateKey } from "@/lib/date-keys";
 import { maybeRefreshJournal } from "@/lib/wiki-journal-agent";
+import { enumerateSessions } from "@/lib/cc-import/enumerate";
+import {
+  ensurePermission,
+  getStoredHandle,
+  isFileSystemAccessSupported,
+} from "@/lib/cc-import/handle-store";
+import { getAllImported } from "@/lib/cc-import/imported-store";
 
 function dateFromSessionSlug(slug: string): Date | null {
   // Matches both `session-YYYY-MM-DD` and topic-sharded variants like
@@ -60,6 +68,8 @@ function JournalPageInner() {
   const [reloadTick, setReloadTick] = useState(0);
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [search, setSearch] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [ccNewCount, setCcNewCount] = useState(0);
   const selectedSlug = searchParams.get("page");
 
   const refreshPages = useCallback(async () => {
@@ -109,6 +119,42 @@ function JournalPageInner() {
       window.removeEventListener(WIKI_UPDATED_EVENT, handler);
     };
   }, [refreshPages, reloadTick]);
+
+  // Ambient check: if the user has previously granted access to their
+  // ~/.claude/projects directory, count how many sessions are not yet
+  // imported so we can badge the toolbar Import button.
+  const refreshCcNewCount = useCallback(async () => {
+    if (!isFileSystemAccessSupported()) {
+      setCcNewCount(0);
+      return;
+    }
+    try {
+      const handle = await getStoredHandle();
+      if (!handle) {
+        setCcNewCount(0);
+        return;
+      }
+      // queryPermission only — never request on background load (no
+      // user gesture). The badge silently disappears if the browser
+      // dropped permission.
+      const state = await ensurePermission(handle);
+      if (state !== "granted") {
+        setCcNewCount(0);
+        return;
+      }
+      const sessions = await enumerateSessions(handle);
+      const imported = getAllImported();
+      let n = 0;
+      for (const s of sessions) if (!(s.sessionId in imported)) n++;
+      setCcNewCount(n);
+    } catch {
+      setCcNewCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCcNewCount();
+  }, [refreshCcNewCount, reloadTick]);
 
   const openPage = useCallback(
     (slug: string) => {
@@ -225,6 +271,14 @@ function JournalPageInner() {
                 Read a paper to start your first study session. As you work, a
                 daily recap and weekly digest will appear here automatically.
               </p>
+              <button
+                type="button"
+                onClick={() => setImportOpen(true)}
+                className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-primary/80 underline-offset-4 hover:text-primary hover:underline"
+              >
+                <Terminal className="size-[13px]" />
+                Or import a Claude Code session
+              </button>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] text-muted-foreground/70">
               <span>One page per day</span>
@@ -235,6 +289,16 @@ function JournalPageInner() {
             </div>
           </div>
         </div>
+        {importOpen ? (
+          <JournalImportModal
+            onClose={() => {
+              setImportOpen(false);
+              void refreshCcNewCount();
+              void refreshPages();
+              setReloadTick((t) => t + 1);
+            }}
+          />
+        ) : null}
       </DashboardLayout>
     );
   }
@@ -280,6 +344,19 @@ function JournalPageInner() {
                 Today
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              title="Import from Claude Code"
+              className="relative rounded-xl border border-border/60 bg-card px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:text-foreground"
+            >
+              <Terminal className="size-[13px]" />
+              {ccNewCount > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground shadow-sm">
+                  {ccNewCount > 99 ? "99+" : ccNewCount}
+                </span>
+              ) : null}
+            </button>
           </div>
 
           {/* Grid */}
@@ -298,6 +375,16 @@ function JournalPageInner() {
           )}
         </div>
       </div>
+
+      {importOpen ? (
+        <JournalImportModal
+          onClose={() => {
+            setImportOpen(false);
+            void refreshCcNewCount();
+            void refreshPages();
+          }}
+        />
+      ) : null}
 
       {selectedPage ? (
         <JournalEntryModal page={selectedPage} onClose={closeModal} />
