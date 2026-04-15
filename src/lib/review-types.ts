@@ -47,4 +47,6 @@ export interface PaperReview {
   pdfPath: string | null;
   /** Source URL for arbitrary web pages. Null for arXiv papers and local PDFs. */
   sourceUrl: string | null;
+  /** ISO timestamp set when this review arrived via share-bundle import. Drives the sidebar "Imported" badge. */
+  importedAt?: string;
 }
