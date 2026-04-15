@@ -42,20 +42,36 @@ export async function enumerateSessions(
   const max = opts.maxSessions ?? 500;
   const out: CcSessionMeta[] = [];
 
-  for await (const projectEntry of iterEntries(root)) {
-    if (projectEntry.kind !== "directory") continue;
-    const projectDir = projectEntry as FileSystemDirectoryHandle;
-
-    for await (const fileEntry of iterEntries(projectDir)) {
-      if (fileEntry.kind !== "file") continue;
-      if (!fileEntry.name.toLowerCase().endsWith(".jsonl")) continue;
+  // Two supported layouts:
+  //   1. User picked `~/.claude/projects` — iterate sub-dirs for jsonls.
+  //   2. User picked a single project dir — iterate its jsonls directly.
+  // We handle both in one pass by also collecting any jsonls found at
+  // the root level.
+  for await (const entry of iterEntries(root)) {
+    if (entry.kind === "directory") {
+      const projectDir = entry as FileSystemDirectoryHandle;
+      for await (const fileEntry of iterEntries(projectDir)) {
+        if (fileEntry.kind !== "file") continue;
+        if (!fileEntry.name.toLowerCase().endsWith(".jsonl")) continue;
+        try {
+          const meta = await readMeta(
+            fileEntry as FileSystemFileHandle,
+            projectDir.name,
+          );
+          if (meta) out.push(meta);
+          if (out.length >= max) break;
+        } catch {
+          /* skip broken file */
+        }
+      }
+    } else if (entry.kind === "file") {
+      if (!entry.name.toLowerCase().endsWith(".jsonl")) continue;
       try {
         const meta = await readMeta(
-          fileEntry as FileSystemFileHandle,
-          projectDir.name,
+          entry as FileSystemFileHandle,
+          root.name,
         );
         if (meta) out.push(meta);
-        if (out.length >= max) break;
       } catch {
         /* skip broken file */
       }
@@ -77,10 +93,10 @@ export async function readSessionById(
   root: FileSystemDirectoryHandle,
   sessionId: string,
 ): Promise<ParsedCcSession | null> {
-  for await (const projectEntry of iterEntries(root)) {
-    if (projectEntry.kind !== "directory") continue;
-    const projectDir = projectEntry as FileSystemDirectoryHandle;
-    for await (const fileEntry of iterEntries(projectDir)) {
+  const matchInDir = async (
+    dir: FileSystemDirectoryHandle,
+  ): Promise<ParsedCcSession | null> => {
+    for await (const fileEntry of iterEntries(dir)) {
       if (fileEntry.kind !== "file") continue;
       const stem = fileEntry.name.replace(/\.jsonl$/i, "");
       if (stem !== sessionId) continue;
@@ -88,11 +104,23 @@ export async function readSessionById(
       const text = await file.text();
       return parseSession({
         fileName: fileEntry.name,
-        parentDirName: projectDir.name,
+        parentDirName: dir.name,
         byteSize: file.size,
         text,
       });
     }
+    return null;
+  };
+
+  // Root-level files first (project-folder pick), then one level deeper
+  // (projects-root pick).
+  const rootHit = await matchInDir(root);
+  if (rootHit) return rootHit;
+
+  for await (const entry of iterEntries(root)) {
+    if (entry.kind !== "directory") continue;
+    const hit = await matchInDir(entry as FileSystemDirectoryHandle);
+    if (hit) return hit;
   }
   return null;
 }

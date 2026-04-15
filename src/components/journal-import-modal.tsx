@@ -23,8 +23,10 @@ import {
   CheckCircle2,
   CircleDashed,
   FolderOpen,
+  Key,
   Loader2,
   RefreshCw,
+  Search,
   Terminal,
   X,
 } from "lucide-react";
@@ -38,14 +40,23 @@ import {
 import { enumerateSessions, readSessionById } from "@/lib/cc-import/enumerate";
 import { getAllImported } from "@/lib/cc-import/imported-store";
 import {
+  COMBINED_PROGRESS_ID,
   importCcSessions,
   type ImportProgress,
 } from "@/lib/cc-import/import-agent";
 import type { CcSessionMeta } from "@/lib/cc-import/types";
-import { getSavedSelectedModel } from "@/lib/client-data";
-import { isModelReady, resolveModelCredentials } from "@/lib/keys";
+import {
+  getSavedSelectedModel,
+  hasAnySavedApiKey,
+  saveSelectedModel,
+} from "@/lib/client-data";
+import { isModelReady, resolveModelCredentials, KEYS_UPDATED_EVENT } from "@/lib/keys";
+import { FALLBACK_MODELS } from "@/lib/models";
 import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
+import SettingsDialog, { ProviderRow } from "@/components/settings-dialog";
+import ModelSelector from "@/components/model-selector";
+import type { Model } from "@/lib/models";
 
 interface JournalImportModalProps {
   onClose: () => void;
@@ -79,6 +90,55 @@ export default function JournalImportModal({
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"all" | "new">("new");
+  const [query, setQuery] = useState("");
+  const [mergeMode, setMergeMode] = useState<"separate" | "combined">("separate");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedModel, setSelectedModelState] = useState<Model | null>(() =>
+    getSavedSelectedModel(),
+  );
+
+  // Keep the local selected model in sync with the global setting so
+  // that external selectors (main app) stay authoritative.
+  useEffect(() => {
+    const sync = () => setSelectedModelState(getSavedSelectedModel());
+    window.addEventListener(KEYS_UPDATED_EVENT, sync);
+    return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
+  }, []);
+
+  const handleModelSelect = useCallback((m: Model | null) => {
+    setSelectedModelState(m);
+    void saveSelectedModel(m);
+  }, []);
+
+  // Tracks whether the user has at least one API key saved so the
+  // Import button can flip from disabled to enabled without a reload.
+  const [hasKey, setHasKey] = useState<boolean>(() => hasAnySavedApiKey());
+  useEffect(() => {
+    const sync = () => setHasKey(hasAnySavedApiKey());
+    window.addEventListener(KEYS_UPDATED_EVENT, sync);
+    return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
+  }, []);
+
+  // Popover for the compact key-entry UI anchored in the footer.
+  const [keyMenuOpen, setKeyMenuOpen] = useState(false);
+  const keyMenuRef = useRef<HTMLDivElement | null>(null);
+  // Close popover the moment a key is saved — the reason for showing
+  // it is gone.
+  useEffect(() => {
+    if (hasKey) setKeyMenuOpen(false);
+  }, [hasKey]);
+  // Outside click dismissal.
+  useEffect(() => {
+    if (!keyMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!keyMenuRef.current) return;
+      if (!keyMenuRef.current.contains(e.target as Node)) {
+        setKeyMenuOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [keyMenuOpen]);
   const handleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
   // Snapshot of localStorage's imported-sessions map. We refresh it
@@ -132,11 +192,12 @@ export default function JournalImportModal({
   /* ---- close on Escape ---- */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (settingsOpen) return; // let the settings dialog own Escape
       if (e.key === "Escape" && phase.kind !== "importing") onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, phase.kind]);
+  }, [onClose, phase.kind, settingsOpen]);
 
   /* ---- actions ---- */
 
@@ -206,22 +267,29 @@ export default function JournalImportModal({
     if (!handle || phase.kind !== "ready") return;
     if (selected.size === 0) return;
 
-    const model = getSavedSelectedModel();
+    let model = selectedModel ?? getSavedSelectedModel();
     if (!model || !isModelReady(model)) {
-      setPhase({
-        kind: "error",
-        message: "Add an API key in Settings before importing — the journal agent needs a model to call.",
-      });
-      return;
+      // Auto-fallback: user has a key but never picked a model. This
+      // shouldn't happen anymore since the Import button is disabled
+      // until a key is saved, but keep the safety net.
+      if (hasAnySavedApiKey()) {
+        const fallback = FALLBACK_MODELS.find((m) => {
+          try {
+            return isModelReady(m);
+          } catch {
+            return false;
+          }
+        });
+        if (fallback) {
+          await saveSelectedModel(fallback);
+          setSelectedModelState(fallback);
+          model = fallback;
+        }
+      }
+      if (!model || !isModelReady(model)) return;
     }
     const creds = resolveModelCredentials(model);
-    if (!creds) {
-      setPhase({
-        kind: "error",
-        message: "Selected model is missing credentials. Check Settings.",
-      });
-      return;
-    }
+    if (!creds) return;
 
     // Read full transcripts for the selected ids.
     const ids = [...selected];
@@ -231,14 +299,18 @@ export default function JournalImportModal({
       if (session) parsed.push(session);
     }
 
+    const effectiveMode: "separate" | "combined" =
+      mergeMode === "combined" && parsed.length > 1 ? "combined" : "separate";
+
     setPhase({
       kind: "importing",
       progress: new Map(),
-      total: parsed.length,
+      total: effectiveMode === "combined" ? 1 : parsed.length,
     });
 
     const result = await importCcSessions({
       sessions: parsed,
+      mode: effectiveMode,
       model,
       apiKey: creds.apiKey,
       apiBaseUrl: creds.apiBaseUrl,
@@ -269,20 +341,60 @@ export default function JournalImportModal({
       errorCount: result.errors.length,
     });
     refreshImportedMap();
-  }, [phase, selected, onImported, refreshImportedMap]);
+  }, [phase, selected, mergeMode, selectedModel, onImported, refreshImportedMap]);
 
   /* ---- derived ---- */
 
   const visibleSessions = useMemo(() => {
     if (phase.kind !== "ready") return [];
-    if (filter === "all") return phase.sessions;
-    return phase.sessions.filter((s) => !(s.sessionId in importedMap));
-  }, [phase, filter, importedMap]);
+    const base =
+      filter === "all"
+        ? phase.sessions
+        : phase.sessions.filter((s) => !(s.sessionId in importedMap));
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((s) => {
+      const haystack = [
+        s.summary,
+        s.firstUserMessage,
+        s.projectLabel,
+        s.projectPath,
+        s.sessionId,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [phase, filter, importedMap, query]);
 
   const newCount = useMemo(() => {
     if (phase.kind !== "ready") return 0;
     return phase.sessions.filter((s) => !(s.sessionId in importedMap)).length;
   }, [phase, importedMap]);
+
+  // Rough upper bound on the combined paperContext payload — the
+  // agent budget is 400 KB, but sessions get per-session headers and
+  // markers so we gate a bit below that.
+  const COMBINED_BYTE_LIMIT = 380_000;
+  const selectedByteTotal = useMemo(() => {
+    if (phase.kind !== "ready") return 0;
+    let total = 0;
+    for (const s of phase.sessions) {
+      if (selected.has(s.sessionId)) total += s.byteSize;
+    }
+    return total;
+  }, [phase, selected]);
+  const combinedAllowed =
+    selected.size > 1 && selectedByteTotal <= COMBINED_BYTE_LIMIT;
+
+  // If selection changes such that combined is no longer allowed,
+  // snap back to separate so the button label doesn't lie.
+  useEffect(() => {
+    if (mergeMode === "combined" && !combinedAllowed) {
+      setMergeMode("separate");
+    }
+  }, [mergeMode, combinedAllowed]);
 
   const toggleOne = (id: string) => {
     setSelected((prev) => {
@@ -310,6 +422,7 @@ export default function JournalImportModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4 py-8"
       onClick={() => {
+        if (settingsOpen) return;
         if (phase.kind !== "importing") onClose();
       }}
     >
@@ -400,13 +513,22 @@ export default function JournalImportModal({
               <p className="mt-3 max-w-sm text-center text-[12.5px] text-muted-foreground">
                 {phase.message}
               </p>
-              <button
-                type="button"
-                onClick={() => setPhase({ kind: "loading" })}
-                className="mt-5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
-              >
-                Try again
-              </button>
+              <div className="mt-5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPhase({ kind: "loading" })}
+                  className="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
+                >
+                  Try again
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
+                >
+                  Open Settings
+                </button>
+              </div>
             </CenteredState>
           ) : phase.kind === "ready" ? (
             <ReadyView
@@ -416,6 +538,8 @@ export default function JournalImportModal({
               selected={selected}
               filter={filter}
               newCount={newCount}
+              query={query}
+              onQueryChange={setQuery}
               onToggleOne={toggleOne}
               onToggleAll={toggleAllVisible}
               onSetFilter={setFilter}
@@ -430,11 +554,83 @@ export default function JournalImportModal({
         </div>
 
         {phase.kind === "ready" ? (
-          <footer className="shrink-0 border-t border-border/60 bg-muted/30 px-6 py-3">
+          <footer className="relative shrink-0 border-t border-border/60 bg-muted/30 px-6 py-2.5">
+            {keyMenuOpen ? (
+              <div
+                ref={keyMenuRef}
+                className="absolute bottom-full left-6 z-20 mb-2 w-[calc(100%-3rem)] max-w-[440px] rounded-lg border border-border/80 bg-popover p-3 shadow-xl ring-1 ring-foreground/5"
+              >
+                <div className="mb-2 flex items-start gap-2">
+                  <Key className="mt-0.5 size-[12px] shrink-0 text-muted-foreground/70" />
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Your key stays on-device and is sent only to the
+                    provider you pick.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <ProviderRow provider="anthropic" placeholder="sk-ant-..." docsUrl="" />
+                  <ProviderRow provider="openai" placeholder="sk-..." docsUrl="" />
+                  <ProviderRow provider="xai" placeholder="xai-..." docsUrl="" />
+                </div>
+              </div>
+            ) : null}
+            <div className="mb-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/80">
+              <span>Journal agent model:</span>
+              <ModelSelector
+                selected={selectedModel}
+                onSelect={handleModelSelect}
+              />
+              {!hasKey ? (
+                <button
+                  type="button"
+                  onClick={() => setKeyMenuOpen((v) => !v)}
+                  className="ml-2 inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-50/60 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:text-amber-400"
+                >
+                  <Key className="size-[11px]" />
+                  Add API key
+                </button>
+              ) : null}
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-muted-foreground/70">
                 {selected.size} selected
               </span>
+              {selected.size > 1 ? (
+                <div className="flex items-center gap-1 rounded-md border border-border/60 bg-card p-0.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setMergeMode("separate")}
+                    className={cn(
+                      "rounded px-2 py-1 transition-colors",
+                      mergeMode === "separate"
+                        ? "bg-primary/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Separate ({selected.size})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => combinedAllowed && setMergeMode("combined")}
+                    disabled={!combinedAllowed}
+                    className={cn(
+                      "rounded px-2 py-1 transition-colors",
+                      !combinedAllowed
+                        ? "cursor-not-allowed text-muted-foreground/40"
+                        : mergeMode === "combined"
+                          ? "bg-primary/10 text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Combined (1)
+                  </button>
+                </div>
+              ) : null}
+              {selected.size > 1 && !combinedAllowed ? (
+                <span className="text-[11px] text-muted-foreground/70">
+                  Selection too large to combine
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={onClose}
@@ -444,17 +640,27 @@ export default function JournalImportModal({
               </button>
               <button
                 type="button"
-                disabled={selected.size === 0}
+                disabled={selected.size === 0 || !hasKey}
                 onClick={handleImport}
                 className="rounded-md bg-primary px-4 py-1.5 text-[12px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground/60"
               >
-                Import {selected.size > 0 ? `${selected.size} ` : ""}
-                {selected.size === 1 ? "session" : "sessions"}
+                {selected.size === 0
+                  ? "Import"
+                  : !hasKey
+                    ? "Add API key to import"
+                    : mergeMode === "combined" && selected.size > 1
+                      ? `Import as 1 combined entry`
+                      : `Import ${selected.size} ${selected.size === 1 ? "session" : "sessions"}`}
               </button>
             </div>
           </footer>
         ) : null}
       </div>
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        focusProvider={null}
+      />
     </div>
   );
 }
@@ -478,6 +684,8 @@ interface ReadyViewProps {
   selected: Set<string>;
   filter: "all" | "new";
   newCount: number;
+  query: string;
+  onQueryChange: (q: string) => void;
   onToggleOne: (id: string) => void;
   onToggleAll: () => void;
   onSetFilter: (f: "all" | "new") => void;
@@ -492,6 +700,8 @@ function ReadyView({
   selected,
   filter,
   newCount,
+  query,
+  onQueryChange,
   onToggleOne,
   onToggleAll,
   onSetFilter,
@@ -542,10 +752,33 @@ function ReadyView({
           </button>
         ) : null}
 
+        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end">
+          <div className="relative w-full max-w-[240px]">
+            <Search className="pointer-events-none absolute left-2 top-1/2 size-[12px] -translate-y-1/2 text-muted-foreground/60" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="Search sessions"
+              className="w-full rounded-md border border-border/60 bg-card py-1 pl-7 pr-7 text-[11.5px] text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-none"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => onQueryChange("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="size-[11px]" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={onRefresh}
-          className="ml-auto rounded-md p-1.5 text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+          className="rounded-md p-1.5 text-muted-foreground/70 hover:bg-muted hover:text-foreground"
           aria-label="Refresh"
         >
           <RefreshCw className="size-[13px]" />
@@ -563,9 +796,11 @@ function ReadyView({
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
         {sessions.length === 0 ? (
           <div className="flex h-full items-center justify-center px-6 py-10 text-center text-[12px] text-muted-foreground/70">
-            {filter === "new"
-              ? "Nothing new to import — every session in this folder is already in your journal."
-              : "No Claude Code sessions found in this folder."}
+            {allSessions.length === 0
+              ? "No Claude Code sessions found in this folder. Pick your ~/.claude/projects directory (press Cmd+Shift+. in the picker to reveal hidden folders on macOS)."
+              : query.trim()
+                ? `No sessions match “${query.trim()}”.`
+                : "Nothing new to import — every session in this folder is already in your journal."}
           </div>
         ) : (
           <ul className="space-y-1">
@@ -642,13 +877,17 @@ interface ImportingViewProps {
 function ImportingView({ phase }: ImportingViewProps) {
   const entries = [...phase.progress.values()].sort((a, b) => a.index - b.index);
   const completed = entries.filter((e) => e.phase !== "start").length;
+  const isCombined =
+    entries.length === 1 && entries[0].sessionId === COMBINED_PROGRESS_ID;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-6 py-5">
       <div className="mb-3 flex items-center gap-2">
         <Loader2 className="size-4 animate-spin text-primary/70" />
         <span className="text-[12px] font-medium text-foreground">
-          Importing {completed} / {phase.total} sessions…
+          {isCombined
+            ? "Combining sessions into one entry…"
+            : `Importing ${completed} / ${phase.total} sessions…`}
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border/60 bg-card/30 px-3 py-2">
@@ -656,29 +895,35 @@ function ImportingView({ phase }: ImportingViewProps) {
           <p className="text-[11px] text-muted-foreground/70">Starting…</p>
         ) : (
           <ul className="space-y-1.5">
-            {entries.map((e) => (
-              <li key={e.sessionId} className="flex items-center gap-2 text-[11.5px]">
-                {e.phase === "start" ? (
-                  <CircleDashed className="size-[13px] animate-spin text-muted-foreground/70" />
-                ) : e.phase === "ok" ? (
-                  <CheckCircle2 className="size-[13px] text-emerald-600" />
-                ) : e.phase === "skip" ? (
-                  <CheckCircle2 className="size-[13px] text-muted-foreground/50" />
-                ) : (
-                  <AlertTriangle className="size-[13px] text-amber-500" />
-                )}
-                <span className="truncate text-muted-foreground">
-                  {e.sessionId.slice(0, 8)} —{" "}
-                  {e.phase === "start"
-                    ? "running agent"
-                    : e.phase === "ok"
-                      ? "added to journal"
-                      : e.phase === "skip"
-                        ? e.message ?? "skipped"
-                        : (e.message ?? "failed")}
-                </span>
-              </li>
-            ))}
+            {entries.map((e) => {
+              const label =
+                e.sessionId === COMBINED_PROGRESS_ID
+                  ? "combined batch"
+                  : e.sessionId.slice(0, 8);
+              return (
+                <li key={e.sessionId} className="flex items-center gap-2 text-[11.5px]">
+                  {e.phase === "start" ? (
+                    <CircleDashed className="size-[13px] animate-spin text-muted-foreground/70" />
+                  ) : e.phase === "ok" ? (
+                    <CheckCircle2 className="size-[13px] text-emerald-600" />
+                  ) : e.phase === "skip" ? (
+                    <CheckCircle2 className="size-[13px] text-muted-foreground/50" />
+                  ) : (
+                    <AlertTriangle className="size-[13px] text-amber-500" />
+                  )}
+                  <span className="truncate text-muted-foreground">
+                    {label} —{" "}
+                    {e.phase === "start"
+                      ? "running agent"
+                      : e.phase === "ok"
+                        ? "added to journal"
+                        : e.phase === "skip"
+                          ? e.message ?? "skipped"
+                          : (e.message ?? "failed")}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

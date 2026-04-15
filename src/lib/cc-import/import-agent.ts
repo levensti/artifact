@@ -41,9 +41,20 @@ export interface ImportSessionsArgs {
   model: Model;
   apiKey: string;
   apiBaseUrl?: string;
+  /**
+   * "separate" (default): one agent call per session, one entry per session.
+   * "combined": a single agent call that sees all selected transcripts at
+   * once and produces one (or occasionally a few) journal entries that
+   * synthesize across them. Useful when the selection is a paused/resumed
+   * thread on the same topic.
+   */
+  mode?: "separate" | "combined";
   /** Per-session progress callback for UI. */
   onProgress?: (status: ImportProgress) => void;
 }
+
+/** Synthetic session id used by the combined-mode progress channel. */
+export const COMBINED_PROGRESS_ID = "__combined__";
 
 export interface ImportProgress {
   sessionId: string;
@@ -75,12 +86,15 @@ export async function importCcSessions(
   };
   if (args.sessions.length === 0) return result;
 
+  const mode = args.mode ?? "separate";
   const token = beginWikiIngest({
     kind: "journal",
     label:
-      args.sessions.length === 1
-        ? "Importing Claude Code session"
-        : `Importing ${args.sessions.length} Claude Code sessions`,
+      mode === "combined"
+        ? `Combining ${args.sessions.length} Claude Code sessions`
+        : args.sessions.length === 1
+          ? "Importing Claude Code session"
+          : `Importing ${args.sessions.length} Claude Code sessions`,
   });
 
   try {
@@ -97,6 +111,73 @@ export async function importCcSessions(
         updatedAt: p.updatedAt,
         contentPreview: p.content.slice(0, 1500),
       }));
+
+    if (mode === "combined") {
+      args.onProgress?.({
+        sessionId: COMBINED_PROGRESS_ID,
+        index: 1,
+        total: 1,
+        phase: "start",
+      });
+      try {
+        const upserts = await runAgentForCombined({
+          sessions: args.sessions,
+          knownPages,
+          model: args.model,
+          apiKey: args.apiKey,
+          apiBaseUrl: args.apiBaseUrl,
+        });
+
+        if (upserts.length === 0) {
+          args.onProgress?.({
+            sessionId: COMBINED_PROGRESS_ID,
+            index: 1,
+            total: 1,
+            phase: "skip",
+            message: "Agent decided nothing was worth journaling",
+          });
+          markImported(args.sessions.map((s) => s.meta.sessionId));
+          result.importedSessionIds.push(
+            ...args.sessions.map((s) => s.meta.sessionId),
+          );
+        } else {
+          await finalizeWikiIngest({
+            pages: upserts,
+            logEntry: { kind: "journal", label: "Claude Code import (combined)" },
+          });
+          markImported(args.sessions.map((s) => s.meta.sessionId));
+          result.importedSessionIds.push(
+            ...args.sessions.map((s) => s.meta.sessionId),
+          );
+          result.createdSlugs.push(...upserts.map((u) => u.slug));
+          args.onProgress?.({
+            sessionId: COMBINED_PROGRESS_ID,
+            index: 1,
+            total: 1,
+            phase: "ok",
+          });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Import failed";
+        for (const s of args.sessions) {
+          result.errors.push({ sessionId: s.meta.sessionId, message });
+        }
+        args.onProgress?.({
+          sessionId: COMBINED_PROGRESS_ID,
+          index: 1,
+          total: 1,
+          phase: "error",
+          message,
+        });
+      }
+
+      if (result.errors.length > 0) {
+        reportWikiIngestError(
+          `Claude Code import: combined mode failed (${result.errors.length} sessions)`,
+        );
+      }
+      return result;
+    }
 
     let i = 0;
     for (const session of args.sessions) {
@@ -218,6 +299,53 @@ interface AgentResponse {
   upserts?: AgentUpsert[];
 }
 
+interface RunCombinedArgs {
+  sessions: ParsedCcSession[];
+  knownPages: RunAgentArgs["knownPages"];
+  model: Model;
+  apiKey: string;
+  apiBaseUrl?: string;
+}
+
+async function runAgentForCombined(
+  args: RunCombinedArgs,
+): Promise<WikiFinalizePage[]> {
+  const transcript = serializeCombinedTranscript(args.sessions);
+  const prompt = buildCombinedPrompt({
+    sessions: args.sessions,
+    knownPages: args.knownPages,
+  });
+
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: args.model.modelId,
+      provider: args.model.provider,
+      apiKey: args.apiKey,
+      ...(args.apiBaseUrl ? { apiBaseUrl: args.apiBaseUrl } : {}),
+      prompt,
+      paperContext: transcript,
+    }),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const data = (await res.json()) as { error?: string };
+      detail = data?.error ?? "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `Agent call failed: HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as { content?: string };
+  const raw = typeof data.content === "string" ? data.content : "";
+  if (!raw) return [];
+
+  const parsed = parseJson<AgentResponse>(raw, {});
+  return sanitizeUpserts(parsed?.upserts ?? []);
+}
+
 async function runAgentForSession(args: RunAgentArgs): Promise<WikiFinalizePage[]> {
   const transcript = serializeTranscript(args.session);
   const prompt = buildPrompt({
@@ -295,6 +423,136 @@ function serializeTranscript(session: ParsedCcSession): string {
     `\n\n--- [transcript truncated: ${full.length - MAX_BYTES + 200} chars omitted from middle] ---\n\n` +
     full.slice(full.length - half)
   );
+}
+
+/**
+ * Serialize multiple sessions into one paperContext payload, ordered
+ * oldest-first so the narrative reads chronologically. Budget is the
+ * same 400 KB cap as the single-session path — we divide it evenly
+ * across sessions and head/tail-truncate any that overflow their share.
+ */
+function serializeCombinedTranscript(sessions: ParsedCcSession[]): string {
+  const TOTAL_BUDGET = 400_000;
+  const ordered = [...sessions].sort((a, b) => {
+    const at = a.meta.startedAt ?? a.meta.lastActivityAt ?? "";
+    const bt = b.meta.startedAt ?? b.meta.lastActivityAt ?? "";
+    return at < bt ? -1 : at > bt ? 1 : 0;
+  });
+
+  const header = [
+    `Combined Claude Code import: ${ordered.length} sessions`,
+    "",
+    "The sessions below are ordered oldest-first. Each is delimited by",
+    "a `=== SESSION <n> ===` marker. Treat them as related context that",
+    "may or may not share a topic — synthesize across them where it",
+    "makes sense, and separate where it doesn't.",
+    "",
+  ].join("\n");
+
+  const perSessionBudget = Math.max(
+    4_000,
+    Math.floor((TOTAL_BUDGET - header.length) / ordered.length),
+  );
+
+  const blocks = ordered.map((session, i) => {
+    const marker = `=== SESSION ${i + 1} of ${ordered.length} ===`;
+    const meta = [
+      `Session id: ${session.meta.sessionId}`,
+      `Project: ${session.meta.projectPath}`,
+      session.meta.startedAt ? `Started: ${session.meta.startedAt}` : null,
+      session.meta.lastActivityAt ? `Ended: ${session.meta.lastActivityAt}` : null,
+      session.meta.summary ? `Summary: ${session.meta.summary}` : null,
+      `Turns: ${session.meta.turnCount}`,
+    ]
+      .filter((x): x is string => x !== null)
+      .join("\n");
+
+    const turns = session.turns
+      .map((t) => `## ${t.role}${t.timestamp ? ` (${t.timestamp})` : ""}\n${t.text}`)
+      .join("\n\n");
+
+    const body = `${marker}\n${meta}\n\n${turns}`;
+    if (body.length <= perSessionBudget) return body;
+    const half = Math.floor((perSessionBudget - 200) / 2);
+    return (
+      body.slice(0, half) +
+      `\n\n--- [session ${i + 1} truncated: ${body.length - perSessionBudget + 200} chars omitted from middle] ---\n\n` +
+      body.slice(body.length - half)
+    );
+  });
+
+  return header + blocks.join("\n\n");
+}
+
+function buildCombinedPrompt(args: {
+  sessions: ParsedCcSession[];
+  knownPages: RunAgentArgs["knownPages"];
+}): string {
+  const { sessions, knownPages } = args;
+  const sessionSummaries = sessions.map((s) => ({
+    sessionId: s.meta.sessionId,
+    projectPath: s.meta.projectPath,
+    startedAt: s.meta.startedAt,
+    lastActivityAt: s.meta.lastActivityAt,
+    turnCount: s.meta.turnCount,
+    summary: s.meta.summary,
+  }));
+  const latestDate = (
+    sessions
+      .map((s) => s.meta.lastActivityAt ?? s.meta.startedAt ?? "")
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? new Date().toISOString()
+  ).slice(0, 10);
+
+  return `You are the journal agent for a research and learning workspace. The user just imported ${sessions.length} Claude Code transcripts in a single batch and asked you to COMBINE them into the journal — treat them as related context and synthesize across them rather than writing one entry per session.
+
+The full transcripts are in your system context, wrapped in <paper> tags. They are delimited internally by \`=== SESSION <n> ===\` markers and ordered oldest-first. Ignore the literal "<paper>" framing.
+
+SESSIONS IN THIS BATCH (${sessions.length}):
+${JSON.stringify(sessionSummaries, null, 2)}
+
+EXISTING JOURNAL ENTRIES (${knownPages.length}):
+${JSON.stringify(knownPages, null, 2)}
+
+YOUR TASK — synthesize, don't enumerate. Options:
+  1. CREATE ONE new session entry that captures the through-line across all these sessions. This is the expected default when the sessions share a topic or arc.
+  2. CREATE A SMALL NUMBER of session entries (2-3 max) if the batch truly contains clearly distinct topics. Only do this if the split is obvious — when in doubt, prefer one synthesized entry.
+  3. UPDATE an existing session entry if this batch is a clear continuation of something already in the journal. Preserve existing structure and voice; integrate new material rather than appending a dated footer.
+  4. Do NOTHING if none of it is worth journaling.
+
+Do NOT write one entry per input session. The user explicitly chose "combined" to avoid that.
+
+DOMAIN NEUTRALITY:
+  - Do NOT assume these are coding sessions. Infer topics from the transcripts themselves.
+  - Do NOT mention "Claude Code", "the CLI", or "multiple sessions" in the entry content. The journal is the user's own knowledge record — frame it as what *they* explored and learned, not how they got there.
+
+SLUG RULES:
+  - Session slugs MUST start with "session-" and be kebab-case. Include a date and a short topic hint, e.g. "session-${latestDate}-rlhf-basics". Use the latest session's date when in doubt.
+  - When UPDATING, pass the exact existing slug. When CREATING, invent a fresh unique slug.
+
+CONTENT STYLE:
+  - Start with a short headline blockquote summarizing the takeaway across the whole arc.
+  - 2-4 paragraphs of narrative in second-person ("you explored…", "you worked through…"). If the sessions happened in sequence, let that shape the narrative ("you first…, then you…").
+  - Bulleted sections like ## Concepts, ## Decisions, ## Open questions where they add value.
+  - Do NOT use [[slug]] syntax anywhere.
+  - Do NOT invent links to /review/<id>.
+
+Return ONLY JSON of this shape — no markdown fences, no prose outside:
+{
+  "notes": "one-line reasoning for debugging",
+  "upserts": [
+    {
+      "action": "create" | "update",
+      "slug": "session-...",
+      "title": "Human title",
+      "pageType": "session",
+      "content": "full markdown content"
+    }
+  ]
+}
+
+If nothing is worth writing, return { "notes": "...", "upserts": [] }.`;
 }
 
 function buildPrompt(args: {
