@@ -465,7 +465,8 @@ export default function SettingsDialog({
             <div>
               <DialogTitle>Manage API keys</DialogTitle>
               <DialogDescription className="text-xs mt-0.5">
-                Keys are stored in a local SQLite file on your device.
+                Keys are stored locally in your browser — they never leave
+                your device.
               </DialogDescription>
             </div>
           </div>

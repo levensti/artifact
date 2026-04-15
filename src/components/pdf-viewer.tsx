@@ -240,7 +240,7 @@ export default function PdfViewer({
 
   return (
     <div className="flex flex-col h-full bg-transparent">
-      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-2 sm:px-4 backdrop-blur-md safe-area-x">
+      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 pl-[max(env(safe-area-inset-left),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] sm:pl-[max(env(safe-area-inset-left),1rem)] sm:pr-[max(env(safe-area-inset-right),1rem)] backdrop-blur-md">
         <div className="flex h-7 sm:h-8 items-center gap-0.5 rounded-full bg-muted/60 px-0.5 sm:px-1">
           <Button
             variant="ghost"
