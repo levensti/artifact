@@ -127,7 +127,8 @@ export default function ModelSelector({
                   }
                 : {
                     provider: job.profile.kind,
-                    profileId: job.profile.id,
+                    apiKey: job.profile.apiKey,
+                    apiBaseUrl: job.profile.baseUrl,
                   };
             const response = await fetch("/api/models", {
               method: "POST",

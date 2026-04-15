@@ -4,7 +4,6 @@
  */
 
 import type { Model } from "@/lib/models";
-import { isInferenceProviderType } from "@/lib/models";
 import type {
   ArxivSearchResult,
   GraphData,
@@ -100,6 +99,7 @@ function normalizeKeywordQueries(raw: string[]): string[] {
 async function generateStructured(
   model: Model,
   apiKey: string,
+  apiBaseUrl: string | undefined,
   prompt: string,
   paperContext: string,
   signal?: AbortSignal,
@@ -116,9 +116,8 @@ async function generateStructured(
     body: JSON.stringify({
       model: model.modelId,
       provider: model.provider,
-      ...(isInferenceProviderType(model.provider)
-        ? { profileId: model.profileId }
-        : { apiKey }),
+      apiKey,
+      ...(apiBaseUrl ? { apiBaseUrl } : {}),
       prompt: augmented,
       paperContext,
     }),
@@ -146,6 +145,8 @@ export interface RunPaperExploreOptions {
   paperContext: string;
   model: Model;
   apiKey: string;
+  /** Base URL for OpenAI-compatible providers. */
+  apiBaseUrl?: string;
   signal?: AbortSignal;
   onProgress?: (phase: string) => void;
 }
@@ -158,8 +159,17 @@ export interface RunPaperExploreResult {
 export async function runPaperExploreAnalysis(
   opts: RunPaperExploreOptions,
 ): Promise<RunPaperExploreResult> {
-  const { reviewId, arxivId, paperTitle, paperContext, model, apiKey, signal, onProgress } =
-    opts;
+  const {
+    reviewId,
+    arxivId,
+    paperTitle,
+    paperContext,
+    model,
+    apiKey,
+    apiBaseUrl,
+    signal,
+    onProgress,
+  } = opts;
 
   const report = (s: string) => onProgress?.(s);
 
@@ -176,7 +186,7 @@ Rules:
 
 Return **only** valid JSON (no markdown fences, no commentary):
 {"prerequisites":[{"topic":"…","description":"…","difficulty":"foundational|intermediate|advanced"}]}`;
-  const prereqRaw = await generateStructured(model, apiKey, prereqPrompt, paperContext, signal, {
+  const prereqRaw = await generateStructured(model, apiKey, apiBaseUrl, prereqPrompt, paperContext, signal, {
     jsonOnly: true,
   });
   const parsedPrereqRaw = parseJson<{ prerequisites?: unknown; items?: unknown }>(
@@ -237,7 +247,7 @@ Return **only** a JSON string array, e.g.:
 ["fault tolerant data parallelism", "ring allreduce distributed training"]
 
 No markdown, no extra keys.`;
-  const keywordRaw = await generateStructured(model, apiKey, keywordPrompt, paperContext, signal, {
+  const keywordRaw = await generateStructured(model, apiKey, apiBaseUrl, keywordPrompt, paperContext, signal, {
     jsonOnly: true,
   });
   const parsedKeywords = parseJson<string[] | { queries?: string[] }>(keywordRaw, []);
@@ -327,7 +337,7 @@ ${JSON.stringify(classifyPayload, null, 2)}
 Return **only** a JSON array (no markdown):
 [{"arxivId":"…","relationship":"…","reasoning":"…","relevant":true|false,"confidence":0.85}]`;
 
-  const clsRaw = await generateStructured(model, apiKey, classifyPrompt, paperContext, signal, {
+  const clsRaw = await generateStructured(model, apiKey, apiBaseUrl, classifyPrompt, paperContext, signal, {
     jsonOnly: true,
   });
   const MIN_CONFIDENCE = 0.48;

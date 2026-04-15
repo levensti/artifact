@@ -10,7 +10,6 @@ import {
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import type { GenerateRequest } from "@/lib/explore";
 import { isInferenceProviderType } from "@/lib/models";
-import { getInferenceProfile } from "@/lib/server/store";
 
 const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
 
@@ -27,8 +26,7 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const { model, provider, apiKey, apiBaseUrl, profileId, prompt, paperContext } =
-    body;
+  const { model, provider, apiKey, apiBaseUrl, prompt, paperContext } = body;
 
   if (!isProvider(provider)) {
     return jsonError(invalidApiProviderMessage(), 400);
@@ -48,30 +46,20 @@ export async function POST(req: NextRequest) {
     return jsonError("Request payload too large.", 413);
   }
 
-  let effectiveApiKey = typeof apiKey === "string" ? apiKey : "";
-  let effectiveBaseUrl =
+  const effectiveApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
+  const effectiveBaseUrl =
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
 
-  if (isInferenceProviderType(provider)) {
-    if (!profileId || typeof profileId !== "string" || !profileId.trim()) {
-      return jsonError("profileId is required for inference providers.", 400);
-    }
-    const prof = getInferenceProfile(profileId.trim());
-    if (!prof) {
-      return jsonError("Unknown inference profile.", 404);
-    }
-    if (prof.kind !== provider) {
-      return jsonError("Inference profile does not match provider type.", 400);
-    }
-    if (!prof.apiKey?.trim() || !prof.baseUrl?.trim()) {
-      return jsonError("Inference profile is missing API key or base URL.", 400);
-    }
-    effectiveApiKey = prof.apiKey;
-    effectiveBaseUrl = prof.baseUrl.trim();
-  } else if (!effectiveApiKey.trim()) {
+  if (!effectiveApiKey) {
     return jsonError(
       "API key is required. Manage API keys in the app to add one.",
       401,
+    );
+  }
+  if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
+    return jsonError(
+      "apiBaseUrl is required for OpenAI-compatible providers.",
+      400,
     );
   }
 

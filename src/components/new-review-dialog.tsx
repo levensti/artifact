@@ -20,6 +20,7 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
+import { savePdfBlob } from "@/lib/client/pdf-blobs";
 import { extractArxivId } from "@/lib/utils";
 
 type SourceMode = "arxiv" | "local" | "web";
@@ -111,31 +112,20 @@ export default function NewReviewDialog({
       return;
     }
 
+    if (!selectedFile.name.toLowerCase().endsWith(".pdf")) {
+      setError("Only .pdf files are supported");
+      return;
+    }
+
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      const uploadRes = await fetch("/api/pdf/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!uploadRes.ok) {
-        const data = await uploadRes.json();
-        setError(data.error || "Upload failed");
-        return;
-      }
-
-      const { pdfPath, originalName } = (await uploadRes.json()) as {
-        pdfPath: string;
-        originalName: string;
-      };
-
-      const title = originalName.replace(/\.pdf$/i, "") || "Local PDF";
+      const pdfPath = await savePdfBlob(selectedFile);
+      const title = selectedFile.name.replace(/\.pdf$/i, "") || "Local PDF";
       const review = await createLocalPdfReview(pdfPath, title);
       setSelectedFile(null);
       onCreated(review.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save PDF");
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,12 @@
 /**
- * Client-side cache + HTTP bridge to SQLite-backed /api/data routes.
+ * Client-side data layer. All reads and writes go to the Dexie-backed
+ * store in src/lib/client/store.ts. This module preserves the public
+ * API the rest of the app already depends on — every exported function
+ * matches its pre-migration signature, so callers remain untouched.
+ *
+ * In-memory caches sit in front of Dexie so that UI render paths can
+ * call `getReviewsSnapshot()` / `getWikiCacheSnapshot()` synchronously,
+ * the same way they did when the data lived on the server.
  */
 
 import type { InferenceProviderProfile, Provider } from "@/lib/models";
@@ -14,10 +21,14 @@ import type { DeepDiveSession } from "@/lib/deep-dives";
 import type {
   GlobalGraphData,
   GraphData,
+  GraphEdge,
+  GraphNode,
   PrerequisitesData,
+  RelationshipType,
 } from "@/lib/explore";
 import { mergeGlobalGraphSession } from "@/lib/explore-merge";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
+import { normalizeArxivId } from "@/lib/reviews";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
@@ -26,30 +37,7 @@ import {
   KEYS_UPDATED_EVENT,
   WIKI_UPDATED_EVENT,
 } from "@/lib/storage-events";
-
-async function apiJson<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const res = await fetch(`/api/data${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    const looksHtml =
-      text.includes("<!DOCTYPE") || text.trimStart().startsWith("<!");
-    throw new Error(
-      looksHtml
-        ? `Request failed: ${res.status} ${res.statusText} (${path})`
-        : text || res.statusText,
-    );
-  }
-  return res.json() as Promise<T>;
-}
+import * as store from "@/lib/client/store";
 
 let hydratePromise: Promise<void> | null = null;
 
@@ -76,16 +64,16 @@ const exploreCache = new Map<
   { prerequisites: PrerequisitesData | null; graph: GraphData | null }
 >();
 
+function dispatch(name: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(name));
+}
+
 export async function hydrateClientStore(): Promise<void> {
   if (typeof window === "undefined") return;
   if (hydratePromise) return hydratePromise;
   hydratePromise = (async () => {
-    const boot = await apiJson<{
-      reviews: PaperReview[];
-      settings: SettingsCache;
-      globalGraph: GlobalGraphData | null;
-      deepDives: DeepDiveSession[];
-    }>("/bootstrap");
+    const boot = await store.getBootstrap();
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
     globalGraphCache = boot.globalGraph;
@@ -93,10 +81,10 @@ export async function hydrateClientStore(): Promise<void> {
     messagesCache.clear();
     annotationsCache.clear();
     exploreCache.clear();
-    window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
-    window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
-    window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
-    window.dispatchEvent(new Event(DEEP_DIVES_UPDATED_EVENT));
+    dispatch(REVIEWS_UPDATED_EVENT);
+    dispatch(KEYS_UPDATED_EVENT);
+    dispatch(EXPLORE_UPDATED_EVENT);
+    dispatch(DEEP_DIVES_UPDATED_EVENT);
   })();
   return hydratePromise;
 }
@@ -108,8 +96,8 @@ export function getReviewsSnapshot(): PaperReview[] {
 }
 
 export async function refreshReviews(): Promise<void> {
-  reviewsCache = await apiJson<PaperReview[]>("/reviews");
-  window.dispatchEvent(new Event(REVIEWS_UPDATED_EVENT));
+  reviewsCache = await store.listReviews();
+  dispatch(REVIEWS_UPDATED_EVENT);
 }
 
 export function getReview(id: string): PaperReview | undefined {
@@ -120,10 +108,23 @@ export async function createReview(
   arxivId: string,
   title: string,
 ): Promise<PaperReview> {
-  const review = await apiJson<PaperReview>("/reviews", {
-    method: "POST",
-    body: JSON.stringify({ arxivId, title }),
-  });
+  const canonical = normalizeArxivId(arxivId);
+  const existing = await store.getReviewByArxivId(canonical);
+  if (existing) {
+    await refreshReviews();
+    return existing;
+  }
+  const now = new Date().toISOString();
+  const review: PaperReview = {
+    id: crypto.randomUUID(),
+    title: title || `arXiv:${canonical}`,
+    arxivId: canonical,
+    createdAt: now,
+    updatedAt: now,
+    pdfPath: null,
+    sourceUrl: null,
+  };
+  await store.insertReview(review);
   await refreshReviews();
   return review;
 }
@@ -132,10 +133,18 @@ export async function createLocalPdfReview(
   pdfPath: string,
   title: string,
 ): Promise<PaperReview> {
-  const review = await apiJson<PaperReview>("/reviews", {
-    method: "POST",
-    body: JSON.stringify({ pdfPath, title }),
-  });
+  const now = new Date().toISOString();
+  const fallback = pdfPath.split("/").pop()?.replace(/\.pdf$/i, "") || "Local PDF";
+  const review: PaperReview = {
+    id: crypto.randomUUID(),
+    title: title || fallback,
+    arxivId: null,
+    createdAt: now,
+    updatedAt: now,
+    pdfPath,
+    sourceUrl: null,
+  };
+  await store.insertReview(review);
   await refreshReviews();
   return review;
 }
@@ -144,12 +153,27 @@ export async function createWebReview(
   sourceUrl: string,
   title: string,
 ): Promise<PaperReview> {
-  const review = await apiJson<PaperReview>("/reviews", {
-    method: "POST",
-    body: JSON.stringify({ sourceUrl, title }),
-  });
+  const now = new Date().toISOString();
+  const review: PaperReview = {
+    id: crypto.randomUUID(),
+    title: title || sourceUrl,
+    arxivId: null,
+    createdAt: now,
+    updatedAt: now,
+    pdfPath: null,
+    sourceUrl,
+  };
+  await store.insertReview(review);
   await refreshReviews();
   return review;
+}
+
+export async function deleteReview(id: string): Promise<void> {
+  await store.deleteReview(id);
+  messagesCache.delete(id);
+  annotationsCache.delete(id);
+  exploreCache.delete(id);
+  await refreshReviews();
 }
 
 /* ── Messages ── */
@@ -158,9 +182,7 @@ export async function loadMessages(reviewId: string): Promise<ChatMessage[]> {
   if (!reviewId?.trim()) return [];
   const cached = messagesCache.get(reviewId);
   if (cached) return cached;
-  const list = await apiJson<ChatMessage[]>(
-    `/reviews/${encodeURIComponent(reviewId)}/messages`,
-  );
+  const list = await store.getMessages(reviewId);
   messagesCache.set(reviewId, list);
   return list;
 }
@@ -170,10 +192,7 @@ export async function saveMessages(
   messages: ChatMessage[],
 ): Promise<void> {
   messagesCache.set(reviewId, messages);
-  await apiJson(`/reviews/${encodeURIComponent(reviewId)}/messages`, {
-    method: "PUT",
-    body: JSON.stringify({ messages }),
-  });
+  await store.setMessages(reviewId, messages);
 }
 
 /* ── Annotations ── */
@@ -182,9 +201,7 @@ export async function loadAnnotations(reviewId: string): Promise<Annotation[]> {
   if (!reviewId?.trim()) return [];
   const cached = annotationsCache.get(reviewId);
   if (cached) return cached;
-  const list = await apiJson<Annotation[]>(
-    `/reviews/${encodeURIComponent(reviewId)}/annotations`,
-  );
+  const list = await store.getAnnotations(reviewId);
   annotationsCache.set(reviewId, list);
   return list;
 }
@@ -194,11 +211,8 @@ export async function saveAnnotations(
   annotations: Annotation[],
 ): Promise<void> {
   annotationsCache.set(reviewId, annotations);
-  await apiJson(`/reviews/${encodeURIComponent(reviewId)}/annotations`, {
-    method: "PUT",
-    body: JSON.stringify({ annotations }),
-  });
-  window.dispatchEvent(new Event(ANNOTATIONS_UPDATED_EVENT));
+  await store.setAnnotations(reviewId, annotations);
+  dispatch(ANNOTATIONS_UPDATED_EVENT);
 }
 
 /* ── Deep dives ── */
@@ -208,19 +222,21 @@ export function getDeepDivesSnapshot(): DeepDiveSession[] {
 }
 
 export async function refreshDeepDives(): Promise<void> {
-  deepDivesCache = await apiJson<DeepDiveSession[]>("/deep-dives");
-  window.dispatchEvent(new Event(DEEP_DIVES_UPDATED_EVENT));
+  deepDivesCache = await store.listDeepDives();
+  dispatch(DEEP_DIVES_UPDATED_EVENT);
 }
 
 export async function saveDeepDive(
   payload: Omit<DeepDiveSession, "id" | "createdAt">,
 ): Promise<DeepDiveSession> {
-  const session = await apiJson<DeepDiveSession>("/deep-dives", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const session: DeepDiveSession = {
+    ...payload,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+  };
+  await store.insertDeepDive(session);
   deepDivesCache = [session, ...deepDivesCache.filter((d) => d.id !== session.id)];
-  window.dispatchEvent(new Event(DEEP_DIVES_UPDATED_EVENT));
+  dispatch(DEEP_DIVES_UPDATED_EVENT);
   return session;
 }
 
@@ -237,10 +253,11 @@ export async function loadExplore(
   }
   const cached = exploreCache.get(reviewId);
   if (cached) return cached;
-  const data = await apiJson<{
-    prerequisites: PrerequisitesData | null;
-    graph: GraphData | null;
-  }>(`/explore/${encodeURIComponent(reviewId)}`);
+  const [prerequisites, graph] = await Promise.all([
+    store.getPrerequisites(reviewId),
+    store.getGraphData(reviewId),
+  ]);
+  const data = { prerequisites, graph };
   exploreCache.set(reviewId, data);
   return data;
 }
@@ -260,13 +277,9 @@ export async function savePrerequisites(
     prerequisites: null,
     graph: null,
   };
-  const next = { ...prev, prerequisites };
-  exploreCache.set(reviewId, next);
-  await apiJson(`/explore/${encodeURIComponent(reviewId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ prerequisites }),
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+  exploreCache.set(reviewId, { ...prev, prerequisites });
+  await store.setPrerequisites(reviewId, prerequisites);
+  dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 export async function saveGraphData(
@@ -277,13 +290,9 @@ export async function saveGraphData(
     prerequisites: null,
     graph: null,
   };
-  const next = { ...prev, graph };
-  exploreCache.set(reviewId, next);
-  await apiJson(`/explore/${encodeURIComponent(reviewId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ graph }),
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+  exploreCache.set(reviewId, { ...prev, graph });
+  await store.setGraphData(reviewId, graph);
+  dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 export async function mergeSessionGraphIntoGlobal(
@@ -296,11 +305,8 @@ export async function mergeSessionGraphIntoGlobal(
     globalGraphCache,
   );
   globalGraphCache = next;
-  await apiJson("/explore/global", {
-    method: "PUT",
-    body: JSON.stringify(next),
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+  if (next) await store.setGlobalGraphData(next);
+  dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 export function getGlobalGraphData(): GlobalGraphData | null {
@@ -308,54 +314,148 @@ export function getGlobalGraphData(): GlobalGraphData | null {
 }
 
 export async function refreshGlobalGraph(): Promise<void> {
-  globalGraphCache = await apiJson<GlobalGraphData | null>("/explore/global");
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+  globalGraphCache = await store.getGlobalGraphData();
+  dispatch(EXPLORE_UPDATED_EVENT);
+}
+
+const VALID_RELATIONSHIPS = new Set<RelationshipType>([
+  "builds-upon",
+  "extends",
+  "similar-approach",
+  "prerequisite",
+  "contrasts-with",
+]);
+
+export interface SaveRelatedPapersInput {
+  arxiv_id?: string;
+  arxivId?: string;
+  title?: string;
+  authors?: string[];
+  abstract?: string;
+  relationship?: string;
+  reasoning?: string;
+}
+
+/**
+ * Persist related papers produced by the assistant's
+ * save_to_knowledge_graph tool call into the per-review graph and the
+ * global cross-review graph. Runs entirely client-side.
+ */
+export async function saveRelatedPapersFromAssistant(
+  reviewId: string,
+  arxivId: string,
+  paperTitle: string,
+  rawPapers: unknown,
+): Promise<number> {
+  if (!Array.isArray(rawPapers) || rawPapers.length === 0) return 0;
+
+  const existing = (await store.getGraphData(reviewId)) ?? null;
+  const currentNode: GraphNode = existing?.nodes.find((n) => n.isCurrent) ?? {
+    id: arxivId,
+    title: paperTitle || "Current paper",
+    authors: [],
+    abstract: "",
+    arxivId,
+    publishedDate: new Date().toISOString(),
+    categories: [],
+    isCurrent: true,
+  };
+
+  const nodeMap = new Map<string, GraphNode>();
+  if (existing) for (const n of existing.nodes) nodeMap.set(n.arxivId, n);
+  nodeMap.set(currentNode.arxivId, currentNode);
+
+  const edgeSet = new Set<string>();
+  const edges: GraphEdge[] = [];
+  if (existing) {
+    for (const e of existing.edges) {
+      edgeSet.add(`${e.source}→${e.target}:${e.relationship}`);
+      edges.push(e);
+    }
+  }
+
+  let added = 0;
+  for (const raw of rawPapers as SaveRelatedPapersInput[]) {
+    if (!raw || typeof raw !== "object") continue;
+    const id = String(raw.arxiv_id ?? raw.arxivId ?? "").trim();
+    const title = String(raw.title ?? "").trim();
+    const relationship = String(raw.relationship ?? "").trim() as RelationshipType;
+    const reasoning = String(raw.reasoning ?? "").trim();
+    if (!id || !title) continue;
+    if (!VALID_RELATIONSHIPS.has(relationship)) continue;
+    if (id === arxivId) continue;
+
+    if (!nodeMap.has(id)) {
+      nodeMap.set(id, {
+        id,
+        title,
+        authors: Array.isArray(raw.authors) ? raw.authors.map(String) : [],
+        abstract: typeof raw.abstract === "string" ? raw.abstract : "",
+        arxivId: id,
+        publishedDate: "",
+        categories: [],
+        isCurrent: false,
+      });
+    }
+
+    const edgeKey = `${arxivId}→${id}:${relationship}`;
+    if (!edgeSet.has(edgeKey)) {
+      edgeSet.add(edgeKey);
+      edges.push({ source: arxivId, target: id, relationship, reasoning });
+      added++;
+    }
+  }
+
+  if (added === 0 && existing) return 0;
+
+  const graph: GraphData = {
+    nodes: [...nodeMap.values()],
+    edges,
+    keywords: existing?.keywords ?? [],
+    generatedAt: new Date().toISOString(),
+    modelUsed: existing?.modelUsed ?? "assistant",
+    anchorReviewId: reviewId,
+  };
+
+  await saveGraphData(reviewId, graph);
+  await mergeSessionGraphIntoGlobal(reviewId, graph);
+  return added;
 }
 
 /**
  * Invalidate the client-side explore cache for a review so the next
- * read re-fetches from the server. Used after the assistant's
- * save_to_knowledge_graph tool writes directly to the DB.
+ * read re-fetches from Dexie.
  */
 export function invalidateExploreCache(reviewId: string): void {
   exploreCache.delete(reviewId);
   globalGraphCache = null;
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+  dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 export async function clearExploreData(reviewId: string): Promise<void> {
   exploreCache.delete(reviewId);
-  await apiJson(`/explore/${encodeURIComponent(reviewId)}`, {
-    method: "DELETE",
-  });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+  await store.clearExploreData(reviewId);
+  dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 export async function clearGlobalKnowledgeGraph(): Promise<void> {
   globalGraphCache = null;
-  await apiJson("/explore/global", { method: "DELETE" });
-  window.dispatchEvent(new Event(EXPLORE_UPDATED_EVENT));
+  await store.clearGlobalKnowledgeGraph();
+  dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 /* ── Wiki (ambient knowledge base) ──────────────────────────────── */
-/**
- * Client bridge to the SQLite-backed /api/data/wiki/* routes. The cache
- * is optimistic: mutations update local state immediately and dispatch
- * WIKI_UPDATED_EVENT so `useSyncExternalStore` subscribers (sidebar,
- * browse page) re-render without waiting for the next fetch.
- */
 
 let wikiPagesCache: WikiPage[] | null = null;
 let wikiPagesInflight: Promise<WikiPage[]> | null = null;
 // Generation counter — bumped by `invalidateWikiCache()` so an in-flight
-// fetch started before the invalidation doesn't overwrite the fresh
+// load started before the invalidation doesn't overwrite the fresh
 // cache with stale data when it eventually resolves.
 let wikiCacheGeneration = 0;
 const wikiIngestedCache = new Map<string, boolean>();
 
 function notifyWikiUpdated(): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(WIKI_UPDATED_EVENT));
+  dispatch(WIKI_UPDATED_EVENT);
 }
 
 function upsertWikiPageInCache(page: WikiPage): void {
@@ -387,9 +487,7 @@ export async function loadWikiPages(): Promise<WikiPage[]> {
   const gen = wikiCacheGeneration;
   wikiPagesInflight = (async () => {
     try {
-      const list = await apiJson<WikiPage[]>("/wiki");
-      // If someone called `invalidateWikiCache()` while this fetch was
-      // in flight, the response is stale — drop it on the floor.
+      const list = await store.listWikiPages();
       if (gen !== wikiCacheGeneration) return list;
       wikiPagesCache = list;
       notifyWikiUpdated();
@@ -404,24 +502,13 @@ export async function loadWikiPages(): Promise<WikiPage[]> {
 /** Fetch a single wiki page by slug, or null if it doesn't exist. */
 export async function loadWikiPage(slug: string): Promise<WikiPage | null> {
   if (!slug?.trim()) return null;
-  // Prefer cache if we have a full list.
   if (wikiPagesCache) {
     const hit = wikiPagesCache.find((p) => p.slug === slug);
     if (hit) return hit;
   }
-  try {
-    const page = await apiJson<WikiPage>(
-      `/wiki/${encodeURIComponent(slug)}`,
-    );
-    upsertWikiPageInCache(page);
-    return page;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-      return null;
-    }
-    throw err;
-  }
+  const page = await store.getWikiPageBySlug(slug);
+  if (page) upsertWikiPageInCache(page);
+  return page;
 }
 
 export interface SaveWikiPageInput {
@@ -437,14 +524,24 @@ export interface SaveWikiPageInput {
 export async function saveWikiPage(
   input: SaveWikiPageInput,
 ): Promise<WikiPage> {
-  const page = await apiJson<WikiPage>("/wiki", {
-    method: "POST",
-    body: JSON.stringify(input),
+  const existing = await store.getWikiPageBySlug(input.slug);
+  const id = existing?.id ?? crypto.randomUUID();
+  await store.upsertWikiPage({
+    id,
+    slug: input.slug,
+    title: input.title,
+    content: input.content,
+    pageType: input.pageType,
   });
-  upsertWikiPageInCache(page);
-  if (input.reviewId) wikiIngestedCache.set(input.reviewId, true);
+  if (input.reviewId) {
+    await store.addWikiPageSource(id, input.reviewId);
+    wikiIngestedCache.set(input.reviewId, true);
+  }
+  const saved = await store.getWikiPageBySlug(input.slug);
+  if (!saved) throw new Error(`saveWikiPage: page disappeared after upsert: ${input.slug}`);
+  upsertWikiPageInCache(saved);
   notifyWikiUpdated();
-  return page;
+  return saved;
 }
 
 /** Partial update of an existing wiki page. */
@@ -452,21 +549,27 @@ export async function updateWikiPage(
   slug: string,
   patch: { title?: string; content?: string; pageType?: WikiPageType },
 ): Promise<WikiPage> {
-  const page = await apiJson<WikiPage>(
-    `/wiki/${encodeURIComponent(slug)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(patch),
-    },
-  );
-  upsertWikiPageInCache(page);
+  const existing = await store.getWikiPageBySlug(slug);
+  if (!existing) throw new Error(`updateWikiPage: page not found: ${slug}`);
+  await store.upsertWikiPage({
+    id: existing.id,
+    slug,
+    title: patch.title ?? existing.title,
+    content: patch.content ?? existing.content,
+    pageType: patch.pageType ?? existing.pageType,
+  });
+  const saved = await store.getWikiPageBySlug(slug);
+  if (!saved) throw new Error(`updateWikiPage: page disappeared: ${slug}`);
+  upsertWikiPageInCache(saved);
   notifyWikiUpdated();
-  return page;
+  return saved;
 }
 
 /** Delete a wiki page by slug. */
 export async function deleteWikiPage(slug: string): Promise<void> {
-  await apiJson(`/wiki/${encodeURIComponent(slug)}`, { method: "DELETE" });
+  const existing = await store.getWikiPageBySlug(slug);
+  if (!existing) return;
+  await store.deleteWikiPage(existing.id);
   if (wikiPagesCache) {
     wikiPagesCache = wikiPagesCache.filter((p) => p.slug !== slug);
   }
@@ -478,11 +581,9 @@ export async function checkWikiIngested(reviewId: string): Promise<boolean> {
   if (!reviewId?.trim()) return false;
   const cached = wikiIngestedCache.get(reviewId);
   if (cached !== undefined) return cached;
-  const res = await apiJson<{ ingested: boolean }>(
-    `/wiki/check?reviewId=${encodeURIComponent(reviewId)}`,
-  );
-  wikiIngestedCache.set(reviewId, res.ingested);
-  return res.ingested;
+  const ingested = await store.hasWikiSourcesForReview(reviewId);
+  wikiIngestedCache.set(reviewId, ingested);
+  return ingested;
 }
 
 /**
@@ -512,16 +613,13 @@ export interface WikiFinalizeInput {
 }
 
 /**
- * Atomically finalize a journal-write batch on the server inside a
- * single SQLite transaction. Fires WIKI_UPDATED_EVENT on success.
+ * Atomically finalize a journal-write batch inside a single Dexie
+ * transaction. Fires WIKI_UPDATED_EVENT on success.
  */
 export async function finalizeWikiIngest(
   input: WikiFinalizeInput,
 ): Promise<{ savedSlugs: string[] }> {
-  const res = await apiJson<{ savedSlugs: string[] }>("/wiki/finalize", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  const res = await store.wikiIngestFinalize(input);
   wikiCacheGeneration++;
   wikiPagesCache = null;
   wikiPagesInflight = null;
@@ -564,9 +662,12 @@ export interface WikiPageMetadata {
 export async function loadWikiPageMetadata(
   slug: string,
 ): Promise<WikiPageMetadata> {
-  return apiJson<WikiPageMetadata>(
-    `/wiki/${encodeURIComponent(slug)}/backlinks`,
-  );
+  const [backlinks, sources, revisions] = await Promise.all([
+    store.getWikiBacklinks(slug),
+    store.getWikiPageSources(slug),
+    store.listWikiRevisions(slug),
+  ]);
+  return { backlinks, sources, revisions };
 }
 
 export interface WikiRevision {
@@ -579,15 +680,7 @@ export interface WikiRevision {
 
 /** Fetch a single historical revision by id. */
 export async function loadWikiRevision(id: number): Promise<WikiRevision | null> {
-  try {
-    return await apiJson<WikiRevision>(`/wiki/revisions/${id}`);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-      return null;
-    }
-    throw err;
-  }
+  return store.getWikiRevision(id);
 }
 
 /* ── Settings / keys ── */
@@ -637,38 +730,31 @@ export function hasAnySavedApiKey(): boolean {
   );
 }
 
+async function reloadSettingsCache(): Promise<void> {
+  settingsCache = await store.getSettings();
+  dispatch(KEYS_UPDATED_EVENT);
+}
+
 export async function setApiKey(provider: Provider, key: string): Promise<void> {
-  settingsCache = await apiJson<SettingsCache>("/settings", {
-    method: "PATCH",
-    body: JSON.stringify({ keys: { [provider]: key } }),
-  });
-  window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+  await store.patchSettings({ keys: { [provider]: key } });
+  await reloadSettingsCache();
 }
 
 export async function saveInferenceProfiles(
   profiles: InferenceProviderProfile[],
 ): Promise<void> {
-  settingsCache = await apiJson<SettingsCache>("/settings", {
-    method: "PATCH",
-    body: JSON.stringify({ inferenceProfiles: profiles }),
-  });
-  window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+  await store.patchSettings({ inferenceProfiles: profiles });
+  await reloadSettingsCache();
 }
 
 export async function clearApiKey(provider: Provider): Promise<void> {
-  settingsCache = await apiJson<SettingsCache>("/settings", {
-    method: "PATCH",
-    body: JSON.stringify({ keys: { [provider]: null } }),
-  });
-  window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+  await store.patchSettings({ keys: { [provider]: null } });
+  await reloadSettingsCache();
 }
 
 export async function saveSelectedModel(model: Model | null): Promise<void> {
-  settingsCache = await apiJson<SettingsCache>("/settings", {
-    method: "PATCH",
-    body: JSON.stringify({ selectedModel: model }),
-  });
-  window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+  await store.patchSettings({ selectedModel: model });
+  await reloadSettingsCache();
 }
 
 export function getSavedSelectedModel(): Model | null {
@@ -678,6 +764,5 @@ export function getSavedSelectedModel(): Model | null {
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {
-  settingsCache = await apiJson<SettingsCache>("/settings");
-  window.dispatchEvent(new Event(KEYS_UPDATED_EVENT));
+  await reloadSettingsCache();
 }

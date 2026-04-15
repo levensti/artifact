@@ -16,7 +16,6 @@
 import { NextRequest } from "next/server";
 import type { Provider } from "@/lib/models";
 import { isInferenceProviderType } from "@/lib/models";
-import { getInferenceProfile } from "@/lib/server/store";
 import {
   invalidApiProviderMessage,
   isAnthropicMessagesProvider,
@@ -38,12 +37,12 @@ interface ChatRequest {
   messages: { role: "user" | "assistant"; content: string }[];
   model: string;
   provider: Provider;
-  /** Required for built-in providers; ignored when `profileId` resolves credentials. */
-  apiKey?: string;
-  /** Inference profile id (OpenAI-compatible); server loads key and base URL. */
-  profileId?: string;
-  /** @deprecated use profileId for inference providers */
+  /** Required. Sent inline from the browser; never persisted server-side. */
+  apiKey: string;
+  /** Base URL for OpenAI-compatible providers. */
   apiBaseUrl?: string;
+  /** Whether the OpenAI-compatible endpoint supports streaming. Default: true. */
+  supportsStreaming?: boolean;
   paperContext?: string;
   paperTitle?: string;
   arxivId?: string;
@@ -135,8 +134,8 @@ export async function POST(req: NextRequest) {
     model,
     provider,
     apiKey,
-    profileId,
     apiBaseUrl,
+    supportsStreaming,
     paperContext,
     paperTitle,
     arxivId,
@@ -154,30 +153,19 @@ export async function POST(req: NextRequest) {
     return jsonError("Model ID is required.", 400);
   }
 
-  let effectiveApiKey = typeof apiKey === "string" ? apiKey : "";
-  let effectiveBaseUrl =
+  const effectiveApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
+  const effectiveBaseUrl =
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
-  let profileSupportsStreaming = true;
+  const profileSupportsStreaming = supportsStreaming !== false;
 
-  if (isInferenceProviderType(provider)) {
-    if (!profileId || typeof profileId !== "string" || !profileId.trim()) {
-      return jsonError("profileId is required for inference providers.", 400);
-    }
-    const prof = getInferenceProfile(profileId.trim());
-    if (!prof) {
-      return jsonError("Unknown inference profile.", 404);
-    }
-    if (prof.kind !== provider) {
-      return jsonError("Inference profile does not match provider type.", 400);
-    }
-    if (!prof.apiKey?.trim() || !prof.baseUrl?.trim()) {
-      return jsonError("Inference profile is missing API key or base URL.", 400);
-    }
-    effectiveApiKey = prof.apiKey;
-    effectiveBaseUrl = prof.baseUrl.trim();
-    profileSupportsStreaming = prof.supportsStreaming !== false;
-  } else if (!effectiveApiKey.trim()) {
+  if (!effectiveApiKey) {
     return jsonError("API key is required.", 401);
+  }
+  if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
+    return jsonError(
+      "apiBaseUrl is required for OpenAI-compatible providers.",
+      400,
+    );
   }
 
   const tools = getAllTools();

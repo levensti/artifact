@@ -18,16 +18,12 @@ import {
 } from "@/lib/reviews";
 import {
   KEYS_UPDATED_EVENT,
-  getApiKey,
   getSavedSelectedModel,
   isModelReady,
   isBuiltinProviderReady,
+  resolveModelCredentials,
 } from "@/lib/keys";
-import {
-  FALLBACK_MODELS,
-  isInferenceProviderType,
-  type Model,
-} from "@/lib/models";
+import { FALLBACK_MODELS, type Model } from "@/lib/models";
 import type { GraphNode } from "@/lib/explore";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 
@@ -162,15 +158,19 @@ export default function DiscoveryPage() {
           .filter((x) => typeof x === "string" && x.trim().length > 0)
           .join("\n\n");
 
+        const creds = resolveModelCredentials(model);
+        if (!creds) {
+          setGenerationError("Missing credentials for selected model.");
+          return;
+        }
         await runPaperExploreAnalysis({
           reviewId: review.id,
           arxivId: node.arxivId,
           paperTitle: node.title,
           paperContext,
           model,
-          apiKey: isInferenceProviderType(model.provider)
-            ? ""
-            : (getApiKey(model.provider) ?? ""),
+          apiKey: creds.apiKey,
+          apiBaseUrl: creds.apiBaseUrl,
           onProgress: setGenerationProgress,
         });
         const after = getGlobalGraphData();

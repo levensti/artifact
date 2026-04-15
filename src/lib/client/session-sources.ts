@@ -1,17 +1,16 @@
 /**
- * Aggregates the user's research activity for the journal agent. Pure read —
- * no writes. Supports two modes:
- *   • single-day (legacy, still used by a couple of callers)
- *   • since-window (the agentic path: everything after a given ISO timestamp).
+ * Client-side port of src/lib/server/session-sources.ts. Aggregates the
+ * user's research activity (reviews, messages, annotations, deep dives)
+ * for the journal agent. Pure read — no writes.
  */
 
 import {
-  listReviews,
-  getMessages,
   getAnnotations,
+  getMessages,
   listDeepDives,
+  listReviews,
   listSessionPagesInRange,
-} from "@/lib/server/store";
+} from "@/lib/client/store";
 
 export interface SessionSourceReview {
   reviewId: string;
@@ -67,8 +66,10 @@ function onLocalDate(iso: string, dateKey: string): boolean {
   return `${y}-${m}-${day}` === dateKey;
 }
 
-export function getSessionSources(dateKey: string): SessionSources {
-  const reviews = listReviews();
+export async function getSessionSources(
+  dateKey: string,
+): Promise<SessionSources> {
+  const reviews = await listReviews();
   const touchedReviews: SessionSourceReview[] = [];
   const chatMessages: SessionSourceChatMessage[] = [];
   const annotations: SessionSourceAnnotation[] = [];
@@ -77,7 +78,7 @@ export function getSessionSources(dateKey: string): SessionSources {
     const createdToday = onLocalDate(r.createdAt, dateKey);
     const updatedToday = onLocalDate(r.updatedAt, dateKey);
 
-    const msgs = getMessages(r.id);
+    const msgs = await getMessages(r.id);
     const todaysMsgs = msgs.filter((m) => onLocalDate(m.timestamp, dateKey));
     for (const m of todaysMsgs) {
       chatMessages.push({
@@ -89,7 +90,7 @@ export function getSessionSources(dateKey: string): SessionSources {
       });
     }
 
-    const anns = getAnnotations(r.id);
+    const anns = await getAnnotations(r.id);
     const todaysAnns = anns.filter((a) => onLocalDate(a.createdAt, dateKey));
     for (const a of todaysAnns) {
       annotations.push({
@@ -119,7 +120,8 @@ export function getSessionSources(dateKey: string): SessionSources {
     }
   }
 
-  const deepDives: SessionSourceDeepDive[] = listDeepDives()
+  const dd = await listDeepDives();
+  const deepDives: SessionSourceDeepDive[] = dd
     .filter((d) => onLocalDate(d.createdAt, dateKey))
     .map((d) => ({
       id: d.id,
@@ -169,12 +171,13 @@ function afterIso(iso: string | null | undefined, sinceIso: string): boolean {
 }
 
 /**
- * Everything touched at or after `sinceIso`. Used by the journal agent to
- * decide what (if anything) to write. Caps per-review chat/annotations to
- * keep the prompt under budget.
+ * Everything touched at or after `sinceIso`. Caps per-review chat and
+ * annotations to keep the prompt under budget.
  */
-export function getRecentActivity(sinceIso: string): RecentActivity {
-  const reviews = listReviews();
+export async function getRecentActivity(
+  sinceIso: string,
+): Promise<RecentActivity> {
+  const reviews = await listReviews();
   const touchedReviews: RecentActivity["reviews"] = [];
   const chatMessages: SessionSourceChatMessage[] = [];
   const annotations: SessionSourceAnnotation[] = [];
@@ -187,7 +190,8 @@ export function getRecentActivity(sinceIso: string): RecentActivity {
     const createdSince = afterIso(r.createdAt, sinceIso);
     const updatedSince = afterIso(r.updatedAt, sinceIso);
 
-    const msgs = getMessages(r.id)
+    const allMsgs = await getMessages(r.id);
+    const msgs = allMsgs
       .filter((m) => afterIso(m.timestamp, sinceIso))
       .slice(-60);
     for (const m of msgs) {
@@ -201,7 +205,8 @@ export function getRecentActivity(sinceIso: string): RecentActivity {
       });
     }
 
-    const anns = getAnnotations(r.id)
+    const allAnns = await getAnnotations(r.id);
+    const anns = allAnns
       .filter((a) => afterIso(a.createdAt, sinceIso))
       .slice(-40);
     for (const a of anns) {
@@ -230,7 +235,8 @@ export function getRecentActivity(sinceIso: string): RecentActivity {
     }
   }
 
-  const deepDives: SessionSourceDeepDive[] = listDeepDives()
+  const dd = await listDeepDives();
+  const deepDives: SessionSourceDeepDive[] = dd
     .filter((d) => afterIso(d.createdAt, sinceIso))
     .map((d) => {
       bump(d.createdAt);

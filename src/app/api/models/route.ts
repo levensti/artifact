@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isInferenceProviderType } from "@/lib/models";
-import { getInferenceProfile } from "@/lib/server/store";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
   isProvider,
@@ -11,7 +10,6 @@ interface ModelsRequest {
   provider: unknown;
   apiKey?: unknown;
   apiBaseUrl?: unknown;
-  profileId?: unknown;
 }
 
 interface ModelOption {
@@ -31,35 +29,24 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const { provider, apiKey, apiBaseUrl, profileId } = body;
+  const { provider, apiKey, apiBaseUrl } = body;
 
   if (!isProvider(provider)) {
     return jsonError("Invalid provider.", 400);
   }
 
-  let effectiveKey: string;
-  let effectiveBase: string | undefined;
+  if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
+    return jsonError("API key is required.", 401);
+  }
+  const effectiveKey = apiKey.trim();
+  const effectiveBase =
+    typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : undefined;
 
-  if (isInferenceProviderType(provider)) {
-    if (!profileId || typeof profileId !== "string" || !profileId.trim()) {
-      return jsonError("profileId is required for inference providers.", 400);
-    }
-    const prof = getInferenceProfile(profileId.trim());
-    if (!prof || prof.kind !== provider) {
-      return jsonError("Invalid or unknown inference profile.", 400);
-    }
-    if (!prof.apiKey?.trim() || !prof.baseUrl?.trim()) {
-      return jsonError("Inference profile is missing API key or base URL.", 400);
-    }
-    effectiveKey = prof.apiKey;
-    effectiveBase = prof.baseUrl.trim();
-  } else {
-    if (!apiKey || typeof apiKey !== "string") {
-      return jsonError("API key is required.", 401);
-    }
-    effectiveKey = apiKey;
-    effectiveBase =
-      typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : undefined;
+  if (isInferenceProviderType(provider) && !effectiveBase) {
+    return jsonError(
+      "apiBaseUrl is required for OpenAI-compatible providers.",
+      400,
+    );
   }
 
   try {
