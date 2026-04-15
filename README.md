@@ -1,27 +1,39 @@
 # Artifact
 
-Artifact is an open source workspace for deeply understanding research papers with AI: the paper stays in view, the model has the full text, and your session keeps notes, analysis, and links between papers instead of losing context every time you switch tabs.
+Artifact is an open source workspace where researchers pair with AI to understand papers and other reading material. As you read, a background agent automatically builds and maintains your personal journal — a living record of the concepts, definitions, and connections you're picking up along the way.
 
-Ask questions with proper grounding, see suggested prerequisite topics and related work, and build a map of how papers connect as you read more than one.
+Load an arXiv paper, a web article, or your own PDF into a reader beside the assistant, and ask questions grounded in the full text. Your journal grows quietly in the background as you read and chat, and every future session is grounded in what it already knows about you — no re-explaining where you left off.
 
 **Bring your own keys.** Configure providers in Settings and use the models you already pay for—Anthropic, OpenAI, xAI, or any OpenAI-compatible inference API (OpenRouter, Fireworks, Together, Sail, etc.). One selector lists every model you add.
 
-Data stays on your machine: reviews and graph state live in SQLite on the server (`/data/artifact.db`). There are no accounts and no telemetry.
+Data stays on your machine: reviews, annotations, uploaded PDFs, and graph state live in your browser's IndexedDB—there is no server-side database, no accounts, and no telemetry.
+
+**Try it now:** [withartifact.com](https://withartifact.com) — no install, just add your API keys and start reading.
 
 ![Paper review — PDF with AI assistant](docs/paper-copilot.png)
 
-## Quick start
+## Run locally
+
+Prefer to run it yourself (for development or self-hosting)? Clone the repo and:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000), add API keys under Settings, then open a paper (by arXiv ID or URL—the PDF loads in the reader).
+Open [localhost:3000](http://localhost:3000) and add your API keys under Settings.
 
 ## Using Artifact
 
-Open a paper to get the PDF next to Assistant, Notes, and Explore. Read and ask with selection-scoped questions; run **Analyze** once per paper to fill prerequisites, related candidates, and the shared graph. Use **Discovery** to browse how analyzed papers relate and what to open next.
+**Open anything.** Artifact reads from multiple sources so you can work with whatever you have in front of you:
+
+- **arXiv ID** — paste an ID like `2401.12345` and the paper loads straight from arXiv.
+- **Paper or web URL** — drop in any paper link or arbitrary web page; the content is cleaned and rendered alongside the assistant.
+- **Local PDF upload** — pick a PDF from your machine and it's stored locally in your browser (IndexedDB), ready to read and query.
+
+Once a source is open, you get the content next to Assistant, Notes, and Explore. Ask selection-scoped questions, and run **Analyze** once per source to fill prerequisites, related candidates, and the shared graph. Use **Discovery** to browse how analyzed papers relate and what to open next.
+
+**Ambient Journal.** As you read and chat, Artifact quietly builds a personal wiki of what you're learning. The **Journal** captures key concepts, definitions, and connections across sessions, then feeds that context back into future chats so the assistant remembers what you already know — without you having to re-explain or re-link anything.
 
 ![Knowledge graph — related papers mapped across sessions](docs/knowledge-graph.png)
 
@@ -41,10 +53,11 @@ npm run build    # Type-check + production build
 
 - **Framework** — Next.js 16 (App Router, Turbopack), React 19, TypeScript
 - **PDF** — react-pdf / pdfjs-dist (full text extraction and selection)
+- **Web pages** — @mozilla/readability + DOMPurify for cleaned, safe rendering
 - **Markdown** — react-markdown, remark-gfm, remark-math, rehype-katex
-- **Graph** — d3-force layout, SVG rendering
+- **Graph** — React Flow (@xyflow/react) with custom paper nodes and relationship edges
 - **Styling** — Tailwind CSS 4, shadcn/ui
-- **Storage** — SQLite (better-sqlite3), WAL mode
+- **Storage** — IndexedDB via Dexie (client-side, per-browser; PDFs stored as blobs)
 - **AI** — Anthropic, OpenAI, xAI, OpenAI-compatible APIs (streaming chat + structured generation)
 - **Paper search** — Semantic Scholar (primary), arXiv API (fallback)
 
@@ -58,19 +71,23 @@ src/
 │   │   ├── arxiv-metadata/    # Fetch paper metadata from arXiv
 │   │   ├── arxiv-search/      # Search arXiv for related papers
 │   │   ├── chat/              # Streaming agentic chat (multi-provider, ReAct loop)
-│   │   ├── data/              # CRUD persistence (reviews, annotations, settings, graph)
 │   │   ├── generate/          # Structured generation for analysis pipeline
 │   │   ├── models/            # Available model catalog
-│   │   └── pdf/               # PDF proxy (CORS)
+│   │   ├── pdf/               # PDF proxy (CORS) + validation
+│   │   ├── web-content/       # Fetch and clean arbitrary web pages
+│   │   └── wiki-schema/       # Serve and edit the ambient wiki schema
 │   ├── discovery/             # Knowledge graph page
-│   ├── review/[id]/           # Paper reader (PDF + right panel)
+│   ├── journal/               # Ambient wiki / journal view
+│   ├── review/[id]/           # Reader (PDF or web page + right panel)
 │   └── settings/              # API key management
 ├── components/
-│   ├── related-works-graph    # Interactive graph (d3-force, SVG, pill nodes)
+│   ├── related-works-graph    # Interactive graph (React Flow, custom nodes + edges)
+│   ├── graph-canvas           # React Flow canvas with paper nodes and relationship edges
 │   ├── chat-panel             # Chat with streaming + analysis progress
 │   ├── prerequisites-panel    # Prerequisite checklist + study guides
 │   ├── right-panel            # Tabbed panel (Assistant / Notes / Explore)
 │   ├── pdf-viewer             # PDF renderer with text selection + annotations
+│   ├── web-viewer             # Readability-cleaned web page reader
 │   ├── annotation-list        # Annotation management
 │   └── sidebar                # Navigation + review history
 ├── hooks/
@@ -87,8 +104,10 @@ src/
     ├── reviews                # Review sessions + chat message persistence
     ├── annotations            # Annotation CRUD
     ├── deep-dives             # Advanced learning sessions
+    ├── wiki                   # Ambient knowledge base: types, storage, ingest, journal agent
     ├── models                 # Model + provider definitions
-    └── server/store           # SQLite database operations
+    ├── client/db              # Dexie (IndexedDB) schema and queries
+    └── client/pdf-blobs       # Local PDF blob storage (IndexedDB)
 ```
 
 </details>
