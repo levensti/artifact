@@ -20,15 +20,14 @@ export default function Home() {
               Artifact
             </h1>
             <p className="mx-auto max-w-md text-[17px] leading-relaxed text-muted-foreground">
-              Read arXiv papers with full-text context, annotate, and chat with
-              an AI assistant.
+              Discover the research frontier.
             </p>
           </div>
           <Button
             onClick={() => setShowNewReview(true)}
             className="h-10 gap-2 rounded-md px-5 text-[13px] font-medium"
           >
-            Start a review
+            Get started
             <ArrowRight size={14} strokeWidth={2} />
           </Button>
         </div>

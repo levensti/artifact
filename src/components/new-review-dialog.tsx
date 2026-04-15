@@ -167,7 +167,9 @@ export default function NewReviewDialog({
             pageTitle = data.title.trim();
           }
         } else {
-          const data = await res.json().catch(() => ({ error: "Failed to fetch" }));
+          const data = await res
+            .json()
+            .catch(() => ({ error: "Failed to fetch" }));
           setError(data.error || "Could not load this page");
           return;
         }
@@ -222,7 +224,7 @@ export default function NewReviewDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Start a review</DialogTitle>
+          <DialogTitle>Start a review session</DialogTitle>
           <DialogDescription>
             {mode === "arxiv"
               ? "Paste a link to any arXiv paper."
@@ -236,7 +238,10 @@ export default function NewReviewDialog({
         <div className="flex gap-0.5 rounded-xl bg-muted/70 p-1 border border-border/40">
           <button
             type="button"
-            onClick={() => { setMode("arxiv"); setError(null); }}
+            onClick={() => {
+              setMode("arxiv");
+              setError(null);
+            }}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === "arxiv"
                 ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
@@ -248,7 +253,10 @@ export default function NewReviewDialog({
           </button>
           <button
             type="button"
-            onClick={() => { setMode("web"); setError(null); }}
+            onClick={() => {
+              setMode("web");
+              setError(null);
+            }}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === "web"
                 ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
@@ -260,7 +268,10 @@ export default function NewReviewDialog({
           </button>
           <button
             type="button"
-            onClick={() => { setMode("local"); setError(null); }}
+            onClick={() => {
+              setMode("local");
+              setError(null);
+            }}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === "local"
                 ? "bg-background text-foreground shadow-md ring-1 ring-border/50"

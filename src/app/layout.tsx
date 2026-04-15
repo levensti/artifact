@@ -12,8 +12,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Artifact",
-  description:
-    "Read arXiv PDFs with full-text Q&A per paper. Your keys and chat history stay in the browser.",
+  description: "Your digital workspace for discovering the research frontier.",
 };
 
 export const viewport: Viewport = {
@@ -28,7 +27,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${inter.variable} h-full`}>
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${inter.variable} h-full`}
+    >
       <body className="h-full overflow-hidden">
         <TooltipProvider delay={200}>{children}</TooltipProvider>
       </body>

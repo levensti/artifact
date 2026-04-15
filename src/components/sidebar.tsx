@@ -41,7 +41,10 @@ function subscribeReviews(onStoreChange: () => void) {
 
 function reviewsSnapshot() {
   const wikiPages = getWikiCacheSnapshot() ?? [];
-  return JSON.stringify({ reviews: getReviews(), wikiPageCount: wikiPages.length });
+  return JSON.stringify({
+    reviews: getReviews(),
+    wikiPageCount: wikiPages.length,
+  });
 }
 
 function reviewsServerSnapshot() {
@@ -167,14 +170,19 @@ export default function Sidebar({
         )}
       >
         <div className="shrink-0 px-2 pb-2 pt-3">
-          <div className="mb-3 flex items-center justify-between gap-2 px-2">
+          <div className="mb-3 flex items-start justify-between gap-2 px-2">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-foreground text-background">
+              <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-foreground text-background">
                 <BookOpen className="size-[14px]" strokeWidth={2} />
               </span>
-              <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
-                Artifact
-              </span>
+              <div className="flex min-w-0 flex-col leading-tight">
+                <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+                  Artifact
+                </span>
+                <span className="truncate text-[11px] font-normal text-muted-foreground">
+                  Discover the frontier
+                </span>
+              </div>
             </div>
             <Button
               variant="ghost"
@@ -190,22 +198,19 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => setShowNewReview(true)}
-            title="Create a review from an arXiv link"
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/85 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
           >
             <span className="flex w-6 shrink-0 items-center justify-center">
-              <FilePlus className="size-[15px] text-primary/85" strokeWidth={1.75} />
+              <FilePlus
+                className="size-[15px] text-primary/85"
+                strokeWidth={1.75}
+              />
             </span>
             <span className="truncate">Start a review</span>
           </button>
           <button
             type="button"
             onClick={() => router.push("/journal")}
-            title={
-              ingestActive
-                ? `Journal: ${wikiPageCount} entries · ${ingestLabel}`
-                : `Journal: ${wikiPageCount} entries`
-            }
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150",
               pathname === "/journal"
@@ -260,7 +265,10 @@ export default function Sidebar({
         <ScrollArea className="min-h-0 flex-1 px-2 pb-2 pt-1">
           {grouped.length === 0 && (
             <div className="mx-2 mt-8 flex flex-col items-center gap-2 text-center">
-              <FilePlus className="size-5 text-muted-foreground/50" strokeWidth={1.5} />
+              <FilePlus
+                className="size-5 text-muted-foreground/50"
+                strokeWidth={1.5}
+              />
               <p className="text-[12px] leading-relaxed text-muted-foreground/70">
                 Your reviews will appear here.
               </p>
@@ -307,7 +315,10 @@ export default function Sidebar({
             onClick={onOpenSettings}
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-[13px] text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-foreground"
           >
-            <Settings className="size-4 shrink-0 opacity-80" strokeWidth={1.75} />
+            <Settings
+              className="size-4 shrink-0 opacity-80"
+              strokeWidth={1.75}
+            />
             Manage API keys
           </button>
         </div>
