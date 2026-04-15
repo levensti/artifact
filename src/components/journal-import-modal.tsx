@@ -120,16 +120,13 @@ export default function JournalImportModal({
   }, []);
 
   // Popover for the compact key-entry UI anchored in the footer.
+  // Derived: even if the user left it open, don't render the popover
+  // once a key exists — the reason for showing it is gone.
   const [keyMenuOpen, setKeyMenuOpen] = useState(false);
   const keyMenuRef = useRef<HTMLDivElement | null>(null);
-  // Close popover the moment a key is saved — the reason for showing
-  // it is gone.
+  const keyMenuVisible = keyMenuOpen && !hasKey;
   useEffect(() => {
-    if (hasKey) setKeyMenuOpen(false);
-  }, [hasKey]);
-  // Outside click dismissal.
-  useEffect(() => {
-    if (!keyMenuOpen) return;
+    if (!keyMenuVisible) return;
     const onDown = (e: MouseEvent) => {
       if (!keyMenuRef.current) return;
       if (!keyMenuRef.current.contains(e.target as Node)) {
@@ -138,7 +135,7 @@ export default function JournalImportModal({
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
-  }, [keyMenuOpen]);
+  }, [keyMenuVisible]);
   const handleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
   // Snapshot of localStorage's imported-sessions map. We refresh it
@@ -388,13 +385,11 @@ export default function JournalImportModal({
   const combinedAllowed =
     selected.size > 1 && selectedByteTotal <= COMBINED_BYTE_LIMIT;
 
-  // If selection changes such that combined is no longer allowed,
-  // snap back to separate so the button label doesn't lie.
-  useEffect(() => {
-    if (mergeMode === "combined" && !combinedAllowed) {
-      setMergeMode("separate");
-    }
-  }, [mergeMode, combinedAllowed]);
+  // Derived merge mode: if the selection grew past the combined
+  // byte budget, fall back to "separate" for rendering without
+  // touching the user's saved preference.
+  const effectiveMergeMode: "separate" | "combined" =
+    mergeMode === "combined" && !combinedAllowed ? "separate" : mergeMode;
 
   const toggleOne = (id: string) => {
     setSelected((prev) => {
@@ -555,7 +550,7 @@ export default function JournalImportModal({
 
         {phase.kind === "ready" ? (
           <footer className="relative shrink-0 border-t border-border/60 bg-muted/30 px-6 py-2.5">
-            {keyMenuOpen ? (
+            {keyMenuVisible ? (
               <div
                 ref={keyMenuRef}
                 className="absolute bottom-full left-6 z-20 mb-2 w-[calc(100%-3rem)] max-w-[440px] rounded-lg border border-border/80 bg-popover p-3 shadow-xl ring-1 ring-foreground/5"
@@ -602,7 +597,7 @@ export default function JournalImportModal({
                     onClick={() => setMergeMode("separate")}
                     className={cn(
                       "rounded px-2 py-1 transition-colors",
-                      mergeMode === "separate"
+                      effectiveMergeMode === "separate"
                         ? "bg-primary/10 text-foreground"
                         : "text-muted-foreground hover:text-foreground",
                     )}
@@ -617,7 +612,7 @@ export default function JournalImportModal({
                       "rounded px-2 py-1 transition-colors",
                       !combinedAllowed
                         ? "cursor-not-allowed text-muted-foreground/40"
-                        : mergeMode === "combined"
+                        : effectiveMergeMode === "combined"
                           ? "bg-primary/10 text-foreground"
                           : "text-muted-foreground hover:text-foreground",
                     )}
@@ -648,7 +643,7 @@ export default function JournalImportModal({
                   ? "Import"
                   : !hasKey
                     ? "Add API key to import"
-                    : mergeMode === "combined" && selected.size > 1
+                    : effectiveMergeMode === "combined" && selected.size > 1
                       ? `Import as 1 combined entry`
                       : `Import ${selected.size} ${selected.size === 1 ? "session" : "sessions"}`}
               </button>
