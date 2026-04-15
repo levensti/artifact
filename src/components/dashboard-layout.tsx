@@ -110,7 +110,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <Sidebar
               collapsed={collapsed}
               presentation="inline"
-              onToggle={toggle}
               onOpenSettings={() => openSettings()}
             />
           </Suspense>
@@ -133,7 +132,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <Sidebar
                 collapsed={false}
                 presentation="overlay"
-                onToggle={toggle}
                 onOpenSettings={() => openSettings()}
               />
             </Suspense>

@@ -7,7 +7,6 @@ import {
   FilePen,
   FilePlus,
   Settings,
-  PanelLeftClose,
   AlertCircle,
 } from "lucide-react";
 import {
@@ -25,7 +24,6 @@ import {
 } from "@/lib/wiki-status";
 import { cn } from "@/lib/utils";
 import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NewReviewDialog from "./new-review-dialog";
 
@@ -55,14 +53,12 @@ interface SidebarProps {
   collapsed: boolean;
   /** Narrow screens: `overlay` = fixed drawer; `inline` = flex column (or w-0 when collapsed). */
   presentation?: "inline" | "overlay";
-  onToggle: () => void;
   onOpenSettings: () => void;
 }
 
 export default function Sidebar({
   collapsed,
   presentation = "inline",
-  onToggle,
   onOpenSettings,
 }: SidebarProps) {
   const reviewsJson = useSyncExternalStore(
@@ -184,16 +180,26 @@ export default function Sidebar({
                 </span>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-              onClick={onToggle}
-              title="Collapse sidebar"
-              aria-label="Collapse sidebar"
+            <a
+              href="https://github.com/levensti/artifact"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View Artifact on GitHub"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent hover:text-foreground"
             >
-              <PanelLeftClose className="size-4" strokeWidth={1.75} />
-            </Button>
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+                className="size-[18px]"
+              >
+                <path
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M12 2C6.477 2 2 6.486 2 12.02c0 4.424 2.865 8.178 6.839 9.504.5.092.682-.218.682-.483 0-.237-.009-.866-.013-1.7-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.071 1.531 1.032 1.531 1.032.892 1.531 2.341 1.089 2.91.832.092-.648.35-1.09.636-1.341-2.22-.253-4.555-1.113-4.555-4.954 0-1.094.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.845c.85.004 1.705.115 2.504.337 1.909-1.296 2.748-1.027 2.748-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.594 1.028 2.688 0 3.85-2.339 4.697-4.566 4.946.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.481A10.02 10.02 0 0 0 22 12.02C22 6.486 17.523 2 12 2Z"
+                />
+              </svg>
+            </a>
           </div>
           <button
             type="button"

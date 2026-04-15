@@ -20,7 +20,7 @@ export default function Home() {
               Artifact
             </h1>
             <p className="mx-auto max-w-md text-[17px] leading-relaxed text-muted-foreground">
-              Discover the research frontier.
+              Discover the frontier.
             </p>
           </div>
           <Button
