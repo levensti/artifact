@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Model } from "@/lib/models";
-import { isInferenceProviderType } from "@/lib/models";
-import { getApiKey, isModelReady } from "@/lib/keys";
+import { isModelReady, resolveModelCredentials } from "@/lib/keys";
 import { loadExplore } from "@/lib/client-data";
 import { runPaperExploreAnalysis } from "@/lib/explore-analysis";
 
@@ -67,9 +66,8 @@ export function useAnalysis({
   const trigger = useCallback((): boolean => {
     if (!selectedModel || !paperContext.trim()) return false;
     if (!isModelReady(selectedModel)) return false;
-    const apiKey = isInferenceProviderType(selectedModel.provider)
-      ? ""
-      : (getApiKey(selectedModel.provider) ?? "");
+    const creds = resolveModelCredentials(selectedModel);
+    if (!creds) return false;
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -87,7 +85,8 @@ export function useAnalysis({
           paperTitle,
           paperContext,
           model: selectedModel,
-          apiKey,
+          apiKey: creds.apiKey,
+          apiBaseUrl: creds.apiBaseUrl,
           signal: controller.signal,
           onProgress: setProgress,
         });

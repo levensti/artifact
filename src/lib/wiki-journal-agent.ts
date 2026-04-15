@@ -11,12 +11,12 @@
  */
 
 import type { Model } from "@/lib/models";
-import { isInferenceProviderType } from "@/lib/models";
 import {
   finalizeWikiIngest,
   loadWikiPages,
   type WikiFinalizePage,
 } from "@/lib/client-data";
+import { getRecentActivity } from "@/lib/client/session-sources";
 import { beginWikiIngest, endWikiIngest } from "@/lib/wiki-status";
 import { parseJson } from "@/lib/json-parse";
 
@@ -80,6 +80,7 @@ export type JournalTrigger = "chat" | "wiki-load" | "manual";
 export interface MaybeRefreshJournalOpts {
   model: Model;
   apiKey: string;
+  apiBaseUrl?: string;
   trigger: JournalTrigger;
   /** If true, bypass the debounce + activity gate. */
   force?: boolean;
@@ -148,6 +149,7 @@ export async function maybeRefreshJournal(
     const raw = await callAgent({
       model: opts.model,
       apiKey: opts.apiKey,
+      apiBaseUrl: opts.apiBaseUrl,
       activity,
       journalEntries,
       now,
@@ -197,11 +199,7 @@ async function fetchRecentActivity(
   sinceIso: string,
 ): Promise<RecentActivity | null> {
   try {
-    const res = await fetch(
-      `/api/data/wiki/session-sources?mode=activity&since=${encodeURIComponent(sinceIso)}`,
-    );
-    if (!res.ok) return null;
-    return (await res.json()) as RecentActivity;
+    return (await getRecentActivity(sinceIso)) as RecentActivity;
   } catch {
     return null;
   }
@@ -210,6 +208,7 @@ async function fetchRecentActivity(
 interface CallAgentArgs {
   model: Model;
   apiKey: string;
+  apiBaseUrl?: string;
   activity: RecentActivity;
   journalEntries: Array<{
     slug: string;
@@ -222,7 +221,7 @@ interface CallAgentArgs {
 }
 
 async function callAgent(args: CallAgentArgs): Promise<string | null> {
-  const { model, apiKey, activity, journalEntries, now } = args;
+  const { model, apiKey, apiBaseUrl, activity, journalEntries, now } = args;
   const prompt = buildPrompt({ activity, journalEntries, now });
 
   try {
@@ -232,9 +231,8 @@ async function callAgent(args: CallAgentArgs): Promise<string | null> {
       body: JSON.stringify({
         model: model.modelId,
         provider: model.provider,
-        ...(isInferenceProviderType(model.provider)
-          ? { profileId: model.profileId }
-          : { apiKey }),
+        apiKey,
+        ...(apiBaseUrl ? { apiBaseUrl } : {}),
         prompt,
         paperContext: "",
       }),

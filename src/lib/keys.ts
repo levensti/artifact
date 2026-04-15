@@ -41,6 +41,35 @@ export function resolveInferenceCredentials(
   return { apiKey: p.apiKey.trim(), baseUrl: p.baseUrl.trim() };
 }
 
+/**
+ * Resolve the request-body fields chat/generate/models endpoints expect
+ * for the given model. Works for both built-in providers (returns just
+ * `apiKey`) and inference profiles (returns `apiKey`, `apiBaseUrl`, and
+ * `supportsStreaming`). Returns null if the required credentials aren't
+ * configured — the caller should surface a friendly error.
+ */
+export function resolveModelCredentials(
+  model: Model,
+): {
+  apiKey: string;
+  apiBaseUrl?: string;
+  supportsStreaming?: boolean;
+} | null {
+  if (isInferenceProviderType(model.provider)) {
+    if (!model.profileId) return null;
+    const p = getInferenceProfileCached(model.profileId);
+    if (!p?.apiKey?.trim() || !p?.baseUrl?.trim()) return null;
+    return {
+      apiKey: p.apiKey.trim(),
+      apiBaseUrl: p.baseUrl.trim(),
+      supportsStreaming: p.supportsStreaming !== false,
+    };
+  }
+  const key = getApiKeyCached(model.provider);
+  if (!key) return null;
+  return { apiKey: key };
+}
+
 export function isBuiltinProviderReady(provider: import("./models").Provider): boolean {
   return isBuiltinProviderReadyCached(provider);
 }

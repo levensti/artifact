@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Model } from "@/lib/models";
 import {
-  getApiKey,
   hasAnySavedApiKey,
-  isInferenceProviderType,
   isModelReady,
   KEYS_UPDATED_EVENT,
+  resolveModelCredentials,
 } from "@/lib/keys";
 import {
   loadMessages,
@@ -15,7 +14,10 @@ import {
   type ChatAssistantBlock,
   type ChatMessage,
 } from "@/lib/reviews";
-import { invalidateExploreCache } from "@/lib/client-data";
+import {
+  invalidateExploreCache,
+  saveRelatedPapersFromAssistant,
+} from "@/lib/client-data";
 import { scheduleJournalAfterChat } from "@/lib/wiki-journal-agent";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
@@ -321,9 +323,9 @@ export function useChat({
             })),
             model: selectedModel.modelId,
             provider: selectedModel.provider,
-            ...(isInferenceProviderType(selectedModel.provider)
-              ? { profileId: selectedModel.profileId }
-              : { apiKey: getApiKey(selectedModel.provider)! }),
+            ...(resolveModelCredentials(selectedModel) ?? {
+              apiKey: "",
+            }),
             paperContext,
             paperTitle,
             arxivId,
@@ -363,15 +365,27 @@ export function useChat({
           ),
         );
 
-        // If the assistant saved to the knowledge graph, invalidate cache
-        // so the Discovery tab picks up the new data.
-        const touchedGraph = steps.some(
-          (s) =>
+        // Persist save_to_knowledge_graph tool calls into IndexedDB
+        // client-side (the server tool is now pure validation).
+        const graphSaves = steps.filter(
+          (s): s is Extract<AgentStep, { kind: "tool_call" }> =>
             s.kind === "tool_call" &&
             s.name === "save_to_knowledge_graph" &&
-            s.output,
+            !!s.output,
         );
-        if (touchedGraph) {
+        if (graphSaves.length > 0 && arxivId) {
+          for (const step of graphSaves) {
+            try {
+              await saveRelatedPapersFromAssistant(
+                reviewId,
+                arxivId,
+                paperTitle,
+                step.input.papers,
+              );
+            } catch {
+              /* ignore — don't break chat on graph persist failure */
+            }
+          }
           invalidateExploreCache(reviewId);
         }
 
@@ -379,10 +393,14 @@ export function useChat({
         // Debounced inside the agent module so a burst of turns collapses
         // into one LLM call.
         if (content && isModelReady(selectedModel)) {
-          const apiKey = isInferenceProviderType(selectedModel.provider)
-            ? ""
-            : (getApiKey(selectedModel.provider) ?? "");
-          scheduleJournalAfterChat({ model: selectedModel, apiKey });
+          const creds = resolveModelCredentials(selectedModel);
+          if (creds) {
+            scheduleJournalAfterChat({
+              model: selectedModel,
+              apiKey: creds.apiKey,
+              apiBaseUrl: creds.apiBaseUrl,
+            });
+          }
         }
       } catch (err) {
         const message =
@@ -479,9 +497,9 @@ export function useChat({
             messages: historyForApi,
             model: selectedModel.modelId,
             provider: selectedModel.provider,
-            ...(isInferenceProviderType(selectedModel.provider)
-              ? { profileId: selectedModel.profileId }
-              : { apiKey: getApiKey(selectedModel.provider)! }),
+            ...(resolveModelCredentials(selectedModel) ?? {
+              apiKey: "",
+            }),
             paperContext,
             paperTitle,
             arxivId,
@@ -519,10 +537,14 @@ export function useChat({
         onAnnotationsPersist();
 
         if (content && isModelReady(selectedModel)) {
-          const apiKey = isInferenceProviderType(selectedModel.provider)
-            ? ""
-            : (getApiKey(selectedModel.provider) ?? "");
-          scheduleJournalAfterChat({ model: selectedModel, apiKey });
+          const creds = resolveModelCredentials(selectedModel);
+          if (creds) {
+            scheduleJournalAfterChat({
+              model: selectedModel,
+              apiKey: creds.apiKey,
+              apiBaseUrl: creds.apiBaseUrl,
+            });
+          }
         }
       } catch (err) {
         const message =

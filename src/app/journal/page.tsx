@@ -11,7 +11,7 @@ import {
   hydrateClientStore,
   loadWikiPages,
 } from "@/lib/client-data";
-import { getApiKey, isInferenceProviderType, isModelReady } from "@/lib/keys";
+import { isModelReady, resolveModelCredentials } from "@/lib/keys";
 import type { WikiPage } from "@/lib/wiki";
 import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import { localDateKey } from "@/lib/date-keys";
@@ -78,16 +78,17 @@ function JournalPageInner() {
         // activity has happened since the last run.
         const model = getSavedSelectedModel();
         if (model && isModelReady(model)) {
-          const apiKey = isInferenceProviderType(model.provider)
-            ? ""
-            : (getApiKey(model.provider) ?? "");
-          void maybeRefreshJournal({
-            model,
-            apiKey,
-            trigger: "wiki-load",
-          }).catch(() => {
-            /* ambient */
-          });
+          const creds = resolveModelCredentials(model);
+          if (creds) {
+            void maybeRefreshJournal({
+              model,
+              apiKey: creds.apiKey,
+              apiBaseUrl: creds.apiBaseUrl,
+              trigger: "wiki-load",
+            }).catch(() => {
+              /* ambient */
+            });
+          }
         }
       } catch (err) {
         if (cancelled) return;

@@ -17,6 +17,7 @@ import NotesRail from "@/components/notes-rail";
 import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
 import { hydrateClientStore } from "@/lib/client-data";
+import { loadPdfBlob } from "@/lib/client/pdf-blobs";
 import { getReview } from "@/lib/reviews";
 import { REVIEWS_UPDATED_EVENT } from "@/lib/storage-events";
 import type { Annotation } from "@/lib/annotations";
@@ -31,13 +32,20 @@ import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
 
-/** Build the API URL to load the PDF for a given review. Returns null for web reviews. */
-function pdfUrlForReview(review: import("@/lib/reviews").PaperReview): string | null {
+/**
+ * Build the PDF URL for a review. Remote arXiv PDFs still proxy through
+ * /api/pdf. Locally-uploaded PDFs live as blobs in IndexedDB — we resolve
+ * them to an object URL asynchronously from the component.
+ */
+function remotePdfUrlForReview(
+  review: import("@/lib/reviews").PaperReview,
+): string | null {
   if (review.sourceUrl) return null;
-  if (review.pdfPath) {
-    return `/api/pdf?path=${encodeURIComponent(review.pdfPath)}`;
+  if (review.pdfPath) return null; // handled via loadPdfBlob
+  if (review.arxivId) {
+    return `/api/pdf?url=${encodeURIComponent(arxivPdfUrl(review.arxivId))}`;
   }
-  return `/api/pdf?url=${encodeURIComponent(arxivPdfUrl(review.arxivId!))}`;
+  return null;
 }
 
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
@@ -72,6 +80,34 @@ export default function ReviewPage() {
     import("@/lib/reviews").PaperReview | undefined
   >(undefined);
   const [dataReady, setDataReady] = useState(false);
+  const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
+
+  // Local PDFs live in IndexedDB — read the blob and hand the viewer an
+  // object URL; revoke it on unmount so the browser can free the blob.
+  // Remote/arxiv PDFs are derived synchronously via useMemo below.
+  const localPdfPath = review?.sourceUrl ? null : review?.pdfPath ?? null;
+  useEffect(() => {
+    if (!localPdfPath) return;
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    void (async () => {
+      const blob = await loadPdfBlob(localPdfPath);
+      if (cancelled || !blob) return;
+      objectUrl = URL.createObjectURL(blob);
+      setBlobPdfUrl(objectUrl);
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setBlobPdfUrl(null);
+    };
+  }, [localPdfPath]);
+
+  const pdfUrl = useMemo(() => {
+    if (!review || review.sourceUrl) return null;
+    if (review.pdfPath) return blobPdfUrl;
+    return remotePdfUrlForReview(review);
+  }, [review, blobPdfUrl]);
 
   useEffect(() => {
     if (!clientReady) return;
@@ -361,9 +397,9 @@ export default function ReviewPage() {
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
               />
-            ) : (
+            ) : pdfUrl ? (
               <PdfViewer
-                pdfUrl={pdfUrlForReview(review)!}
+                pdfUrl={pdfUrl}
                 onTextExtracted={setPaperText}
                 onTextSelected={handleTextSelected}
                 onSelectionCleared={handleSelectionCleared}
@@ -372,6 +408,11 @@ export default function ReviewPage() {
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
               />
+            ) : (
+              <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
+                <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+                Loading PDF…
+              </div>
             )}
           </div>
 

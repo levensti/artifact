@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { Loader2, Sparkles, Compass } from "lucide-react";
 import type { Model } from "@/lib/models";
-import { getApiKey, isInferenceProviderType, isModelReady } from "@/lib/keys";
+import { isModelReady, resolveModelCredentials } from "@/lib/keys";
 import type { Prerequisite } from "@/lib/explore";
 import { savePrerequisites } from "@/lib/client-data";
 import { useExploreData } from "@/hooks/use-explore-data";
@@ -25,15 +25,16 @@ async function generateStudyMarkdown(
   prompt: string,
   paperContext: string,
 ): Promise<string> {
+  const creds = resolveModelCredentials(model);
+  if (!creds) throw new Error("Missing credentials for selected model.");
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: model.modelId,
       provider: model.provider,
-      ...(isInferenceProviderType(model.provider)
-        ? { profileId: model.profileId }
-        : { apiKey: getApiKey(model.provider)! }),
+      apiKey: creds.apiKey,
+      ...(creds.apiBaseUrl ? { apiBaseUrl: creds.apiBaseUrl } : {}),
       prompt,
       paperContext,
     }),
