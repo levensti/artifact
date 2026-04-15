@@ -120,7 +120,7 @@ export default function JournalEntryModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-[780px] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+        className="flex max-h-[90vh] w-full max-w-[780px] flex-col overflow-hidden rounded-xl border border-border/60 bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -128,23 +128,18 @@ export default function JournalEntryModal({
         {/* Header */}
         <div className="shrink-0 border-b border-border/60 px-6 py-4">
           <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]",
-                isDigest
-                  ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-600"
-                  : "border-rose-500/20 bg-rose-500/10 text-rose-600",
-              )}
-            >
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/8">
               {isDigest ? (
-                <Sparkles className="size-3" strokeWidth={2.5} />
+                <Sparkles className="size-[14px] text-primary/60" strokeWidth={1.8} />
               ) : (
-                <BookMarked className="size-3" strokeWidth={2.5} />
+                <BookMarked className="size-[14px] text-primary/60" strokeWidth={1.8} />
               )}
+            </div>
+            <span className="text-[11px] font-medium text-muted-foreground/80">
               {isDigest ? "Weekly digest" : "Study session"}
             </span>
-            <span className="text-[11px] text-muted-foreground">
-              Updated {updatedLabel}
+            <span className="text-[11px] text-muted-foreground/60">
+              · Updated {updatedLabel}
             </span>
 
             <div className="ml-auto flex items-center gap-2">
@@ -153,18 +148,18 @@ export default function JournalEntryModal({
                 <button
                   type="button"
                   onClick={flushAndExit}
-                  className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground/80 shadow-sm transition-colors hover:border-primary/30 hover:text-foreground"
                 >
-                  <Check className="size-3" strokeWidth={2.5} />
+                  <Check className="size-3" strokeWidth={2} />
                   Done
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:text-foreground"
                 >
-                  <Pencil className="size-3" strokeWidth={2.5} />
+                  <Pencil className="size-3" strokeWidth={2} />
                   Edit
                 </button>
               )}
@@ -172,7 +167,7 @@ export default function JournalEntryModal({
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
-                className="inline-flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
               >
                 <X className="size-3.5" strokeWidth={2} />
               </button>
@@ -201,16 +196,16 @@ export default function JournalEntryModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {isEditing ? (
             <div className="flex flex-col gap-3">
-              <div className="flex gap-0.5 self-start rounded-full border border-border bg-card p-0.5">
+              <div className="flex gap-0.5 self-start rounded-lg border border-border/60 bg-card p-0.5 shadow-sm">
                 {(["write", "preview"] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => setEditTab(mode)}
                     className={cn(
-                      "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                      "rounded-md px-3 py-1 text-[11px] font-medium capitalize transition-colors",
                       editTab === mode
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-primary/8 text-foreground"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >

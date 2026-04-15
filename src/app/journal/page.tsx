@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AlertTriangle, Search } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -36,7 +36,23 @@ function dateFromDigestSlug(slug: string): Date | null {
   return simple;
 }
 
-export default function WikiBrowsePage() {
+export default function JournalPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+            Loading…
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <JournalPageInner />
+    </Suspense>
+  );
+}
+
+function JournalPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [ready, setReady] = useState(false);
