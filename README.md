@@ -1,6 +1,6 @@
 # Artifact
 
-Artifact is an open source **digital workspace for researchers to discover the frontier**: the paper stays in view, the model has the full text, and your session keeps notes, analysis, and links between papers instead of losing context every time you switch tabs.
+Artifact is an open source **digital workspace that helps researchers discover the frontier**. The paper stays in view, the model has the full text, and your session keeps notes, analysis, and links between papers — so you stop losing context every time you switch tabs.
 
 Ask questions with proper grounding, see suggested prerequisite topics and related work, and build a map of how papers connect as you read more than one.
 
