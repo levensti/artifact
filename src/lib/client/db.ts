@@ -17,7 +17,7 @@ import type {
 } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 
-export interface ReviewRow extends PaperReview {}
+export type ReviewRow = PaperReview;
 
 export interface MessagesRow {
   reviewId: string;
@@ -29,7 +29,7 @@ export interface AnnotationsRow {
   annotations: Annotation[];
 }
 
-export interface DeepDiveRow extends DeepDiveSession {}
+export type DeepDiveRow = DeepDiveSession;
 
 export interface PrerequisitesRow {
   reviewId: string;
@@ -46,7 +46,7 @@ export interface GlobalGraphRow {
   data: GlobalGraphData;
 }
 
-export interface WikiPageRow extends WikiPage {}
+export type WikiPageRow = WikiPage;
 
 export interface WikiPageSourceRow {
   // Composite key: `${pageId}::${reviewId}`

@@ -80,37 +80,34 @@ export default function ReviewPage() {
     import("@/lib/reviews").PaperReview | undefined
   >(undefined);
   const [dataReady, setDataReady] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
 
-  // Resolve the PDF URL for the viewer. Local PDFs live in IndexedDB —
-  // read the blob and hand the viewer an object URL; revoke it on
-  // unmount so the browser can free the blob.
+  // Local PDFs live in IndexedDB — read the blob and hand the viewer an
+  // object URL; revoke it on unmount so the browser can free the blob.
+  // Remote/arxiv PDFs are derived synchronously via useMemo below.
+  const localPdfPath = review?.sourceUrl ? null : review?.pdfPath ?? null;
   useEffect(() => {
-    if (!review) {
-      setPdfUrl(null);
-      return;
-    }
-    if (review.sourceUrl) {
-      setPdfUrl(null);
-      return;
-    }
-    if (!review.pdfPath) {
-      setPdfUrl(remotePdfUrlForReview(review));
-      return;
-    }
+    if (!localPdfPath) return;
     let objectUrl: string | null = null;
     let cancelled = false;
     void (async () => {
-      const blob = await loadPdfBlob(review.pdfPath!);
+      const blob = await loadPdfBlob(localPdfPath);
       if (cancelled || !blob) return;
       objectUrl = URL.createObjectURL(blob);
-      setPdfUrl(objectUrl);
+      setBlobPdfUrl(objectUrl);
     })();
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setBlobPdfUrl(null);
     };
-  }, [review]);
+  }, [localPdfPath]);
+
+  const pdfUrl = useMemo(() => {
+    if (!review || review.sourceUrl) return null;
+    if (review.pdfPath) return blobPdfUrl;
+    return remotePdfUrlForReview(review);
+  }, [review, blobPdfUrl]);
 
   useEffect(() => {
     if (!clientReady) return;
