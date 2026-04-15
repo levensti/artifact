@@ -16,6 +16,7 @@ import {
   type ChatMessage,
 } from "@/lib/reviews";
 import { invalidateExploreCache } from "@/lib/client-data";
+import { scheduleJournalAfterChat } from "@/lib/wiki-journal-agent";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
@@ -373,6 +374,16 @@ export function useChat({
         if (touchedGraph) {
           invalidateExploreCache(reviewId);
         }
+
+        // Ambient: schedule the journal agent to consider this turn.
+        // Debounced inside the agent module so a burst of turns collapses
+        // into one LLM call.
+        if (content && isModelReady(selectedModel)) {
+          const apiKey = isInferenceProviderType(selectedModel.provider)
+            ? ""
+            : (getApiKey(selectedModel.provider) ?? "");
+          scheduleJournalAfterChat({ model: selectedModel, apiKey });
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
@@ -506,6 +517,13 @@ export function useChat({
         setThreadStream(thread);
         await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
+
+        if (content && isModelReady(selectedModel)) {
+          const apiKey = isInferenceProviderType(selectedModel.provider)
+            ? ""
+            : (getApiKey(selectedModel.provider) ?? "");
+          scheduleJournalAfterChat({ model: selectedModel, apiKey });
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";

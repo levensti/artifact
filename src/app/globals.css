@@ -4,43 +4,43 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Quiet Precision — cool neutrals + blue-slate */
+/* Quiet Precision — warm neutrals + blue-slate accent (Notion-inspired) */
 
 :root {
   --radius: 0.5rem;
 
-  --background: #f8f9fa;         /* cool paper white */
-  --foreground: #1a1d21;         /* cool near-black */
-  --card: #ffffff;               /* pure white cards */
-  --card-foreground: #1a1d21;
+  --background: #ffffff;         /* pure paper white */
+  --foreground: #37352f;         /* Notion-style warm near-black */
+  --card: #ffffff;
+  --card-foreground: #37352f;
   --popover: #ffffff;
-  --popover-foreground: #1a1d21;
+  --popover-foreground: #37352f;
 
-  --primary: #3b5998;            /* blue-slate */
+  --primary: #3b5998;            /* blue-slate accent */
   --primary-foreground: #ffffff;
   --primary-muted: color-mix(in srgb, var(--primary) 82%, var(--foreground));
 
-  --secondary: #f0f1f3;          /* light cool gray */
-  --secondary-foreground: #1a1d21;
-  --muted: #eceef0;
-  --muted-foreground: #6b7280;   /* medium cool gray */
-  --accent: #e8ebef;             /* cool hover state */
-  --accent-foreground: #1a1d21;
+  --secondary: #f1f1ef;          /* warm light gray */
+  --secondary-foreground: #37352f;
+  --muted: #f1f0ec;              /* warm hover/chip */
+  --muted-foreground: #787570;   /* warm mid-gray */
+  --accent: #ececea;             /* warm hover */
+  --accent-foreground: #37352f;
 
   --destructive: #dc2626;
-  --border: #e2e5e9;             /* cool subtle border */
-  --input: #dde0e4;
-  --ring: #3b5998;               /* match primary */
+  --border: #e9e8e3;             /* warm subtle border */
+  --input: #e1e0db;
+  --ring: #3b5998;
 
-  --reader-mat: #f2f3f5;
+  --reader-mat: #f6f5f2;
 
-  --sidebar: #f4f5f7;
-  --sidebar-foreground: #1a1d21;
+  --sidebar: #f7f6f3;            /* Notion warm-gray sidebar */
+  --sidebar-foreground: #37352f;
   --sidebar-primary: #3b5998;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8ebef;
-  --sidebar-accent-foreground: #1a1d21;
-  --sidebar-border: #e2e5e9;
+  --sidebar-accent: #ececea;
+  --sidebar-accent-foreground: #37352f;
+  --sidebar-border: #e9e8e3;
   --sidebar-ring: #3b5998;
 }
 
@@ -166,6 +166,95 @@
 .chat-markdown a:hover {
   color: color-mix(in srgb, var(--primary) 88%, black);
   border-bottom-color: color-mix(in srgb, var(--primary) 58%, transparent);
+}
+
+/* ── Wiki page prose — Notion-like roomy reading layout ────────── */
+.prose-wiki .chat-markdown {
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--foreground) 94%, white);
+}
+.prose-wiki .chat-markdown h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  margin-top: 2em;
+  margin-bottom: 0.55em;
+}
+.prose-wiki .chat-markdown h2 {
+  font-size: 1.3125rem;
+  font-weight: 650;
+  letter-spacing: -0.018em;
+  margin-top: 1.7em;
+  margin-bottom: 0.45em;
+}
+.prose-wiki .chat-markdown h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  margin-top: 1.4em;
+  margin-bottom: 0.35em;
+}
+.prose-wiki .chat-markdown p { margin-bottom: 0.9em; }
+.prose-wiki .chat-markdown ul,
+.prose-wiki .chat-markdown ol {
+  margin-bottom: 0.9em;
+  padding-left: 1.5em;
+}
+.prose-wiki .chat-markdown li { margin-bottom: 0.35em; }
+.prose-wiki .chat-markdown blockquote {
+  border-left-width: 3px;
+  padding-left: 1em;
+  margin: 1em 0;
+}
+.prose-wiki .chat-markdown code { font-size: 0.88em; }
+
+.wiki-title {
+  font-family: var(--font-sans);
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.15;
+  color: var(--foreground);
+  margin: 0;
+}
+.wiki-title-input {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.15;
+  color: var(--foreground);
+  overflow: hidden;
+}
+.wiki-title-input::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
+}
+
+.wiki-body-textarea {
+  display: block;
+  width: 100%;
+  min-height: 60vh;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--foreground);
+  tab-size: 2;
+}
+.wiki-body-textarea::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
 .transition-sidebar {
