@@ -21,6 +21,11 @@ import {
   type WikiCollisionStrategy,
 } from "@/lib/client/sharing/import-bundle";
 
+type ImportMode = "review" | "journal";
+
+type ReviewPreview = Extract<BundlePreview, { kind: "review" }>;
+type WikiPreview = Extract<BundlePreview, { kind: "wiki" }>;
+
 type Stage =
   | { kind: "pick" }
   | { kind: "loading" }
@@ -31,18 +36,41 @@ type Stage =
 
 interface ImportBundleDialogProps {
   open: boolean;
+  mode: ImportMode;
   onClose: () => void;
 }
 
-/**
- * Single import entry point. Accepts both review and wiki bundles,
- * dispatching on `preview.kind`. Kept intentionally minimal — this is a
- * power-user path, not a core flow, so we favor clarity over chrome.
- */
+const MODE_COPY: Record<
+  ImportMode,
+  {
+    title: string;
+    description: string;
+    fileHint: string;
+    wrongKindError: string;
+  }
+> = {
+  review: {
+    title: "Import a shared review",
+    description: "Open a review bundle someone shared with you.",
+    fileHint: "review-*.json",
+    wrongKindError:
+      "This looks like a journal entry. Use “import a shared entry” under Journal instead.",
+  },
+  journal: {
+    title: "Import a shared journal entry",
+    description: "Open a journal bundle someone shared with you.",
+    fileHint: "journal-*.json",
+    wrongKindError:
+      "This looks like a review. Use “import a shared review” under Start a review instead.",
+  },
+};
+
 export default function ImportBundleDialog({
   open,
+  mode,
   onClose,
 }: ImportBundleDialogProps) {
+  const copy = MODE_COPY[mode];
   const [stage, setStage] = useState<Stage>({ kind: "pick" });
   const [reviewStrategy, setReviewStrategy] =
     useState<ReviewCollisionStrategy>("copy");
@@ -63,27 +91,38 @@ export default function ImportBundleDialog({
     onClose();
   }, [onClose, reset]);
 
-  const handleFile = useCallback(async (file: File) => {
-    setStage({ kind: "loading" });
-    try {
-      const text = await file.text();
-      const parsed = await previewBundleFromText(text);
-      if (!parsed.ok || !parsed.preview) {
+  const expectedKind = mode === "review" ? "review" : "wiki";
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setStage({ kind: "loading" });
+      try {
+        const text = await file.text();
+        const parsed = await previewBundleFromText(text);
+        if (!parsed.ok || !parsed.preview) {
+          setStage({
+            kind: "error",
+            message: parsed.error ?? "Unknown error parsing bundle.",
+          });
+          return;
+        }
+        if (parsed.preview.kind !== expectedKind) {
+          setStage({ kind: "error", message: copy.wrongKindError });
+          return;
+        }
+        setStage({ kind: "preview", preview: parsed.preview });
+      } catch (err) {
         setStage({
           kind: "error",
-          message: parsed.error ?? "Unknown error parsing bundle.",
+          message:
+            err instanceof Error
+              ? err.message
+              : "Failed to read file contents.",
         });
-        return;
       }
-      setStage({ kind: "preview", preview: parsed.preview });
-    } catch (err) {
-      setStage({
-        kind: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to read file contents.",
-      });
-    }
-  }, []);
+    },
+    [expectedKind, copy.wrongKindError],
+  );
 
   const handleCommit = useCallback(async () => {
     if (stage.kind !== "preview") return;
@@ -97,7 +136,8 @@ export default function ImportBundleDialog({
         if (result.skipped) {
           setStage({
             kind: "done",
-            message: "Skipped — a review with this source is already in your library.",
+            message:
+              "Skipped — a review with this source is already in your library.",
           });
           return;
         }
@@ -141,11 +181,8 @@ export default function ImportBundleDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Import shared bundle</DialogTitle>
-          <DialogDescription>
-            Load a <code className="rounded bg-muted px-1 py-0.5 text-[11px]">.json</code>{" "}
-            file exported from another Artifact workspace.
-          </DialogDescription>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         {stage.kind === "pick" && (
@@ -155,12 +192,15 @@ export default function ImportBundleDialog({
               onClick={() => fileInputRef.current?.click()}
               className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card px-4 py-8 text-center transition-colors hover:border-primary/40 hover:bg-muted/40"
             >
-              <Upload className="size-5 text-muted-foreground" strokeWidth={1.75} />
+              <Upload
+                className="size-5 text-muted-foreground"
+                strokeWidth={1.75}
+              />
               <span className="text-[13px] font-medium text-foreground">
                 Choose a bundle file
               </span>
               <span className="text-[11px] text-muted-foreground">
-                review-*.json or journal-*.json
+                {copy.fileHint}
               </span>
             </button>
             <input
@@ -253,7 +293,7 @@ export default function ImportBundleDialog({
 }
 
 interface ReviewPreviewBodyProps {
-  preview: Extract<BundlePreview, { kind: "review" }>;
+  preview: ReviewPreview;
   strategy: ReviewCollisionStrategy;
   onStrategyChange: (next: ReviewCollisionStrategy) => void;
 }
@@ -272,7 +312,10 @@ function ReviewPreviewBody({
         <p className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
           Review
         </p>
-        <p className="mt-0.5 truncate text-[13px] font-medium text-foreground" title={review.title}>
+        <p
+          className="mt-0.5 truncate text-[13px] font-medium text-foreground"
+          title={review.title}
+        >
           {review.title}
         </p>
         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -284,65 +327,75 @@ function ReviewPreviewBody({
         </p>
       </div>
 
-      <ul className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-        <li>
-          <span className="font-semibold tabular-nums text-foreground">
-            {counts.messages}
-          </span>{" "}
-          messages
-        </li>
-        <li>
-          <span className="font-semibold tabular-nums text-foreground">
-            {counts.annotations}
-          </span>{" "}
-          annotations
-        </li>
-        <li>
-          <span className="font-semibold tabular-nums text-foreground">
-            {counts.deepDives}
-          </span>{" "}
-          deep dives
-        </li>
-        <li>
-          <span className="font-semibold tabular-nums text-foreground">
-            {counts.graphNodes}
-          </span>{" "}
-          graph nodes
-        </li>
-      </ul>
+      {(() => {
+        const items: Array<{ n: number; label: string }> = [
+          { n: counts.messages, label: "chat messages" },
+          { n: counts.annotations, label: "annotations" },
+          { n: counts.deepDives, label: "deep dives" },
+          { n: counts.graphNodes, label: "related works" },
+        ].filter((item) => item.n > 0);
+
+        if (items.length === 0) {
+          return (
+            <p className="text-[11px] text-muted-foreground">
+              This bundle has no chat history or annotations yet — just the
+              paper itself.
+            </p>
+          );
+        }
+
+        return (
+          <ul className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+            {items.map(({ n, label }) => (
+              <li key={label}>
+                <span className="font-semibold tabular-nums text-foreground">
+                  {n}
+                </span>{" "}
+                {label}
+              </li>
+            ))}
+          </ul>
+        );
+      })()}
 
       {hasCollision ? (
         <div className="space-y-1.5">
           <p className="text-[11px] font-medium text-foreground">
-            This review already exists in your library
+            You already have this review in your library
           </p>
           <div className="flex flex-col gap-1">
-            {(["copy", "overwrite", "skip"] as const).map((opt) => (
+            {(
+              [
+                {
+                  value: "copy",
+                  label: "Import as a new copy",
+                  hint: "— keeps both",
+                },
+                {
+                  value: "overwrite",
+                  label: "Replace mine",
+                  hint: "— uses the incoming version",
+                },
+                {
+                  value: "skip",
+                  label: "Don't import",
+                  hint: "— leaves mine alone",
+                },
+              ] as const
+            ).map(({ value, label, hint }) => (
               <label
-                key={opt}
+                key={value}
                 className="flex cursor-pointer items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-[12px] has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5"
               >
                 <input
                   type="radio"
                   name="review-strategy"
-                  checked={strategy === opt}
-                  onChange={() => onStrategyChange(opt)}
+                  checked={strategy === value}
+                  onChange={() => onStrategyChange(value)}
                   className="accent-primary"
                 />
-                <span className="font-medium text-foreground capitalize">
-                  {opt === "copy"
-                    ? "Import as copy"
-                    : opt === "overwrite"
-                    ? "Overwrite"
-                    : "Skip"}
-                </span>
-                <span className="text-muted-foreground">
-                  {opt === "copy"
-                    ? "— keeps both"
-                    : opt === "overwrite"
-                    ? "— replaces existing"
-                    : "— do nothing"}
-                </span>
+                <span className="font-medium text-foreground">{label}</span>
+                <span className="text-muted-foreground">{hint}</span>
               </label>
             ))}
           </div>
@@ -358,15 +411,15 @@ function ReviewPreviewBody({
       ) : null}
 
       <p className="text-[11px] text-muted-foreground">
-        The PDF isn&apos;t included — it&apos;ll be re-fetched from the
-        source on first view.
+        The PDF itself isn&apos;t bundled — it&apos;ll be re-fetched from the
+        source the first time you open the review.
       </p>
     </div>
   );
 }
 
 interface WikiPreviewBodyProps {
-  preview: Extract<BundlePreview, { kind: "wiki" }>;
+  preview: WikiPreview;
   strategy: WikiCollisionStrategy;
   onStrategyChange: (next: WikiCollisionStrategy) => void;
 }
@@ -384,12 +437,15 @@ function WikiPreviewBody({
         <p className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
           Journal entry
         </p>
-        <p className="mt-0.5 truncate text-[13px] font-medium text-foreground" title={root?.title}>
+        <p
+          className="mt-0.5 truncate text-[13px] font-medium text-foreground"
+          title={root?.title}
+        >
           {root?.title ?? "(untitled)"}
         </p>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          {pagesTotal} {pagesTotal === 1 ? "page" : "pages"} total ·{" "}
-          {newSlugs.length} new, {collidingSlugs.length} existing
+          {pagesTotal} {pagesTotal === 1 ? "page" : "pages"} · {newSlugs.length}{" "}
+          new, {collidingSlugs.length} already in your journal
         </p>
       </div>
 
@@ -397,36 +453,42 @@ function WikiPreviewBody({
         <div className="space-y-1.5">
           <p className="text-[11px] font-medium text-foreground">
             {collidingSlugs.length === 1
-              ? "1 page already exists"
-              : `${collidingSlugs.length} pages already exist`}
+              ? "One page already exists in your journal"
+              : `${collidingSlugs.length} pages already exist in your journal`}
           </p>
           <div className="flex flex-col gap-1">
-            {(["skip", "overwrite", "rename"] as const).map((opt) => (
+            {(
+              [
+                {
+                  value: "skip",
+                  label: "Keep mine",
+                  hint: "— leaves existing pages alone",
+                },
+                {
+                  value: "overwrite",
+                  label: "Replace mine",
+                  hint: "— uses the incoming versions",
+                },
+                {
+                  value: "rename",
+                  label: "Import alongside",
+                  hint: "— adds them as new pages",
+                },
+              ] as const
+            ).map(({ value, label, hint }) => (
               <label
-                key={opt}
+                key={value}
                 className="flex cursor-pointer items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-[12px] has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5"
               >
                 <input
                   type="radio"
                   name="wiki-strategy"
-                  checked={strategy === opt}
-                  onChange={() => onStrategyChange(opt)}
+                  checked={strategy === value}
+                  onChange={() => onStrategyChange(value)}
                   className="accent-primary"
                 />
-                <span className="font-medium text-foreground capitalize">
-                  {opt === "skip"
-                    ? "Skip existing"
-                    : opt === "overwrite"
-                    ? "Overwrite"
-                    : "Rename"}
-                </span>
-                <span className="text-muted-foreground">
-                  {opt === "skip"
-                    ? "— keep my version"
-                    : opt === "overwrite"
-                    ? "— replace with imported"
-                    : "— import as new page"}
-                </span>
+                <span className="font-medium text-foreground">{label}</span>
+                <span className="text-muted-foreground">{hint}</span>
               </label>
             ))}
           </div>

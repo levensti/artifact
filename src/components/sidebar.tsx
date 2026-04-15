@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   BookOpen,
-  FileDown,
   FilePen,
   FilePlus,
   Settings,
   AlertCircle,
+  Share2,
 } from "lucide-react";
+import { canShareReview } from "@/lib/client/sharing/export-review";
 import {
   getReviews,
   REVIEWS_UPDATED_EVENT,
@@ -28,6 +29,7 @@ import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NewReviewDialog from "./new-review-dialog";
 import ImportBundleDialog from "./import-bundle-dialog";
+import ShareReviewDialog from "./share-review-dialog";
 
 function subscribeReviews(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -102,7 +104,10 @@ export default function Sidebar({
     return `${activeIngests.length} running`;
   }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
-  const [showImport, setShowImport] = useState(false);
+  const [importMode, setImportMode] = useState<"review" | "journal" | null>(
+    null,
+  );
+  const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -211,25 +216,24 @@ export default function Sidebar({
           >
             <span className="flex w-6 shrink-0 items-center justify-center">
               <FilePlus
-                className="size-[15px] text-primary/85"
+                className="size-3.75 text-primary/85"
                 strokeWidth={1.75}
               />
             </span>
             <span className="truncate">Start a review</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setShowImport(true)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/85 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
-          >
-            <span className="flex w-6 shrink-0 items-center justify-center">
-              <FileDown
-                className="size-[15px] opacity-80"
-                strokeWidth={1.75}
-              />
-            </span>
-            <span className="truncate">Import from file</span>
-          </button>
+          <div className="flex px-2 pb-1 -mt-0.5">
+            <span className="w-6 shrink-0" aria-hidden />
+            <div className="pl-2">
+              <button
+                type="button"
+                onClick={() => setImportMode("review")}
+                className="text-[11.5px] text-foreground/50 transition-colors duration-150 hover:text-foreground/80 hover:underline underline-offset-2"
+              >
+                or import a shared review
+              </button>
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => router.push("/journal")}
@@ -261,6 +265,18 @@ export default function Sidebar({
               </span>
             ) : null}
           </button>
+          <div className="flex px-2 pb-1 -mt-0.5">
+            <span className="w-6 shrink-0" aria-hidden />
+            <div className="pl-2">
+              <button
+                type="button"
+                onClick={() => setImportMode("journal")}
+                className="text-[11.5px] text-foreground/50 transition-colors duration-150 hover:text-foreground/80 hover:underline underline-offset-2"
+              >
+                or import a shared entry
+              </button>
+            </div>
+          </div>
           {ingestError ? (
             <div
               className="mx-1 mt-2 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[10px] leading-snug text-destructive"
@@ -305,6 +321,7 @@ export default function Sidebar({
                 {group.items.map((review) => {
                   const isActive = pathname === `/review/${review.id}`;
                   const isImported = Boolean(review.importedAt);
+                  const shareable = canShareReview(review);
                   return (
                     <div
                       key={review.id}
@@ -321,7 +338,7 @@ export default function Sidebar({
                           router.push(`/review/${review.id}`);
                       }}
                       className={cn(
-                        "relative flex w-full cursor-pointer items-start gap-1.5 break-words rounded-md px-2.5 py-1.5 text-left text-[13px] leading-snug transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50",
+                        "group relative flex w-full cursor-pointer items-start gap-1.5 break-words rounded-md px-2.5 py-1.5 text-left text-[13px] leading-snug transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50",
                         isActive
                           ? "bg-sidebar-accent font-medium text-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-primary"
                           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
@@ -337,6 +354,21 @@ export default function Sidebar({
                         >
                           Imported
                         </span>
+                      ) : null}
+                      {shareable ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShareTarget(review);
+                          }}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          title="Share this review"
+                          aria-label={`Share ${review.title}`}
+                          className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/80 opacity-0 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60 group-hover:opacity-100 group-focus-within:opacity-100"
+                        >
+                          <Share2 className="size-3" strokeWidth={2} />
+                        </button>
                       ) : null}
                     </div>
                   );
@@ -367,8 +399,13 @@ export default function Sidebar({
         onCreated={handleReviewCreated}
       />
       <ImportBundleDialog
-        open={showImport}
-        onClose={() => setShowImport(false)}
+        open={importMode !== null}
+        mode={importMode ?? "review"}
+        onClose={() => setImportMode(null)}
+      />
+      <ShareReviewDialog
+        review={shareTarget}
+        onClose={() => setShareTarget(null)}
       />
     </>
   );

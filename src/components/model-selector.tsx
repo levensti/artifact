@@ -458,8 +458,9 @@ export default function ModelSelector({
         {!anyKey ? (
           <div className="px-2 py-3 space-y-2">
             <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
-              Save an API key in Settings. Keys stay in local SQLite on this
-              device; models load from the provider after your key is stored.
+              Save an API key in Settings. Keys stay in your browser&apos;s
+              local storage; models load from the provider once your key is
+              saved.
             </p>
             <DropdownMenuItem
               className="text-xs gap-2 cursor-pointer"

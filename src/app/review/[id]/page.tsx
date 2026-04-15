@@ -459,7 +459,6 @@ export default function ReviewPage() {
                 selectedModel={selectedModel}
                 onModelChange={handleModelChange}
                 sourceUrl={review.sourceUrl}
-                canShare={Boolean(review.arxivId || review.sourceUrl)}
               />
             </div>
           </>
@@ -549,7 +548,6 @@ export default function ReviewPage() {
               selectedModel={selectedModel}
               onModelChange={handleModelChange}
               sourceUrl={review.sourceUrl}
-              canShare={Boolean(review.arxivId || review.sourceUrl)}
             />
           </div>
         )}
