@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   BookOpen,
+  FileDown,
   FilePen,
   FilePlus,
   Settings,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NewReviewDialog from "./new-review-dialog";
+import ImportBundleDialog from "./import-bundle-dialog";
 
 function subscribeReviews(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -100,6 +102,7 @@ export default function Sidebar({
     return `${activeIngests.length} running`;
   }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -216,6 +219,19 @@ export default function Sidebar({
           </button>
           <button
             type="button"
+            onClick={() => setShowImport(true)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/85 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
+          >
+            <span className="flex w-6 shrink-0 items-center justify-center">
+              <FileDown
+                className="size-[15px] opacity-80"
+                strokeWidth={1.75}
+              />
+            </span>
+            <span className="truncate">Import from file</span>
+          </button>
+          <button
+            type="button"
             onClick={() => router.push("/journal")}
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150",
@@ -288,25 +304,40 @@ export default function Sidebar({
               <div className="flex flex-col gap-0.5">
                 {group.items.map((review) => {
                   const isActive = pathname === `/review/${review.id}`;
+                  const isImported = Boolean(review.importedAt);
                   return (
                     <div
                       key={review.id}
                       role="button"
                       tabIndex={0}
-                      title={review.title}
+                      title={
+                        isImported
+                          ? `${review.title} — imported from a share`
+                          : review.title
+                      }
                       onClick={() => router.push(`/review/${review.id}`)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ")
                           router.push(`/review/${review.id}`);
                       }}
                       className={cn(
-                        "relative w-full cursor-pointer break-words rounded-md px-2.5 py-1.5 text-left text-[13px] leading-snug transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50",
+                        "relative flex w-full cursor-pointer items-start gap-1.5 break-words rounded-md px-2.5 py-1.5 text-left text-[13px] leading-snug transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50",
                         isActive
                           ? "bg-sidebar-accent font-medium text-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-primary"
                           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
                       )}
                     >
-                      {review.title}
+                      <span className="min-w-0 flex-1 break-words">
+                        {review.title}
+                      </span>
+                      {isImported ? (
+                        <span
+                          className="mt-px inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-primary/80"
+                          aria-label="Imported from a shared bundle"
+                        >
+                          Imported
+                        </span>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -334,6 +365,10 @@ export default function Sidebar({
         open={showNewReview}
         onClose={() => setShowNewReview(false)}
         onCreated={handleReviewCreated}
+      />
+      <ImportBundleDialog
+        open={showImport}
+        onClose={() => setShowImport(false)}
       />
     </>
   );
