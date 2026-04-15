@@ -1,8 +1,8 @@
 # Artifact
 
-Artifact is an open source workspace where researchers pair with AI to understand papers and other reading material — and where an ambient agent keeps a running journal of what they learn along the way.
+Artifact is an open source workspace where researchers pair with AI to understand papers and other reading material. As you read, a background agent automatically builds and maintains your personal journal — a living record of the concepts, definitions, and connections you're picking up along the way.
 
-Load an arXiv paper, a web article, or your own PDF into a reader beside the assistant, and ask questions grounded in the full text. As you read and chat, the Journal agent quietly captures key concepts, definitions, and connections into a personal wiki that feeds back into every future session — so the assistant always knows what you already know.
+Load an arXiv paper, a web article, or your own PDF into a reader beside the assistant, and ask questions grounded in the full text. Your journal grows quietly in the background as you read and chat, and every future session is grounded in what it already knows about you — no re-explaining where you left off.
 
 **Bring your own keys.** Configure providers in Settings and use the models you already pay for—Anthropic, OpenAI, xAI, or any OpenAI-compatible inference API (OpenRouter, Fireworks, Together, Sail, etc.). One selector lists every model you add.
 
