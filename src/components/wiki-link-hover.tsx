@@ -15,20 +15,13 @@ interface WikiLinkHoverProps {
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  paper: "paper",
-  concept: "concept",
-  method: "method",
-  entity: "entity",
-  graph: "graph",
-  index: "index",
-  log: "log",
+  session: "session",
+  digest: "digest",
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  paper: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-  concept: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  method: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-  entity: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  session: "bg-rose-500/10 text-rose-600 border-rose-500/20",
+  digest: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
 };
 
 function firstParagraph(content: string): string {
@@ -53,7 +46,7 @@ function firstParagraph(content: string): string {
  *
  * Appears as a compact chip (type badge + title). On hover, lazy-loads
  * the target wiki page and shows a preview tooltip. Clicks navigate to
- * `/wiki?page=slug` via next/router.
+ * `/journal?page=slug` via next/router.
  *
  * Used anywhere markdown is rendered — chat messages, wiki page
  * content, the recent activity timeline.
@@ -88,7 +81,7 @@ export default function WikiLinkHover({
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      router.push(`/wiki?page=${encodeURIComponent(slug)}`, { scroll: false });
+      router.push(`/journal?page=${encodeURIComponent(slug)}`, { scroll: false });
     },
     [router, slug],
   );
@@ -101,7 +94,7 @@ export default function WikiLinkHover({
       <TooltipPrimitive.Trigger
         render={
           <a
-            href={`/wiki?page=${encodeURIComponent(slug)}`}
+            href={`/journal?page=${encodeURIComponent(slug)}`}
             onClick={handleClick}
             onMouseEnter={ensureLoaded}
             onFocus={ensureLoaded}

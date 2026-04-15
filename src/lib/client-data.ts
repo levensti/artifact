@@ -509,15 +509,11 @@ export interface WikiFinalizePage {
 export interface WikiFinalizeInput {
   pages: WikiFinalizePage[];
   logEntry?: { label: string; kind?: string };
-  rebuildIndex?: boolean;
 }
 
 /**
- * Atomically finalize a wiki-ingest batch on the server: upserts every
- * page, rebuilds backlinks + index, and appends the log — all inside a
- * single SQLite transaction. Use this instead of calling `saveWikiPage`
- * in a loop when the writes form a logical unit (paper ingest, chat
- * extract). Fire WIKI_UPDATED_EVENT on success.
+ * Atomically finalize a journal-write batch on the server inside a
+ * single SQLite transaction. Fires WIKI_UPDATED_EVENT on success.
  */
 export async function finalizeWikiIngest(
   input: WikiFinalizeInput,

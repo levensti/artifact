@@ -14,7 +14,7 @@
 /** Matches `[[slug]]` where slug is a-z/0-9/hyphens, length 1-80. */
 export const WIKI_LINK_RE = /\[\[([a-z0-9][a-z0-9-]{0,79})\]\]/gi;
 
-export const WIKI_LINK_HREF_PREFIX = "/wiki?page=";
+export const WIKI_LINK_HREF_PREFIX = "/journal?page=";
 
 /** Turn `transformer-architecture` → `Transformer Architecture`. */
 function prettifySlug(slug: string): string {

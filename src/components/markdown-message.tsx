@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -34,6 +35,13 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
               return (
                 <WikiLinkHover slug={slug}>{props.children}</WikiLinkHover>
               );
+            }
+            // Route relative/in-app paths through next/link so citations
+            // like [Title](/review/abc) feel native instead of popping a
+            // new tab. External URLs still open in a new tab.
+            const href = props.href ?? "";
+            if (href.startsWith("/")) {
+              return <Link href={href}>{props.children}</Link>;
             }
             return <a {...props} target="_blank" rel="noopener noreferrer" />;
           },

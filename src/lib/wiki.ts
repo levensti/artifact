@@ -1,13 +1,6 @@
 /** Wiki page types and interfaces for the ambient knowledge base. */
 
-export type WikiPageType =
-  | "paper"
-  | "concept"
-  | "method"
-  | "entity"
-  | "graph"
-  | "index"
-  | "log";
+export type WikiPageType = "session" | "digest";
 
 export interface WikiPage {
   id: string;

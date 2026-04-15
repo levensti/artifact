@@ -28,7 +28,6 @@ import {
 import { arxivPdfUrl } from "@/lib/utils";
 
 import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
-import { useAutoWikiIngest } from "@/hooks/use-auto-wiki-ingest";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
 
@@ -163,17 +162,6 @@ export default function ReviewPage() {
     setSelectedModel(model);
     void saveSelectedModel(model);
   }, []);
-
-  // Ambient background: when a paper is opened, silently ingest it into the
-  // wiki so the knowledge base compounds without any user action. Runs once
-  // per review (guarded inside the hook + server-side `hasWikiSourcesForReview`).
-  useAutoWikiIngest({
-    reviewId: review?.id ?? "",
-    paperTitle: review?.title ?? "",
-    arxivId: review?.arxivId ?? null,
-    paperText,
-    selectedModel,
-  });
 
   const [annotationVersion, setAnnotationVersion] = useState(0);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);

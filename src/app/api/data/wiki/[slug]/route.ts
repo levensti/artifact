@@ -36,6 +36,17 @@ export async function PUT(
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  if (
+    body.pageType !== undefined &&
+    body.pageType !== "session" &&
+    body.pageType !== "digest"
+  ) {
+    return Response.json(
+      { error: `Invalid pageType: ${body.pageType}` },
+      { status: 400 },
+    );
+  }
+
   upsertWikiPage({
     id: existing.id,
     slug: decoded,

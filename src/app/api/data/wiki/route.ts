@@ -34,6 +34,12 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  if (pageType !== "session" && pageType !== "digest") {
+    return Response.json(
+      { error: `Invalid pageType: ${pageType}` },
+      { status: 400 },
+    );
+  }
 
   const id = getWikiPageBySlug(slug)?.id ?? crypto.randomUUID();
   upsertWikiPage({ id, slug, title, content, pageType });

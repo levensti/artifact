@@ -98,6 +98,18 @@ function initSchema(db: Database.Database) {
   migrateWikiBacklinks(db);
   migrateWikiPageSourcesPassage(db);
   migrateWikiRevisions(db);
+  migrateDeleteLegacyWikiTypes(db);
+}
+
+/**
+ * Post-refactor cleanup: the wiki is now journal-only (session + digest).
+ * Purge any legacy rows created by the earlier extraction pipelines so the
+ * KB page count reflects reality on first boot.
+ */
+function migrateDeleteLegacyWikiTypes(db: Database.Database) {
+  db.prepare(
+    `DELETE FROM wiki_pages WHERE page_type NOT IN ('session', 'digest')`,
+  ).run();
 }
 
 /** Older DBs created deep_dives without a FK; recreate so DELETE FROM reviews cascades. */
@@ -701,7 +713,7 @@ export function searchWikiPages(query: string): WikiPage[] {
 export function getWikiPageCount(): number {
   const db = getDb();
   const row = db
-    .prepare(`SELECT COUNT(*) AS cnt FROM wiki_pages WHERE page_type NOT IN ('index', 'log')`)
+    .prepare(`SELECT COUNT(*) AS cnt FROM wiki_pages`)
     .get() as { cnt: number };
   return row.cnt;
 }
@@ -850,6 +862,29 @@ export function getWikiRevision(
   return row ?? null;
 }
 
+/** List session pages whose date-keyed slugs fall within the given inclusive range. */
+export function listSessionPagesInRange(
+  startDateKey: string,
+  endDateKey: string,
+): Array<{ slug: string; title: string; content: string; updatedAt: string }> {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT slug, title, content, updated_at AS updatedAt
+       FROM wiki_pages
+       WHERE page_type = 'session'
+         AND slug >= ?
+         AND slug <= ?
+       ORDER BY slug ASC`,
+    )
+    .all(`session-${startDateKey}`, `session-${endDateKey}`) as Array<{
+    slug: string;
+    title: string;
+    content: string;
+    updatedAt: string;
+  }>;
+}
+
 /* ── Atomic wiki-ingest finalize (T2.1) ── */
 
 export interface IngestFinalizeInput {
@@ -865,105 +900,20 @@ export interface IngestFinalizeInput {
       passage?: string;
     };
   }>;
-  /** Short human label for the log entry. If omitted, no log is appended. */
+  /** Short human label for a future journal log entry. Currently unused. */
   logEntry?: {
     label: string;
-    /** e.g. "ingest", "update", "chat-extract". Defaults to "ingest". */
     kind?: string;
   };
-  /** Whether to rebuild the knowledge-base index page after this batch. */
-  rebuildIndex?: boolean;
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  paper: "Papers",
-  concept: "Concepts",
-  method: "Methods",
-  entity: "Entities",
-  graph: "Knowledge Graphs",
-};
-
-function buildIndexContent(db: Database.Database): string {
-  const rows = db
-    .prepare(
-      `SELECT slug, title, content, page_type AS pageType, updated_at AS updatedAt
-       FROM wiki_pages
-       WHERE page_type NOT IN ('index', 'log')
-       ORDER BY page_type, title`,
-    )
-    .all() as Array<{
-    slug: string;
-    title: string;
-    content: string;
-    pageType: string;
-    updatedAt: string;
-  }>;
-  if (rows.length === 0) return "";
-
-  const grouped = new Map<string, typeof rows>();
-  for (const p of rows) {
-    const list = grouped.get(p.pageType) ?? [];
-    list.push(p);
-    grouped.set(p.pageType, list);
-  }
-
-  let content = "# Knowledge Base Index\n\n";
-  content += `*${rows.length} pages across ${grouped.size} categories*\n\n`;
-  for (const [type, pages] of grouped) {
-    content += `## ${TYPE_LABELS[type] ?? type}\n\n`;
-    for (const p of pages) {
-      const firstLine = p.content
-        .split("\n")
-        .find((l) => l.trim() && !l.startsWith("#"));
-      const excerpt = firstLine
-        ? firstLine.trim().slice(0, 100) + (firstLine.length > 100 ? "…" : "")
-        : "";
-      content += `- [[${p.slug}]] — ${excerpt}\n`;
-    }
-    content += "\n";
-  }
-  return content;
-}
-
-function appendLogEntry(
-  db: Database.Database,
-  kind: string,
-  label: string,
-  now: string,
-): void {
-  const date = now.slice(0, 10);
-  const time = now.slice(11, 16);
-  const entry = `- \`${date} ${time}\` **${kind}** — ${label}\n`;
-
-  const existing = db
-    .prepare(`SELECT id, content FROM wiki_pages WHERE slug = 'log'`)
-    .get() as { id: string; content: string } | undefined;
-
-  if (existing) {
-    db.prepare(
-      `UPDATE wiki_pages SET content = ?, updated_at = ? WHERE id = ?`,
-    ).run(existing.content + entry, now, existing.id);
-  } else {
-    const header = `# Knowledge Base Log\n\nChronological record of knowledge base operations.\n\n`;
-    db.prepare(
-      `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
-       VALUES (?, 'log', 'Knowledge Base Log', ?, 'log', ?, ?)`,
-    ).run(crypto.randomUUID(), header + entry, now, now);
-  }
 }
 
 /**
- * Run a wiki-ingest batch atomically on the server:
+ * Run a journal-write batch atomically on the server:
  *   1. Upsert every page (new or updated) → also records a revision snapshot.
  *   2. Rebuild backlinks for each upserted page.
  *   3. Link sources (passage + added_at) if provided.
- *   4. Rebuild the `index` page from the freshly-committed state.
- *   5. Append a log entry.
  *
- * All of this runs inside a single better-sqlite3 transaction, which
- * makes it safe against concurrent ingests. The `index` page can no
- * longer be clobbered by a slower parallel ingest because the SELECT +
- * UPSERT happen in a single serialized write window.
+ * Runs inside a single better-sqlite3 transaction, safe against concurrent writes.
  */
 export function wikiIngestFinalize(
   input: IngestFinalizeInput,
@@ -1029,34 +979,6 @@ export function wikiIngestFinalize(
       }
 
       savedSlugs.push(page.slug);
-    }
-
-    if (batch.rebuildIndex) {
-      const indexContent = buildIndexContent(db);
-      if (indexContent) {
-        const existingIndex = db
-          .prepare(`SELECT id FROM wiki_pages WHERE slug = 'index'`)
-          .get() as { id: string } | undefined;
-        if (existingIndex) {
-          db.prepare(
-            `UPDATE wiki_pages SET title = ?, content = ?, page_type = 'index', updated_at = ? WHERE id = ?`,
-          ).run("Knowledge Base Index", indexContent, now, existingIndex.id);
-        } else {
-          db.prepare(
-            `INSERT INTO wiki_pages (id, slug, title, content, page_type, created_at, updated_at)
-             VALUES (?, 'index', 'Knowledge Base Index', ?, 'index', ?, ?)`,
-          ).run(crypto.randomUUID(), indexContent, now, now);
-        }
-      }
-    }
-
-    if (batch.logEntry) {
-      appendLogEntry(
-        db,
-        batch.logEntry.kind ?? "ingest",
-        batch.logEntry.label,
-        now,
-      );
     }
   });
 

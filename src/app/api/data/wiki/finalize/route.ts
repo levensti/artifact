@@ -4,12 +4,12 @@ import type { WikiPageType } from "@/lib/wiki";
 
 export const runtime = "nodejs";
 
+const ALLOWED_TYPES: ReadonlySet<WikiPageType> = new Set(["session", "digest"]);
+
 /**
- * Atomic "ingest finalize" endpoint. Takes a batch of pages + optional
- * log entry + optional index rebuild, and runs them all in a single
- * server-side transaction. Used by `runWikiIngest` and
- * `extractWikiFromResponse` so concurrent ingests can't clobber the
- * index page or lose log entries.
+ * Atomic "ingest finalize" endpoint. Takes a batch of journal pages
+ * (sessions + digests) and writes them in a single server-side
+ * transaction. Used by the session/digest ambient generators.
  */
 export async function POST(req: NextRequest) {
   let body: {
@@ -21,7 +21,6 @@ export async function POST(req: NextRequest) {
       source?: { reviewId: string; passage?: string };
     }>;
     logEntry?: { label: string; kind?: string };
-    rebuildIndex?: boolean;
   };
   try {
     body = await req.json();
@@ -32,11 +31,18 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(body.pages)) {
     return Response.json({ error: "pages must be an array" }, { status: 400 });
   }
+  for (const p of body.pages) {
+    if (!ALLOWED_TYPES.has(p.pageType)) {
+      return Response.json(
+        { error: `Invalid pageType: ${p.pageType}` },
+        { status: 400 },
+      );
+    }
+  }
 
   const result = wikiIngestFinalize({
     pages: body.pages,
     logEntry: body.logEntry,
-    rebuildIndex: body.rebuildIndex ?? true,
   });
   return Response.json(result);
 }

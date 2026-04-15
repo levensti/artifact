@@ -6,8 +6,8 @@
  * ingest site needing to own its own React state.
  *
  * Usage:
- *   const token = beginWikiIngest({ kind: "paper", label: paperTitle });
- *   try { await runWikiIngest(...); }
+ *   const token = beginWikiIngest({ kind: "journal", label: "Journaling" });
+ *   try { await runJournalAgent(...); }
  *   finally { endWikiIngest(token); }
  *
  * Subscribe in a component with:
@@ -20,7 +20,7 @@
 
 const WIKI_INGEST_UPDATED_EVENT = "paper-copilot-wiki-ingest-updated";
 
-export type WikiIngestKind = "paper" | "chat-extract" | "lint" | "other";
+export type WikiIngestKind = "journal" | "other";
 
 export interface WikiIngestTask {
   id: number;

@@ -16,7 +16,7 @@ import {
   type ChatMessage,
 } from "@/lib/reviews";
 import { invalidateExploreCache } from "@/lib/client-data";
-import { extractWikiFromResponse } from "@/lib/wiki-chat-extract";
+import { scheduleJournalAfterChat } from "@/lib/wiki-journal-agent";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
@@ -375,22 +375,14 @@ export function useChat({
           invalidateExploreCache(reviewId);
         }
 
-        // Ambient: extract any wiki-worthy concepts from the assistant's
-        // response in the background. Fire-and-forget — never blocks the
-        // UI and silently rate-limits itself per review.
-        if (content && selectedModel && isModelReady(selectedModel)) {
+        // Ambient: schedule the journal agent to consider this turn.
+        // Debounced inside the agent module so a burst of turns collapses
+        // into one LLM call.
+        if (content && isModelReady(selectedModel)) {
           const apiKey = isInferenceProviderType(selectedModel.provider)
             ? ""
             : (getApiKey(selectedModel.provider) ?? "");
-          void extractWikiFromResponse({
-            responseText: content,
-            paperTitle,
-            reviewId,
-            model: selectedModel,
-            apiKey,
-          }).catch(() => {
-            /* ambient: ignore */
-          });
+          scheduleJournalAfterChat({ model: selectedModel, apiKey });
         }
       } catch (err) {
         const message =
@@ -526,20 +518,11 @@ export function useChat({
         await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
 
-        // Ambient wiki extraction from thread replies as well.
-        if (content && selectedModel && isModelReady(selectedModel)) {
+        if (content && isModelReady(selectedModel)) {
           const apiKey = isInferenceProviderType(selectedModel.provider)
             ? ""
             : (getApiKey(selectedModel.provider) ?? "");
-          void extractWikiFromResponse({
-            responseText: content,
-            paperTitle,
-            reviewId,
-            model: selectedModel,
-            apiKey,
-          }).catch(() => {
-            /* ambient: ignore */
-          });
+          scheduleJournalAfterChat({ model: selectedModel, apiKey });
         }
       } catch (err) {
         const message =
