@@ -137,7 +137,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </Suspense>
           </>
         )}
-        {collapsed && (
+        {collapsed && !narrow && (
           <div className="flex h-full w-11 shrink-0 flex-col items-center border-r border-border bg-background pt-2 safe-area-x">
             <Button
               variant="outline"
@@ -150,7 +150,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </Button>
           </div>
         )}
-        <main className="flex-1 min-w-0 overflow-hidden">{children}</main>
+        <main className="relative flex-1 min-w-0 overflow-hidden">
+          {narrow && collapsed && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="fixed left-2 top-[max(0.5rem,env(safe-area-inset-top,0px))] z-20 size-8 border-border bg-background/90 shadow-sm backdrop-blur"
+              onClick={toggle}
+              title="Open sidebar"
+              aria-label="Open sidebar"
+            >
+              <PanelLeft size={14} />
+            </Button>
+          )}
+          {children}
+        </main>
         <SettingsDialog
           open={settingsOpen}
           onOpenChange={handleSettingsOpenChange}

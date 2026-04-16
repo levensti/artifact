@@ -13,19 +13,19 @@ export default function Home() {
 
   return (
     <DashboardLayout>
-      <div className="flex h-full items-center justify-center bg-background px-6">
-        <div className="max-w-lg space-y-10 text-center">
-          <div className="space-y-5">
-            <h1 className="text-[44px] font-bold leading-[1.05] tracking-[-0.03em] text-foreground">
+      <div className="flex h-full items-center justify-center bg-background px-4 sm:px-6">
+        <div className="max-w-lg space-y-8 text-center sm:space-y-10">
+          <div className="space-y-4 sm:space-y-5">
+            <h1 className="text-balance text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-foreground sm:text-[44px]">
               Artifact
             </h1>
-            <p className="mx-auto max-w-md text-[17px] leading-relaxed text-muted-foreground">
+            <p className="mx-auto max-w-md text-[15px] leading-relaxed text-muted-foreground sm:text-[17px]">
               Discover the frontier.
             </p>
           </div>
           <Button
             onClick={() => setShowNewReview(true)}
-            className="h-10 gap-2 rounded-md px-5 text-[13px] font-medium"
+            className="h-11 gap-2 rounded-md px-5 text-[14px] font-medium sm:h-10 sm:text-[13px]"
           >
             Get started
             <ArrowRight size={14} strokeWidth={2} />

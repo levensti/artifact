@@ -306,7 +306,7 @@ function JournalPageInner() {
   return (
     <DashboardLayout>
       <div className="flex h-full flex-col overflow-y-auto bg-background">
-        <div className="mx-auto w-full max-w-[1180px] px-8 pb-16 pt-10">
+        <div className="mx-auto w-full max-w-[1180px] px-4 pb-16 pt-10 sm:px-8">
           {/* Header */}
           <header className="mb-6 space-y-1">
             <div className="flex items-center gap-2">
