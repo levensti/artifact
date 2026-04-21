@@ -5,12 +5,10 @@ import { loadExplore } from "@/lib/client-data";
 import {
   EXPLORE_UPDATED_EVENT,
   type PrerequisitesData,
-  type GraphData,
 } from "@/lib/explore";
 
 interface ExploreData {
   prerequisites: PrerequisitesData | null;
-  graph: GraphData | null;
 }
 
 export function useExploreData(reviewId: string): ExploreData {
@@ -20,7 +18,6 @@ export function useExploreData(reviewId: string): ExploreData {
 
   const [data, setData] = useState<ExploreData>({
     prerequisites: null,
-    graph: null,
   });
 
   useEffect(() => {

@@ -15,7 +15,7 @@
 
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type { PrerequisitesData, GraphData } from "@/lib/explore";
+import type { PrerequisitesData } from "@/lib/explore";
 import type { ChatMessage, PaperReview } from "@/lib/review-types";
 import type { WikiPage } from "@/lib/wiki";
 
@@ -33,14 +33,13 @@ export interface BundleEnvelope<T extends BundleType, D> {
   data: D;
 }
 
-/** Review contents that travel in a bundle. No PDF, no global graph, no settings. */
+/** Review contents that travel in a bundle. No PDF, no settings. */
 export interface ReviewBundleData {
   review: PaperReview;
   messages: ChatMessage[];
   annotations: Annotation[];
   deepDives: DeepDiveSession[];
   prerequisites: PrerequisitesData | null;
-  graph: GraphData | null;
 }
 
 /** Wiki contents. `pages[0]` is the "root" export; the rest are transitively-linked pages. */
@@ -152,8 +151,6 @@ export function validateBundle(raw: unknown): ValidationResult<AnyBundle> {
       issues.push("bundle.data.deepDives: expected array");
     if (!("prerequisites" in data))
       issues.push("bundle.data.prerequisites: required (nullable)");
-    if (!("graph" in data))
-      issues.push("bundle.data.graph: required (nullable)");
   } else {
     if (!isArr(data.pages) || data.pages.length === 0) {
       issues.push("bundle.data.pages: expected non-empty array");

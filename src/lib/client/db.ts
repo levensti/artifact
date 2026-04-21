@@ -10,11 +10,7 @@ import Dexie, { type Table } from "dexie";
 import type { Annotation } from "@/lib/annotations";
 import type { ChatMessage, PaperReview } from "@/lib/review-types";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type {
-  GlobalGraphData,
-  GraphData,
-  PrerequisitesData,
-} from "@/lib/explore";
+import type { PrerequisitesData } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 
 export type ReviewRow = PaperReview;
@@ -34,16 +30,6 @@ export type DeepDiveRow = DeepDiveSession;
 export interface PrerequisitesRow {
   reviewId: string;
   data: PrerequisitesData;
-}
-
-export interface GraphRow {
-  reviewId: string;
-  graph: GraphData;
-}
-
-export interface GlobalGraphRow {
-  id: "singleton";
-  data: GlobalGraphData;
 }
 
 export type WikiPageRow = WikiPage;
@@ -96,8 +82,6 @@ export class ArtifactDB extends Dexie {
   reviewAnnotations!: Table<AnnotationsRow, string>;
   deepDives!: Table<DeepDiveRow, string>;
   explorePrerequisites!: Table<PrerequisitesRow, string>;
-  exploreGraphs!: Table<GraphRow, string>;
-  globalGraph!: Table<GlobalGraphRow, string>;
   wikiPages!: Table<WikiPageRow, string>;
   wikiPageSources!: Table<WikiPageSourceRow, string>;
   wikiBacklinks!: Table<WikiBacklinkRow, string>;
@@ -121,6 +105,11 @@ export class ArtifactDB extends Dexie {
       wikiRevisions: "++id, pageId, slug, savedAt",
       settings: "key",
       pdfBlobs: "id",
+    });
+    // v2: drop the legacy discovery-graph tables. `null` removes a table.
+    this.version(2).stores({
+      exploreGraphs: null,
+      globalGraph: null,
     });
   }
 }

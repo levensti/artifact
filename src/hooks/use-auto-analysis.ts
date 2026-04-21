@@ -10,7 +10,6 @@ export type AnalysisStatus = "idle" | "running" | "done" | "error";
 
 interface UseAnalysisOptions {
   reviewId: string;
-  arxivId: string;
   paperTitle: string;
   paperContext: string;
   selectedModel: Model | null;
@@ -28,7 +27,6 @@ interface UseAnalysisReturn {
 
 export function useAnalysis({
   reviewId,
-  arxivId,
   paperTitle,
   paperContext,
   selectedModel,
@@ -54,9 +52,7 @@ export function useAnalysis({
     let cancelled = false;
     void loadExplore(reviewId).then((d) => {
       if (cancelled) return;
-      const hasData =
-        d.prerequisites !== null || d.graph !== null;
-      setStatus(hasData ? "done" : "idle");
+      setStatus(d.prerequisites !== null ? "done" : "idle");
     });
     return () => {
       cancelled = true;
@@ -81,7 +77,6 @@ export function useAnalysis({
       try {
         await runPaperExploreAnalysis({
           reviewId,
-          arxivId,
           paperTitle,
           paperContext,
           model: selectedModel,
@@ -101,7 +96,7 @@ export function useAnalysis({
     })();
 
     return true;
-  }, [reviewId, arxivId, paperTitle, paperContext, selectedModel]);
+  }, [reviewId, paperTitle, paperContext, selectedModel]);
 
   useEffect(() => {
     return () => {

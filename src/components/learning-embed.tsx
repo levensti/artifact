@@ -8,7 +8,6 @@ import type { Prerequisite } from "@/lib/explore";
 import { savePrerequisites } from "@/lib/client-data";
 import { useExploreData } from "@/hooks/use-explore-data";
 import PrerequisitesSection from "@/components/prerequisites-section";
-import RelatedWorksGraph from "@/components/related-works-graph";
 import MarkdownMessage from "@/components/markdown-message";
 import {
   Dialog,
@@ -61,8 +60,7 @@ export default function LearningEmbed({
   paperContext,
   selectedModel,
 }: LearningEmbedProps) {
-  const { prerequisites: prereqData, graph: graphData } =
-    useExploreData(reviewId);
+  const { prerequisites: prereqData } = useExploreData(reviewId);
 
   const [loadingTopicId, setLoadingTopicId] = useState<string | null>(null);
   const [studyItem, setStudyItem] = useState<Prerequisite | null>(null);
@@ -138,18 +136,18 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
     [prereqData, reviewId],
   );
 
-  if (!prereqData && !graphData) {
+  if (!prereqData) {
     return (
       <p className="text-xs text-muted-foreground leading-relaxed">
         Nothing saved yet. Use <span className="font-medium text-foreground/85">Build learning map</span>{" "}
-        above to generate prerequisites and a related-works graph for this paper.
+        above to generate prerequisites for this paper.
       </p>
     );
   }
 
   return (
     <div className="space-y-4 pt-1">
-      {prereqData && prereqData.prerequisites.length > 0 && (
+      {prereqData.prerequisites.length > 0 && (
         <section className="space-y-2">
           <div className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary shrink-0" />
@@ -163,13 +161,6 @@ Stay factual; if the paper text does not support a claim, say that it is a typic
             }}
             onToggleComplete={handleToggleComplete}
           />
-        </section>
-      )}
-
-      {graphData && (
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold text-foreground">Related works</h4>
-          <RelatedWorksGraph graph={graphData} />
         </section>
       )}
 

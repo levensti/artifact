@@ -25,8 +25,6 @@ const badgeVariants = cva(
           "bg-[var(--badge-accent-bg)] text-[var(--badge-accent-fg)]",
         imported:
           "bg-[var(--badge-imported-bg)] text-[var(--badge-imported-fg)]",
-        discovery:
-          "bg-[var(--badge-discovery-bg)] text-[var(--badge-discovery-fg)]",
         error:
           "bg-[var(--badge-error-bg)] text-[var(--badge-error-fg)]",
       },

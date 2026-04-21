@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
-  Network,
   Search,
   Wrench,
   X,
@@ -24,10 +23,6 @@ const TOOL_LABELS: Record<string, [string, string]> = {
   arxiv_search: ["Searching arXiv", "Searched arXiv"],
   web_search: ["Searching the web", "Searched the web"],
   rank_results: ["Ranking results", "Ranked results"],
-  save_to_knowledge_graph: [
-    "Saving to knowledge graph",
-    "Saved to knowledge graph",
-  ],
 };
 
 function toolLabel(name: string, done: boolean): string {
@@ -40,7 +35,6 @@ const TOOL_ICONS: Record<string, typeof Search> = {
   arxiv_search: Search,
   web_search: Search,
   rank_results: Wrench,
-  save_to_knowledge_graph: Network,
 };
 
 /* ------------------------------------------------------------------ */
@@ -141,15 +135,9 @@ export function ToolCallStep({
       </button>
       {open && output && (
         <div className="border-t border-border/40 px-2.5 py-2 max-h-[180px] overflow-y-auto bg-muted/5">
-          {name === "save_to_knowledge_graph" ? (
-            <div className="text-[11px] leading-relaxed text-muted-foreground/80">
-              <MarkdownMessage content={output} />
-            </div>
-          ) : (
-            <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
-              {output}
-            </pre>
-          )}
+          <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
+            {output}
+          </pre>
         </div>
       )}
     </div>

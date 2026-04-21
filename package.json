@@ -19,7 +19,6 @@
     "@tiptap/react": "^3.22.4",
     "@tiptap/starter-kit": "^3.22.4",
     "@types/dompurify": "^3.0.5",
-    "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dexie": "^4.4.2",

@@ -18,15 +18,7 @@ import {
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type {
-  GlobalGraphData,
-  GraphData,
-  GraphEdge,
-  GraphNode,
-  PrerequisitesData,
-  RelationshipType,
-} from "@/lib/explore";
-import { mergeGlobalGraphSession } from "@/lib/explore-merge";
+import type { PrerequisitesData } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import { normalizeArxivId } from "@/lib/reviews";
 import {
@@ -54,14 +46,13 @@ let settingsCache: SettingsCache = {
   inferenceProfiles: [],
   selectedModel: null,
 };
-let globalGraphCache: GlobalGraphData | null = null;
 let deepDivesCache: DeepDiveSession[] = [];
 
 const messagesCache = new Map<string, ChatMessage[]>();
 const annotationsCache = new Map<string, Annotation[]>();
 const exploreCache = new Map<
   string,
-  { prerequisites: PrerequisitesData | null; graph: GraphData | null }
+  { prerequisites: PrerequisitesData | null }
 >();
 
 function dispatch(name: string): void {
@@ -76,7 +67,6 @@ export async function hydrateClientStore(): Promise<void> {
     const boot = await store.getBootstrap();
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
-    globalGraphCache = boot.globalGraph;
     deepDivesCache = boot.deepDives;
     messagesCache.clear();
     annotationsCache.clear();
@@ -246,25 +236,20 @@ export async function loadExplore(
   reviewId: string,
 ): Promise<{
   prerequisites: PrerequisitesData | null;
-  graph: GraphData | null;
 }> {
   if (!reviewId?.trim()) {
-    return { prerequisites: null, graph: null };
+    return { prerequisites: null };
   }
   const cached = exploreCache.get(reviewId);
   if (cached) return cached;
-  const [prerequisites, graph] = await Promise.all([
-    store.getPrerequisites(reviewId),
-    store.getGraphData(reviewId),
-  ]);
-  const data = { prerequisites, graph };
+  const prerequisites = await store.getPrerequisites(reviewId);
+  const data = { prerequisites };
   exploreCache.set(reviewId, data);
   return data;
 }
 
 export function getExploreCached(reviewId: string): {
   prerequisites: PrerequisitesData | null;
-  graph: GraphData | null;
 } | undefined {
   return exploreCache.get(reviewId);
 }
@@ -273,153 +258,9 @@ export async function savePrerequisites(
   reviewId: string,
   prerequisites: PrerequisitesData,
 ): Promise<void> {
-  const prev = exploreCache.get(reviewId) ?? {
-    prerequisites: null,
-    graph: null,
-  };
-  exploreCache.set(reviewId, { ...prev, prerequisites });
+  exploreCache.set(reviewId, { prerequisites });
   await store.setPrerequisites(reviewId, prerequisites);
   dispatch(EXPLORE_UPDATED_EVENT);
-}
-
-export async function saveGraphData(
-  reviewId: string,
-  graph: GraphData,
-): Promise<void> {
-  const prev = exploreCache.get(reviewId) ?? {
-    prerequisites: null,
-    graph: null,
-  };
-  exploreCache.set(reviewId, { ...prev, graph });
-  await store.setGraphData(reviewId, graph);
-  dispatch(EXPLORE_UPDATED_EVENT);
-}
-
-export async function mergeSessionGraphIntoGlobal(
-  anchorReviewId: string,
-  graph: GraphData,
-): Promise<void> {
-  const next = mergeGlobalGraphSession(
-    anchorReviewId,
-    graph,
-    globalGraphCache,
-  );
-  globalGraphCache = next;
-  if (next) await store.setGlobalGraphData(next);
-  dispatch(EXPLORE_UPDATED_EVENT);
-}
-
-export function getGlobalGraphData(): GlobalGraphData | null {
-  return globalGraphCache;
-}
-
-export async function refreshGlobalGraph(): Promise<void> {
-  globalGraphCache = await store.getGlobalGraphData();
-  dispatch(EXPLORE_UPDATED_EVENT);
-}
-
-const VALID_RELATIONSHIPS = new Set<RelationshipType>([
-  "builds-upon",
-  "extends",
-  "similar-approach",
-  "prerequisite",
-  "contrasts-with",
-]);
-
-export interface SaveRelatedPapersInput {
-  arxiv_id?: string;
-  arxivId?: string;
-  title?: string;
-  authors?: string[];
-  abstract?: string;
-  relationship?: string;
-  reasoning?: string;
-}
-
-/**
- * Persist related papers produced by the assistant's
- * save_to_knowledge_graph tool call into the per-review graph and the
- * global cross-review graph. Runs entirely client-side.
- */
-export async function saveRelatedPapersFromAssistant(
-  reviewId: string,
-  arxivId: string,
-  paperTitle: string,
-  rawPapers: unknown,
-): Promise<number> {
-  if (!Array.isArray(rawPapers) || rawPapers.length === 0) return 0;
-
-  const existing = (await store.getGraphData(reviewId)) ?? null;
-  const currentNode: GraphNode = existing?.nodes.find((n) => n.isCurrent) ?? {
-    id: arxivId,
-    title: paperTitle || "Current paper",
-    authors: [],
-    abstract: "",
-    arxivId,
-    publishedDate: new Date().toISOString(),
-    categories: [],
-    isCurrent: true,
-  };
-
-  const nodeMap = new Map<string, GraphNode>();
-  if (existing) for (const n of existing.nodes) nodeMap.set(n.arxivId, n);
-  nodeMap.set(currentNode.arxivId, currentNode);
-
-  const edgeSet = new Set<string>();
-  const edges: GraphEdge[] = [];
-  if (existing) {
-    for (const e of existing.edges) {
-      edgeSet.add(`${e.source}→${e.target}:${e.relationship}`);
-      edges.push(e);
-    }
-  }
-
-  let added = 0;
-  for (const raw of rawPapers as SaveRelatedPapersInput[]) {
-    if (!raw || typeof raw !== "object") continue;
-    const id = String(raw.arxiv_id ?? raw.arxivId ?? "").trim();
-    const title = String(raw.title ?? "").trim();
-    const relationship = String(raw.relationship ?? "").trim() as RelationshipType;
-    const reasoning = String(raw.reasoning ?? "").trim();
-    if (!id || !title) continue;
-    if (!VALID_RELATIONSHIPS.has(relationship)) continue;
-    if (id === arxivId) continue;
-
-    if (!nodeMap.has(id)) {
-      nodeMap.set(id, {
-        id,
-        title,
-        authors: Array.isArray(raw.authors) ? raw.authors.map(String) : [],
-        abstract: typeof raw.abstract === "string" ? raw.abstract : "",
-        arxivId: id,
-        publishedDate: "",
-        categories: [],
-        isCurrent: false,
-      });
-    }
-
-    const edgeKey = `${arxivId}→${id}:${relationship}`;
-    if (!edgeSet.has(edgeKey)) {
-      edgeSet.add(edgeKey);
-      edges.push({ source: arxivId, target: id, relationship, reasoning });
-      added++;
-    }
-  }
-
-  if (added === 0 && existing) return 0;
-
-  const graph: GraphData = {
-    nodes: [...nodeMap.values()],
-    edges,
-    keywords: existing?.keywords ?? [],
-    generatedAt: new Date().toISOString(),
-    modelUsed: existing?.modelUsed ?? "assistant",
-    anchorReviewId: reviewId,
-  };
-
-  await saveGraphData(reviewId, graph);
-  await mergeSessionGraphIntoGlobal(reviewId, graph);
-  return added;
 }
 
 /**
@@ -428,19 +269,12 @@ export async function saveRelatedPapersFromAssistant(
  */
 export function invalidateExploreCache(reviewId: string): void {
   exploreCache.delete(reviewId);
-  globalGraphCache = null;
   dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 export async function clearExploreData(reviewId: string): Promise<void> {
   exploreCache.delete(reviewId);
   await store.clearExploreData(reviewId);
-  dispatch(EXPLORE_UPDATED_EVENT);
-}
-
-export async function clearGlobalKnowledgeGraph(): Promise<void> {
-  globalGraphCache = null;
-  await store.clearGlobalKnowledgeGraph();
   dispatch(EXPLORE_UPDATED_EVENT);
 }
 

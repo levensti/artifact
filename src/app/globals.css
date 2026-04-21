@@ -64,8 +64,6 @@
   --badge-accent-fg: color-mix(in srgb, var(--primary) 88%, transparent);
   --badge-imported-bg: color-mix(in srgb, var(--warning) 12%, transparent);
   --badge-imported-fg: color-mix(in srgb, var(--warning) 85%, transparent);
-  --badge-discovery-bg: color-mix(in srgb, var(--success) 12%, transparent);
-  --badge-discovery-fg: color-mix(in srgb, var(--success) 85%, transparent);
   --badge-error-bg: color-mix(in srgb, var(--destructive) 10%, transparent);
   --badge-error-fg: color-mix(in srgb, var(--destructive) 85%, transparent);
 
