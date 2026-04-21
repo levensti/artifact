@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Check, ChevronDown, KeyRound, Loader2, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, KeyRound, Loader2, RefreshCw, Settings } from "lucide-react";
 import {
   PROVIDER_ORDER,
   PROVIDER_META,
@@ -108,7 +108,6 @@ export default function ModelSelector({
     });
 
     if (jobs.length === 0) {
-      // Use a transition to avoid synchronous cascading renders during effect execution.
       startTransition(() => setModelsByFetchKey({}));
       return () => {
         cancelled = true;
@@ -213,9 +212,9 @@ export default function ModelSelector({
     selected && isModelReady(selected)
       ? selected.label
       : !anyKey
-        ? "Add API key first"
+        ? "Add API key"
         : loadingKeyed && totalSelectable === 0
-          ? "Loading models…"
+          ? "Loading…"
           : "Select model";
 
   const showTriggerSpinner =
@@ -225,75 +224,58 @@ export default function ModelSelector({
 
   const inferenceProfiles = getInferenceProfiles();
 
+  const readyBuiltinProviders = useMemo(
+    () => (PROVIDER_ORDER as (keyof typeof PROVIDER_META)[]).filter((p) => isBuiltinProviderReady(p)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [keysVersion],
+  );
+
+  const readyInferenceProfiles = useMemo(
+    () => inferenceProfiles.filter((p) => p.apiKey.trim() && p.baseUrl.trim() && p.label.trim()),
+    [inferenceProfiles],
+  );
+
   function renderBuiltinGroup(
     provider: keyof typeof PROVIDER_META,
     groupIndex: number,
   ) {
     const meta = PROVIDER_META[provider];
-    const hasKey = !!getApiKey(provider);
     const raw = modelsByFetchKey[provider];
-    const state: ProviderModelsState = !hasKey
-      ? { status: "no-key" }
-      : (raw ?? { status: "loading" });
+    const state: ProviderModelsState = raw ?? { status: "loading" };
 
     return (
       <Fragment key={provider}>
         {groupIndex > 0 && <DropdownMenuSeparator />}
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-[11px] font-medium text-foreground">
+          <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
             {meta.label}
           </DropdownMenuLabel>
 
-          {state.status === "no-key" && (
-            <>
-              <p className="px-1.5 pb-1 text-[10px] text-muted-foreground leading-snug">
-                Add your {meta.label} key to load models from this provider.
-              </p>
-              <DropdownMenuItem
-                className="text-xs gap-2 cursor-pointer text-primary focus:text-primary"
-                onClick={() => openSettings({ provider })}
-              >
-                <KeyRound className="size-3.5 opacity-80" />
-                Add {meta.label} API key…
-              </DropdownMenuItem>
-            </>
-          )}
-
           {state.status === "loading" && (
             <DropdownMenuItem disabled className="text-xs gap-2 opacity-100">
-              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-              <span className="text-muted-foreground">Loading models…</span>
+              <Loader2 className="size-3 animate-spin text-muted-foreground" />
+              <span className="text-muted-foreground">Loading…</span>
             </DropdownMenuItem>
           )}
 
           {state.status === "error" && (
-            <>
-              <p className="px-1.5 pb-1 text-[10px] text-muted-foreground leading-snug">
-                Could not load models. Check the key or try again.
-              </p>
-              <DropdownMenuItem
-                className="text-xs gap-2 cursor-pointer"
-                onClick={() => setRefetchTick((t) => t + 1)}
-              >
-                <RefreshCw className="size-3.5 opacity-80" />
-                Retry
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem
+              className="text-xs gap-2 cursor-pointer"
+              onClick={() => setRefetchTick((t) => t + 1)}
+            >
+              <RefreshCw className="size-3.5 opacity-80" />
+              Retry
+            </DropdownMenuItem>
           )}
 
           {state.status === "ok" && state.models.length === 0 && (
-            <>
-              <p className="px-1.5 pb-1 text-[10px] text-muted-foreground leading-snug">
-                No models returned for this key.
-              </p>
-              <DropdownMenuItem
-                className="text-xs gap-2 cursor-pointer"
-                onClick={() => setRefetchTick((t) => t + 1)}
-              >
-                <RefreshCw className="size-3.5 opacity-80" />
-                Refresh list
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem
+              className="text-xs gap-2 cursor-pointer"
+              onClick={() => setRefetchTick((t) => t + 1)}
+            >
+              <RefreshCw className="size-3.5 opacity-80" />
+              No models found — retry
+            </DropdownMenuItem>
           )}
 
           {state.status === "ok" &&
@@ -323,71 +305,41 @@ export default function ModelSelector({
 
   function renderProfileGroup(
     profiles: InferenceProviderProfile[],
-    sectionTitle: string,
-    sectionKind: "openai_compatible",
   ) {
     if (profiles.length === 0) return null;
 
     return (
-      <Fragment key={sectionKind}>
+      <Fragment key="inference">
+        <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-[11px] font-medium text-foreground">
-            {sectionTitle}
-          </DropdownMenuLabel>
           {profiles.map((prof) => {
-            const complete =
-              prof.apiKey.trim() && prof.baseUrl.trim() && prof.label.trim();
             const raw = modelsByFetchKey[prof.id];
-            const state: ProviderModelsState = !complete
-              ? { status: "no-key" }
-              : (raw ?? { status: "loading" });
+            const state: ProviderModelsState = raw ?? { status: "loading" };
 
             return (
               <Fragment key={prof.id}>
-                <div className="px-1.5 pt-1 pb-0.5 text-[10px] font-medium text-muted-foreground">
+                <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
                   {prof.label}
-                </div>
-
-                {state.status === "no-key" && (
-                  <>
-                    <p className="px-1.5 pb-1 text-[10px] text-muted-foreground leading-snug">
-                      Add a display name, base URL, and API key in Settings.
-                    </p>
-                    <DropdownMenuItem
-                      className="text-xs gap-2 cursor-pointer text-primary focus:text-primary"
-                      onClick={() => openSettings({ provider: sectionKind })}
-                    >
-                      <KeyRound className="size-3.5 opacity-80" />
-                      Configure inference providers…
-                    </DropdownMenuItem>
-                  </>
-                )}
+                </DropdownMenuLabel>
 
                 {state.status === "loading" && (
                   <DropdownMenuItem
                     disabled
                     className="text-xs gap-2 opacity-100"
                   >
-                    <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                    <span className="text-muted-foreground">
-                      Loading models…
-                    </span>
+                    <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                    <span className="text-muted-foreground">Loading…</span>
                   </DropdownMenuItem>
                 )}
 
                 {state.status === "error" && (
-                  <>
-                    <p className="px-1.5 pb-1 text-[10px] text-muted-foreground leading-snug">
-                      Could not load models for this endpoint.
-                    </p>
-                    <DropdownMenuItem
-                      className="text-xs gap-2 cursor-pointer"
-                      onClick={() => setRefetchTick((t) => t + 1)}
-                    >
-                      <RefreshCw className="size-3.5 opacity-80" />
-                      Retry
-                    </DropdownMenuItem>
-                  </>
+                  <DropdownMenuItem
+                    className="text-xs gap-2 cursor-pointer"
+                    onClick={() => setRefetchTick((t) => t + 1)}
+                  >
+                    <RefreshCw className="size-3.5 opacity-80" />
+                    Retry
+                  </DropdownMenuItem>
                 )}
 
                 {state.status === "ok" && state.models.length === 0 && (
@@ -431,60 +383,54 @@ export default function ModelSelector({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          "inline-flex max-w-[min(200px,42vw)] items-center gap-1 rounded-md px-2 transition-colors hover:bg-accent hover:text-accent-foreground",
+          "inline-flex max-w-[min(200px,42vw)] items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs transition-all duration-150 hover:border-border hover:bg-muted/50",
           hasModelSelected
-            ? "h-8 text-sm font-medium text-foreground"
-            : "h-7 text-xs font-normal text-muted-foreground",
+            ? "font-medium text-foreground"
+            : "text-muted-foreground",
         )}
         aria-label={selected ? `Model: ${selected.label}` : triggerLabel}
       >
-        <span className="truncate">{triggerLabel}</span>
         {showTriggerSpinner ? (
-          <Loader2 size={10} className="animate-spin shrink-0" />
-        ) : (
-          <ChevronDown
-            className={cn(
-              "shrink-0",
-              hasModelSelected ? "size-3.5" : "size-2.5",
-            )}
-            strokeWidth={2}
-          />
-        )}
+          <Loader2 className="size-3 animate-spin shrink-0" />
+        ) : null}
+        <span className="truncate">{triggerLabel}</span>
+        <ChevronDown
+          className="size-3 shrink-0 text-muted-foreground/50"
+          strokeWidth={2}
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[min(18rem,calc(100vw-1.5rem))]"
+        className="w-[min(16rem,calc(100vw-1.5rem))]"
       >
         {!anyKey ? (
           <div className="px-2 py-3 space-y-2">
             <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
-              Save an API key in Settings. Keys stay in your browser&apos;s
-              local storage; models load from the provider once your key is
-              saved.
+              Add an API key in Settings to load available models.
             </p>
             <DropdownMenuItem
               className="text-xs gap-2 cursor-pointer"
               onClick={() => openSettings()}
             >
               <KeyRound className="size-3.5 opacity-80" />
-              Manage API keys
+              Open Settings
             </DropdownMenuItem>
           </div>
         ) : (
           <>
-            {(PROVIDER_ORDER as (keyof typeof PROVIDER_META)[]).map(
-              (provider, idx) => renderBuiltinGroup(provider, idx),
+            {readyBuiltinProviders.map((provider, idx) =>
+              renderBuiltinGroup(provider, idx),
             )}
-            {inferenceProfiles.length > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                {renderProfileGroup(
-                  inferenceProfiles,
-                  "OpenAI-compatible inference providers",
-                  "openai_compatible",
-                )}
-              </>
-            )}
+            {renderProfileGroup(readyInferenceProfiles)}
+
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-[11px] gap-2 cursor-pointer text-muted-foreground"
+              onClick={() => openSettings()}
+            >
+              <Settings className="size-3 opacity-60" />
+              Add more providers…
+            </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>

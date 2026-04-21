@@ -113,7 +113,7 @@ export function ToolCallStep({
             <X className="size-3 text-destructive shrink-0" strokeWidth={2.5} />
           ) : (
             <Check
-              className="size-3 text-emerald-600 shrink-0"
+              className="size-3 text-success shrink-0"
               strokeWidth={2.5}
             />
           )

@@ -94,7 +94,7 @@ function ChatInput({
         className={cn(
           "flex items-end gap-2 rounded-xl border transition-[box-shadow,border-color,background-color] duration-200",
           inputLocked
-            ? "border-amber-500/35 bg-amber-500/5"
+            ? "border-warning/35 bg-warning/5"
             : "bg-card border-border shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 focus-within:shadow-md focus-within:shadow-primary/5",
         )}
       >
@@ -122,7 +122,12 @@ function ChatInput({
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 m-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
+          className={cn(
+            "size-8 m-1.5 rounded-lg transition-all duration-200",
+            input.trim() && !inputLocked && selectedModel && !isStreaming
+              ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+              : "bg-primary/10 text-primary hover:bg-primary/20",
+          )}
           onClick={sendMessage}
           disabled={
             inputLocked || !selectedModel || !input.trim() || isStreaming
@@ -138,25 +143,25 @@ function ChatInput({
           }
         >
           {isStreaming ? (
-            <Loader2 className="animate-spin" size={15} />
+            <Loader2 className="size-3.5 animate-spin" />
           ) : (
-            <Send size={15} />
+            <Send className="size-3.5" />
           )}
         </Button>
       </div>
       <div className="mt-1.5 space-y-0.5">
         {inputLocked ? (
-          <p className="px-1 text-center text-[11px] leading-snug text-amber-700/90">
+          <p className="px-1 text-center text-[11px] leading-snug text-warning">
             Chat is locked until you add an API key.
           </p>
         ) : (
-          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground/85">
+          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground">
             {chatThreadAnnotationId
               ? "Replies stay tied to this highlight."
               : "Messages apply to the whole paper."}
           </p>
         )}
-        <p className="px-1 text-center text-[10px] leading-snug text-muted-foreground/50">
+        <p className="px-1 text-center text-[10px] leading-snug text-muted-foreground/60">
           {selectedModel
             ? `${selectedModel.label} · Shift+Enter new line`
             : hasSavedKeys

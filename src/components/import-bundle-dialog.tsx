@@ -248,7 +248,7 @@ export default function ImportBundleDialog({
 
         {stage.kind === "done" && (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <FileDown className="size-5 text-emerald-600" strokeWidth={1.75} />
+            <FileDown className="size-5 text-success" strokeWidth={1.75} />
             <p className="text-[13px] text-foreground">{stage.message}</p>
           </div>
         )}
@@ -403,7 +403,7 @@ function ReviewPreviewBody({
       ) : null}
 
       {notes.length > 0 ? (
-        <ul className="space-y-1 text-[11px] text-amber-700 dark:text-amber-400">
+        <ul className="space-y-1 text-[11px] text-warning dark:text-warning">
           {notes.map((n, i) => (
             <li key={i}>⚠︎ {n}</li>
           ))}

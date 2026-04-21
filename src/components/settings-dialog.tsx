@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Check, Key, Plus, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Check, Key, Plus, Trash2, CircleCheck, Circle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,8 +25,10 @@ import type {
   Provider,
 } from "@/lib/models";
 import { PROVIDER_META } from "@/lib/models";
+import { cn } from "@/lib/utils";
 
 type BuiltinSettingsProvider = keyof typeof PROVIDER_META;
+
 
 interface ProviderRowProps {
   provider: BuiltinSettingsProvider;
@@ -40,6 +42,7 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
   const [hasKey, setHasKey] = useState(() => !!getApiKey(provider));
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     const sync = () => {
@@ -57,6 +60,7 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
     void setApiKey(provider, trimmed).then(() => {
       setHasKey(true);
       setSaved(true);
+      setExpanded(false);
       setTimeout(() => setSaved(false), 2000);
     });
   };
@@ -72,57 +76,88 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
   return (
     <div
       data-settings-provider={provider}
-      className="rounded-xl border border-border/80 bg-card/80 p-3.5 space-y-3 transition-shadow duration-300"
+      className="rounded-xl border border-border/60 bg-card transition-all duration-200"
     >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <h3 className="text-sm font-semibold">{meta.label}</h3>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="flex-1 relative min-w-0">
-          <Key
-            size={13}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-          />
-          <Input
-            type={visible ? "text" : "password"}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={placeholder}
-            className="pl-8 pr-9 text-xs h-9"
-          />
-          <button
-            type="button"
-            onClick={() => setVisible(!visible)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={visible ? "Hide key" : "Show key"}
-          >
-            {visible ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
+      {/* Header row — always visible */}
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-[11px] font-bold text-muted-foreground">
+          {meta.label.charAt(0)}
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button
-            onClick={handleSave}
-            disabled={!value.trim()}
-            variant={saved ? "outline" : "default"}
-            size="sm"
-            className={
-              saved ? "text-primary border-primary/35 gap-1 h-9" : "h-9 gap-1"
-            }
-          >
-            {saved && <Check size={13} />}
-            {saved ? "Saved" : "Save"}
-          </Button>
-          {hasKey && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="flex items-center justify-center size-9 shrink-0 rounded-md border border-destructive/25 bg-destructive/10 text-destructive/90 hover:text-destructive hover:bg-destructive/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              title="Remove key"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
+          <p className="text-[11px] text-muted-foreground/60 truncate">
+            {hasKey ? "API key configured" : "No API key set"}
+          </p>
+        </div>
+        {hasKey ? (
+          <CircleCheck size={16} className="shrink-0 text-success" strokeWidth={2} />
+        ) : (
+          <Circle size={16} className="shrink-0 text-muted-foreground/30" strokeWidth={1.5} />
+        )}
+      </button>
+
+      {/* Expandable key input */}
+      <div
+        className={cn(
+          "grid transition-all duration-200 ease-out",
+          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="px-4 pb-3.5 pt-0.5 space-y-2.5">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 relative min-w-0">
+                <Key
+                  size={13}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
+                />
+                <Input
+                  type={visible ? "text" : "password"}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder={placeholder}
+                  className="pl-8 pr-9 text-xs h-9"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setVisible(!visible)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={visible ? "Hide key" : "Show key"}
+                >
+                  {visible ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  onClick={handleSave}
+                  disabled={!value.trim()}
+                  variant={saved ? "outline" : "default"}
+                  size="sm"
+                  className={
+                    saved ? "text-success border-success/35 gap-1 h-9" : "h-9 gap-1"
+                  }
+                >
+                  {saved && <Check size={13} />}
+                  {saved ? "Saved" : "Save"}
+                </Button>
+                {hasKey && (
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="flex items-center justify-center size-9 shrink-0 rounded-md border border-destructive/25 bg-destructive/5 text-destructive/70 hover:text-destructive hover:bg-destructive/15 transition-colors"
+                    title="Remove key"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -186,18 +221,18 @@ function InferenceProfileCard({
   return (
     <div
       data-settings-profile={profile.id}
-      className="rounded-lg border border-border/70 bg-background/50 p-3 space-y-2.5"
+      className="rounded-lg border border-border/50 bg-background/50 p-3 space-y-2.5"
     >
       <Input
         value={label}
         onChange={(e) => setLabel(e.target.value)}
-        placeholder="Inference provider name"
+        placeholder="Provider name"
         className="text-xs h-8 font-medium"
         spellCheck={false}
       />
 
       <div className="space-y-1">
-        <label className="text-[10px] font-medium text-muted-foreground">
+        <label className="text-[10px] font-medium text-muted-foreground/70">
           API base URL
         </label>
         <Input
@@ -218,7 +253,7 @@ function InferenceProfileCard({
       <div className="relative">
         <Key
           size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+          className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
         />
         <Input
           type={visible ? "text" : "password"}
@@ -264,7 +299,7 @@ function InferenceProfileCard({
         <button
           type="button"
           onClick={onRemove}
-          className="flex items-center justify-center size-8 shrink-0 rounded-md border border-destructive/25 bg-destructive/10 text-destructive/90 hover:text-destructive hover:bg-destructive/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="flex items-center justify-center size-8 shrink-0 rounded-md border border-destructive/25 bg-destructive/5 text-destructive/70 hover:text-destructive hover:bg-destructive/15 transition-colors"
           title="Remove provider"
         >
           <Trash2 size={14} />
@@ -324,41 +359,44 @@ function InferenceEndpointsSection({
 
   return (
     <div
-      className="rounded-xl border border-border/80 bg-card/80 p-3.5 space-y-3"
+      className="rounded-xl border border-border/60 bg-card p-4 space-y-3"
       data-settings-provider="openai_compatible"
     >
-      <div className="space-y-0.5">
-        <h3 className="text-sm font-semibold">{sectionTitle}</h3>
-        <p className="text-xs text-muted-foreground leading-snug">
-          {description}
-        </p>
+      <div className="flex items-center gap-3">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-[11px] font-bold text-muted-foreground">
+          +
+        </div>
+        <div className="space-y-0.5">
+          <h3 className="text-[13px] font-semibold">{sectionTitle}</h3>
+          <p className="text-[11px] text-muted-foreground/60 leading-snug">
+            {description}
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        {profiles.map((p) => (
-          <InferenceProfileCard
-            key={p.id}
-            profile={p}
-            onUpdate={(patch) => updateProfile(p.id, patch)}
-            onRemove={() => removeProfile(p.id)}
-            basePlaceholder={basePlaceholder}
-          />
-        ))}
-      </div>
+      {profiles.length > 0 && (
+        <div className="space-y-2">
+          {profiles.map((p) => (
+            <InferenceProfileCard
+              key={p.id}
+              profile={p}
+              onUpdate={(patch) => updateProfile(p.id, patch)}
+              onRemove={() => removeProfile(p.id)}
+              basePlaceholder={basePlaceholder}
+            />
+          ))}
+        </div>
+      )}
 
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="w-full h-8 text-xs gap-1.5"
+        className="w-full h-8 text-xs gap-1.5 border-dashed"
         onClick={addProfile}
       >
         <Plus size={12} />
-        Add{" "}
-        {kind === "openai_compatible"
-          ? "OpenAI-compatible"
-          : "Anthropic-compatible"}{" "}
-        provider
+        Add provider
       </Button>
     </div>
   );
@@ -451,29 +489,27 @@ export default function SettingsDialog({
     return aHas - bHas;
   });
 
+  const configuredCount = entries.filter((e) => e.hasKey).length;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
         className="flex max-h-[min(720px,min(90dvh,85vh))] w-[min(100vw-1rem,32rem)] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg safe-area-p"
       >
-        <DialogHeader className="shrink-0 border-b border-border/70 px-4 pt-4 pb-3 text-left">
-          <div className="flex items-center gap-2.5">
-            <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Key size={16} className="text-primary" />
-            </div>
-            <div>
-              <DialogTitle>Manage API keys</DialogTitle>
-              <DialogDescription className="text-xs mt-0.5">
-                Keys are stored locally in your browser — they never leave
-                your device.
-              </DialogDescription>
-            </div>
+        <DialogHeader className="shrink-0 border-b border-border/50 px-5 pt-5 pb-4 text-left">
+          <div className="space-y-1">
+            <DialogTitle className="text-[17px] font-bold tracking-[-0.02em]">Settings</DialogTitle>
+            <DialogDescription className="text-[12px] text-muted-foreground/60">
+              {configuredCount > 0
+                ? `${configuredCount} provider${configuredCount === 1 ? "" : "s"} configured · keys stored locally`
+                : "Add an API key to get started — keys never leave your browser."}
+            </DialogDescription>
           </div>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="space-y-3 px-4 py-3">
+          <div className="space-y-2.5 px-4 py-4">
             {sortedEntries.map((entry) =>
               entry.kind === "builtin" ? (
                 <ProviderRow
@@ -486,8 +522,8 @@ export default function SettingsDialog({
                 <InferenceEndpointsSection
                   key="openai_compatible"
                   kind="openai_compatible"
-                  sectionTitle="OpenAI-compatible inference providers"
-                  description="Any provider that supports the OpenAI Chat Completions API (e.g. Fireworks, OpenRouter, Sail)."
+                  sectionTitle="Custom providers"
+                  description="OpenAI-compatible endpoints (Fireworks, OpenRouter, etc.)"
                   basePlaceholder="https://api.example.com/v1"
                 />
               ),

@@ -460,7 +460,7 @@ export default function JournalImportModal({
             </CenteredState>
           ) : phase.kind === "unsupported" ? (
             <CenteredState>
-              <AlertTriangle className="size-6 text-amber-500/80" />
+              <AlertTriangle className="size-6 text-warning/80" />
               <p className="mt-3 max-w-sm text-center text-[12.5px] text-muted-foreground">
                 Your browser doesn&apos;t support the File System Access API. Use a Chromium-based browser (Chrome, Edge, Brave, Arc) to import sessions directly.
               </p>
@@ -504,7 +504,7 @@ export default function JournalImportModal({
             </CenteredState>
           ) : phase.kind === "error" ? (
             <CenteredState>
-              <AlertTriangle className="size-6 text-amber-500/80" />
+              <AlertTriangle className="size-6 text-warning/80" />
               <p className="mt-3 max-w-sm text-center text-[12.5px] text-muted-foreground">
                 {phase.message}
               </p>
@@ -579,7 +579,7 @@ export default function JournalImportModal({
                 <button
                   type="button"
                   onClick={() => setKeyMenuOpen((v) => !v)}
-                  className="ml-2 inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-50/60 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:text-amber-400"
+                  className="ml-2 inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/5 px-2 py-0.5 text-[11px] font-medium text-warning hover:bg-warning/10 dark:bg-warning/10 dark:text-warning"
                 >
                   <Key className="size-[11px]" />
                   Add API key
@@ -830,7 +830,7 @@ function ReadyView({
                           {s.summary || s.firstUserMessage || s.sessionId.slice(0, 8)}
                         </span>
                         {alreadyImported ? (
-                          <span className="shrink-0 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
+                          <span className="shrink-0 rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success">
                             Imported
                           </span>
                         ) : null}
@@ -900,11 +900,11 @@ function ImportingView({ phase }: ImportingViewProps) {
                   {e.phase === "start" ? (
                     <CircleDashed className="size-[13px] animate-spin text-muted-foreground/70" />
                   ) : e.phase === "ok" ? (
-                    <CheckCircle2 className="size-[13px] text-emerald-600" />
+                    <CheckCircle2 className="size-[13px] text-success" />
                   ) : e.phase === "skip" ? (
                     <CheckCircle2 className="size-[13px] text-muted-foreground/50" />
                   ) : (
-                    <AlertTriangle className="size-[13px] text-amber-500" />
+                    <AlertTriangle className="size-[13px] text-warning" />
                   )}
                   <span className="truncate text-muted-foreground">
                     {label} —{" "}
@@ -934,7 +934,7 @@ interface DoneViewProps {
 function DoneView({ phase, onClose }: DoneViewProps) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-10">
-      <CheckCircle2 className="size-7 text-emerald-600" />
+      <CheckCircle2 className="size-7 text-success" />
       <p className="mt-3 text-[13px] font-semibold text-foreground">Import complete</p>
       <p className="mt-1 text-center text-[12px] text-muted-foreground">
         {phase.successCount > 0

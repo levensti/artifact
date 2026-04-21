@@ -3,10 +3,8 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  BookOpen,
   FilePen,
   FilePlus,
-  Settings,
   AlertCircle,
   Share2,
 } from "lucide-react";
@@ -57,13 +55,11 @@ interface SidebarProps {
   collapsed: boolean;
   /** Narrow screens: `overlay` = fixed drawer; `inline` = flex column (or w-0 when collapsed). */
   presentation?: "inline" | "overlay";
-  onOpenSettings: () => void;
 }
 
 export default function Sidebar({
   collapsed,
   presentation = "inline",
-  onOpenSettings,
 }: SidebarProps) {
   const reviewsJson = useSyncExternalStore(
     subscribeReviews,
@@ -140,19 +136,18 @@ export default function Sidebar({
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayKey = localDateKey(yesterdayDate);
 
+    const now = new Date();
+    const sameYear = (y: number) => y === now.getFullYear();
+
     return sortedKeys.map((dateKey) => {
       const [yy, mm, dd] = dateKey.split("-").map(Number);
       const d = new Date(yy, mm - 1, dd);
-      const absolute = d.toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
       const short = d.toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
+        ...(sameYear(yy) ? {} : { year: "numeric" }),
       });
-      let label = absolute;
+      let label = short;
       if (dateKey === todayKey) label = `Today · ${short}`;
       else if (dateKey === yesterdayKey) label = `Yesterday · ${short}`;
       return { key: dateKey, label, items: byDate.get(dateKey)! };
@@ -173,17 +168,20 @@ export default function Sidebar({
             (collapsed ? "w-0 border-r-0" : "w-[272px]"),
         )}
       >
-        <div className="shrink-0 px-2 pb-2 pt-3">
-          <div className="mb-3 flex items-start justify-between gap-2 px-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-foreground text-background">
-                <BookOpen className="size-[14px]" strokeWidth={2} />
+        <div className="shrink-0 px-2 pb-2 pt-5">
+          <div className="mb-4 flex items-start justify-between gap-2 px-2">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-foreground">
+                <svg viewBox="4 4 24 24" aria-hidden className="size-[18px]">
+                  <path d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z" fill="#fafafa" opacity="0.35"/>
+                  <circle cx="22" cy="10" r="3.2" fill="#fafafa"/>
+                </svg>
               </span>
               <div className="flex min-w-0 flex-col leading-tight">
-                <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+                <span className="truncate text-[18px] font-bold tracking-[-0.025em] text-foreground">
                   Artifact
                 </span>
-                <span className="truncate text-[11px] font-normal text-muted-foreground">
+                <span className="truncate text-[11px] font-normal text-muted-foreground/70">
                   Discover the frontier
                 </span>
               </div>
@@ -193,13 +191,13 @@ export default function Sidebar({
               target="_blank"
               rel="noopener noreferrer"
               aria-label="View Artifact on GitHub"
-              className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent hover:text-foreground"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent hover:text-foreground"
             >
               <svg
                 viewBox="0 0 24 24"
                 fill="currentColor"
                 aria-hidden
-                className="size-[18px]"
+                className="size-[22px]"
               >
                 <path
                   fillRule="evenodd"
@@ -212,7 +210,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => setShowNewReview(true)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/85 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
           >
             <span className="flex w-6 shrink-0 items-center justify-center">
               <FilePlus
@@ -222,18 +220,6 @@ export default function Sidebar({
             </span>
             <span className="truncate">Start a review</span>
           </button>
-          <div className="flex px-2 pb-1 -mt-0.5">
-            <span className="w-6 shrink-0" aria-hidden />
-            <div className="pl-2">
-              <button
-                type="button"
-                onClick={() => setImportMode("review")}
-                className="text-[11.5px] text-foreground/50 transition-colors duration-150 hover:text-foreground/80 hover:underline underline-offset-2"
-              >
-                or import a shared review
-              </button>
-            </div>
-          </div>
           <button
             type="button"
             onClick={() => router.push("/journal")}
@@ -241,7 +227,7 @@ export default function Sidebar({
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150",
               pathname === "/journal"
                 ? "bg-sidebar-accent text-foreground font-medium"
-                : "text-foreground/85 hover:bg-sidebar-accent/60 hover:text-foreground",
+                : "text-foreground/80 hover:bg-sidebar-accent/60 hover:text-foreground",
             )}
           >
             <span className="relative flex w-6 shrink-0 items-center justify-center">
@@ -265,18 +251,6 @@ export default function Sidebar({
               </span>
             ) : null}
           </button>
-          <div className="flex px-2 pb-1 -mt-0.5">
-            <span className="w-6 shrink-0" aria-hidden />
-            <div className="pl-2">
-              <button
-                type="button"
-                onClick={() => setImportMode("journal")}
-                className="text-[11.5px] text-foreground/50 transition-colors duration-150 hover:text-foreground/80 hover:underline underline-offset-2"
-              >
-                or import a shared entry
-              </button>
-            </div>
-          </div>
           {ingestError ? (
             <div
               className="mx-1 mt-2 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[10px] leading-snug text-destructive"
@@ -298,7 +272,11 @@ export default function Sidebar({
           ) : null}
         </div>
 
-        <div className="mx-2 mt-3 mb-2 h-px shrink-0 bg-sidebar-border/60" />
+        <div className="mx-2 mt-3 mb-1 shrink-0 border-t border-sidebar-border/60 pt-2">
+          <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
+            Reviews
+          </p>
+        </div>
 
         <ScrollArea className="min-h-0 flex-1 px-2 pb-2 pt-1">
           {grouped.length === 0 && (
@@ -314,7 +292,7 @@ export default function Sidebar({
           )}
           {grouped.map((group) => (
             <div key={group.key} className="mb-5 last:mb-0">
-              <p className="sticky top-0 z-10 mb-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75 bg-sidebar/95 backdrop-blur-sm">
+              <p className="sticky top-0 z-10 mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/45 bg-sidebar/95 backdrop-blur-sm">
                 {group.label}
               </p>
               <div className="flex flex-col gap-0.5">
@@ -325,7 +303,7 @@ export default function Sidebar({
                   return (
                     <div
                       key={review.id}
-                      role="button"
+                      role="link"
                       tabIndex={0}
                       title={
                         isImported
@@ -334,8 +312,10 @@ export default function Sidebar({
                       }
                       onClick={() => router.push(`/review/${review.id}`)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ")
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
                           router.push(`/review/${review.id}`);
+                        }
                       }}
                       className={cn(
                         "group relative flex w-full cursor-pointer items-start gap-1.5 break-words rounded-md px-2.5 py-1.5 text-left text-[13px] leading-snug transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50",
@@ -349,7 +329,7 @@ export default function Sidebar({
                       </span>
                       {isImported ? (
                         <span
-                          className="mt-px inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-primary/80"
+                          className="mt-px inline-flex shrink-0 items-center rounded-full bg-[var(--badge-imported-bg)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[var(--badge-imported-fg)]"
                           aria-label="Imported from a shared bundle"
                         >
                           Imported
@@ -378,25 +358,16 @@ export default function Sidebar({
           ))}
         </ScrollArea>
 
-        <div className="px-2 pb-2 pt-2 shrink-0 border-t border-sidebar-border/60">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-[13px] text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-foreground"
-          >
-            <Settings
-              className="size-4 shrink-0 opacity-80"
-              strokeWidth={1.75}
-            />
-            Manage API keys
-          </button>
-        </div>
       </aside>
 
       <NewReviewDialog
         open={showNewReview}
         onClose={() => setShowNewReview(false)}
         onCreated={handleReviewCreated}
+        onImport={() => {
+          setShowNewReview(false);
+          setImportMode("review");
+        }}
       />
       <ImportBundleDialog
         open={importMode !== null}

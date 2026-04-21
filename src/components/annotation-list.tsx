@@ -52,24 +52,31 @@ export default function AnnotationList({
     return (
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col text-left font-sans antialiased",
-          compact ? "px-4 pb-4 pt-5" : "px-4 pb-4 pt-6",
+          "flex min-h-0 flex-1 flex-col items-center justify-center text-center font-sans antialiased",
+          compact ? "px-5 pb-4 pt-5" : "px-5 pb-4 pt-6",
         )}
       >
-        <div className="flex flex-col">
-          <div className="mb-4 space-y-1 px-2">
-            <p className="text-sm font-semibold leading-snug tracking-tight text-foreground">
-              Your annotations
+        <div className="flex flex-col items-center gap-4 max-w-[200px]">
+          {/* Visual flow: select → action */}
+          <div className="flex items-center gap-2 text-muted-foreground/40">
+            <div className="flex h-7 items-center rounded bg-primary/8 px-2 text-[10px] font-medium text-primary/50 border border-primary/10">
+              selected text
+            </div>
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" className="shrink-0 text-muted-foreground/30">
+              <path d="M0 5h12M10 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <div className="flex h-7 items-center rounded-full bg-foreground/8 px-2 text-[10px] font-medium text-muted-foreground/50 border border-border/60">
+              note
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-[13px] font-semibold tracking-tight text-foreground">
+              No annotations yet
             </p>
-            <p className="min-h-10 text-xs leading-relaxed text-muted-foreground">
-              Select text in the paper to begin.
+            <p className="text-[11.5px] leading-relaxed text-muted-foreground/60">
+              Select any passage in the paper to add a note or dive deeper with your assistant.
             </p>
           </div>
-
-          <p className="px-2 text-xs leading-relaxed text-muted-foreground/70">
-            Highlight any passage to add a note or start a deeper conversation
-            with your assistant.
-          </p>
         </div>
       </div>
     );

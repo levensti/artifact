@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, FileText, Globe, Loader2, Upload } from "lucide-react";
+import { ArrowRight, FileDown, FileText, Globe, Loader2, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,18 +23,20 @@ import {
 import { savePdfBlob } from "@/lib/client/pdf-blobs";
 import { extractArxivId } from "@/lib/utils";
 
-type SourceMode = "arxiv" | "local" | "web";
+type SourceMode = "arxiv" | "local" | "web" | "import";
 
 interface NewReviewDialogProps {
   open: boolean;
   onClose: () => void;
   onCreated: (reviewId: string) => void;
+  onImport?: () => void;
 }
 
 export default function NewReviewDialog({
   open,
   onClose,
   onCreated,
+  onImport,
 }: NewReviewDialogProps) {
   const [mode, setMode] = useState<SourceMode>("arxiv");
   const [url, setUrl] = useState("");
@@ -230,59 +232,76 @@ export default function NewReviewDialog({
               ? "Paste a link to any arXiv paper."
               : mode === "web"
                 ? "Paste a link to any web page."
-                : "Select a PDF from your computer."}
+                : mode === "import"
+                  ? "Open a review someone shared with you."
+                  : "Select a PDF from your computer."}
           </DialogDescription>
         </DialogHeader>
 
         {/* Mode toggle */}
-        <div className="flex gap-0.5 rounded-xl bg-muted/70 p-1 border border-border/40">
-          <button
-            type="button"
-            onClick={() => {
-              setMode("arxiv");
-              setError(null);
+        <div className="relative flex gap-0.5 rounded-xl bg-muted/70 p-1 border border-border/40">
+          {/* Sliding pill */}
+          <div
+            className="absolute top-1 bottom-1 rounded-lg bg-background shadow-md ring-1 ring-border/50 transition-all duration-200 ease-out"
+            style={{
+              width: "calc((100% - 8px) / 4)",
+              left: mode === "arxiv"
+                ? "4px"
+                : mode === "web"
+                  ? "calc(4px + (100% - 8px) / 4)"
+                  : mode === "local"
+                    ? "calc(4px + 2 * (100% - 8px) / 4)"
+                    : "calc(4px + 3 * (100% - 8px) / 4)",
             }}
-            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === "arxiv"
-                ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            }`}
-          >
-            <Globe size={13} />
-            arXiv link
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("web");
-              setError(null);
-            }}
-            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === "web"
-                ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            }`}
-          >
-            <Globe size={13} />
-            Web URL
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("local");
-              setError(null);
-            }}
-            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === "local"
-                ? "bg-background text-foreground shadow-md ring-1 ring-border/50"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            }`}
-          >
-            <FileText size={13} />
-            Local PDF
-          </button>
+          />
+          {(["arxiv", "web", "local", "import"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMode(m); setError(null); }}
+              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+                mode === m
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {m === "local" ? <FileText size={13} /> : m === "import" ? <FileDown size={13} /> : <Globe size={13} />}
+              {m === "arxiv" ? "arXiv" : m === "web" ? "Web URL" : m === "local" ? "PDF" : "Import"}
+            </button>
+          ))}
         </div>
 
+        {mode === "import" ? (
+          <div className="mt-1">
+            <button
+              type="button"
+              onClick={() => {
+                handleOpenChange(false);
+                onImport?.();
+              }}
+              className="w-full rounded-xl border-2 border-dashed border-border px-4 py-8 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm"
+            >
+              <div className="flex flex-col items-center gap-1.5">
+                <FileDown size={20} className="text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Open a shared review file
+                </span>
+                <span className="text-[11px] text-muted-foreground/50">
+                  review-*.json
+                </span>
+              </div>
+            </button>
+            <DialogFooter className="mt-5">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => handleOpenChange(false)}
+              >
+                Cancel
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="mt-1">
           {mode === "arxiv" ? (
             <>
@@ -328,7 +347,7 @@ export default function NewReviewDialog({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading}
-                className="w-full rounded-xl border-2 border-dashed border-border/70 px-4 py-8 text-center transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.03] hover:shadow-inner disabled:opacity-50"
+                className="w-full rounded-xl border-2 border-dashed border-border px-4 py-8 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm disabled:opacity-50"
               >
                 {selectedFile ? (
                   <div className="flex items-center justify-center gap-2">
@@ -362,23 +381,24 @@ export default function NewReviewDialog({
             <Button type="submit" disabled={!canSubmit || loading}>
               {loading ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                   Loading…
                 </>
               ) : mode === "arxiv" && existingReview ? (
                 <>
                   Open review
-                  <ArrowRight size={14} />
+                  <ArrowRight className="size-3.5" />
                 </>
               ) : (
                 <>
                   Start review
-                  <ArrowRight size={14} />
+                  <ArrowRight className="size-3.5" />
                 </>
               )}
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

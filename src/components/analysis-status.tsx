@@ -22,7 +22,7 @@ export default function AnalysisStatusBadge({
       className={cn(
         "inline-flex items-center gap-1.5 text-[11px] rounded-full px-2 py-0.5 shrink-0 transition-colors",
         status === "running" && "bg-primary/10 text-primary",
-        status === "done" && "bg-emerald-100/60 text-emerald-800",
+        status === "done" && "bg-success/10 text-success",
         status === "error" && "bg-destructive/10 text-destructive cursor-pointer hover:bg-destructive/15",
       )}
       onClick={status === "error" ? onRetrigger : undefined}

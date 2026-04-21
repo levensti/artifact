@@ -2,11 +2,12 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { AlertTriangle, Search, Terminal } from "lucide-react";
+import { AlertTriangle, ChevronDown, FileDown, Search, Terminal } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import JournalCard, { type JournalEntry } from "@/components/journal-card";
 import JournalEntryModal from "@/components/journal-entry-modal";
 import JournalImportModal from "@/components/journal-import-modal";
+import ImportBundleDialog from "@/components/import-bundle-dialog";
 import {
   getSavedSelectedModel,
   hydrateClientStore,
@@ -69,6 +70,8 @@ function JournalPageInner() {
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
+  const [bundleImportOpen, setBundleImportOpen] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [ccNewCount, setCcNewCount] = useState(0);
   const selectedSlug = searchParams.get("page");
 
@@ -232,7 +235,7 @@ function JournalPageInner() {
       <DashboardLayout>
         <div className="flex h-full items-center justify-center px-6">
           <div className="max-w-md space-y-4 text-center">
-            <AlertTriangle className="mx-auto size-8 text-amber-600" />
+            <AlertTriangle className="mx-auto size-8 text-warning" />
             <div className="space-y-1">
               <h1 className="text-base font-semibold text-foreground">
                 Could not load the knowledge base
@@ -259,36 +262,107 @@ function JournalPageInner() {
   const hasAnyContent = journalEntries.length > 0;
 
   if (!hasAnyContent) {
+    const todayLabel = new Date().toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    });
+
     return (
       <DashboardLayout>
-        <div className="flex h-full items-center justify-center bg-background px-6">
-          <div className="max-w-md space-y-8 text-center">
-            <div className="space-y-4">
-              <h1 className="text-[36px] font-bold leading-[1.1] tracking-[-0.028em] text-foreground">
-                Your journal is empty
+        <div
+          className="flex h-full flex-col overflow-y-auto"
+          style={{ background: "var(--reader-mat)" }}
+        >
+          <div className="mx-auto w-full max-w-[640px] px-6 pt-[min(14vh,120px)] pb-16">
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-[22px] font-bold leading-tight tracking-[-0.03em] text-foreground">
+                Journal
               </h1>
-              <p className="mx-auto max-w-md text-[15px] leading-relaxed text-muted-foreground">
-                Read a paper to start your first study session. As you work, a
-                daily recap and weekly digest will appear here automatically.
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                A running log of what you read and build. Entries appear
+                automatically as you work.
               </p>
-              <button
-                type="button"
-                onClick={() => setImportOpen(true)}
-                className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-primary/80 underline-offset-4 hover:text-primary hover:underline"
-              >
-                <Terminal className="size-[13px]" />
-                Or import a Claude Code session
-              </button>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] text-muted-foreground/70">
-              <span>One page per day</span>
-              <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-              <span>Weekly synthesis</span>
-              <span className="size-0.5 rounded-full bg-muted-foreground/35" />
-              <span>Built in the background by your assistant</span>
+
+            {/* Ghost timeline — shows the shape of what will fill in */}
+            <div className="relative">
+              {/* Vertical timeline spine */}
+              <div className="absolute left-[15px] top-2 bottom-6 w-px bg-border/50" />
+
+              {/* Today — the active slot */}
+              <div className="relative mb-6 pl-10">
+                <div className="absolute left-[11px] top-[7px] size-[9px] rounded-full border-2 border-primary/50 bg-background" />
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-primary/60">
+                  Today &middot; {todayLabel}
+                </p>
+                <div className="mt-3 rounded-xl border border-dashed border-border bg-card/50 px-5 py-5">
+                  <p className="text-[13px] font-medium text-foreground/70">
+                    Your first entry will appear here
+                  </p>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground/60">
+                    Read a paper or import a coding session — the journal agent
+                    synthesizes your activity into a daily recap overnight.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setImportOpen(true)}
+                      className="group inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground/80 transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:text-foreground"
+                    >
+                      <Terminal className="size-3 text-primary/50 transition-colors group-hover:text-primary/70" />
+                      Import from Claude Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBundleImportOpen(true)}
+                      className="group inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground/80 transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:text-foreground"
+                    >
+                      <FileDown className="size-3 text-primary/50 transition-colors group-hover:text-primary/70" />
+                      Open a shared journal
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ghost: upcoming week digest */}
+              <div className="relative mb-6 pl-10 opacity-30">
+                <div className="absolute left-[12px] top-[7px] size-[7px] rounded-full bg-muted-foreground/30" />
+                <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground/60">
+                  This week
+                </p>
+                <div className="mt-2.5 h-[52px] rounded-lg border border-dashed border-border/60 bg-card/30" />
+              </div>
+
+              {/* Ghost: previous days */}
+              <div className="relative pl-10 opacity-15">
+                <div className="absolute left-[12px] top-[7px] size-[7px] rounded-full bg-muted-foreground/30" />
+                <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground/60">
+                  Earlier
+                </p>
+                <div className="mt-2.5 grid grid-cols-2 gap-2">
+                  <div className="h-[44px] rounded-lg border border-dashed border-border/60 bg-card/30" />
+                  <div className="h-[44px] rounded-lg border border-dashed border-border/60 bg-card/30" />
+                </div>
+              </div>
+            </div>
+
+            {/* Feature pills */}
+            <div className="mt-10 flex items-center gap-3 px-1">
+              <div className="h-px flex-1 bg-border/40" />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium tracking-[0.04em] text-muted-foreground/35">
+                <span>One page per day</span>
+                <span className="size-0.5 rounded-full bg-muted-foreground/25" />
+                <span>Weekly synthesis</span>
+                <span className="size-0.5 rounded-full bg-muted-foreground/25" />
+                <span>Runs in the background</span>
+              </div>
+              <div className="h-px flex-1 bg-border/40" />
             </div>
           </div>
         </div>
+
         {importOpen ? (
           <JournalImportModal
             onClose={() => {
@@ -299,64 +373,109 @@ function JournalPageInner() {
             }}
           />
         ) : null}
+        <ImportBundleDialog
+          open={bundleImportOpen}
+          mode="journal"
+          onClose={() => {
+            setBundleImportOpen(false);
+            void refreshPages();
+          }}
+        />
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="flex h-full flex-col overflow-y-auto bg-background">
-        <div className="mx-auto w-full max-w-[1180px] px-4 pb-16 pt-10 sm:px-8">
-          {/* Header */}
-          <header className="mb-6 space-y-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold leading-snug tracking-tight text-foreground">
-                Journal
-              </p>
-              <span className="text-[11px] font-medium tabular-nums text-muted-foreground/60">
-                {journalEntries.length}{" "}
-                {journalEntries.length === 1 ? "entry" : "entries"}
-              </span>
-            </div>
-            <p className="text-xs leading-relaxed text-muted-foreground/70">
-              Daily recaps and weekly syntheses build here automatically.
-            </p>
-          </header>
-
-          {/* Toolbar */}
-          <div className="mb-6 flex items-center gap-2">
-            <div className="flex flex-1 items-center gap-2 rounded-xl border border-border/60 bg-card px-3 py-2 shadow-sm transition-colors focus-within:border-primary/30">
-              <Search className="size-[13px] shrink-0 text-muted-foreground/60" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search journal…"
-                className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-              />
-            </div>
-            {hasTodaySession ? (
-              <button
-                type="button"
-                onClick={scrollToToday}
-                className="rounded-xl border border-border/60 bg-card px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:text-foreground"
-              >
-                Today
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              title="Import from Claude Code"
-              className="relative rounded-xl border border-border/60 bg-card px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:text-foreground"
-            >
-              <Terminal className="size-[13px]" />
-              {ccNewCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground shadow-sm">
-                  {ccNewCount > 99 ? "99+" : ccNewCount}
+      <div className="flex h-full flex-col overflow-y-auto" style={{ background: 'var(--reader-mat)' }}>
+        <div className="mx-auto w-full max-w-[1180px] px-5 pb-16 pt-5 sm:px-8">
+          {/* Header + toolbar row */}
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <header>
+              <div className="flex items-baseline gap-2">
+                <h1 className="text-[18px] font-bold leading-none tracking-[-0.025em] text-foreground">
+                  Journal
+                </h1>
+                <span className="text-[11px] tabular-nums text-muted-foreground/50">
+                  {journalEntries.length}{" "}
+                  {journalEntries.length === 1 ? "entry" : "entries"}
                 </span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+                Daily recaps and weekly syntheses build here automatically.
+              </p>
+            </header>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-1.5 transition-colors focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/10">
+                <Search className="size-3 shrink-0 text-muted-foreground/45" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="w-[140px] bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/45 focus:outline-none sm:w-[180px]"
+                />
+              </div>
+              {hasTodaySession ? (
+                <button
+                  type="button"
+                  onClick={scrollToToday}
+                  className="rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"
+                >
+                  Today
+                </button>
               ) : null}
-            </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setImportMenuOpen(!importMenuOpen)}
+                  className="relative flex items-center gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"
+                >
+                  Import
+                  <ChevronDown className="size-3 text-muted-foreground/50" />
+                  {ccNewCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-primary px-1 text-[8px] font-semibold leading-none text-primary-foreground shadow-sm">
+                      {ccNewCount > 99 ? "99+" : ccNewCount}
+                    </span>
+                  ) : null}
+                </button>
+                {importMenuOpen ? (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setImportMenuOpen(false)} />
+                    <div className="absolute right-0 top-full z-50 mt-1 w-[200px] rounded-lg border border-border bg-card p-1 shadow-md animate-in fade-in slide-in-from-top-1 duration-150">
+                      <button
+                        type="button"
+                        onClick={() => { setImportMenuOpen(false); setImportOpen(true); }}
+                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
+                      >
+                        <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">From Claude Code</p>
+                          <p className="text-[10px] text-muted-foreground/60">Import coding sessions</p>
+                        </div>
+                        {ccNewCount > 0 ? (
+                          <span className="ml-auto shrink-0 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
+                            {ccNewCount > 99 ? "99+" : ccNewCount}
+                          </span>
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setImportMenuOpen(false); setBundleImportOpen(true); }}
+                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
+                      >
+                        <FileDown className="size-3.5 shrink-0 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">From shared file</p>
+                          <p className="text-[10px] text-muted-foreground/60">Open a journal bundle</p>
+                        </div>
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
           </div>
 
           {/* Grid */}
@@ -365,7 +484,7 @@ function JournalPageInner() {
               No entries match &ldquo;{search}&rdquo;.
             </div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
               {filteredEntries.map((entry) => (
                 <div key={entry.page.id} id={`card-${entry.page.slug}`}>
                   <JournalCard entry={entry} onOpen={openPage} />
@@ -416,6 +535,15 @@ function JournalPageInner() {
           </div>
         </div>
       ) : null}
+
+      <ImportBundleDialog
+        open={bundleImportOpen}
+        mode="journal"
+        onClose={() => {
+          setBundleImportOpen(false);
+          void refreshPages();
+        }}
+      />
     </DashboardLayout>
   );
 }

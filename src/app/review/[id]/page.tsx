@@ -26,7 +26,7 @@ import {
   addAnnotation,
   getAnnotation,
 } from "@/lib/annotations";
-import { arxivPdfUrl } from "@/lib/utils";
+import { arxivPdfUrl, BREAKPOINTS } from "@/lib/utils";
 
 import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
@@ -144,7 +144,7 @@ export default function ReviewPage() {
 
   // Auto-collapse side panels on narrow viewports
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 1279px)");
+    const mq = window.matchMedia(BREAKPOINTS.COMPACT);
     const handler = (e: MediaQueryListEvent) => {
       setNarrowViewport(e.matches);
       if (e.matches) {
@@ -385,7 +385,7 @@ export default function ReviewPage() {
       <div className="relative flex h-full overflow-hidden">
         {/* Main content: paper viewer + inline notes rail (when wide) */}
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)" style={{ boxShadow: 'inset 0 2px 12px rgba(0,0,0,0.04), inset 0 0 4px rgba(0,0,0,0.02)' }}>
             {review.sourceUrl ? (
               <WebViewer
                 sourceUrl={review.sourceUrl}
@@ -436,10 +436,11 @@ export default function ReviewPage() {
           <>
             <div
               onMouseDown={handleMouseDown}
-              className={`relative w-1 cursor-col-resize flex items-center justify-center shrink-0 transition-colors ${isDragging ? "bg-primary/30" : "bg-border/80 hover:bg-muted-foreground/25"}`}
+              className={`group/drag relative w-[5px] cursor-col-resize flex items-center justify-center shrink-0 transition-colors duration-150 ${isDragging ? "bg-primary/25" : "bg-transparent hover:bg-muted-foreground/12"}`}
             >
-              <div className="absolute p-0.5 rounded-md bg-card border border-border/90 opacity-0 hover:opacity-100 transition-opacity shadow-sm">
-                <GripVertical size={10} className="text-muted-foreground" />
+              <div className="absolute inset-y-0 -left-1 -right-1" />
+              <div className={`flex items-center justify-center rounded-full bg-card border border-border shadow-sm transition-opacity duration-150 size-6 ${isDragging ? "opacity-100" : "opacity-0 group-hover/drag:opacity-100"}`}>
+                <GripVertical size={10} className="text-muted-foreground/70" />
               </div>
             </div>
 
