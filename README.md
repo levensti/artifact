@@ -6,7 +6,7 @@ Load an arXiv paper, a web article, or your own PDF into a reader beside the ass
 
 **Bring your own keys.** Configure providers in Settings and use the models you already pay for—Anthropic, OpenAI, xAI, or any OpenAI-compatible inference API (OpenRouter, Fireworks, Together, Sail, etc.). One selector lists every model you add.
 
-Data stays on your machine: reviews, annotations, uploaded PDFs, and graph state live in your browser's IndexedDB—there is no server-side database, no accounts, and no telemetry.
+Data stays on your machine: reviews, annotations, uploaded PDFs, and your journal live in your browser's IndexedDB—there is no server-side database, no accounts, and no telemetry.
 
 **Try it now:** [withartifact.com](https://withartifact.com) — no install, just add your API keys and start reading.
 
@@ -31,17 +31,15 @@ Open [localhost:3000](http://localhost:3000) and add your API keys under Setting
 - **Paper or web URL** — drop in any paper link or arbitrary web page; the content is cleaned and rendered alongside the assistant.
 - **Local PDF upload** — pick a PDF from your machine and it's stored locally in your browser (IndexedDB), ready to read and query.
 
-Once a source is open, you get the content next to Assistant, Notes, and Explore. Ask selection-scoped questions, and run **Analyze** once per source to fill prerequisites, related candidates, and the shared graph. Use **Discovery** to browse how analyzed papers relate and what to open next.
+Once a source is open, you get the content next to Assistant, Notes, and Explore. Ask selection-scoped questions, and run **Analyze** once per source to generate a prerequisite checklist tailored to the paper.
 
 **Ambient Journal.** As you read and chat, Artifact quietly builds a personal wiki of what you're learning. The **Journal** captures key concepts, definitions, and connections across sessions, then feeds that context back into future chats so the assistant remembers what you already know — without you having to re-explain or re-link anything.
-
-![Knowledge graph — related papers mapped across sessions](docs/knowledge-graph.png)
 
 ## Contributing
 
 Contributions are welcome. Open an issue before large changes so the approach can be discussed.
 
-The chat agent is a [ReAct-style loop](src/app/api/chat/) over a tool registry in `src/tools/`. New or improved tools (`arxiv-search`, `web-search`, `rank-results`, `save-to-graph`) extend what the model can do without forking the core loop.
+The chat agent is a [ReAct-style loop](src/app/api/chat/) over a tool registry in `src/tools/`. New or improved tools (`arxiv-search`, `web-search`, `rank-results`) extend what the model can do without forking the core loop.
 
 ```bash
 npm run lint     # ESLint
@@ -55,7 +53,7 @@ npm run build    # Type-check + production build
 - **PDF** — react-pdf / pdfjs-dist (full text extraction and selection)
 - **Web pages** — @mozilla/readability + DOMPurify for cleaned, safe rendering
 - **Markdown** — react-markdown, remark-gfm, remark-math, rehype-katex
-- **Graph** — React Flow (@xyflow/react) with custom paper nodes and relationship edges
+- **Editor** — Tiptap for the journal/wiki editor
 - **Styling** — Tailwind CSS 4, shadcn/ui
 - **Storage** — IndexedDB via Dexie (client-side, per-browser; PDFs stored as blobs)
 - **AI** — Anthropic, OpenAI, xAI, OpenAI-compatible APIs (streaming chat + structured generation)
@@ -71,43 +69,45 @@ src/
 │   │   ├── arxiv-metadata/    # Fetch paper metadata from arXiv
 │   │   ├── arxiv-search/      # Search arXiv for related papers
 │   │   ├── chat/              # Streaming agentic chat (multi-provider, ReAct loop)
-│   │   ├── generate/          # Structured generation for analysis pipeline
+│   │   ├── generate/          # Structured generation for the analysis pipeline
 │   │   ├── models/            # Available model catalog
 │   │   ├── pdf/               # PDF proxy (CORS) + validation
 │   │   ├── web-content/       # Fetch and clean arbitrary web pages
 │   │   └── wiki-schema/       # Serve and edit the ambient wiki schema
-│   ├── discovery/             # Knowledge graph page
 │   ├── journal/               # Ambient wiki / journal view
 │   ├── review/[id]/           # Reader (PDF or web page + right panel)
-│   └── settings/              # API key management
+│   ├── settings/              # API key management
+│   ├── apple-icon.tsx         # PWA apple-touch-icon (PNG, generated)
+│   ├── icon.svg               # PWA favicon
+│   └── manifest.ts            # PWA manifest
 ├── components/
-│   ├── related-works-graph    # Interactive graph (React Flow, custom nodes + edges)
-│   ├── graph-canvas           # React Flow canvas with paper nodes and relationship edges
 │   ├── chat-panel             # Chat with streaming + analysis progress
 │   ├── prerequisites-panel    # Prerequisite checklist + study guides
 │   ├── right-panel            # Tabbed panel (Assistant / Notes / Explore)
 │   ├── pdf-viewer             # PDF renderer with text selection + annotations
 │   ├── web-viewer             # Readability-cleaned web page reader
 │   ├── annotation-list        # Annotation management
+│   ├── wiki-editor            # Tiptap-based journal editor
+│   ├── import-bundle-dialog   # Import/preview shared review and journal bundles
 │   └── sidebar                # Navigation + review history
 ├── hooks/
 │   ├── use-auto-analysis      # Analysis trigger + status tracking
-│   └── use-explore-data       # Reactive access to graph/prerequisite data
+│   ├── use-chat               # Streaming chat client + tool-call plumbing
+│   └── use-explore-data       # Reactive access to prerequisite data
 ├── tools/
 │   ├── arxiv-search           # Paper search tool (Semantic Scholar + arXiv)
 │   ├── web-search             # General web search tool
-│   ├── rank-results           # Result ranking tool
-│   └── save-to-graph          # Knowledge graph persistence tool
+│   └── rank-results           # Result ranking tool
 └── lib/
-    ├── explore-analysis       # Multi-phase analysis pipeline
-    ├── explore                # Graph types, storage, merge logic
+    ├── explore-analysis       # Prerequisite generation pipeline
+    ├── explore                # Prerequisite + search-result types
     ├── reviews                # Review sessions + chat message persistence
     ├── annotations            # Annotation CRUD
     ├── deep-dives             # Advanced learning sessions
     ├── wiki                   # Ambient knowledge base: types, storage, ingest, journal agent
     ├── models                 # Model + provider definitions
-    ├── client/db              # Dexie (IndexedDB) schema and queries
-    └── client/pdf-blobs       # Local PDF blob storage (IndexedDB)
+    ├── client/sharing         # Review and journal bundle export/import
+    └── client/db              # Dexie (IndexedDB) schema and queries
 ```
 
 </details>
