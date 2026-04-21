@@ -74,13 +74,13 @@ export default function ChatEmptyState({
             disabled={!canSend}
             onClick={() => onSend(s.prompt)}
             className={cn(
-              "group flex min-h-[4.5rem] w-full flex-col items-start gap-2 rounded-xl border border-border/60 bg-card px-3.5 py-3 text-left transition-all duration-200 shadow-sm",
+              "group flex min-h-[4.5rem] w-full flex-col items-start gap-2 rounded-xl border border-border bg-card px-3.5 py-3 text-left shadow-sm transition-all duration-200",
               canSend
-                ? "cursor-pointer hover:border-primary/30 hover:shadow-md hover:shadow-primary/5 active:shadow-sm"
+                ? "cursor-pointer hover:border-primary/30 hover:shadow-md hover:shadow-primary/8 hover:-translate-y-px active:translate-y-0 active:shadow-sm"
                 : "cursor-not-allowed opacity-50",
             )}
           >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 transition-colors group-hover:bg-primary/14">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--badge-accent-bg)] transition-colors group-hover:bg-primary/15">
               <s.icon className="size-4 text-primary/60" strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1 space-y-0.5">
@@ -97,10 +97,10 @@ export default function ChatEmptyState({
 
       <div className="mt-5 flex items-start gap-2 px-2">
         <BrainCircuit
-          className="mt-0.5 size-3 shrink-0 text-muted-foreground/35"
+          className="mt-0.5 size-3 shrink-0 text-muted-foreground/40"
           strokeWidth={1.5}
         />
-        <span className="text-[10px] leading-snug text-muted-foreground/45 not-italic">
+        <span className="text-[10px] leading-snug text-muted-foreground/40 not-italic">
           Searches arXiv &amp; the web automatically when needed
         </span>
       </div>

@@ -5,6 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export const BREAKPOINTS = {
+  NARROW: "(max-width: 1023px)",
+  COMPACT: "(max-width: 1279px)",
+} as const;
+
 export function extractArxivId(url: string): string | null {
   const match = url.match(/arxiv\.org\/(?:abs|pdf)\/(\d+\.\d+)(?:v\d+)?/);
   return match ? match[1] : null;

@@ -5,7 +5,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import type { Provider } from "@/lib/models";
 import { PanelLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, BREAKPOINTS } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import Sidebar from "./sidebar";
 import SettingsDialog from "./settings-dialog";
@@ -15,7 +15,7 @@ import DataHydration from "./data-hydration";
 const SIDEBAR_KEY = "paper-copilot-sidebar-collapsed";
 const OPEN_SETTINGS_FLAG = "paper-copilot-open-settings";
 
-const NARROW_MQ = "(max-width: 1023px)";
+const NARROW_MQ = BREAKPOINTS.NARROW;
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -110,7 +110,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <Sidebar
               collapsed={collapsed}
               presentation="inline"
-              onOpenSettings={() => openSettings()}
             />
           </Suspense>
         )}
@@ -132,8 +131,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <Sidebar
                 collapsed={false}
                 presentation="overlay"
-                onOpenSettings={() => openSettings()}
-              />
+                />
             </Suspense>
           </>
         )}
@@ -150,7 +148,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </Button>
           </div>
         )}
-        <main className="relative flex-1 min-w-0 overflow-hidden">
+        <main className="relative flex-1 min-w-0 overflow-hidden animate-page-enter">
           {narrow && collapsed && (
             <Button
               variant="outline"

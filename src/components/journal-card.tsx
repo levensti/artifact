@@ -91,47 +91,49 @@ export default function JournalCard({ entry, onOpen }: JournalCardProps) {
       type="button"
       onClick={() => onOpen(entry.page.slug)}
       className={cn(
-        "group flex h-[180px] w-full flex-col rounded-xl border border-border/60 bg-card p-4 text-left shadow-sm transition-all duration-200",
-        "hover:border-primary/30 hover:shadow-md hover:shadow-primary/5",
+        "group flex w-full flex-col rounded-xl border border-border bg-card px-4 py-4 text-left shadow-sm transition-all duration-200",
+        "hover:border-primary/30 hover:shadow-md hover:shadow-primary/8 hover:-translate-y-px",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/8 transition-colors group-hover:bg-primary/14">
-            <Icon className="size-[14px] text-primary/60" strokeWidth={1.8} />
-          </div>
-          <span className="text-[11px] font-medium text-muted-foreground/80">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <Icon
+            className={cn(
+              "size-3",
+              isDigest ? "text-warning/60" : "text-primary/50",
+            )}
+            strokeWidth={1.8}
+          />
+          <span className="text-[10.5px] font-medium text-muted-foreground/60">
             {typeLabel}
           </span>
         </div>
-        <span className="text-[11px] font-medium text-muted-foreground/60">
+        <span className="text-[10.5px] tabular-nums text-muted-foreground/45">
           {dateLabel}
         </span>
       </div>
 
-      <h3 className="mt-3 line-clamp-2 text-[13.5px] font-semibold leading-snug text-foreground/85 transition-colors group-hover:text-foreground">
+      <h3 className="mt-2 line-clamp-2 h-[37px] text-[13.5px] font-semibold leading-snug tracking-[-0.01em] text-foreground/85 transition-colors group-hover:text-foreground">
         {entry.page.title}
       </h3>
 
-      <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-muted-foreground/75">
+      <p className="mt-1.5 line-clamp-2 h-[37px] text-[12px] leading-[1.55] text-muted-foreground/55">
         {excerpt}
       </p>
 
-      {chips.length > 0 ? (
-        <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-2 text-[10px] text-muted-foreground/60">
-          {chips.map((c, i) => (
-            <span key={c.label} className="tabular-nums">
-              {i > 0 ? <span className="mr-2 opacity-40">·</span> : null}
-              <span className="font-semibold text-foreground/70">
-                {c.count}
-              </span>{" "}
-              {c.label}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-auto" />
-      )}
+      <div className="mt-3 flex flex-wrap items-center gap-x-2.5 border-t border-border/40 pt-2.5 text-[10.5px] text-muted-foreground/50 min-h-[28px]">
+        {chips.length > 0
+          ? chips.map((c, i) => (
+              <span key={c.label} className="tabular-nums">
+                {i > 0 ? <span className="mr-2.5 opacity-30">·</span> : null}
+                <span className="font-semibold text-foreground/60">
+                  {c.count}
+                </span>{" "}
+                {c.label}
+              </span>
+            ))
+          : <span className="text-muted-foreground/30">{isDigest ? "Weekly digest" : "Session"}</span>}
+      </div>
     </button>
   );
 }

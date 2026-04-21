@@ -1,7 +1,6 @@
 "use client";
 
 import { MessageSquarePlus, StickyNote } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface SelectionPopoverProps {
   rect: DOMRect;
@@ -15,37 +14,40 @@ export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionP
   const pad = 8;
   const centerX = rect.left + rect.width / 2;
   const left = Math.min(vw - pad, Math.max(pad, centerX));
-  const top = Math.min(rect.bottom + 8, vh - 50);
+  const top = Math.min(rect.bottom + 12, vh - 50);
 
   return (
     <div
-      className="fixed z-50 animate-in fade-in slide-in-from-bottom-1 duration-150 max-w-[calc(100vw-1rem)]"
+      className="fixed z-50 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-[calc(100vw-1rem)]"
       style={{
         top: `${top}px`,
         left: `${left}px`,
         transform: "translateX(-50%)",
       }}
     >
-      <div className="flex items-center gap-1 bg-card border border-border rounded-lg shadow-md shadow-slate-900/12 p-1">
-        <Button
-          size="sm"
-          variant="ghost"
+      {/* Arrow */}
+      <div
+        className="absolute -top-[5px] left-1/2 -translate-x-1/2 size-2.5 rotate-45 bg-foreground"
+        aria-hidden
+      />
+      <div className="relative flex items-center gap-0.5 rounded-full bg-foreground px-1 py-1 shadow-lg shadow-black/20">
+        <button
+          type="button"
           onClick={onAsk}
-          className="gap-1.5 text-xs h-7 rounded-md px-2.5"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-background transition-colors hover:bg-background/15"
         >
-          <MessageSquarePlus size={12} />
+          <MessageSquarePlus size={13} strokeWidth={2} />
           Dive deeper
-        </Button>
-        <div className="w-px h-4 bg-border" />
-        <Button
-          size="sm"
-          variant="ghost"
+        </button>
+        <div className="w-px h-4 bg-background/20" aria-hidden />
+        <button
+          type="button"
           onClick={onAnnotate}
-          className="gap-1.5 text-xs h-7 rounded-md px-2.5"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-background transition-colors hover:bg-background/15"
         >
-          <StickyNote size={12} />
+          <StickyNote size={13} strokeWidth={2} />
           Add note
-        </Button>
+        </button>
       </div>
     </div>
   );

@@ -238,9 +238,9 @@ export default function DiscoveryPage() {
             </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-muted-foreground/70 text-xs">
               <span>From first paper to research map</span>
-              <span className="size-0.5 rounded-full bg-muted-foreground/35" />
+              <span className="size-0.5 rounded-full bg-muted-foreground/40" />
               <span>Assistant-guided discovery</span>
-              <span className="size-0.5 rounded-full bg-muted-foreground/35" />
+              <span className="size-0.5 rounded-full bg-muted-foreground/40" />
               <span>Built as you learn</span>
             </div>
           </div>
@@ -266,12 +266,12 @@ export default function DiscoveryPage() {
         </header>
         <div className="flex-1 min-h-0 p-3">
           {toastMessage && (
-            <div className="mb-2 flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-900">
+            <div className="mb-2 flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
               <CheckCircle2 className="size-3.5 shrink-0" />
               <span>{toastMessage}</span>
               <button
                 type="button"
-                className="ml-auto text-emerald-900/70 hover:text-emerald-900"
+                className="ml-auto text-success/70 hover:text-success"
                 onClick={() => setToastMessage(null)}
                 aria-label="Dismiss notification"
               >
