@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Loader2,
   MessageSquareQuote,
   Send,
-  AlertTriangle,
 } from "lucide-react";
 import {
   PROVIDER_META,
@@ -314,15 +313,14 @@ export default function ChatPanel({
     else openSettings();
   };
 
-  const errorText = chat.error ?? "";
-  const errorIsAuth =
-    /\b(api key|unauthorized|forbidden|401|403|invalid key|missing key)\b/i.test(
-      errorText,
-    );
-  const errorIsTransient =
-    /\b(timeout|timed out|429|rate limit|overloaded|unavailable|network|failed to fetch)\b/i.test(
-      errorText,
-    );
+  const handleRetry = useCallback(() => {
+    void chat.retryLastError();
+  }, [chat]);
+
+  const buildFailure = (msgId: string) =>
+    chat.failedUserMsgId === msgId && chat.error
+      ? { error: chat.error, canRetry: chat.canRetry, onRetry: handleRetry }
+      : null;
 
   const blockCtx: BlockCtx = {
     reviewId,
@@ -400,6 +398,7 @@ export default function ChatPanel({
                   }
                   agentSteps={chat.agentSteps}
                   blockCtx={blockCtx}
+                  failure={buildFailure(msg.id)}
                 />
               ))}
             </>
@@ -423,6 +422,7 @@ export default function ChatPanel({
                   }
                   agentSteps={chat.agentSteps}
                   blockCtx={blockCtx}
+                  failure={buildFailure(msg.id)}
                 />
               ))}
             </>
@@ -447,70 +447,6 @@ export default function ChatPanel({
           >
             Add API key
           </Button>
-        </div>
-      )}
-
-      {chat.error && (
-        <div className="mx-3 mb-2 px-3 py-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm leading-snug space-y-2">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            <div className="min-w-0 space-y-1">
-              <p>{chat.error}</p>
-              <p className="text-xs text-destructive/80">
-                {errorIsAuth
-                  ? "This looks like an authentication issue."
-                  : errorIsTransient
-                    ? "This looks temporary. Try again in a moment."
-                    : "This may be a provider or model issue."}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {errorIsAuth ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={openKeysForChat}
-              >
-                Manage API keys
-              </Button>
-            ) : (
-              <>
-                {chat.canRetry && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => void chat.retryLastError()}
-                    disabled={chat.isStreaming}
-                  >
-                    Retry
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => chat.clearError()}
-                >
-                  Dismiss
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={openKeysForChat}
-                >
-                  Model & keys
-                </Button>
-              </>
-            )}
-          </div>
         </div>
       )}
 

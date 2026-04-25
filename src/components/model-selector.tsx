@@ -16,6 +16,7 @@ import {
   type Model,
   type Provider,
 } from "@/lib/models";
+import { hasInferenceCredentials } from "@/lib/ai-providers";
 import { cn } from "@/lib/utils";
 import {
   getApiKey,
@@ -94,7 +95,7 @@ export default function ModelSelector({
       }
     }
     for (const prof of getInferenceProfiles()) {
-      if (prof.apiKey.trim() && prof.baseUrl.trim() && prof.label.trim()) {
+      if (prof.label.trim() && hasInferenceCredentials(prof)) {
         jobs.push({ kind: "profile", profile: prof, key: prof.id });
       }
     }
@@ -191,7 +192,7 @@ export default function ModelSelector({
     const jobs: string[] = [
       ...PROVIDER_ORDER.filter((p) => isBuiltinProviderReady(p)),
       ...getInferenceProfiles()
-        .filter((p) => p.apiKey.trim() && p.baseUrl.trim() && p.label.trim())
+        .filter((p) => p.label.trim() && hasInferenceCredentials(p))
         .map((p) => p.id),
     ];
     return jobs.some((k) => {
@@ -231,7 +232,7 @@ export default function ModelSelector({
   );
 
   const readyInferenceProfiles = useMemo(
-    () => inferenceProfiles.filter((p) => p.apiKey.trim() && p.baseUrl.trim() && p.label.trim()),
+    () => inferenceProfiles.filter((p) => p.label.trim() && hasInferenceCredentials(p)),
     [inferenceProfiles],
   );
 

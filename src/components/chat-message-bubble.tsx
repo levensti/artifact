@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertCircle, RotateCw } from "lucide-react";
 import type { Model } from "@/lib/models";
 import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
@@ -127,18 +128,52 @@ export function ChatMessageBubble({
   isCurrentlyStreaming,
   agentSteps,
   blockCtx,
+  failure,
 }: {
   msg: ChatMessage | AnnotationMessage;
   isCurrentlyStreaming: boolean;
   agentSteps: AgentStep[];
   blockCtx: BlockCtx;
+  /** When set, render an inline failure indicator beneath this user message. */
+  failure?: {
+    error: string;
+    canRetry: boolean;
+    onRetry: () => void;
+  } | null;
 }) {
   if (msg.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
         <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed bg-primary/10 text-foreground shadow-sm">
           <div className="whitespace-pre-wrap">{msg.content}</div>
         </div>
+        {failure && (
+          <div className="flex max-w-[85%] flex-col items-end gap-0.5 pr-1">
+            <div className="flex items-center gap-1.5 text-[11px] text-destructive/90">
+              <AlertCircle className="size-3" strokeWidth={2.25} />
+              <span>Couldn&rsquo;t send</span>
+              {failure.canRetry && (
+                <>
+                  <span className="text-destructive/40">·</span>
+                  <button
+                    type="button"
+                    onClick={failure.onRetry}
+                    className="inline-flex items-center gap-0.5 font-medium text-destructive underline-offset-2 hover:underline"
+                  >
+                    <RotateCw className="size-2.5" strokeWidth={2.5} />
+                    Retry
+                  </button>
+                </>
+              )}
+            </div>
+            <p
+              className="text-right text-[10.5px] leading-snug text-destructive/70"
+              title={failure.error}
+            >
+              {failure.error}
+            </p>
+          </div>
+        )}
       </div>
     );
   }

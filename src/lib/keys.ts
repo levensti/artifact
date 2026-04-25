@@ -1,5 +1,6 @@
 import type { Model } from "@/lib/models";
 import { isInferenceProviderType } from "@/lib/models";
+import { hasInferenceCredentials } from "@/lib/ai-providers";
 import {
   clearApiKey as clearApiKeyRemote,
   getApiKey as getApiKeyCached,
@@ -37,8 +38,8 @@ export function resolveInferenceCredentials(
 ): { apiKey: string; baseUrl: string } | null {
   if (!isInferenceProviderType(model.provider) || !model.profileId) return null;
   const p = getInferenceProfileCached(model.profileId);
-  if (!p?.apiKey?.trim() || !p?.baseUrl?.trim()) return null;
-  return { apiKey: p.apiKey.trim(), baseUrl: p.baseUrl.trim() };
+  if (!p || !hasInferenceCredentials(p)) return null;
+  return { apiKey: p.apiKey?.trim() ?? "", baseUrl: p.baseUrl.trim() };
 }
 
 /**
@@ -47,6 +48,10 @@ export function resolveInferenceCredentials(
  * `apiKey`) and inference profiles (returns `apiKey`, `apiBaseUrl`, and
  * `supportsStreaming`). Returns null if the required credentials aren't
  * configured — the caller should surface a friendly error.
+ *
+ * Local inference profiles (localhost base URL) allow an empty `apiKey`
+ * since runtimes like Ollama / LM Studio / llama.cpp don't use one. Cloud
+ * inference profiles still require a key.
  */
 export function resolveModelCredentials(
   model: Model,
@@ -58,9 +63,9 @@ export function resolveModelCredentials(
   if (isInferenceProviderType(model.provider)) {
     if (!model.profileId) return null;
     const p = getInferenceProfileCached(model.profileId);
-    if (!p?.apiKey?.trim() || !p?.baseUrl?.trim()) return null;
+    if (!p || !hasInferenceCredentials(p)) return null;
     return {
-      apiKey: p.apiKey.trim(),
+      apiKey: p.apiKey?.trim() ?? "",
       apiBaseUrl: p.baseUrl.trim(),
       supportsStreaming: p.supportsStreaming !== false,
     };

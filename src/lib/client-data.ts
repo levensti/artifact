@@ -15,6 +15,7 @@ import {
   BUILTIN_PROVIDER_ORDER,
   isInferenceProviderType,
 } from "@/lib/models";
+import { hasInferenceCredentials } from "@/lib/ai-providers";
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
@@ -710,7 +711,8 @@ export function isModelReady(model: Model): boolean {
   if (isInferenceProviderType(model.provider)) {
     if (!model.profileId) return false;
     const p = getInferenceProfile(model.profileId);
-    return !!(p?.apiKey?.trim() && p?.baseUrl?.trim() && p?.label?.trim());
+    if (!p?.label?.trim()) return false;
+    return hasInferenceCredentials(p);
   }
   return isBuiltinProviderReady(model.provider);
 }
@@ -725,9 +727,7 @@ export function hasAnySavedApiKey(): boolean {
   for (const p of BUILTIN_PROVIDER_ORDER) {
     if (getApiKey(p)) return true;
   }
-  return settingsCache.inferenceProfiles.some(
-    (x) => x.apiKey.trim() && x.baseUrl.trim(),
-  );
+  return settingsCache.inferenceProfiles.some(hasInferenceCredentials);
 }
 
 async function reloadSettingsCache(): Promise<void> {

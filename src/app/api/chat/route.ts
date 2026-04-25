@@ -19,6 +19,7 @@ import { isInferenceProviderType } from "@/lib/models";
 import {
   invalidApiProviderMessage,
   isAnthropicMessagesProvider,
+  isLocalhostUrl,
   isProvider,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
@@ -158,7 +159,11 @@ export async function POST(req: NextRequest) {
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
   const profileSupportsStreaming = supportsStreaming !== false;
 
-  if (!effectiveApiKey) {
+  const isLocalInferenceCall =
+    isInferenceProviderType(provider) &&
+    !!effectiveBaseUrl &&
+    isLocalhostUrl(effectiveBaseUrl);
+  if (!effectiveApiKey && !isLocalInferenceCall) {
     return jsonError("API key is required.", 401);
   }
   if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
