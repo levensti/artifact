@@ -89,7 +89,7 @@ function ChatInput({
   };
 
   return (
-    <div className="p-3 shrink-0 bg-gradient-to-t from-background via-background to-transparent">
+    <div className="p-3 shrink-0 bg-linear-to-t from-background via-background to-transparent">
       <div
         className={cn(
           "flex items-end gap-2 rounded-xl border transition-[box-shadow,border-color,background-color] duration-200",
@@ -339,7 +339,7 @@ export default function ChatPanel({
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
       {!hideHeader && (
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-gradient-to-r from-background to-primary/[0.03] px-4">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-linear-to-r from-background to-primary/3 px-4">
           <span className="text-sm font-bold tracking-tight text-foreground">
             Assistant
           </span>
