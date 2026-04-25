@@ -62,19 +62,23 @@ async function parseNDJSONStream(
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        let event: StreamEvent;
         try {
-          onEvent(JSON.parse(trimmed) as StreamEvent);
+          event = JSON.parse(trimmed) as StreamEvent;
         } catch {
-          // skip malformed lines
+          continue; // skip malformed lines
         }
+        onEvent(event); // exceptions propagate so callers can react to error events
       }
     }
     if (buffer.trim()) {
+      let event: StreamEvent;
       try {
-        onEvent(JSON.parse(buffer.trim()) as StreamEvent);
+        event = JSON.parse(buffer.trim()) as StreamEvent;
       } catch {
-        /* ignore */
+        return;
       }
+      onEvent(event);
     }
   } finally {
     reader.releaseLock();
@@ -202,6 +206,9 @@ export interface UseChatReturn {
   setInput: (v: string) => void;
   isStreaming: boolean;
   error: string | null;
+  /** ID of the latest user message whose send failed. Renderers attach an
+   *  inline retry/error indicator to this message. */
+  failedUserMsgId: string | null;
   agentSteps: AgentStep[];
   streamingMsgId: string | null;
   hasSavedKeys: boolean;
@@ -239,6 +246,10 @@ export function useChat({
     text: string;
     threadAnnotationId: string | null;
   } | null>(null);
+  /** ID of the latest user message whose send failed — drives the inline
+   *  failure indicator/retry button on the message itself. Cleared on the
+   *  next successful submit. */
+  const [failedUserMsgId, setFailedUserMsgId] = useState<string | null>(null);
 
   // Load messages on review change
   useEffect(() => {
@@ -274,8 +285,7 @@ export function useChat({
   void keysVersion;
 
   const hasSavedKeys = hasAnySavedApiKey();
-  const hasKeyForModel =
-    selectedModel != null && isModelReady(selectedModel);
+  const hasKeyForModel = selectedModel != null && isModelReady(selectedModel);
 
   /* ---------------------------------------------------------------- */
   /*  Main chat submit                                                 */
@@ -290,6 +300,7 @@ export function useChat({
 
       setError(null);
       setLastFailedRequest(null);
+      setFailedUserMsgId(null);
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -343,8 +354,8 @@ export function useChat({
 
         await parseNDJSONStream(response.body, (event) => {
           if (event.type === "error") {
-            setError(event.message);
-            return;
+            // Throw so the catch block handles cleanup uniformly with HTTP errors.
+            throw new Error(event.message);
           }
           steps = processStreamEvent(steps, event);
           setAgentSteps([...steps]);
@@ -405,14 +416,12 @@ export function useChat({
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsg.id
-              ? { ...m, content: `Error: ${message}` }
-              : m,
-          ),
-        );
+        // Drop the empty assistant placeholder — never repurpose it for an
+        // error, since it visually masquerades as a real reply. The failure
+        // is surfaced inline beneath the user message instead.
+        setMessages((prev) => prev.filter((m) => m.id !== assistantMsg.id));
         setError(message);
+        setFailedUserMsgId(userMsg.id);
         setLastFailedRequest({ text: trimmed, threadAnnotationId: null });
       } finally {
         setIsStreaming(false);
@@ -449,6 +458,7 @@ export function useChat({
 
       setError(null);
       setLastFailedRequest(null);
+      setFailedUserMsgId(null);
 
       const userMsg: AnnotationMessage = {
         id: crypto.randomUUID(),
@@ -484,7 +494,10 @@ export function useChat({
         : "";
       const historyForApi = threadWithUser.map((m, i) => ({
         role: m.role,
-        content: i === 0 && m.role === "user" ? highlightPreamble + m.content : m.content,
+        content:
+          i === 0 && m.role === "user"
+            ? highlightPreamble + m.content
+            : m.content,
       }));
 
       let steps: AgentStep[] = [];
@@ -517,8 +530,7 @@ export function useChat({
 
         await parseNDJSONStream(response.body, (event) => {
           if (event.type === "error") {
-            setError(event.message);
-            return;
+            throw new Error(event.message);
           }
           steps = processStreamEvent(steps, event);
           setAgentSteps([...steps]);
@@ -556,6 +568,7 @@ export function useChat({
         onAnnotationsPersist();
         setThreadStream(thread);
         setError(message);
+        setFailedUserMsgId(userMsg.id);
         setLastFailedRequest({
           text: trimmed,
           threadAnnotationId: chatThreadAnnotationId,
@@ -617,13 +630,18 @@ export function useChat({
     setInput,
     isStreaming,
     error,
+    failedUserMsgId,
     agentSteps,
     streamingMsgId,
     hasSavedKeys,
     hasKeyForModel,
     canRetry: !!lastFailedRequest,
     retryLastError,
-    clearError: () => setError(null),
+    clearError: () => {
+      setError(null);
+      setFailedUserMsgId(null);
+      setLastFailedRequest(null);
+    },
     sendMessage,
     submitChat,
     submitThreadChat,

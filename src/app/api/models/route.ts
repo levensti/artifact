@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { isInferenceProviderType } from "@/lib/models";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
+  isLocalhostUrl,
   isProvider,
+  normalizeOpenAiCompatibleBase,
   openAiCompatibleModelsListUrl,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
@@ -35,13 +37,18 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid provider.", 400);
   }
 
-  if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
-    return jsonError("API key is required.", 401);
-  }
-  const effectiveKey = apiKey.trim();
+  const effectiveKey =
+    typeof apiKey === "string" ? apiKey.trim() : "";
   const effectiveBase =
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : undefined;
 
+  const isLocalInferenceCall =
+    isInferenceProviderType(provider) &&
+    !!effectiveBase &&
+    isLocalhostUrl(effectiveBase);
+  if (!effectiveKey && !isLocalInferenceCall) {
+    return jsonError("API key is required.", 401);
+  }
   if (isInferenceProviderType(provider) && !effectiveBase) {
     return jsonError(
       "apiBaseUrl is required for OpenAI-compatible providers.",
@@ -68,10 +75,36 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ models: await fetchXAIModels(effectiveKey) });
   } catch (err) {
-    const message =
+    const rawMessage =
       err instanceof Error ? err.message : "Failed to load model list";
+    const message = rewriteLocalhostFetchError(rawMessage, effectiveBase);
     return jsonError(message, 502);
   }
+}
+
+/**
+ * When fetching from a localhost URL fails with a connection error, the raw
+ * "fetch failed" / "ECONNREFUSED" message isn't actionable. Rewrite to point
+ * the user at the obvious cause: their local LLM server isn't running.
+ */
+function rewriteLocalhostFetchError(
+  message: string,
+  baseUrl: string | undefined,
+): string {
+  if (!baseUrl) return message;
+  let normalized: string;
+  try {
+    normalized = normalizeOpenAiCompatibleBase(baseUrl);
+  } catch {
+    return message;
+  }
+  if (!isLocalhostUrl(normalized)) return message;
+  const looksLikeConnError =
+    /econnrefused|fetch failed|networkerror|enotfound|connection refused/i.test(
+      message,
+    );
+  if (!looksLikeConnError) return message;
+  return `Cannot reach local LLM server at ${normalized}. Is it running?`;
 }
 
 async function fetchOpenAIModels(apiKey: string): Promise<ModelOption[]> {

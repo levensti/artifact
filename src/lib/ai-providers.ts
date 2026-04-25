@@ -37,15 +37,51 @@ export function providerApiErrorLabel(provider: Provider): string {
   }
 }
 
+const LOCALHOST_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
+
+export function isLocalhostUrl(url: string): boolean {
+  const s = url.trim();
+  if (!s) return false;
+  try {
+    const withScheme = /^https?:\/\//i.test(s) ? s : `http://${s}`;
+    const u = new URL(withScheme);
+    return LOCALHOST_HOSTS.has(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * An inference profile is usable if it has a base URL AND either a local
+ * server (no auth) or an API key. Cloud profiles (Fireworks, OpenRouter, …)
+ * still require a key.
+ */
+export function hasInferenceCredentials(p: {
+  baseUrl: string;
+  apiKey: string;
+}): boolean {
+  if (!p.baseUrl.trim()) return false;
+  return isLocalhostUrl(p.baseUrl) || !!p.apiKey.trim();
+}
+
 /**
  * Normalize user input for OpenAI-compatible servers (e.g. Fireworks `.../inference/v1`).
  * If the URL has no path (only origin, e.g. `https://api.sailresearch.com`), defaults to `/v1`
  * so `.../models` and `.../chat/completions` resolve correctly.
+ *
+ * For schemeless input pointing at a localhost host (e.g. `localhost:11434/v1`), defaults to
+ * `http://` since local LLM servers like Ollama / LM Studio / llama.cpp don't serve TLS.
  */
 export function normalizeOpenAiCompatibleBase(raw: string): string {
   const s = raw.trim();
   if (!s) throw new Error("Base URL is empty.");
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+  let withScheme: string;
+  if (/^https?:\/\//i.test(s)) {
+    withScheme = s;
+  } else {
+    const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/.test(s);
+    withScheme = `${isLocal ? "http" : "https"}://${s}`;
+  }
   const u = new URL(withScheme);
   if (u.protocol !== "https:" && u.protocol !== "http:") {
     throw new Error("Invalid base URL.");

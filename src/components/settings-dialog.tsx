@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Check, Key, Plus, Trash2, CircleCheck, Circle } from "lucide-react";
+import { Eye, EyeOff, Check, Cpu, Key, Plus, Trash2, CircleCheck, Circle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { isLocalhostUrl } from "@/lib/ai-providers";
 import {
   getApiKey,
   setApiKey,
@@ -259,7 +266,9 @@ function InferenceProfileCard({
           type={visible ? "text" : "password"}
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="API key"
+          placeholder={
+            isLocalhostUrl(baseUrl) ? "API key (optional for local)" : "API key"
+          }
           className="pl-7 pr-8 text-xs h-8"
         />
         <button
@@ -291,7 +300,11 @@ function InferenceProfileCard({
           variant={saved ? "outline" : "default"}
           className="h-8 text-xs"
           onClick={handleSave}
-          disabled={!label.trim() || !baseUrl.trim() || !apiKey.trim()}
+          disabled={
+            !label.trim() ||
+            !baseUrl.trim() ||
+            (!apiKey.trim() && !isLocalhostUrl(baseUrl))
+          }
         >
           {saved && <Check size={12} className="mr-1" />}
           {saved ? "Saved" : "Save"}
@@ -308,6 +321,18 @@ function InferenceProfileCard({
     </div>
   );
 }
+
+interface LocalLlmPreset {
+  name: string;
+  baseUrl: string;
+}
+
+const LOCAL_LLM_PRESETS: LocalLlmPreset[] = [
+  { name: "Ollama", baseUrl: "http://localhost:11434/v1" },
+  { name: "LM Studio", baseUrl: "http://localhost:1234/v1" },
+  { name: "llama.cpp", baseUrl: "http://localhost:8080/v1" },
+  { name: "vLLM", baseUrl: "http://localhost:8000/v1" },
+];
 
 function InferenceEndpointsSection({
   kind,
@@ -351,6 +376,23 @@ function InferenceEndpointsSection({
     );
   }, [kind]);
 
+  const addLocalProfile = useCallback(
+    (preset: LocalLlmPreset) => {
+      const next: InferenceProviderProfile = {
+        id: crypto.randomUUID(),
+        label: `${preset.name} (local)`,
+        kind,
+        baseUrl: preset.baseUrl,
+        apiKey: "",
+        supportsStreaming: true,
+      };
+      void saveInferenceProfiles([...getInferenceProfiles(), next]).then(() =>
+        bump((n) => n + 1),
+      );
+    },
+    [kind],
+  );
+
   useEffect(() => {
     const sync = () => bump((n) => n + 1);
     window.addEventListener(KEYS_UPDATED_EVENT, sync);
@@ -388,16 +430,38 @@ function InferenceEndpointsSection({
         </div>
       )}
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-full h-8 text-xs gap-1.5 border-dashed"
-        onClick={addProfile}
-      >
-        <Plus size={12} />
-        Add provider
-      </Button>
+      <div className="flex flex-col sm:flex-row gap-2">
+        {/* Local LLM presets are desktop-only — mobile devices can't host an inference server. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="hidden sm:flex sm:flex-1 h-8 items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 text-xs font-medium hover:border-border hover:bg-muted/50 transition-colors"
+          >
+            <Cpu size={12} />
+            Add local LLM
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-44">
+            {LOCAL_LLM_PRESETS.map((preset) => (
+              <DropdownMenuItem
+                key={preset.name}
+                className="text-xs cursor-pointer"
+                onClick={() => addLocalProfile(preset)}
+              >
+                {preset.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="sm:flex-1 h-8 text-xs gap-1.5 border-dashed"
+          onClick={addProfile}
+        >
+          <Plus size={12} />
+          Add provider
+        </Button>
+      </div>
     </div>
   );
 }
