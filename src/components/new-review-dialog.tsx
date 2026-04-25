@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, FileDown, FileText, Globe, Loader2, Upload } from "lucide-react";
+import { ArrowRight, FileDown, FileText, Globe, Loader2, Search, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import {
 } from "@/lib/reviews";
 import { savePdfBlob } from "@/lib/client/pdf-blobs";
 import { extractArxivId } from "@/lib/utils";
+import type { ArxivSearchResult } from "@/lib/explore";
 
 type SourceMode = "arxiv" | "local" | "web" | "import";
 
@@ -51,6 +52,16 @@ export default function NewReviewDialog({
     undefined,
   );
 
+  // Keyword search state for arXiv mode.
+  const [searchResults, setSearchResults] = useState<ArxivSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const trimmedUrl = url.trim();
+  const looksLikeArxivQuery =
+    trimmedUrl.length >= 3 &&
+    !arxivId &&
+    !/^https?:\/\//i.test(trimmedUrl) &&
+    !/^\d+\.\d+(v\d+)?$/.test(trimmedUrl);
+
   useEffect(() => {
     const sync = () => {
       setExistingReview(arxivId ? getReviewByArxivId(arxivId) : undefined);
@@ -60,11 +71,66 @@ export default function NewReviewDialog({
     return () => window.removeEventListener(REVIEWS_UPDATED_EVENT, sync);
   }, [arxivId]);
 
+  useEffect(() => {
+    if (mode !== "arxiv" || !looksLikeArxivQuery) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/arxiv-search?query=${encodeURIComponent(trimmedUrl)}&max_results=8`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) {
+          setSearchResults([]);
+          return;
+        }
+        const data: { results?: ArxivSearchResult[] } = await res.json();
+        setSearchResults(data.results ?? []);
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [mode, looksLikeArxivQuery, trimmedUrl]);
+
+  const handleSelectSearchResult = async (result: ArxivSearchResult) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const review = await createOrGetReview(result.arxivId, result.title);
+      setUrl("");
+      setSearchResults([]);
+      onCreated(review.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start review");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmitArxiv = async () => {
     setError(null);
 
-    if (!url.trim()) {
-      setError("Please enter an arXiv URL");
+    if (!trimmedUrl) {
+      setError("Paste a link or search by keywords");
+      return;
+    }
+
+    // If the input is a search query, pick the top result on Enter.
+    if (looksLikeArxivQuery) {
+      if (searchResults.length > 0) {
+        await handleSelectSearchResult(searchResults[0]);
+      }
       return;
     }
 
@@ -205,6 +271,8 @@ export default function NewReviewDialog({
       setSelectedFile(null);
       setError(null);
       setLoading(false);
+      setSearchResults([]);
+      setSearching(false);
       onClose();
     }
   };
@@ -217,7 +285,8 @@ export default function NewReviewDialog({
 
   const canSubmit =
     mode === "arxiv"
-      ? url.trim().length > 0
+      ? Boolean(arxivId) ||
+        (looksLikeArxivQuery && searchResults.length > 0)
       : mode === "web"
         ? webUrl.trim().length > 0
         : selectedFile !== null;
@@ -229,7 +298,7 @@ export default function NewReviewDialog({
           <DialogTitle>Start a review session</DialogTitle>
           <DialogDescription>
             {mode === "arxiv"
-              ? "Paste a link to any arXiv paper."
+              ? "Paste a link or search arXiv by keywords."
               : mode === "web"
                 ? "Paste a link to any web page."
                 : mode === "import"
@@ -239,59 +308,62 @@ export default function NewReviewDialog({
         </DialogHeader>
 
         {/* Mode toggle */}
-        <div className="relative flex gap-0.5 rounded-xl bg-muted/70 p-1 border border-border/40">
-          {/* Sliding pill */}
-          <div
-            className="absolute top-1 bottom-1 rounded-lg bg-background shadow-md ring-1 ring-border/50 transition-all duration-200 ease-out"
-            style={{
-              width: "calc((100% - 8px) / 4)",
-              left: mode === "arxiv"
-                ? "4px"
-                : mode === "web"
-                  ? "calc(4px + (100% - 8px) / 4)"
-                  : mode === "local"
-                    ? "calc(4px + 2 * (100% - 8px) / 4)"
-                    : "calc(4px + 3 * (100% - 8px) / 4)",
-            }}
-          />
-          {(["arxiv", "web", "local", "import"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => { setMode(m); setError(null); }}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
-                mode === m
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {m === "local" ? <FileText size={13} /> : m === "import" ? <FileDown size={13} /> : <Globe size={13} />}
-              {m === "arxiv" ? "arXiv" : m === "web" ? "Web URL" : m === "local" ? "PDF" : "Import"}
-            </button>
-          ))}
-        </div>
+        {(() => {
+          const modes = ["arxiv", "local", "web", "import"] as const;
+          const activeIndex = modes.indexOf(mode);
+          return (
+            <div className="relative flex gap-0.5 rounded-xl bg-muted/70 p-1 border border-border/40">
+              {/* Sliding pill */}
+              <div
+                className="absolute top-1 bottom-1 rounded-lg bg-background shadow-md ring-1 ring-border/50 transition-all duration-200 ease-out"
+                style={{
+                  width: "calc((100% - 8px) / 4)",
+                  left: `calc(4px + ${activeIndex} * (100% - 8px) / 4)`,
+                }}
+              />
+              {modes.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { setMode(m); setError(null); }}
+                  className={`relative z-10 flex-1 min-w-0 flex items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                    mode === m
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {m === "local" ? (
+                    <FileText size={13} className="shrink-0" />
+                  ) : m === "import" ? (
+                    <FileDown size={13} className="shrink-0" />
+                  ) : (
+                    <Globe size={13} className="shrink-0" />
+                  )}
+                  {m === "arxiv" ? "arXiv" : m === "web" ? "Web" : m === "local" ? "PDF" : "Import"}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {mode === "import" ? (
-          <div className="mt-1">
-            <button
-              type="button"
-              onClick={() => {
-                handleOpenChange(false);
-                onImport?.();
-              }}
-              className="w-full rounded-xl border-2 border-dashed border-border px-4 py-8 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm"
-            >
-              <div className="flex flex-col items-center gap-1.5">
-                <FileDown size={20} className="text-muted-foreground" />
+          <div className="mt-4 border-t border-border/40 pt-4">
+            <div className="h-[68px] flex items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  handleOpenChange(false);
+                  onImport?.();
+                }}
+                className="w-full h-full rounded-xl border-2 border-dashed border-border px-4 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm flex items-center justify-center gap-2"
+              >
+                <FileDown size={16} className="text-muted-foreground shrink-0" />
                 <span className="text-sm text-muted-foreground">
                   Open a shared review file
                 </span>
-                <span className="text-[11px] text-muted-foreground/50">
-                  review-*.json
-                </span>
-              </div>
-            </button>
-            <DialogFooter className="mt-5">
+              </button>
+            </div>
+            <DialogFooter className="mt-4 border-t border-border/40 pt-4">
               <Button
                 type="button"
                 variant="ghost"
@@ -302,74 +374,121 @@ export default function NewReviewDialog({
             </DialogFooter>
           </div>
         ) : (
-        <form onSubmit={handleSubmit} className="mt-1">
-          {mode === "arxiv" ? (
-            <>
+        <form onSubmit={handleSubmit} className="mt-4 border-t border-border/40 pt-4">
+          {/* Fixed-height primary input area — keeps footer stable across tabs */}
+          <div className="h-[68px] flex items-center">
+            {mode === "arxiv" ? (
+              <div className="relative w-full">
+                <Search
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                />
+                <Input
+                  value={url}
+                  onChange={(e) => {
+                    setUrl(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="Paste a link or search by keywords"
+                  autoFocus
+                  disabled={loading}
+                  className="pl-8"
+                />
+              </div>
+            ) : mode === "web" ? (
               <Input
-                value={url}
+                value={webUrl}
                 onChange={(e) => {
-                  setUrl(e.target.value);
+                  setWebUrl(e.target.value);
                   setError(null);
                 }}
-                placeholder="https://arxiv.org/abs/2602.00277"
+                placeholder="https://example.com/article"
                 autoFocus
                 disabled={loading}
+                className="w-full"
               />
-              {arxivId && existingReview && (
-                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                  You already have a review for this paper. Continue to open it,
-                  or paste a different link.
-                </p>
+            ) : (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loading}
+                  className="w-full h-full rounded-xl border-2 border-dashed border-border px-4 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm disabled:opacity-50 flex items-center justify-center"
+                >
+                  {selectedFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <FileText size={16} className="text-primary shrink-0" />
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {selectedFile.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Upload size={16} className="text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Click to select a PDF
+                      </span>
+                    </div>
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Expandable extras (arXiv search results, errors) */}
+          {mode === "arxiv" && arxivId && existingReview && (
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              You already have a review for this paper. Continue to open it,
+              or paste a different link.
+            </p>
+          )}
+          {mode === "arxiv" && looksLikeArxivQuery && (
+            <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-border/40 bg-muted/30">
+              {searching && searchResults.length === 0 ? (
+                <div className="flex items-center justify-center gap-2 px-3 py-4 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Searching arXiv…
+                </div>
+              ) : searchResults.length === 0 ? (
+                <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                  No papers found. Try different keywords.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border/40">
+                  {searchResults.map((r) => (
+                    <li key={r.arxivId}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSearchResult(r)}
+                        disabled={loading}
+                        className="w-full px-3 py-2 text-left transition-colors hover:bg-background disabled:opacity-50"
+                      >
+                        <div className="text-xs font-medium text-foreground line-clamp-2">
+                          {r.title}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-1">
+                          {r.authors.slice(0, 3).join(", ")}
+                          {r.authors.length > 3 ? " et al." : ""}
+                          {r.publishedDate ? ` · ${r.publishedDate.slice(0, 4)}` : ""}
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </>
-          ) : mode === "web" ? (
-            <Input
-              value={webUrl}
-              onChange={(e) => {
-                setWebUrl(e.target.value);
-                setError(null);
-              }}
-              placeholder="https://example.com/article"
-              autoFocus
-              disabled={loading}
-            />
-          ) : (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                onChange={handleFileChange}
-                className="hidden"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loading}
-                className="w-full rounded-xl border-2 border-dashed border-border px-4 py-8 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm disabled:opacity-50"
-              >
-                {selectedFile ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <FileText size={16} className="text-primary shrink-0" />
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {selectedFile.name}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-1.5">
-                    <Upload size={20} className="text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      Click to select a PDF
-                    </span>
-                  </div>
-                )}
-              </button>
-            </>
+            </div>
           )}
           {error && <p className="text-xs text-destructive mt-2">{error}</p>}
 
-          <DialogFooter className="mt-5">
+          <DialogFooter className="mt-4 border-t border-border/40 pt-4">
             <Button
               type="button"
               variant="ghost"
