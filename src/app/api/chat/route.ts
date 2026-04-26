@@ -19,7 +19,6 @@ import { isInferenceProviderType } from "@/lib/models";
 import {
   invalidApiProviderMessage,
   isAnthropicMessagesProvider,
-  isLocalhostUrl,
   isProvider,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
@@ -168,11 +167,10 @@ export async function POST(req: NextRequest) {
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
   const profileSupportsStreaming = supportsStreaming !== false;
 
-  const isLocalInferenceCall =
-    isInferenceProviderType(provider) &&
-    !!effectiveBaseUrl &&
-    isLocalhostUrl(effectiveBaseUrl);
-  if (!effectiveApiKey && !isLocalInferenceCall) {
+  // OpenAI-compatible providers may be unauthenticated (localhost Ollama, or
+  // a tunnel fronting one). If the upstream actually requires a key, it will
+  // 401 and we surface that error — better than blocking valid setups here.
+  if (!effectiveApiKey && !isInferenceProviderType(provider)) {
     return jsonError("API key is required.", 401);
   }
   if (isInferenceProviderType(provider) && !effectiveBaseUrl) {

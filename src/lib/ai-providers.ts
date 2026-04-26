@@ -73,16 +73,17 @@ export function isLocalhostUrl(url: string): boolean {
 }
 
 /**
- * An inference profile is usable if it has a base URL AND either a local
- * server (no auth) or an API key. Cloud profiles (Fireworks, OpenRouter, …)
- * still require a key.
+ * An inference profile is usable if it has a base URL. The API key is
+ * optional: localhost servers and tunnel-fronted local servers (Ollama via
+ * cloudflared/ngrok) don't require auth. Cloud profiles that *do* require a
+ * key will surface a 401 from upstream — surfacing that error is preferable
+ * to blocking the tunnel use-case at the client.
  */
 export function hasInferenceCredentials(p: {
   baseUrl: string;
   apiKey: string;
 }): boolean {
-  if (!p.baseUrl.trim()) return false;
-  return isLocalhostUrl(p.baseUrl) || !!p.apiKey.trim();
+  return !!p.baseUrl.trim();
 }
 
 /**

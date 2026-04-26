@@ -301,11 +301,7 @@ function InferenceProfileCard({
           variant={saved ? "outline" : "default"}
           className="h-8 text-xs"
           onClick={handleSave}
-          disabled={
-            !label.trim() ||
-            !baseUrl.trim() ||
-            (!apiKey.trim() && !isLocalhostUrl(baseUrl))
-          }
+          disabled={!label.trim() || !baseUrl.trim()}
         >
           {saved && <Check size={12} className="mr-1" />}
           {saved ? "Saved" : "Save"}
