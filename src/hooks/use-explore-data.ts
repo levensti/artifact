@@ -2,26 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { loadExplore } from "@/lib/client-data";
-import {
-  EXPLORE_UPDATED_EVENT,
-  type PrerequisitesData,
-  type GraphData,
-} from "@/lib/explore";
+import { EXPLORE_UPDATED_EVENT } from "@/lib/storage-events";
+import type { PrerequisitesData } from "@/lib/explore";
 
 interface ExploreData {
   prerequisites: PrerequisitesData | null;
-  graph: GraphData | null;
 }
 
 export function useExploreData(reviewId: string): ExploreData {
   const read = useCallback(async (): Promise<ExploreData> => {
-    return loadExplore(reviewId);
+    const { prerequisites } = await loadExplore(reviewId);
+    return { prerequisites };
   }, [reviewId]);
 
-  const [data, setData] = useState<ExploreData>({
-    prerequisites: null,
-    graph: null,
-  });
+  const [data, setData] = useState<ExploreData>({ prerequisites: null });
 
   useEffect(() => {
     let cancelled = false;

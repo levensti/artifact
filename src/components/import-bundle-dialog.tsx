@@ -332,7 +332,6 @@ function ReviewPreviewBody({
           { n: counts.messages, label: "chat messages" },
           { n: counts.annotations, label: "annotations" },
           { n: counts.deepDives, label: "deep dives" },
-          { n: counts.graphNodes, label: "related works" },
         ].filter((item) => item.n > 0);
 
         if (items.length === 0) {

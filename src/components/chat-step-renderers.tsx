@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
-  Network,
   Quote,
   Search,
   Wrench,
@@ -27,10 +26,6 @@ import type { AgentStep } from "@/hooks/use-chat";
 const TOOL_LABELS: Record<string, [string, string]> = {
   arxiv_search: ["Searching arXiv", "Searched arXiv"],
   web_search: ["Searching the web", "Searched the web"],
-  save_to_knowledge_graph: [
-    "Saving to knowledge graph",
-    "Saved to knowledge graph",
-  ],
   read_section: ["Reading section", "Read section"],
   search_paper: ["Searching the paper", "Searched the paper"],
   lookup_citation: ["Looking up citation", "Looked up citation"],
@@ -45,7 +40,6 @@ function toolLabel(name: string, done: boolean): string {
 const TOOL_ICONS: Record<string, typeof Search> = {
   arxiv_search: Search,
   web_search: Search,
-  save_to_knowledge_graph: Network,
   read_section: BookOpen,
   search_paper: Search,
   lookup_citation: Quote,
@@ -159,15 +153,9 @@ export function ToolCallStep({
       </button>
       {open && output && (
         <div className="border-t border-border/40 px-2.5 py-2 max-h-[180px] overflow-y-auto bg-muted/5">
-          {name === "save_to_knowledge_graph" ? (
-            <div className="text-[11px] leading-relaxed text-muted-foreground/80">
-              <MarkdownMessage content={output} />
-            </div>
-          ) : (
-            <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
-              {output}
-            </pre>
-          )}
+          <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
+            {output}
+          </pre>
         </div>
       )}
     </div>

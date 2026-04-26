@@ -3,9 +3,12 @@
  * that the markdown renderer can recognize and render as styled chips.
  *
  * The agent is instructed to write citations like:
- *   - "(§3)" or "(§3.2)"  — section reference
- *   - "(Fig. 3)" or "(Figure 3)" — figure reference
- *   - "(Ref. [27])" or "(Ref. [Vaswani2017])" — bibliographic reference
+ *   - "§3" / "§3.2" / "Section 3" / "Sec. 3.2"          — section reference
+ *   - "Fig. 3" / "Figure 3"                              — figure reference
+ *   - "Ref. [27]" / "Ref. [Vaswani2017]"                 — bibliographic reference
+ *
+ * Surrounding parens are optional — bare inline forms like "see §4.2"
+ * are matched too, since models drift away from a strict (§...) format.
  *
  * After transformation, the markdown renderer's `a` component looks for
  * links whose href begins with one of the prefixes below and renders them
@@ -16,14 +19,13 @@ export const CITATION_PREFIX_SECTION = "#cite-section-";
 export const CITATION_PREFIX_FIGURE = "#cite-figure-";
 export const CITATION_PREFIX_REF = "#cite-ref-";
 
-// Accept a few common variations so the agent doesn't have to be perfect:
-//   (§3), (§3.2), (§ 3.2), (Section 3), (Sec. 3.2)
+// §3, §3.2, § 3.2, Section 3, Sec. 3.2 — bare or parenthesized.
 const SECTION_RE =
-  /\((?:§\s*|Section\s+|Sec\.\s+)(\d+(?:\.\d+){0,2})\)/g;
-// (Fig. 3), (Figure 3), (Fig 3)
-const FIGURE_RE = /\((?:Fig\.?|Figure)\s+(\d+(?:\.\d+)?)\)/g;
-// (Ref. [27]), (Ref [27]), (Ref. [Vaswani2017]), (Ref [Vaswani et al., 2017])
-const REF_RE = /\(Ref\.?\s+\[([^\]]+)\]\)/g;
+  /(?:§\s*|\bSection\s+|\bSec\.\s+)(\d+(?:\.\d+){0,2})\b/g;
+// Fig. 3, Figure 3, Fig 3 — bare or parenthesized.
+const FIGURE_RE = /\b(?:Fig\.?|Figure)\s+(\d+(?:\.\d+)?)\b/g;
+// Ref. [27], Ref [27], Ref. [Vaswani2017], Ref [Vaswani et al., 2017]
+const REF_RE = /\bRef\.?\s+\[([^\]]+)\]/g;
 
 /**
  * Convert citation tokens in `content` into markdown links pointing at

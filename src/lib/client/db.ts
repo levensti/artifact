@@ -10,11 +10,7 @@ import Dexie, { type Table } from "dexie";
 import type { Annotation } from "@/lib/annotations";
 import type { ChatMessage, ParsedPaper, PaperReview } from "@/lib/review-types";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type {
-  GlobalGraphData,
-  GraphData,
-  PrerequisitesData,
-} from "@/lib/explore";
+import type { PrerequisitesData } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 
 export type ReviewRow = PaperReview;
@@ -34,16 +30,6 @@ export type DeepDiveRow = DeepDiveSession;
 export interface PrerequisitesRow {
   reviewId: string;
   data: PrerequisitesData;
-}
-
-export interface GraphRow {
-  reviewId: string;
-  graph: GraphData;
-}
-
-export interface GlobalGraphRow {
-  id: "singleton";
-  data: GlobalGraphData;
 }
 
 export type WikiPageRow = WikiPage;
@@ -108,8 +94,6 @@ export class ArtifactDB extends Dexie {
   reviewAnnotations!: Table<AnnotationsRow, string>;
   deepDives!: Table<DeepDiveRow, string>;
   explorePrerequisites!: Table<PrerequisitesRow, string>;
-  exploreGraphs!: Table<GraphRow, string>;
-  globalGraph!: Table<GlobalGraphRow, string>;
   wikiPages!: Table<WikiPageRow, string>;
   wikiPageSources!: Table<WikiPageSourceRow, string>;
   wikiBacklinks!: Table<WikiBacklinkRow, string>;
@@ -137,6 +121,11 @@ export class ArtifactDB extends Dexie {
     });
     this.version(2).stores({
       parsedPapers: "&hash",
+    });
+    // v3: drop knowledge-graph tables (exploreGraphs, globalGraph).
+    this.version(3).stores({
+      exploreGraphs: null,
+      globalGraph: null,
     });
   }
 }

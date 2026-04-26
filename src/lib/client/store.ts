@@ -9,11 +9,7 @@
 
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type {
-  GlobalGraphData,
-  GraphData,
-  PrerequisitesData,
-} from "@/lib/explore";
+import type { PrerequisitesData } from "@/lib/explore";
 import type {
   InferenceProviderProfile,
   Model,
@@ -63,7 +59,6 @@ export async function deleteReview(id: string): Promise<boolean> {
       db.reviewMessages,
       db.reviewAnnotations,
       db.explorePrerequisites,
-      db.exploreGraphs,
       db.deepDives,
       db.wikiPageSources,
       db.pdfBlobs,
@@ -78,7 +73,6 @@ export async function deleteReview(id: string): Promise<boolean> {
       await db.reviewMessages.delete(id);
       await db.reviewAnnotations.delete(id);
       await db.explorePrerequisites.delete(id);
-      await db.exploreGraphs.delete(id);
       await db.deepDives.where("reviewId").equals(id).delete();
       await db.wikiPageSources.where("reviewId").equals(id).delete();
       return true;
@@ -141,45 +135,8 @@ export async function setPrerequisites(
   await getDb().explorePrerequisites.put({ reviewId, data });
 }
 
-export async function getGraphData(
-  reviewId: string,
-): Promise<GraphData | null> {
-  const row = await getDb().exploreGraphs.get(reviewId);
-  return row?.graph ?? null;
-}
-
-export async function setGraphData(
-  reviewId: string,
-  graph: GraphData,
-): Promise<void> {
-  await getDb().exploreGraphs.put({ reviewId, graph });
-}
-
 export async function clearExploreData(reviewId: string): Promise<void> {
-  const db = getDb();
-  await db.transaction(
-    "rw",
-    [db.explorePrerequisites, db.exploreGraphs],
-    async () => {
-      await db.explorePrerequisites.delete(reviewId);
-      await db.exploreGraphs.delete(reviewId);
-    },
-  );
-}
-
-/* ── Global graph ── */
-
-export async function getGlobalGraphData(): Promise<GlobalGraphData | null> {
-  const row = await getDb().globalGraph.get("singleton");
-  return row?.data ?? null;
-}
-
-export async function setGlobalGraphData(data: GlobalGraphData): Promise<void> {
-  await getDb().globalGraph.put({ id: "singleton", data });
-}
-
-export async function clearGlobalKnowledgeGraph(): Promise<void> {
-  await getDb().globalGraph.delete("singleton");
+  await getDb().explorePrerequisites.delete(reviewId);
 }
 
 /* ── Settings (API keys + selected model) ── */
@@ -651,14 +608,12 @@ export async function wikiIngestFinalize(
 export async function getBootstrap(): Promise<{
   reviews: PaperReview[];
   settings: Awaited<ReturnType<typeof getSettings>>;
-  globalGraph: GlobalGraphData | null;
   deepDives: DeepDiveSession[];
 }> {
-  const [reviews, settings, globalGraph, deepDives] = await Promise.all([
+  const [reviews, settings, deepDives] = await Promise.all([
     listReviews(),
     getSettings(),
-    getGlobalGraphData(),
     listDeepDives(),
   ]);
-  return { reviews, settings, globalGraph, deepDives };
+  return { reviews, settings, deepDives };
 }

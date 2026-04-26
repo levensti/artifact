@@ -93,8 +93,8 @@ export default function ShareReviewDialog({
           <li className="flex gap-2">
             <span className="mt-[5px] size-1 shrink-0 rounded-full bg-muted-foreground/60" />
             <span>
-              Includes your chat history, annotations, deep dives, prerequisites,
-              and the related-works graph for this paper.
+              Includes your chat history, annotations, deep dives, and
+              prerequisites for this paper.
             </span>
           </li>
           <li className="flex gap-2">

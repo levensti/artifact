@@ -35,7 +35,6 @@ function makeReviewBundle(): ReviewBundle {
       annotations: [],
       deepDives: [],
       prerequisites: null,
-      graph: null,
     },
   };
 }
