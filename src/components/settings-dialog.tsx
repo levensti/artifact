@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Check, Cpu, Key, Plus, Trash2, CircleCheck, Circle } from "lucide-react";
+import { Eye, EyeOff, Check, ChevronDown, Cpu, Key, Plus, Trash2, CircleCheck, Circle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -463,6 +463,70 @@ function InferenceEndpointsSection({
           Add provider
         </Button>
       </div>
+
+      {profiles.some((p) => isLocalhostUrl(p.baseUrl)) && (
+        <LocalLlmDeployedSiteHelp />
+      )}
+    </div>
+  );
+}
+
+function LocalLlmDeployedSiteHelp() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 text-left text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="font-medium">Using a local LLM on a deployed site?</span>
+        <ChevronDown
+          size={12}
+          className={cn("shrink-0 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 text-muted-foreground/90">
+          <p>
+            On <code className="font-mono">localhost</code> dev, this just works.
+            On a deployed (https) site, the server can&apos;t reach your machine,
+            so you have two options:
+          </p>
+          <div className="space-y-1">
+            <p className="font-medium text-foreground/80">
+              1. Allow direct browser access (model list only)
+            </p>
+            <p>
+              Start Ollama with this origin allowed so the model dropdown can
+              populate from your browser:
+            </p>
+            <pre className="overflow-x-auto rounded bg-background/60 px-2 py-1 font-mono text-[10px]">
+              OLLAMA_ORIGINS={typeof window !== "undefined" ? window.location.origin : "https://your-site"} ollama serve
+            </pre>
+            <p className="text-muted-foreground/70">
+              Note: chat itself still won&apos;t work this way — the chat
+              endpoint runs server-side.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-medium text-foreground/80">
+              2. Expose Ollama via a tunnel (full chat support)
+            </p>
+            <p>
+              Run a tunnel and paste the public https URL as the base URL above:
+            </p>
+            <pre className="overflow-x-auto rounded bg-background/60 px-2 py-1 font-mono text-[10px]">
+              cloudflared tunnel --url http://localhost:11434
+            </pre>
+            <p>
+              Or with ngrok:{" "}
+              <code className="font-mono">ngrok http 11434</code>. Use the
+              resulting <code className="font-mono">https://…/v1</code> URL.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

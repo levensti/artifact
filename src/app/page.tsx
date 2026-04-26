@@ -120,15 +120,6 @@ export default function Home() {
               </div>
             </button>
           </div>
-
-          {/* Quiet footer hint */}
-          <div className="mt-8 flex items-center gap-3 px-1">
-            <div className="h-px flex-1 bg-border/50" />
-            <span className="text-[10px] font-medium tracking-[0.08em] uppercase text-muted-foreground/35">
-              Everything stays in your browser
-            </span>
-            <div className="h-px flex-1 bg-border/50" />
-          </div>
         </div>
       </div>
 

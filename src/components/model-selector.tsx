@@ -16,7 +16,12 @@ import {
   type Model,
   type Provider,
 } from "@/lib/models";
-import { hasInferenceCredentials } from "@/lib/ai-providers";
+import {
+  hasInferenceCredentials,
+  isLocalhostUrl,
+  openAiCompatibleModelsListUrl,
+  type OpenAiCompatibleProvider,
+} from "@/lib/ai-providers";
 import { cn } from "@/lib/utils";
 import {
   getApiKey,
@@ -40,7 +45,7 @@ import {
 type ProviderModelsState =
   | { status: "no-key" }
   | { status: "loading" }
-  | { status: "error" }
+  | { status: "error"; message?: string }
   | { status: "ok"; models: Model[] };
 
 interface ModelSelectorProps {
@@ -55,6 +60,66 @@ type FetchJob =
       profile: InferenceProviderProfile;
       key: string;
     };
+
+type ModelsListResponse = { models?: Array<{ id: string; label: string }> };
+
+function localhostUnreachableMessage(): string {
+  // Both "server not running" and "CORS rejection" surface as a TypeError on
+  // the client — we can't distinguish them, so cover both possibilities.
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "this site";
+  return `Can't reach local server. Make sure it's running and that it allows requests from ${origin} (e.g. OLLAMA_ORIGINS=${origin}).`;
+}
+
+async function fetchProxiedModelsList(
+  job: FetchJob,
+): Promise<ModelsListResponse | null> {
+  const body =
+    job.kind === "builtin"
+      ? { provider: job.provider, apiKey: getApiKey(job.provider) ?? "" }
+      : {
+          provider: job.profile.kind,
+          apiKey: job.profile.apiKey,
+          apiBaseUrl: job.profile.baseUrl,
+        };
+  const response = await fetch("/api/models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) return null;
+  return (await response.json()) as ModelsListResponse;
+}
+
+async function fetchLocalhostModelsList(
+  profile: InferenceProviderProfile,
+): Promise<ModelsListResponse | null> {
+  const url = openAiCompatibleModelsListUrl(
+    profile.kind as OpenAiCompatibleProvider,
+    profile.baseUrl,
+  );
+  const headers: Record<string, string> = {};
+  if (profile.apiKey.trim()) {
+    headers.Authorization = `Bearer ${profile.apiKey}`;
+  }
+  const response = await fetch(url, { headers });
+  if (!response.ok) return null;
+  const data = (await response.json()) as {
+    data?: unknown;
+    models?: unknown;
+  };
+  const rawList = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.models)
+      ? data.models
+      : [];
+  const models = rawList
+    .map((m: { id?: string }) => m.id)
+    .filter((id: unknown): id is string => typeof id === "string")
+    .sort((a, b) => a.localeCompare(b))
+    .map((id) => ({ id, label: id }));
+  return { models };
+}
 
 export default function ModelSelector({
   selected,
@@ -119,28 +184,28 @@ export default function ModelSelector({
       const results = await Promise.all(
         jobs.map(async (job) => {
           try {
-            const body =
-              job.kind === "builtin"
-                ? {
-                    provider: job.provider,
-                    apiKey: getApiKey(job.provider) ?? "",
-                  }
-                : {
-                    provider: job.profile.kind,
-                    apiKey: job.profile.apiKey,
-                    apiBaseUrl: job.profile.baseUrl,
-                  };
-            const response = await fetch("/api/models", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            });
-            if (!response.ok) {
-              return { key: job.key, result: { status: "error" } as const };
+            // For localhost inference profiles, the Next.js server can't reach
+            // the user's machine — fetch the models list directly from the
+            // browser. Requires the local server to allow this origin (e.g.
+            // OLLAMA_ORIGINS for Ollama).
+            const useDirectLocalhost =
+              job.kind === "profile" && isLocalhostUrl(job.profile.baseUrl);
+            const data = useDirectLocalhost
+              ? await fetchLocalhostModelsList(
+                  (job as Extract<FetchJob, { kind: "profile" }>).profile,
+                )
+              : await fetchProxiedModelsList(job);
+            if (!data) {
+              return {
+                key: job.key,
+                result: {
+                  status: "error" as const,
+                  message: useDirectLocalhost
+                    ? localhostUnreachableMessage()
+                    : undefined,
+                },
+              };
             }
-            const data = (await response.json()) as {
-              models?: Array<{ id: string; label: string }>;
-            };
             const models = (data.models ?? []).map((m) => {
               if (job.kind === "builtin") {
                 return {
@@ -163,7 +228,17 @@ export default function ModelSelector({
               result: { status: "ok" as const, models },
             };
           } catch {
-            return { key: job.key, result: { status: "error" } as const };
+            const useDirectLocalhost =
+              job.kind === "profile" && isLocalhostUrl(job.profile.baseUrl);
+            return {
+              key: job.key,
+              result: {
+                status: "error" as const,
+                message: useDirectLocalhost
+                  ? localhostUnreachableMessage()
+                  : undefined,
+              },
+            };
           }
         }),
       );
@@ -334,13 +409,20 @@ export default function ModelSelector({
                 )}
 
                 {state.status === "error" && (
-                  <DropdownMenuItem
-                    className="text-xs gap-2 cursor-pointer"
-                    onClick={() => setRefetchTick((t) => t + 1)}
-                  >
-                    <RefreshCw className="size-3.5 opacity-80" />
-                    Retry
-                  </DropdownMenuItem>
+                  <>
+                    {state.message && (
+                      <p className="px-2 pt-1 pb-0.5 text-[10px] leading-snug text-muted-foreground">
+                        {state.message}
+                      </p>
+                    )}
+                    <DropdownMenuItem
+                      className="text-xs gap-2 cursor-pointer"
+                      onClick={() => setRefetchTick((t) => t + 1)}
+                    >
+                      <RefreshCw className="size-3.5 opacity-80" />
+                      Retry
+                    </DropdownMenuItem>
+                  </>
                 )}
 
                 {state.status === "ok" && state.models.length === 0 && (
