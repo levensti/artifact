@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft,
-  Loader2,
-  MessageSquareQuote,
-  Send,
-} from "lucide-react";
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ArrowLeft, Loader2, MessageSquareQuote, Send } from "lucide-react";
 import {
   PROVIDER_META,
   isInferenceProviderType,
@@ -150,24 +152,11 @@ function ChatInput({
         </Button>
       </div>
       <div className="mt-1.5 space-y-0.5">
-        {inputLocked ? (
+        {inputLocked && (
           <p className="px-1 text-center text-[11px] leading-snug text-warning">
             Chat is locked until you add an API key.
           </p>
-        ) : (
-          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground">
-            {chatThreadAnnotationId
-              ? "Replies stay tied to this highlight."
-              : "Messages apply to the whole paper."}
-          </p>
         )}
-        <p className="px-1 text-center text-[10px] leading-snug text-muted-foreground/60">
-          {selectedModel
-            ? `${selectedModel.label} · Shift+Enter new line`
-            : hasSavedKeys
-              ? "Choose a model above · Shift+Enter new line"
-              : "Manage API keys first · Shift+Enter new line"}
-        </p>
         {!hasSavedKeys && (
           <div className="flex justify-center">
             <Button
