@@ -27,7 +27,7 @@ Open [localhost:3000](http://localhost:3000) and add your API keys under Setting
 
 **Open anything.** Artifact reads from multiple sources so you can work with whatever you have in front of you:
 
-- **arXiv ID** — paste an ID like `2401.12345` and the paper loads straight from arXiv.
+- **arXiv** — paste a paper URL or search for a paper directly in Artifact.
 - **Paper or web URL** — drop in any paper link or arbitrary web page; the content is cleaned and rendered alongside the assistant.
 - **Local PDF upload** — pick a PDF from your machine and it's stored locally in your browser (IndexedDB), ready to read and query.
 
