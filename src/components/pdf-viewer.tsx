@@ -31,6 +31,10 @@ interface PdfViewerProps {
 }
 
 const H_PADDING = 16;
+const ZOOM_STEP = 0.2;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_DEBOUNCE_MS = 140;
 
 function clientXY(e: MouseEvent | TouchEvent): { x: number; y: number } {
   if ("changedTouches" in e && e.changedTouches[0]) {
@@ -52,8 +56,15 @@ export default function PdfViewer({
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
-  /** Multiplier on fit-to-width (1 = page width matches column). */
-  const [zoomMul, setZoomMul] = useState(1);
+  /**
+   * Multiplier on fit-to-width (1 = page width matches column).
+   * `liveZoom` updates immediately on click so the UI feels responsive.
+   * `committedZoom` is the value pdf.js actually rasterizes at; it lags
+   * behind `liveZoom` by `ZOOM_DEBOUNCE_MS` so rapid clicks coalesce into a
+   * single re-rasterization.
+   */
+  const [liveZoom, setLiveZoom] = useState(1);
+  const [committedZoom, setCommittedZoom] = useState(1);
   const [containerWidth, setContainerWidth] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -74,8 +85,18 @@ export default function PdfViewer({
   const fitWidth = Math.max(0, containerWidth - H_PADDING);
   const pageWidth = Math.max(
     120,
-    Math.floor(fitWidth * Math.min(3, Math.max(0.5, zoomMul))),
+    Math.floor(fitWidth * Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, committedZoom))),
   );
+
+  // Coalesce rapid zoom clicks into one rasterization.
+  useEffect(() => {
+    if (liveZoom === committedZoom) return;
+    const id = window.setTimeout(
+      () => setCommittedZoom(liveZoom),
+      ZOOM_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [liveZoom, committedZoom]);
 
   const extractText = useCallback(
     async (pdf: PDFDocumentProxy) => {
@@ -235,8 +256,14 @@ export default function PdfViewer({
     target?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const zoomOut = () => setZoomMul((z) => Math.max(0.5, Math.round((z - 0.12) * 100) / 100));
-  const zoomIn = () => setZoomMul((z) => Math.min(3, Math.round((z + 0.12) * 100) / 100));
+  const zoomOut = () =>
+    setLiveZoom((z) =>
+      Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100),
+    );
+  const zoomIn = () =>
+    setLiveZoom((z) =>
+      Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100),
+    );
 
   return (
     <div className="flex flex-col h-full bg-transparent">
@@ -277,7 +304,7 @@ export default function PdfViewer({
             <ZoomOut size={14} />
           </Button>
           <span className="min-w-[36px] sm:min-w-[40px] text-center text-[11px] sm:text-xs font-semibold tabular-nums leading-none text-foreground/70">
-            {Math.round(zoomMul * 100)}%
+            {Math.round(liveZoom * 100)}%
           </span>
           <Button
             variant="ghost"
@@ -312,13 +339,31 @@ export default function PdfViewer({
             setLoadError("Failed to load PDF. Check that the URL or file path is valid.");
           }}
           loading={null}
-          className="flex flex-col items-center gap-2 py-3 sm:py-4 px-2"
+          // `align-items: safe center` keeps small pages centered but falls
+          // back to start-aligned when the page is wider than the column —
+          // otherwise the left edge of a zoomed page is clipped beyond the
+          // scroll origin. `w-fit min-w-full` makes the Document grow to
+          // match its widest page so the parent's overflow-auto can produce
+          // a horizontal scrollbar.
+          className="flex flex-col gap-2 py-3 sm:py-4 px-2 w-fit min-w-full [align-items:safe_center]"
         >
           {Array.from({ length: numPages }, (_, i) => {
             const pageNum = i + 1;
             const pageAnnotations = annotations.filter((a) => a.pageNumber === pageNum);
+            // Transient CSS scale during the debounce window so the page
+            // tracks the user's zoom intent before pdf.js re-rasterizes.
+            // Resolves to 1 on commit (and during stable state).
+            const previewScale = liveZoom / committedZoom;
             return (
-              <div key={pageNum} className="relative">
+              <div
+                key={pageNum}
+                className="relative"
+                style={{
+                  transform: previewScale === 1 ? undefined : `scale(${previewScale})`,
+                  transformOrigin: "top center",
+                  willChange: previewScale === 1 ? undefined : "transform",
+                }}
+              >
                 <Page
                   pageNumber={pageNum}
                   width={containerWidth > 0 ? pageWidth : 400}
