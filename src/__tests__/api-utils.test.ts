@@ -25,16 +25,43 @@ describe("parseApiErrorMessage", () => {
     expect(parseApiErrorMessage(json, "fallback")).toBe("Rate limited");
   });
 
-  it("returns fallback for non-JSON input", () => {
-    expect(parseApiErrorMessage("plain text error", "fallback")).toBe("fallback");
+  it("extracts string error field (Ollama-style)", () => {
+    const json = JSON.stringify({ error: "model not found" });
+    expect(parseApiErrorMessage(json, "fallback")).toBe("model not found");
   });
 
-  it("returns fallback when error.message is missing", () => {
+  it("extracts top-level message field", () => {
+    const json = JSON.stringify({ message: "upstream offline" });
+    expect(parseApiErrorMessage(json, "fallback")).toBe("upstream offline");
+  });
+
+  it("appends snippet for plain-text bodies", () => {
+    expect(parseApiErrorMessage("Forbidden", "Upstream error")).toBe(
+      "Upstream error: Forbidden",
+    );
+  });
+
+  it("appends snippet for JSON without recognized error fields", () => {
     const json = JSON.stringify({ status: "error" });
-    expect(parseApiErrorMessage(json, "fallback")).toBe("fallback");
+    expect(parseApiErrorMessage(json, "fallback")).toBe(
+      `fallback: ${json}`,
+    );
+  });
+
+  it("returns fallback for HTML error pages", () => {
+    const html = "<!doctype html><html><body>502</body></html>";
+    expect(parseApiErrorMessage(html, "fallback")).toBe("fallback");
   });
 
   it("returns fallback for empty string", () => {
     expect(parseApiErrorMessage("", "fallback")).toBe("fallback");
+  });
+
+  it("truncates very long bodies", () => {
+    const long = "x".repeat(500);
+    const out = parseApiErrorMessage(long, "fallback");
+    expect(out.startsWith("fallback: ")).toBe(true);
+    expect(out.endsWith("…")).toBe(true);
+    expect(out.length).toBeLessThan(250);
   });
 });

@@ -62,6 +62,9 @@ type FetchJob =
     };
 
 type ModelsListResponse = { models?: Array<{ id: string; label: string }> };
+type FetchModelsResult =
+  | { ok: true; data: ModelsListResponse }
+  | { ok: false; message?: string };
 
 function localhostUnreachableMessage(): string {
   // Both "server not running" and "CORS rejection" surface as a TypeError on
@@ -73,7 +76,7 @@ function localhostUnreachableMessage(): string {
 
 async function fetchProxiedModelsList(
   job: FetchJob,
-): Promise<ModelsListResponse | null> {
+): Promise<FetchModelsResult> {
   const body =
     job.kind === "builtin"
       ? { provider: job.provider, apiKey: getApiKey(job.provider) ?? "" }
@@ -87,13 +90,22 @@ async function fetchProxiedModelsList(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) return null;
-  return (await response.json()) as ModelsListResponse;
+  if (!response.ok) {
+    let message: string | undefined;
+    try {
+      const errBody = (await response.json()) as { error?: string };
+      if (typeof errBody?.error === "string") message = errBody.error;
+    } catch {
+      // ignore
+    }
+    return { ok: false, message };
+  }
+  return { ok: true, data: (await response.json()) as ModelsListResponse };
 }
 
 async function fetchLocalhostModelsList(
   profile: InferenceProviderProfile,
-): Promise<ModelsListResponse | null> {
+): Promise<FetchModelsResult> {
   const url = openAiCompatibleModelsListUrl(
     profile.kind as OpenAiCompatibleProvider,
     profile.baseUrl,
@@ -103,7 +115,9 @@ async function fetchLocalhostModelsList(
     headers.Authorization = `Bearer ${profile.apiKey}`;
   }
   const response = await fetch(url, { headers });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    return { ok: false, message: `${response.status} ${response.statusText}` };
+  }
   const data = (await response.json()) as {
     data?: unknown;
     models?: unknown;
@@ -118,7 +132,7 @@ async function fetchLocalhostModelsList(
     .filter((id: unknown): id is string => typeof id === "string")
     .sort((a, b) => a.localeCompare(b))
     .map((id) => ({ id, label: id }));
-  return { models };
+  return { ok: true, data: { models } };
 }
 
 export default function ModelSelector({
@@ -190,22 +204,25 @@ export default function ModelSelector({
             // OLLAMA_ORIGINS for Ollama).
             const useDirectLocalhost =
               job.kind === "profile" && isLocalhostUrl(job.profile.baseUrl);
-            const data = useDirectLocalhost
+            const result = useDirectLocalhost
               ? await fetchLocalhostModelsList(
                   (job as Extract<FetchJob, { kind: "profile" }>).profile,
                 )
               : await fetchProxiedModelsList(job);
-            if (!data) {
+            if (!result.ok) {
               return {
                 key: job.key,
                 result: {
                   status: "error" as const,
-                  message: useDirectLocalhost
-                    ? localhostUnreachableMessage()
-                    : undefined,
+                  message:
+                    result.message ??
+                    (useDirectLocalhost
+                      ? localhostUnreachableMessage()
+                      : undefined),
                 },
               };
             }
+            const data = result.data;
             const models = (data.models ?? []).map((m) => {
               if (job.kind === "builtin") {
                 return {
@@ -335,13 +352,20 @@ export default function ModelSelector({
           )}
 
           {state.status === "error" && (
-            <DropdownMenuItem
-              className="text-xs gap-2 cursor-pointer"
-              onClick={() => setRefetchTick((t) => t + 1)}
-            >
-              <RefreshCw className="size-3.5 opacity-80" />
-              Retry
-            </DropdownMenuItem>
+            <>
+              {state.message && (
+                <p className="px-2 pt-1 pb-0.5 text-[10px] leading-snug text-muted-foreground">
+                  {state.message}
+                </p>
+              )}
+              <DropdownMenuItem
+                className="text-xs gap-2 cursor-pointer"
+                onClick={() => setRefetchTick((t) => t + 1)}
+              >
+                <RefreshCw className="size-3.5 opacity-80" />
+                Retry
+              </DropdownMenuItem>
+            </>
           )}
 
           {state.status === "ok" && state.models.length === 0 && (

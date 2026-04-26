@@ -510,15 +510,30 @@ function LocalLlmDeployedSiteHelp() {
               2. Expose Ollama via a tunnel (full chat support)
             </p>
             <p>
-              Run a tunnel and paste the public https URL as the base URL above:
+              Run a tunnel and paste the public URL (with{" "}
+              <code className="font-mono">/v1</code> appended) as the base URL
+              above. Leave the API key blank.
             </p>
             <pre className="overflow-x-auto rounded bg-background/60 px-2 py-1 font-mono text-[10px]">
-              cloudflared tunnel --url http://localhost:11434
+              cloudflared tunnel --url http://localhost:11434 \{"\n"}
+              {"  "}--http-host-header localhost:11434
             </pre>
+            <p className="text-muted-foreground/70">
+              The <code className="font-mono">--http-host-header</code> flag is
+              required: Ollama rejects requests whose Host header isn&apos;t
+              <code className="font-mono"> localhost</code> (anti-DNS-rebinding
+              check). Without it you&apos;ll see a 403.
+            </p>
             <p>
-              Or with ngrok:{" "}
-              <code className="font-mono">ngrok http 11434</code>. Use the
-              resulting <code className="font-mono">https://…/v1</code> URL.
+              ngrok alternative:{" "}
+              <code className="font-mono">
+                ngrok http 11434 --host-header=localhost:11434
+              </code>
+              .
+            </p>
+            <p className="text-muted-foreground/70">
+              Cloudflare quick tunnels rotate the URL on every restart — re-run
+              the command and update the Base URL when that happens.
             </p>
           </div>
         </div>
