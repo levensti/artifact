@@ -219,7 +219,7 @@ function InferenceProfileCard({
     onUpdate({
       label: label.trim(),
       baseUrl: baseUrl.trim(),
-      apiKey: apiKey.trim(),
+      apiKey: isLocalhostUrl(baseUrl) ? "" : apiKey.trim(),
       supportsStreaming,
     });
     setSaved(true);
@@ -258,29 +258,29 @@ function InferenceProfileCard({
         {urlError && <p className="text-[10px] text-destructive">{urlError}</p>}
       </div>
 
-      <div className="relative">
-        <Key
-          size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
-        />
-        <Input
-          type={visible ? "text" : "password"}
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={
-            isLocalhostUrl(baseUrl) ? "API key (optional for local)" : "API key"
-          }
-          className="pl-7 pr-8 text-xs h-8"
-        />
-        <button
-          type="button"
-          onClick={() => setVisible(!visible)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-          aria-label={visible ? "Hide key" : "Show key"}
-        >
-          {visible ? <EyeOff size={12} /> : <Eye size={12} />}
-        </button>
-      </div>
+      {!isLocalhostUrl(baseUrl) && (
+        <div className="relative">
+          <Key
+            size={12}
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
+          />
+          <Input
+            type={visible ? "text" : "password"}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="API key"
+            className="pl-7 pr-8 text-xs h-8"
+          />
+          <button
+            type="button"
+            onClick={() => setVisible(!visible)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+            aria-label={visible ? "Hide key" : "Show key"}
+          >
+            {visible ? <EyeOff size={12} /> : <Eye size={12} />}
+          </button>
+        </div>
+      )}
 
       <label className="flex items-center gap-2 cursor-pointer pt-0.5">
         <input
