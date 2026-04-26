@@ -4,7 +4,6 @@
  *
  * Deliberately excluded from the bundle:
  *   • The PDF blob — recipient re-fetches from arxivId / sourceUrl.
- *   • The global merged graph — cross-review aggregate, not owned here.
  *   • Settings / API keys — privacy-critical.
  *   • Wiki pages — a separate bundle type.
  */
@@ -50,12 +49,11 @@ export async function buildReviewBundle(
     pdfPath: null,
   };
 
-  const [messages, annotations, prerequisites, graph, allDeepDives] =
+  const [messages, annotations, prerequisites, allDeepDives] =
     await Promise.all([
       store.getMessages(reviewId),
       store.getAnnotations(reviewId),
       store.getPrerequisites(reviewId),
-      store.getGraphData(reviewId),
       store.listDeepDives(),
     ]);
 
@@ -71,7 +69,6 @@ export async function buildReviewBundle(
       annotations,
       deepDives,
       prerequisites,
-      graph,
     },
   };
 }

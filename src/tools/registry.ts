@@ -8,7 +8,6 @@
 import type { ToolDefinition } from "./types";
 import { arxivSearchTool } from "./arxiv-search";
 import { webSearchTool } from "./web-search";
-import { saveToGraphTool } from "./save-to-graph";
 import { readSectionTool } from "./read-section";
 import { searchPaperTool } from "./search-paper";
 import { lookupCitationTool } from "./lookup-citation";
@@ -24,10 +23,9 @@ const ALL_TOOLS: ToolDefinition[] = [
   readSectionTool,
   searchPaperTool,
   lookupCitationTool,
-  // Discovery tools — find related papers and ground answers in web sources.
+  // Search tools — find related papers and ground answers in web sources.
   arxivSearchTool,
   webSearchTool,
-  saveToGraphTool,
 ];
 
 /* ------------------------------------------------------------------ */

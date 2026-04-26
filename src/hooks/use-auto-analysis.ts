@@ -54,9 +54,7 @@ export function useAnalysis({
     let cancelled = false;
     void loadExplore(reviewId).then((d) => {
       if (cancelled) return;
-      const hasData =
-        d.prerequisites !== null || d.graph !== null;
-      setStatus(hasData ? "done" : "idle");
+      setStatus(d.prerequisites !== null ? "done" : "idle");
     });
     return () => {
       cancelled = true;

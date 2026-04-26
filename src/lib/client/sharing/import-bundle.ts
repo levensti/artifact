@@ -20,7 +20,6 @@
 
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type { GraphData } from "@/lib/explore";
 import * as store from "@/lib/client/store";
 import {
   invalidateWikiCache,
@@ -49,7 +48,6 @@ export interface ReviewPreview {
     messages: number;
     annotations: number;
     deepDives: number;
-    graphNodes: number;
   };
   /** Informational note shown in the preview dialog. */
   notes: string[];
@@ -140,7 +138,6 @@ async function summarizeReview(bundle: ReviewBundle): Promise<ReviewPreview> {
       messages: bundle.data.messages.length,
       annotations: bundle.data.annotations.length,
       deepDives: bundle.data.deepDives.length,
-      graphNodes: bundle.data.graph?.nodes.length ?? 0,
     },
     notes,
   };
@@ -236,13 +233,6 @@ export async function commitReviewBundle(
     }),
   );
 
-  const rewrittenGraph: GraphData | null = bundle.data.graph
-    ? {
-        ...bundle.data.graph,
-        anchorReviewId: finalReviewId,
-      }
-    : null;
-
   await db.transaction(
     "rw",
     [
@@ -250,7 +240,6 @@ export async function commitReviewBundle(
       db.reviewMessages,
       db.reviewAnnotations,
       db.explorePrerequisites,
-      db.exploreGraphs,
       db.deepDives,
     ],
     async () => {
@@ -259,7 +248,6 @@ export async function commitReviewBundle(
       await db.reviewMessages.delete(finalReviewId);
       await db.reviewAnnotations.delete(finalReviewId);
       await db.explorePrerequisites.delete(finalReviewId);
-      await db.exploreGraphs.delete(finalReviewId);
       await db.deepDives.where("reviewId").equals(finalReviewId).delete();
 
       await db.reviews.put(rewrittenReview);
@@ -279,12 +267,6 @@ export async function commitReviewBundle(
         await db.explorePrerequisites.put({
           reviewId: finalReviewId,
           data: bundle.data.prerequisites,
-        });
-      }
-      if (rewrittenGraph) {
-        await db.exploreGraphs.put({
-          reviewId: finalReviewId,
-          graph: rewrittenGraph,
         });
       }
       for (const dd of rewrittenDeepDives) {

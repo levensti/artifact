@@ -15,10 +15,6 @@ import {
   type ChatAssistantBlock,
   type ChatMessage,
 } from "@/lib/reviews";
-import {
-  invalidateExploreCache,
-  saveRelatedPapersFromAssistant,
-} from "@/lib/client-data";
 import { scheduleJournalAfterChat } from "@/lib/wiki-journal-agent";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
@@ -450,30 +446,6 @@ export function useChat({
               : m,
           ),
         );
-
-        // Persist save_to_knowledge_graph tool calls into IndexedDB
-        // client-side (the server tool is now pure validation).
-        const graphSaves = steps.filter(
-          (s): s is Extract<AgentStep, { kind: "tool_call" }> =>
-            s.kind === "tool_call" &&
-            s.name === "save_to_knowledge_graph" &&
-            !!s.output,
-        );
-        if (graphSaves.length > 0 && arxivId) {
-          for (const step of graphSaves) {
-            try {
-              await saveRelatedPapersFromAssistant(
-                reviewId,
-                arxivId,
-                paperTitle,
-                step.input.papers,
-              );
-            } catch {
-              /* ignore — don't break chat on graph persist failure */
-            }
-          }
-          invalidateExploreCache(reviewId);
-        }
 
         // Ambient: schedule the journal agent to consider this turn.
         // Debounced inside the agent module so a burst of turns collapses
