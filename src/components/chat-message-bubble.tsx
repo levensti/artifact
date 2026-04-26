@@ -43,7 +43,7 @@ export function ArxivHitsBlock({
         arXiv ({results.length} results) &middot;{" "}
         <span className="text-foreground/80">{query}</span>
       </p>
-      <ul className="space-y-2 max-h-[240px] overflow-y-auto">
+      <ul className="space-y-2 max-h-60 overflow-y-auto">
         {results.slice(0, 12).map((r) => (
           <li
             key={r.arxivId}
@@ -77,7 +77,10 @@ export function hasInterleavedBlocks(blocks: ChatAssistantBlock[]): boolean {
   );
 }
 
-export function renderInterleavedBlocks(blocks: ChatAssistantBlock[], ctx: BlockCtx) {
+export function renderInterleavedBlocks(
+  blocks: ChatAssistantBlock[],
+  ctx: BlockCtx,
+) {
   return blocks.map((block, i) => {
     if (block.type === "text_segment") {
       return block.content ? (

@@ -56,11 +56,11 @@ export function ThinkingIndicator() {
       <span className="text-xs text-muted-foreground font-medium">
         Thinking…
       </span>
-      <span className="inline-flex gap-[3px]">
+      <span className="inline-flex gap-0.75">
         {[0, 150, 300].map((delay) => (
           <span
             key={delay}
-            className="size-[4px] rounded-full bg-primary/40 animate-bounce"
+            className="size-1 rounded-full bg-primary/40 animate-bounce"
             style={{ animationDelay: `${delay}ms`, animationDuration: "1.2s" }}
           />
         ))}
@@ -98,10 +98,7 @@ export function ToolCallStep({
   // web_search returned the "no Brave key" sentinel — show the inline
   // configure card instead of the default tool_result rendering. Done
   // before the rest of the rendering so the user sees one clean prompt.
-  if (
-    name === "web_search" &&
-    output?.trim() === BRAVE_KEY_REQUIRED_SENTINEL
-  ) {
+  if (name === "web_search" && output?.trim() === BRAVE_KEY_REQUIRED_SENTINEL) {
     return <BraveKeyPromptCard />;
   }
 
@@ -124,20 +121,22 @@ export function ToolCallStep({
           failed ? (
             <X className="size-3 text-destructive shrink-0" strokeWidth={2.5} />
           ) : (
-            <Check
-              className="size-3 text-success shrink-0"
-              strokeWidth={2.5}
-            />
+            <Check className="size-3 text-success shrink-0" strokeWidth={2.5} />
           )
         ) : (
           <Loader2 className="size-3 text-primary/60 animate-spin shrink-0" />
         )}
         <Icon className="size-3 text-muted-foreground/70 shrink-0" />
-        <span className={cn("font-medium", failed ? "text-destructive/90" : "text-foreground/80")}>
+        <span
+          className={cn(
+            "font-medium",
+            failed ? "text-destructive/90" : "text-foreground/80",
+          )}
+        >
           {toolLabel(name, done)}
         </span>
         {queryStr && (
-          <span className="text-muted-foreground/70 truncate max-w-[180px]">
+          <span className="text-muted-foreground/70 truncate max-w-45">
             &middot; {queryStr}
           </span>
         )}
@@ -152,7 +151,7 @@ export function ToolCallStep({
         )}
       </button>
       {open && output && (
-        <div className="border-t border-border/40 px-2.5 py-2 max-h-[180px] overflow-y-auto bg-muted/5">
+        <div className="border-t border-border/40 px-2.5 py-2 max-h-45 overflow-y-auto bg-muted/5">
           <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
             {output}
           </pre>

@@ -282,7 +282,7 @@ function JournalPageInner() {
           className="flex h-full flex-col overflow-y-auto"
           style={{ background: "var(--reader-mat)" }}
         >
-          <div className="mx-auto w-full max-w-[640px] px-6 pt-[min(14vh,120px)] pb-16">
+          <div className="mx-auto w-full max-w-160 px-6 pt-[min(14vh,120px)] pb-16">
             {/* Header */}
             <div className="mb-8">
               <h1 className="text-[22px] font-bold leading-tight tracking-[-0.03em] text-foreground">
@@ -297,12 +297,12 @@ function JournalPageInner() {
             {/* Ghost timeline — shows the shape of what will fill in */}
             <div className="relative">
               {/* Vertical timeline spine */}
-              <div className="absolute left-[15px] top-2 bottom-6 w-px bg-border/50" />
+              <div className="absolute left-3.75 top-2 bottom-6 w-px bg-border/50" />
 
               {/* Today — the active slot */}
               <div className="relative mb-6 pl-10">
-                <div className="absolute left-[11px] top-[7px] size-[9px] rounded-full border-2 border-primary/50 bg-background" />
-                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-primary/60">
+                <div className="absolute left-2.75 top-1.75 size-2.25 rounded-full border-2 border-primary/50 bg-background" />
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary/60">
                   Today &middot; {todayLabel}
                 </p>
                 <div className="mt-3 rounded-xl border border-dashed border-border bg-card/50 px-5 py-5">
@@ -317,7 +317,7 @@ function JournalPageInner() {
                     <button
                       type="button"
                       onClick={() => setImportOpen(true)}
-                      className="group inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground/80 transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:text-foreground"
+                      className="group inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground/80 transition-all duration-200 hover:border-primary/25 hover:shadow-(--shadow-primary) hover:text-foreground"
                     >
                       <Terminal className="size-3 text-primary/50 transition-colors group-hover:text-primary/70" />
                       Import from Claude Code
@@ -325,7 +325,7 @@ function JournalPageInner() {
                     <button
                       type="button"
                       onClick={() => setBundleImportOpen(true)}
-                      className="group inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground/80 transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:text-foreground"
+                      className="group inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground/80 transition-all duration-200 hover:border-primary/25 hover:shadow-(--shadow-primary) hover:text-foreground"
                     >
                       <FileDown className="size-3 text-primary/50 transition-colors group-hover:text-primary/70" />
                       Open a shared journal
@@ -336,22 +336,22 @@ function JournalPageInner() {
 
               {/* Ghost: upcoming week digest */}
               <div className="relative mb-6 pl-10 opacity-30">
-                <div className="absolute left-[12px] top-[7px] size-[7px] rounded-full bg-muted-foreground/30" />
-                <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground/60">
+                <div className="absolute left-3 top-1.75 size-1.75 rounded-full bg-muted-foreground/30" />
+                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
                   This week
                 </p>
-                <div className="mt-2.5 h-[52px] rounded-lg border border-dashed border-border/60 bg-card/30" />
+                <div className="mt-2.5 h-13 rounded-lg border border-dashed border-border/60 bg-card/30" />
               </div>
 
               {/* Ghost: previous days */}
               <div className="relative pl-10 opacity-15">
-                <div className="absolute left-[12px] top-[7px] size-[7px] rounded-full bg-muted-foreground/30" />
-                <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground/60">
+                <div className="absolute left-3 top-1.75 size-1.75 rounded-full bg-muted-foreground/30" />
+                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
                   Earlier
                 </p>
                 <div className="mt-2.5 grid grid-cols-2 gap-2">
-                  <div className="h-[44px] rounded-lg border border-dashed border-border/60 bg-card/30" />
-                  <div className="h-[44px] rounded-lg border border-dashed border-border/60 bg-card/30" />
+                  <div className="h-11 rounded-lg border border-dashed border-border/60 bg-card/30" />
+                  <div className="h-11 rounded-lg border border-dashed border-border/60 bg-card/30" />
                 </div>
               </div>
             </div>
@@ -386,7 +386,7 @@ function JournalPageInner() {
         className="flex h-full flex-col overflow-y-auto"
         style={{ background: "var(--reader-mat)" }}
       >
-        <div className="mx-auto w-full max-w-[1180px] px-5 pb-16 pt-5 sm:px-8">
+        <div className="mx-auto w-full max-w-295 px-5 pb-16 pt-5 sm:px-8">
           {/* Header + toolbar row */}
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <header>
@@ -409,7 +409,7 @@ function JournalPageInner() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search…"
-                  className="w-[140px] bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/45 focus:outline-none sm:w-[180px]"
+                  className="w-35 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/45 focus:outline-none sm:w-45"
                 />
               </div>
               {hasTodaySession ? (
@@ -430,7 +430,7 @@ function JournalPageInner() {
                   Import
                   <ChevronDown className="size-3 text-muted-foreground/50" />
                   {ccNewCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-primary px-1 text-[8px] font-semibold leading-none text-primary-foreground shadow-sm">
+                    <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[8px] font-semibold leading-none text-primary-foreground shadow-sm">
                       {ccNewCount > 99 ? "99+" : ccNewCount}
                     </span>
                   ) : null}
@@ -441,7 +441,7 @@ function JournalPageInner() {
                       className="fixed inset-0 z-40"
                       onClick={() => setImportMenuOpen(false)}
                     />
-                    <div className="absolute right-0 top-full z-50 mt-1 w-[200px] rounded-lg border border-border bg-card p-1 shadow-md animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="absolute right-0 top-full z-50 mt-1 w-50 rounded-lg border border-border bg-card p-1 shadow-md animate-in fade-in slide-in-from-top-1 duration-150">
                       <button
                         type="button"
                         onClick={() => {
