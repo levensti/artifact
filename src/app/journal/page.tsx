@@ -355,19 +355,6 @@ function JournalPageInner() {
                 </div>
               </div>
             </div>
-
-            {/* Feature pills */}
-            <div className="mt-10 flex items-center gap-3 px-1">
-              <div className="h-px flex-1 bg-border/40" />
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium tracking-[0.04em] text-muted-foreground/35">
-                <span>One page per day</span>
-                <span className="size-0.5 rounded-full bg-muted-foreground/25" />
-                <span>Weekly synthesis</span>
-                <span className="size-0.5 rounded-full bg-muted-foreground/25" />
-                <span>Runs in the background</span>
-              </div>
-              <div className="h-px flex-1 bg-border/40" />
-            </div>
           </div>
         </div>
 
@@ -412,9 +399,6 @@ function JournalPageInner() {
                   {journalEntries.length === 1 ? "entry" : "entries"}
                 </span>
               </div>
-              <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-                Daily recaps and weekly syntheses build here automatically.
-              </p>
             </header>
 
             <div className="flex items-center gap-2">
