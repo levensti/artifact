@@ -272,6 +272,71 @@
   border-bottom-color: color-mix(in srgb, var(--primary) 58%, transparent);
 }
 
+/* ── Citation chips: (§N), (Fig. N), (Ref. [key]) ──────────────── */
+.chat-markdown a.citation-chip {
+  display: inline-block;
+  font-size: 0.875em;
+  font-variant-numeric: tabular-nums;
+  padding: 0 0.3em;
+  margin: 0 0.1em;
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: color-mix(in srgb, var(--primary) 90%, var(--foreground));
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.chat-markdown a.citation-chip:hover {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+.chat-markdown a.citation-chip.citation-chip--unresolved {
+  cursor: default;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--muted-foreground) 6%, transparent);
+  border-color: color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+}
+.chat-markdown a.citation-chip.citation-chip--unresolved:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 10%, transparent);
+  border-color: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+}
+
+/* Brief highlight pulse on a PDF page when a citation chip is clicked.
+ * Always plays even if the page is already in view, so the click feels
+ * responsive even when no actual scroll happens. */
+@keyframes page-flash-anim {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent); }
+  20% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 38%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent); }
+}
+.page-flash {
+  animation: page-flash-anim 1s ease-out;
+  border-radius: 4px;
+}
+
+/* Inline "Open Settings" button rendered when the agent uses
+ * [Settings](app://settings) to deep-link the user to the config dialog. */
+.chat-markdown button.settings-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  font-size: 0.875em;
+  padding: 0.1em 0.55em;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: color-mix(in srgb, var(--primary) 90%, var(--foreground));
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.chat-markdown button.settings-link:hover {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+}
+
 /* ── Wiki page prose — Notion-like roomy reading layout ────────── */
 .prose-wiki .chat-markdown {
   font-size: 1.0625rem;

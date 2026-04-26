@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import ModelSelector from "./model-selector";
 import { useSettingsOpener } from "./settings-opener-context";
+import { BraveKeyResumeProvider } from "./brave-key-resume-context";
 import ChatEmptyState from "./chat-empty-state";
 import { ChatMessageBubble, type BlockCtx } from "./chat-message-bubble";
 import { useChat } from "@/hooks/use-chat";
@@ -335,6 +336,9 @@ export default function ChatPanel({
   /* ---------------------------------------------------------------- */
 
   return (
+    <BraveKeyResumeProvider
+      resumeAfterBraveDecision={chat.resumeAfterBraveDecision}
+    >
     <div className="flex flex-col h-full min-h-0 bg-background">
       {!hideHeader && (
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-linear-to-r from-background to-primary/3 px-4">
@@ -461,5 +465,6 @@ export default function ChatPanel({
         onOpenSettings={openSettings}
       />
     </div>
+    </BraveKeyResumeProvider>
   );
 }

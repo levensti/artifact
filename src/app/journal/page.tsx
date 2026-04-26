@@ -2,7 +2,13 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { AlertTriangle, ChevronDown, FileDown, Search, Terminal } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  FileDown,
+  Search,
+  Terminal,
+} from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import JournalCard, { type JournalEntry } from "@/components/journal-card";
 import JournalEntryModal from "@/components/journal-entry-modal";
@@ -161,7 +167,9 @@ function JournalPageInner() {
 
   const openPage = useCallback(
     (slug: string) => {
-      router.push(`/journal?page=${encodeURIComponent(slug)}`, { scroll: false });
+      router.push(`/journal?page=${encodeURIComponent(slug)}`, {
+        scroll: false,
+      });
     },
     [router],
   );
@@ -387,7 +395,10 @@ function JournalPageInner() {
 
   return (
     <DashboardLayout>
-      <div className="flex h-full flex-col overflow-y-auto" style={{ background: 'var(--reader-mat)' }}>
+      <div
+        className="flex h-full flex-col overflow-y-auto"
+        style={{ background: "var(--reader-mat)" }}
+      >
         <div className="mx-auto w-full max-w-[1180px] px-5 pb-16 pt-5 sm:px-8">
           {/* Header + toolbar row */}
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -442,33 +453,46 @@ function JournalPageInner() {
                 </button>
                 {importMenuOpen ? (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setImportMenuOpen(false)} />
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setImportMenuOpen(false)}
+                    />
                     <div className="absolute right-0 top-full z-50 mt-1 w-[200px] rounded-lg border border-border bg-card p-1 shadow-md animate-in fade-in slide-in-from-top-1 duration-150">
                       <button
                         type="button"
-                        onClick={() => { setImportMenuOpen(false); setImportOpen(true); }}
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          setImportOpen(true);
+                        }}
                         className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
                       >
                         <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
                         <div>
                           <p className="font-medium">From Claude Code</p>
-                          <p className="text-[10px] text-muted-foreground/60">Import coding sessions</p>
+                          <p className="text-[10px] text-muted-foreground/60">
+                            Import recent conversations
+                          </p>
                         </div>
                         {ccNewCount > 0 ? (
-                          <span className="ml-auto shrink-0 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
+                          <span className="ml-auto shrink-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
                             {ccNewCount > 99 ? "99+" : ccNewCount}
                           </span>
                         ) : null}
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setImportMenuOpen(false); setBundleImportOpen(true); }}
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          setBundleImportOpen(true);
+                        }}
                         className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
                       >
                         <FileDown className="size-3.5 shrink-0 text-muted-foreground" />
                         <div>
                           <p className="font-medium">From shared file</p>
-                          <p className="text-[10px] text-muted-foreground/60">Open a journal bundle</p>
+                          <p className="text-[10px] text-muted-foreground/60">
+                            Open a journal bundle
+                          </p>
                         </div>
                       </button>
                     </div>

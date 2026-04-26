@@ -13,7 +13,7 @@ describe("tool registry", () => {
     const names = tools.map((t) => t.name);
     expect(names).toContain("arxiv_search");
     expect(names).toContain("web_search");
-    expect(names).toContain("rank_results");
+    expect(names).toContain("save_to_knowledge_graph");
   });
 
   it("finds a tool by name", () => {

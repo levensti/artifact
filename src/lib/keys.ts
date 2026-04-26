@@ -3,17 +3,21 @@ import { isInferenceProviderType } from "@/lib/models";
 import { hasInferenceCredentials } from "@/lib/ai-providers";
 import {
   clearApiKey as clearApiKeyRemote,
+  clearBraveSearchApiKey as clearBraveSearchApiKeyRemote,
   getApiKey as getApiKeyCached,
+  getBraveSearchApiKey as getBraveSearchApiKeyCached,
   getInferenceProfile as getInferenceProfileCached,
   getInferenceProfiles as getInferenceProfilesCached,
   getSavedSelectedModel as getSavedSelectedModelCached,
   hasAnySavedApiKey as hasAnySavedApiKeyCached,
+  hasBraveSearchApiKey as hasBraveSearchApiKeyCached,
   isBuiltinProviderReady as isBuiltinProviderReadyCached,
   isModelReady as isModelReadyCached,
   isProviderReady as isProviderReadyCached,
   saveInferenceProfiles as saveInferenceProfilesRemote,
   saveSelectedModel as saveSelectedModelRemote,
   setApiKey as setApiKeyRemote,
+  setBraveSearchApiKey as setBraveSearchApiKeyRemote,
 } from "@/lib/client-data";
 
 export { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
@@ -109,6 +113,22 @@ export async function clearApiKey(
   provider: import("./models").Provider,
 ): Promise<void> {
   return clearApiKeyRemote(provider);
+}
+
+export function getBraveSearchApiKey(): string | null {
+  return getBraveSearchApiKeyCached();
+}
+
+export function hasBraveSearchApiKey(): boolean {
+  return hasBraveSearchApiKeyCached();
+}
+
+export async function setBraveSearchApiKey(key: string): Promise<void> {
+  return setBraveSearchApiKeyRemote(key);
+}
+
+export async function clearBraveSearchApiKey(): Promise<void> {
+  return clearBraveSearchApiKeyRemote();
 }
 
 export async function saveSelectedModel(

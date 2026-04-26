@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isLocalhostUrl } from "@/lib/ai-providers";
+import { BraveSearchKeyRow } from "@/components/brave-search-key-row";
 import {
   getApiKey,
   setApiKey,
@@ -592,6 +593,12 @@ export default function SettingsDialog({
                 />
               ),
             )}
+            <div className="pt-2">
+              <h3 className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                Search & external tools
+              </h3>
+              <BraveSearchKeyRow />
+            </div>
           </div>
         </div>
       </DialogContent>

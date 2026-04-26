@@ -13,6 +13,7 @@ import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2, MessageSquare, StickyNote, X } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel from "@/components/right-panel";
+import { CitationContextProvider } from "@/components/citation-context";
 import NotesRail from "@/components/notes-rail";
 import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
@@ -448,19 +449,21 @@ export default function ReviewPage() {
               className="flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background"
               style={{ width: `${panelWidth}px` }}
             >
-              <RightPanel
-                reviewId={review.id}
-                arxivId={review.arxivId ?? ""}
-                paperTitle={review.title}
-                paperContext={paperText}
-                annotations={annotations}
-                chatThreadAnnotationId={effectiveChatThreadAnnotationId}
-                onChatThreadChange={setChatThreadAnnotationId}
-                onAnnotationsPersist={refreshAnnotations}
-                selectedModel={selectedModel}
-                onModelChange={handleModelChange}
-                sourceUrl={review.sourceUrl}
-              />
+              <CitationContextProvider paperText={paperText}>
+                <RightPanel
+                  reviewId={review.id}
+                  arxivId={review.arxivId ?? ""}
+                  paperTitle={review.title}
+                  paperContext={paperText}
+                  annotations={annotations}
+                  chatThreadAnnotationId={effectiveChatThreadAnnotationId}
+                  onChatThreadChange={setChatThreadAnnotationId}
+                  onAnnotationsPersist={refreshAnnotations}
+                  selectedModel={selectedModel}
+                  onModelChange={handleModelChange}
+                  sourceUrl={review.sourceUrl}
+                />
+              </CitationContextProvider>
             </div>
           </>
         )}
@@ -537,19 +540,21 @@ export default function ReviewPage() {
             >
               <X size={16} />
             </button>
-            <RightPanel
-              reviewId={review.id}
-              arxivId={review.arxivId ?? ""}
-              paperTitle={review.title}
-              paperContext={paperText}
-              annotations={annotations}
-              chatThreadAnnotationId={effectiveChatThreadAnnotationId}
-              onChatThreadChange={setChatThreadAnnotationId}
-              onAnnotationsPersist={refreshAnnotations}
-              selectedModel={selectedModel}
-              onModelChange={handleModelChange}
-              sourceUrl={review.sourceUrl}
-            />
+            <CitationContextProvider paperText={paperText}>
+              <RightPanel
+                reviewId={review.id}
+                arxivId={review.arxivId ?? ""}
+                paperTitle={review.title}
+                paperContext={paperText}
+                annotations={annotations}
+                chatThreadAnnotationId={effectiveChatThreadAnnotationId}
+                onChatThreadChange={setChatThreadAnnotationId}
+                onAnnotationsPersist={refreshAnnotations}
+                selectedModel={selectedModel}
+                onModelChange={handleModelChange}
+                sourceUrl={review.sourceUrl}
+              />
+            </CitationContextProvider>
           </div>
         )}
       </div>

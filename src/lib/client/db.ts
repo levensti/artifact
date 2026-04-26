@@ -8,7 +8,7 @@
 
 import Dexie, { type Table } from "dexie";
 import type { Annotation } from "@/lib/annotations";
-import type { ChatMessage, PaperReview } from "@/lib/review-types";
+import type { ChatMessage, ParsedPaper, PaperReview } from "@/lib/review-types";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type {
   GlobalGraphData,
@@ -87,8 +87,20 @@ export interface PdfBlobRow {
 }
 
 /**
- * Dexie schema — v1. Bump the version number and add a `.upgrade()` on
- * the next store call when tables change.
+ * Cached structured representation of a paper, keyed by the sha256 hash of
+ * the extracted text. Hash-keyed (not reviewId-keyed) so the same paper
+ * opened from a different review hits the same cache.
+ */
+export interface ParsedPaperRow {
+  hash: string;
+  parsed: ParsedPaper;
+}
+
+/**
+ * Dexie schema. Bump the version number and add the new store on the next
+ * `.version().stores()` call when tables change. Dexie creates new stores
+ * automatically on upgrade; only structural changes to existing stores
+ * need an explicit `.upgrade()` callback.
  */
 export class ArtifactDB extends Dexie {
   reviews!: Table<ReviewRow, string>;
@@ -104,6 +116,7 @@ export class ArtifactDB extends Dexie {
   wikiRevisions!: Table<WikiRevisionRow, number>;
   settings!: Table<SettingsRow, string>;
   pdfBlobs!: Table<PdfBlobRow, string>;
+  parsedPapers!: Table<ParsedPaperRow, string>;
 
   constructor() {
     super("artifact");
@@ -121,6 +134,9 @@ export class ArtifactDB extends Dexie {
       wikiRevisions: "++id, pageId, slug, savedAt",
       settings: "key",
       pdfBlobs: "id",
+    });
+    this.version(2).stores({
+      parsedPapers: "&hash",
     });
   }
 }

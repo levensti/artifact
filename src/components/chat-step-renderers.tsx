@@ -2,18 +2,22 @@
 
 import { useState } from "react";
 import {
+  BookOpen,
   BrainCircuit,
   Check,
   ChevronDown,
   ChevronRight,
   Loader2,
   Network,
+  Quote,
   Search,
   Wrench,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MarkdownMessage from "./markdown-message";
+import BraveKeyPromptCard from "./brave-key-prompt-card";
+import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import type { AgentStep } from "@/hooks/use-chat";
 
 /* ------------------------------------------------------------------ */
@@ -23,11 +27,13 @@ import type { AgentStep } from "@/hooks/use-chat";
 const TOOL_LABELS: Record<string, [string, string]> = {
   arxiv_search: ["Searching arXiv", "Searched arXiv"],
   web_search: ["Searching the web", "Searched the web"],
-  rank_results: ["Ranking results", "Ranked results"],
   save_to_knowledge_graph: [
     "Saving to knowledge graph",
     "Saved to knowledge graph",
   ],
+  read_section: ["Reading section", "Read section"],
+  search_paper: ["Searching the paper", "Searched the paper"],
+  lookup_citation: ["Looking up citation", "Looked up citation"],
 };
 
 function toolLabel(name: string, done: boolean): string {
@@ -39,8 +45,10 @@ function toolLabel(name: string, done: boolean): string {
 const TOOL_ICONS: Record<string, typeof Search> = {
   arxiv_search: Search,
   web_search: Search,
-  rank_results: Wrench,
   save_to_knowledge_graph: Network,
+  read_section: BookOpen,
+  search_paper: Search,
+  lookup_citation: Quote,
 };
 
 /* ------------------------------------------------------------------ */
@@ -92,6 +100,16 @@ export function ToolCallStep({
       normalizedOutput.startsWith("paper search failed:") ||
       normalizedOutput.startsWith("request failed:"));
   const queryStr = "query" in input && input.query ? String(input.query) : null;
+
+  // web_search returned the "no Brave key" sentinel — show the inline
+  // configure card instead of the default tool_result rendering. Done
+  // before the rest of the rendering so the user sees one clean prompt.
+  if (
+    name === "web_search" &&
+    output?.trim() === BRAVE_KEY_REQUIRED_SENTINEL
+  ) {
+    return <BraveKeyPromptCard />;
+  }
 
   return (
     <div

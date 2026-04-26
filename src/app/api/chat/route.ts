@@ -2,8 +2,8 @@
  * Agentic chat endpoint.
  *
  * Implements a server-side ReAct loop: the LLM can call tools (arXiv search,
- * web search, ranking, etc.) as many times as needed, and the loop feeds
- * results back until the LLM produces a final text response.
+ * web search, etc.) as many times as needed, and the loop feeds results
+ * back until the LLM produces a final text response.
  *
  * Streams NDJSON events to the client:
  *   {"type":"text_delta","text":"..."}
@@ -29,6 +29,7 @@ import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import { runAnthropicAgentLoop } from "./anthropic-handler";
 import { runOpenAIAgentLoop } from "./openai-handler";
+import type { ParsedPaper } from "@/lib/review-types";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -44,48 +45,60 @@ interface ChatRequest {
   apiBaseUrl?: string;
   /** Whether the OpenAI-compatible endpoint supports streaming. Default: true. */
   supportsStreaming?: boolean;
+  /**
+   * Full paper text. For short papers (<~30k tokens) the browser sends this
+   * and the agent works directly off it. For long papers, the browser sends
+   * `parsedPaper` instead and the agent fetches sections on demand via tools.
+   */
   paperContext?: string;
+  /**
+   * Structured paper representation (L1 summary, sections, references). Sent
+   * for long papers in place of `paperContext`. When present, the chat handler
+   * puts only the summary + table of contents in the system prompt and
+   * exposes `read_section` / `search_paper` / `lookup_citation` for detail.
+   */
+  parsedPaper?: ParsedPaper;
   paperTitle?: string;
   arxivId?: string;
   reviewId?: string;
   /** Set when the review is for an arbitrary web page rather than a paper/PDF. */
   sourceUrl?: string;
+  /**
+   * User-provided Brave Search API key. When absent the `web_search` tool
+   * returns a sentinel that the chat UI surfaces as a configure card.
+   */
+  braveSearchApiKey?: string;
+  /**
+   * Set when the user has explicitly dismissed the "configure Brave key"
+   * card and wants the agent to proceed without web search. The chat
+   * handler unregisters `web_search` for the turn so the agent doesn't
+   * attempt it again.
+   */
+  skipWebSearch?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
 /*  System prompt                                                      */
 /* ------------------------------------------------------------------ */
 
-const WIKI_FIRST_BLOCK = `You have a persistent, personal knowledge base — an LLM-maintained wiki that compounds everything the user has read and explored. Two tools give you access to it:
-
-- \`query_knowledge_base\`: search or fetch pages (by query or slug). Pages include papers, concepts, methods, and entities. USE THIS BEFORE ANSWERING any conceptual or technical question — the user has likely explored related material already, and citing their own notes is far more useful than re-deriving from training data.
-- \`update_knowledge_base\`: create or extend a page when you've synthesized something worth keeping (a clear explanation, a clarifying connection, a novel insight). Prefer extending an existing page over creating a near-duplicate.
-
-How to use the wiki well:
-1. When the user asks about a concept, method, or entity — call \`query_knowledge_base\` first, even if you "know" the answer. Ground your reply in what's there.
-2. Cite pages inline as \`[[slug]]\` — the UI renders these as clickable wiki links with hover previews. Example: "This builds on the idea of [[attention-mechanism]] from Vaswani et al."
-3. When you introduce a cross-reference \`[[slug]]\`, only use slugs that actually exist (confirmed via query_knowledge_base) OR slugs you're about to create with update_knowledge_base in the same turn.
-4. After explaining something substantive that isn't yet captured, save it with \`update_knowledge_base\`. Keep pages tight (150-400 words), use markdown, and cross-reference related pages.
-5. Never dump the wiki's raw contents into a reply — synthesize and cite.`;
-
 const PAPER_SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a paper reading tool. You have deep expertise across all academic fields — machine learning, mathematics, physics, biology, and beyond.
 
 Your mission: help the user deeply understand the paper they are reading and the ideas surrounding it. You can explain, search, discover, and connect ideas.
 
-${WIKI_FIRST_BLOCK}
+How the paper appears in your context:
+- For short papers, the <paper> block contains the full text. Read it directly.
+- For long papers, the <paper> block contains only the title, abstract, an L1 summary, and a numbered table of contents. To read specific content, use \`read_section\` (by name or index), \`search_paper\` (to find passages by query), or \`lookup_citation\` (to resolve a reference). Don't pretend to read what you haven't fetched — if the summary doesn't cover a question, fetch the relevant section.
 
 Capabilities:
-- You have the full text of the paper in context (when available)
-- You can search arXiv to find related papers, prerequisites, and seminal references
-- You can search the web to ground your answers with real sources and documentation
-- You can rank and filter search results to find the most relevant ones
-- You can save related papers to the knowledge graph so they persist in the Discovery tab for later exploration
+- \`read_section\`, \`search_paper\`, \`lookup_citation\` for paper-internal content (long-paper mode)
+- \`arxiv_search\` to find related papers, prerequisites, and seminal references
+- \`web_search\` to ground your answers with real sources and documentation. If web_search returns "BRAVE_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure or repeat the request; just continue your answer with what's available from the paper, training data, and arXiv.
+- \`save_to_knowledge_graph\` to persist related papers to the user's Discovery tab
 
 Guidelines:
-- Cite specific sections, equations, figures, or theorems from the paper when relevant
+- Cite specific sections, equations, figures, or theorems from the paper when relevant. Reference sections as "(§N)" so the UI can navigate to them.
 - Use LaTeX notation for math (wrapped in $ or $$)
-- When asked about prerequisites, related work, or the research landscape, proactively use your search tools to find real papers — don't just rely on your training data
-- When explaining highly technical concepts, consider searching for authoritative explanations to ground your answer
+- When asked about prerequisites, related work, or the research landscape, proactively use \`arxiv_search\` — don't just rely on your training data
 - Be precise and dense with insight — researchers value depth over verbosity
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
 - When you find related papers (especially for "related work" or "prerequisite" queries), use save_to_knowledge_graph to persist them so the user can explore the relationship map in the Discovery tab
@@ -95,14 +108,11 @@ const WEB_SYSTEM_PROMPT = `You are a superintelligent research assistant embedde
 
 Your mission: help the user deeply understand the web page they are reading, explore related topics, and connect ideas.
 
-${WIKI_FIRST_BLOCK}
-
 Capabilities:
 - You have the full extracted text of the web page in context (when available)
 - You can search arXiv to find academic papers related to the content
-- You can search the web to find additional sources, context, and related material
-- You can rank and filter search results to find the most relevant ones
-- You can save related papers to the knowledge graph so they persist in the Discovery tab for later exploration
+- You can search the web to find additional sources, context, and related material. If web_search returns "BRAVE_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure; just continue with what you have.
+- You can save related papers to the user's knowledge graph using \`save_to_knowledge_graph\`; these surface in the Discovery tab for later exploration
 
 Guidelines:
 - Reference specific passages, claims, or sections from the page when relevant
@@ -114,7 +124,7 @@ Guidelines:
 - When you find related papers, use save_to_knowledge_graph to persist them so the user can explore the relationship map in the Discovery tab
 - Use tools when they add value, but don't force tool use for simple questions you can answer directly from the page context`;
 
-function getSystemPrompt(sourceUrl?: string): string {
+function getSystemPrompt(sourceUrl: string | undefined): string {
   return sourceUrl ? WEB_SYSTEM_PROMPT : PAPER_SYSTEM_PROMPT;
 }
 
@@ -138,10 +148,13 @@ export async function POST(req: NextRequest) {
     apiBaseUrl,
     supportsStreaming,
     paperContext,
+    parsedPaper,
     paperTitle,
     arxivId,
     reviewId,
     sourceUrl,
+    braveSearchApiKey,
+    skipWebSearch,
   } = body;
 
   if (!isProvider(provider)) {
@@ -173,8 +186,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const tools = getAllTools();
-  const toolContext: ToolContext = { paperContext, paperTitle, arxivId, reviewId };
+  const trimmedBraveKey =
+    typeof braveSearchApiKey === "string" ? braveSearchApiKey.trim() : "";
+  // Always register all tools — web_search included. When the user has no
+  // Brave key, the tool returns a sentinel that the chat UI surfaces as an
+  // inline "Add Brave Search API key" card rather than the agent verbalizing
+  // the failure. The exception: if the user dismissed the card, we drop
+  // web_search so the agent can't even try.
+  const tools = skipWebSearch
+    ? getAllTools().filter((t) => t.name !== "web_search")
+    : getAllTools();
+  const toolContext: ToolContext = {
+    paperContext,
+    parsedPaper,
+    paperTitle,
+    arxivId,
+    reviewId,
+    braveSearchApiKey: trimmedBraveKey || undefined,
+  };
   const systemPrompt = getSystemPrompt(sourceUrl);
   const encoder = new TextEncoder();
 
@@ -196,6 +225,7 @@ export async function POST(req: NextRequest) {
             effectiveApiKey,
             systemPrompt,
             paperContext,
+            parsedPaper,
             tools,
             toolContext,
             emit,
@@ -207,6 +237,7 @@ export async function POST(req: NextRequest) {
             effectiveApiKey,
             systemPrompt,
             paperContext,
+            parsedPaper,
             provider as OpenAiCompatibleProvider,
             tools,
             toolContext,

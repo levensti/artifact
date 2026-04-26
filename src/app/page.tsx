@@ -68,7 +68,7 @@ export default function Home() {
               </div>
             </button>
 
-            {/* Lane 2: Import coding sessions */}
+            {/* Lane 2: Import from Claude Code session */}
             <button
               type="button"
               onClick={() => router.push("/journal")}
