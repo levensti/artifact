@@ -345,7 +345,12 @@ export default function Sidebar({
                           onKeyDown={(e) => e.stopPropagation()}
                           title="Share this review"
                           aria-label={`Share ${review.title}`}
-                          className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/80 opacity-0 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60 group-hover:opacity-100 group-focus-within:opacity-100"
+                          className={cn(
+                            "mt-px inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60",
+                            isActive
+                              ? "opacity-90"
+                              : "opacity-40 group-hover:opacity-90 group-focus-within:opacity-90",
+                          )}
                         >
                           <Share2 className="size-3" strokeWidth={2} />
                         </button>
