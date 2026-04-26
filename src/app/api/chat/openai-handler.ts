@@ -6,6 +6,7 @@
 import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
+import type { ParsedPaper } from "@/lib/review-types";
 import {
   openAiCompatibleChatCompletionsUrl,
   providerApiErrorLabel,
@@ -16,7 +17,9 @@ import {
   getToolByName,
   toOpenAITools,
 } from "@/tools/registry";
+import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import type { ToolContext } from "@/tools/types";
+import { buildPaperBlock } from "./paper-block";
 
 const MAX_TOOL_ROUNDS = 8;
 
@@ -44,8 +47,16 @@ interface OpenAIStreamChoice {
   delta?: OpenAIStreamDelta;
 }
 
+interface OpenAIUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
+
 interface OpenAIStreamEvent {
   choices?: OpenAIStreamChoice[];
+  usage?: OpenAIUsage;
 }
 
 export interface OpenAIHandlerOptions {
@@ -61,6 +72,7 @@ export async function runOpenAIAgentLoop(
   apiKey: string,
   systemPrompt: string,
   paperContext: string | undefined,
+  parsedPaper: ParsedPaper | undefined,
   provider: OpenAiCompatibleProvider,
   tools: ReturnType<typeof getAllTools>,
   toolContext: ToolContext,
@@ -68,8 +80,9 @@ export async function runOpenAIAgentLoop(
   options?: OpenAIHandlerOptions,
 ) {
   const useStreaming = options?.supportsStreaming !== false;
-  const systemContent = paperContext
-    ? `${systemPrompt}\n\n<paper>\n${paperContext}\n</paper>`
+  const paperBlock = buildPaperBlock(paperContext, parsedPaper);
+  const systemContent = paperBlock
+    ? `${systemPrompt}\n\n${paperBlock}`
     : systemPrompt;
 
   const openaiTools = toOpenAITools(tools);
@@ -88,15 +101,25 @@ export async function runOpenAIAgentLoop(
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     emit({ type: "turn_start" });
 
+    const requestBody: Record<string, unknown> = {
+      model,
+      messages: apiMessages,
+      tools: openaiTools,
+      stream: useStreaming,
+      max_tokens: 16384,
+    };
+    // OpenAI/xAI: opt into usage in the final stream chunk so we can report
+    // cached_tokens uniformly. Local OpenAI-compatible servers that don't
+    // recognize this option typically ignore it; if any reject it, we'd need
+    // a capability flag, but at present this is universally accepted.
+    if (useStreaming) {
+      requestBody.stream_options = { include_usage: true };
+    }
+
     const response = await fetch(baseUrl, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        model,
-        messages: apiMessages,
-        tools: openaiTools,
-        stream: useStreaming,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -108,6 +131,7 @@ export async function runOpenAIAgentLoop(
     let textContent: string;
     let toolCalls: OpenAIToolCall[];
     let finishReason: string;
+    let usage: OpenAIUsage | undefined;
 
     if (!useStreaming) {
       const data = (await response.json()) as {
@@ -115,11 +139,13 @@ export async function runOpenAIAgentLoop(
           finish_reason?: string;
           message?: { content?: string; tool_calls?: OpenAIToolCall[] };
         }>;
+        usage?: OpenAIUsage;
       };
       const choice = data.choices?.[0];
       textContent = choice?.message?.content ?? "";
       toolCalls = choice?.message?.tool_calls ?? [];
       finishReason = choice?.finish_reason ?? "stop";
+      usage = data.usage;
 
       if (textContent) {
         emit({ type: "text_delta", text: textContent });
@@ -133,6 +159,22 @@ export async function runOpenAIAgentLoop(
       textContent = parsed.textContent;
       toolCalls = parsed.toolCalls;
       finishReason = parsed.finishReason;
+      usage = parsed.usage;
+    }
+
+    if (usage) {
+      const promptTokens = usage.prompt_tokens ?? 0;
+      const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
+      emit({
+        type: "cache_stats",
+        // OpenAI reports the *total* prompt_tokens including the cached
+        // portion. Surface non-cached input separately so the event has the
+        // same meaning as for Anthropic.
+        inputTokens: Math.max(0, promptTokens - cached),
+        cacheReadTokens: cached,
+        cacheCreationTokens: 0, // OpenAI auto-caches; no creation accounting.
+        outputTokens: usage.completion_tokens ?? 0,
+      });
     }
 
     if (finishReason !== "tool_calls" || toolCalls.length === 0) break;
@@ -147,6 +189,7 @@ export async function runOpenAIAgentLoop(
       })),
     });
 
+    let braveKeyRequired = false;
     for (const tc of toolCalls) {
       let parsedInput: Record<string, unknown> = {};
       try {
@@ -165,6 +208,8 @@ export async function runOpenAIAgentLoop(
         output = `Tool error: ${err instanceof Error ? err.message : "unknown error"}`;
       }
 
+      if (output === BRAVE_KEY_REQUIRED_SENTINEL) braveKeyRequired = true;
+
       emit({ type: "tool_result", id: tc.id, name: tc.function.name, output });
       apiMessages.push({
         role: "tool",
@@ -172,6 +217,11 @@ export async function runOpenAIAgentLoop(
         content: output,
       });
     }
+
+    // If web_search returned the "no Brave key" sentinel, stop the loop
+    // immediately. The chat UI surfaces a configure card and the agent
+    // resumes (or continues without web search) on user choice.
+    if (braveKeyRequired) break;
   }
 }
 
@@ -182,12 +232,24 @@ export async function runOpenAIAgentLoop(
 async function parseOpenAISSE(
   body: ReadableStream<Uint8Array>,
   emit: (e: StreamEvent) => void,
-): Promise<{ textContent: string; toolCalls: OpenAIToolCall[]; finishReason: string }> {
+): Promise<{
+  textContent: string;
+  toolCalls: OpenAIToolCall[];
+  finishReason: string;
+  usage?: OpenAIUsage;
+}> {
   let textContent = "";
   const toolCallMap = new Map<number, OpenAIToolCall>();
   let finishReason = "stop";
+  let usage: OpenAIUsage | undefined;
 
   await readSSEStream<OpenAIStreamEvent>(body, (event) => {
+    // Final chunk: choices is empty array, usage is populated. Capture it
+    // and bail before scanning choices below.
+    if (event.usage) {
+      usage = event.usage;
+    }
+
     const choice = event.choices?.[0];
     if (!choice) return;
 
@@ -222,5 +284,5 @@ async function parseOpenAISSE(
   });
 
   const toolCalls = Array.from(toolCallMap.values()).sort((a, b) => a.index - b.index);
-  return { textContent, toolCalls, finishReason };
+  return { textContent, toolCalls, finishReason, usage };
 }

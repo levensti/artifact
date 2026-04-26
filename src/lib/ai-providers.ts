@@ -23,6 +23,27 @@ export function isAnthropicMessagesProvider(
   return value === "anthropic";
 }
 
+/**
+ * Provider capability flags. These let handlers and call sites adapt to the
+ * concrete provider without knowing which one it is. Add fields here as new
+ * cross-provider features are added; keep the surface minimal.
+ */
+export interface ProviderCapabilities {
+  /**
+   * Provider exposes explicit prompt-cache breakpoints (e.g. Anthropic's
+   * `cache_control` blocks). When false, providers either auto-cache stable
+   * prefixes (OpenAI, xAI) or don't cache at all (some local servers); both
+   * cases require no client-side caching markers.
+   */
+  explicitPromptCache: boolean;
+}
+
+export function getProviderCapabilities(provider: Provider): ProviderCapabilities {
+  return {
+    explicitPromptCache: provider === "anthropic",
+  };
+}
+
 /** Human-readable name for API error messages and logs. */
 export function providerApiErrorLabel(provider: Provider): string {
   switch (provider) {

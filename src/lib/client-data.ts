@@ -48,12 +48,14 @@ type SettingsCache = {
   keys: Partial<Record<Provider, string>>;
   inferenceProfiles: InferenceProviderProfile[];
   selectedModel: Model | null;
+  braveSearchApiKey: string | null;
 };
 
 let settingsCache: SettingsCache = {
   keys: {},
   inferenceProfiles: [],
   selectedModel: null,
+  braveSearchApiKey: null,
 };
 let globalGraphCache: GlobalGraphData | null = null;
 let deepDivesCache: DeepDiveSession[] = [];
@@ -749,6 +751,26 @@ export async function saveInferenceProfiles(
 
 export async function clearApiKey(provider: Provider): Promise<void> {
   await store.patchSettings({ keys: { [provider]: null } });
+  await reloadSettingsCache();
+}
+
+/* ── Tool keys (currently just Brave Search) ── */
+
+export function getBraveSearchApiKey(): string | null {
+  return settingsCache.braveSearchApiKey;
+}
+
+export function hasBraveSearchApiKey(): boolean {
+  return !!settingsCache.braveSearchApiKey;
+}
+
+export async function setBraveSearchApiKey(key: string): Promise<void> {
+  await store.patchSettings({ braveSearchApiKey: key });
+  await reloadSettingsCache();
+}
+
+export async function clearBraveSearchApiKey(): Promise<void> {
+  await store.patchSettings({ braveSearchApiKey: null });
   await reloadSettingsCache();
 }
 

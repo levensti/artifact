@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Model } from "@/lib/models";
 import {
+  getBraveSearchApiKey,
   hasAnySavedApiKey,
   isModelReady,
   KEYS_UPDATED_EVENT,
@@ -22,6 +23,11 @@ import { scheduleJournalAfterChat } from "@/lib/wiki-journal-agent";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
+import {
+  isLongPaper,
+  parseAndCachePaper,
+} from "@/lib/client/parsed-papers";
+import type { ParsedPaper } from "@/lib/review-types";
 
 /* ------------------------------------------------------------------ */
 /*  Agent step types (used during streaming for progressive rendering) */
@@ -220,6 +226,9 @@ export interface UseChatReturn {
   submitChat: (text: string) => Promise<void>;
   submitThreadChat: (text: string) => Promise<void>;
   displayThread: AnnotationMessage[];
+  /** Resume an assistant turn that paused waiting for the user to decide
+   *  about the Brave-key card. Wired into the inline card via context. */
+  resumeAfterBraveDecision: (opts: { skipWebSearch: boolean }) => void;
 }
 
 export function useChat({
@@ -287,12 +296,64 @@ export function useChat({
   const hasSavedKeys = hasAnySavedApiKey();
   const hasKeyForModel = selectedModel != null && isModelReady(selectedModel);
 
+  /**
+   * Decide what paper payload to send to /api/chat. Short papers go in as
+   * `paperContext` (full text) — the historical behavior. Long papers are
+   * parsed once and sent as `parsedPaper`, with sections fetched on demand
+   * via tools. Parse-on-first-use; cached in IndexedDB so repeat opens are
+   * free. If parsing fails, fall back to sending the full text and let the
+   * server cap or the model truncate — degrading is preferable to blocking
+   * chat on a parse error.
+   */
+  const buildPaperPayload = useCallback(
+    async (): Promise<{
+      paperContext?: string;
+      parsedPaper?: ParsedPaper;
+    }> => {
+      if (!paperContext) return {};
+      if (!isLongPaper(paperContext)) return { paperContext };
+      if (!selectedModel) return { paperContext };
+
+      const creds = resolveModelCredentials(selectedModel);
+      if (!creds) return { paperContext };
+
+      try {
+        const parsed = await parseAndCachePaper(paperContext, {
+          model: selectedModel.modelId,
+          provider: selectedModel.provider,
+          apiKey: creds.apiKey,
+          apiBaseUrl: creds.apiBaseUrl,
+        });
+        return { parsedPaper: parsed };
+      } catch (err) {
+        // Best-effort fallback: still chat, just with truncated/full text.
+        console.warn("Paper parse failed, sending full text instead:", err);
+        return { paperContext };
+      }
+    },
+    [paperContext, selectedModel],
+  );
+
   /* ---------------------------------------------------------------- */
   /*  Main chat submit                                                 */
   /* ---------------------------------------------------------------- */
 
   const submitChat = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      opts?: {
+        /** Reuse this existing user message id instead of appending a new one. Used by resume flows. */
+        existingUserMsgId?: string;
+        /**
+         * Explicit message history to send to the server. Used by resume
+         * flows so the truncation done before retry isn't subject to React
+         * state-update timing. Should already include the user message.
+         */
+        historyOverride?: ChatMessage[];
+        /** Tell the server not to register web_search for this turn. Used after the user dismisses the Brave card. */
+        skipWebSearch?: boolean;
+      },
+    ) => {
       const trimmed = text.trim();
       if (!trimmed || isStreaming || !selectedModel) return;
 
@@ -303,7 +364,7 @@ export function useChat({
       setFailedUserMsgId(null);
 
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: opts?.existingUserMsgId ?? crypto.randomUUID(),
         role: "user",
         content: text,
         timestamp: new Date().toISOString(),
@@ -315,15 +376,27 @@ export function useChat({
         timestamp: new Date().toISOString(),
       };
 
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      // For a fresh submit append both messages. For a resume, the user
+      // message already exists in the list — only append the new assistant.
+      if (opts?.existingUserMsgId) {
+        setMessages((prev) => [...prev, assistantMsg]);
+      } else {
+        setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      }
       setIsStreaming(true);
       setStreamingMsgId(assistantMsg.id);
       setAgentSteps([]);
 
-      const historyForApi = [...messages, userMsg];
+      const historyForApi = opts?.historyOverride
+        ? opts.historyOverride
+        : opts?.existingUserMsgId
+          ? messages // already includes the user message
+          : [...messages, userMsg];
       let steps: AgentStep[] = [];
 
       try {
+        const paperPayload = await buildPaperPayload();
+        const braveKey = getBraveSearchApiKey();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -337,11 +410,13 @@ export function useChat({
             ...(resolveModelCredentials(selectedModel) ?? {
               apiKey: "",
             }),
-            paperContext,
+            ...paperPayload,
             paperTitle,
             arxivId,
             reviewId,
             ...(sourceUrl ? { sourceUrl } : {}),
+            ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
+            ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
           }),
         });
 
@@ -433,12 +508,56 @@ export function useChat({
       isStreaming,
       selectedModel,
       messages,
-      paperContext,
+      buildPaperPayload,
       paperTitle,
       arxivId,
       reviewId,
       sourceUrl,
     ],
+  );
+
+  /* ---------------------------------------------------------------- */
+  /*  Resume after the Brave-key card was actioned                     */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Re-runs the chat agent on the user's last message after the Brave-key
+   * configure card has been actioned. Removes the previous (incomplete)
+   * assistant message that contained the card, keeps the original user
+   * message, and re-submits — passing `skipWebSearch: true` when the user
+   * dismissed (so the tool isn't even registered).
+   *
+   * Called from `BraveKeyResumeProvider` (set up by ChatPanel). No-op when
+   * we can't find a user message to retry.
+   */
+  const resumeAfterBraveDecision = useCallback(
+    ({ skipWebSearch }: { skipWebSearch: boolean }) => {
+      if (isStreaming) return;
+
+      // Find the most recent user message and drop everything after it.
+      let lastUserIdx = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user") {
+          lastUserIdx = i;
+          break;
+        }
+      }
+      if (lastUserIdx < 0) return;
+
+      const userMsg = messages[lastUserIdx];
+      // Truncate trailing messages — keep up through the user message.
+      const truncated = messages.slice(0, lastUserIdx + 1);
+      setMessages(truncated);
+
+      // Pass the truncated history explicitly so the retry doesn't depend
+      // on React state-update timing.
+      void submitChat(userMsg.content, {
+        existingUserMsgId: userMsg.id,
+        historyOverride: truncated,
+        skipWebSearch,
+      });
+    },
+    [isStreaming, messages, submitChat],
   );
 
   /* ---------------------------------------------------------------- */
@@ -503,6 +622,8 @@ export function useChat({
       let steps: AgentStep[] = [];
 
       try {
+        const paperPayload = await buildPaperPayload();
+        const braveKey = getBraveSearchApiKey();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -513,11 +634,12 @@ export function useChat({
             ...(resolveModelCredentials(selectedModel) ?? {
               apiKey: "",
             }),
-            paperContext,
+            ...paperPayload,
             paperTitle,
             arxivId,
             reviewId,
             ...(sourceUrl ? { sourceUrl } : {}),
+            ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
           }),
         });
 
@@ -587,7 +709,7 @@ export function useChat({
       reviewId,
       arxivId,
       paperTitle,
-      paperContext,
+      buildPaperPayload,
       onAnnotationsPersist,
       sourceUrl,
     ],
@@ -646,5 +768,6 @@ export function useChat({
     submitChat,
     submitThreadChat,
     displayThread: threadStream ?? [],
+    resumeAfterBraveDecision,
   };
 }

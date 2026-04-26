@@ -28,6 +28,7 @@ import { getDb, type WikiBacklinkRow } from "@/lib/client/db";
 const INFERENCE_PROFILES_KEY = "inference_profiles";
 const SELECTED_MODEL_KEY = "selected_model";
 const API_KEY_PREFIX = "api_key:";
+const BRAVE_SEARCH_API_KEY = "brave_search_api_key";
 
 /* ── Reviews ── */
 
@@ -204,6 +205,7 @@ export async function getSettings(): Promise<{
   keys: Partial<Record<Provider, string>>;
   inferenceProfiles: InferenceProviderProfile[];
   selectedModel: Model | null;
+  braveSearchApiKey: string | null;
 }> {
   const db = getDb();
   const keys: Partial<Record<Provider, string>> = {};
@@ -229,7 +231,9 @@ export async function getSettings(): Promise<{
       selectedModel = null;
     }
   }
-  return { keys, inferenceProfiles, selectedModel };
+  const braveRow = await db.settings.get(BRAVE_SEARCH_API_KEY);
+  const braveSearchApiKey = braveRow?.value || null;
+  return { keys, inferenceProfiles, selectedModel, braveSearchApiKey };
 }
 
 export async function setApiKey(
@@ -268,6 +272,7 @@ export async function patchSettings(patch: {
   keys?: Partial<Record<Provider, string | null>>;
   inferenceProfiles?: InferenceProviderProfile[] | null;
   selectedModel?: Model | null;
+  braveSearchApiKey?: string | null;
 }): Promise<void> {
   if (patch.keys) {
     for (const [p, v] of Object.entries(patch.keys) as [
@@ -289,6 +294,14 @@ export async function patchSettings(patch: {
   }
   if ("selectedModel" in patch) {
     await setSelectedModel(patch.selectedModel ?? null);
+  }
+  if ("braveSearchApiKey" in patch) {
+    const v = patch.braveSearchApiKey;
+    if (v === null || v === undefined || v === "") {
+      await getDb().settings.delete(BRAVE_SEARCH_API_KEY);
+    } else {
+      await getDb().settings.put({ key: BRAVE_SEARCH_API_KEY, value: v });
+    }
   }
 }
 

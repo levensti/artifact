@@ -42,6 +42,18 @@ export interface ToolContext {
   arxivId?: string;
   /** Internal review ID for data persistence. */
   reviewId?: string;
+  /**
+   * Structured representation of the paper, when available. Used by
+   * paper-internal tools (read_section, search_paper, lookup_citation)
+   * to access the paper without dragging the full text into every prompt.
+   * Populated by the chat handler from the request body.
+   */
+  parsedPaper?: import("@/lib/review-types").ParsedPaper;
+  /**
+   * User-provided Brave Search API key. When present, `web_search` uses
+   * this; otherwise the tool isn't registered for the request at all.
+   */
+  braveSearchApiKey?: string;
 }
 
 /* ------------------------------------------------------------------ */

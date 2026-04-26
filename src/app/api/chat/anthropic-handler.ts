@@ -5,12 +5,15 @@
 import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
+import type { ParsedPaper } from "@/lib/review-types";
 import {
   getAllTools,
   getToolByName,
   toAnthropicTools,
 } from "@/tools/registry";
+import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import type { ToolContext } from "@/tools/types";
+import { buildPaperBlock } from "./paper-block";
 
 const MAX_TOOL_ROUNDS = 8;
 
@@ -40,14 +43,38 @@ interface AnthropicToolResultBlock {
   content: string;
 }
 
+interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 interface AnthropicSSEEvent {
   type: string;
   index?: number;
   content_block?: { type: string; id?: string; name?: string };
   delta?: { type: string; text?: string; partial_json?: string; stop_reason?: string };
+  message?: { usage?: AnthropicUsage };
+  usage?: AnthropicUsage;
 }
 
 type AnthropicMessageContent = AnthropicContentBlock | AnthropicToolResultBlock;
+
+type AnthropicCacheControl = { type: "ephemeral" };
+
+interface AnthropicSystemBlock {
+  type: "text";
+  text: string;
+  cache_control?: AnthropicCacheControl;
+}
+
+interface AnthropicToolWithCache {
+  name: string;
+  description: string;
+  input_schema: unknown;
+  cache_control?: AnthropicCacheControl;
+}
 
 export async function runAnthropicAgentLoop(
   chatMessages: { role: "user" | "assistant"; content: string }[],
@@ -55,15 +82,39 @@ export async function runAnthropicAgentLoop(
   apiKey: string,
   systemPrompt: string,
   paperContext: string | undefined,
+  parsedPaper: ParsedPaper | undefined,
   tools: ReturnType<typeof getAllTools>,
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
 ) {
-  const systemContent = paperContext
-    ? `${systemPrompt}\n\n<paper>\n${paperContext}\n</paper>`
-    : systemPrompt;
+  // System is a structured array so we can mark the paper as a cache
+  // breakpoint. The base prompt is small + stable; the paper is large + stable
+  // across turns within a 5-minute window. Caching the paper is the win;
+  // marking the base prompt as cacheable too is harmless and slightly cheaper.
+  const systemBlocks: AnthropicSystemBlock[] = [
+    { type: "text", text: systemPrompt },
+  ];
+  const paperBlock = buildPaperBlock(paperContext, parsedPaper);
+  if (paperBlock) {
+    systemBlocks.push({
+      type: "text",
+      text: paperBlock,
+      cache_control: { type: "ephemeral" },
+    });
+  }
 
-  const anthropicTools = toAnthropicTools(tools);
+  // Tool definitions are stable across turns too. Mark the last tool as a
+  // cache breakpoint so the entire tools array gets cached.
+  const baseTools = toAnthropicTools(tools);
+  const cachedTools: AnthropicToolWithCache[] = baseTools.length
+    ? [
+        ...baseTools.slice(0, -1),
+        {
+          ...baseTools[baseTools.length - 1],
+          cache_control: { type: "ephemeral" },
+        },
+      ]
+    : [];
 
   const apiMessages: Array<{ role: string; content: string | AnthropicMessageContent[] }> = chatMessages.map((m) => ({
     role: m.role,
@@ -82,10 +133,10 @@ export async function runAnthropicAgentLoop(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4096,
-        system: systemContent,
+        max_tokens: 16384,
+        system: systemBlocks,
         messages: apiMessages,
-        tools: anthropicTools,
+        tools: cachedTools,
         stream: true,
       }),
     });
@@ -130,6 +181,16 @@ export async function runAnthropicAgentLoop(
       });
     }
 
+    // If web_search returned the "no Brave key" sentinel, stop the loop
+    // immediately. The chat UI will surface a configure card and pause until
+    // the user adds a key or dismisses; otherwise the agent would charge
+    // ahead with an answer it knows is unsupported by web grounding.
+    if (
+      toolResults.some((r) => r.content === BRAVE_KEY_REQUIRED_SENTINEL)
+    ) {
+      break;
+    }
+
     apiMessages.push({ role: "user", content: toolResults });
   }
 }
@@ -145,9 +206,26 @@ async function parseAnthropicSSE(
   const blocks: AnthropicContentBlock[] = [];
   let toolInputAccum = "";
   let stopReason = "end_turn";
+  // Anthropic reports input/cache token counts on `message_start` and the
+  // final output_tokens on `message_delta`. Accumulate both before emitting.
+  const usage: AnthropicUsage = {};
 
   await readSSEStream<AnthropicSSEEvent>(body, (event) => {
     switch (event.type) {
+      case "message_start": {
+        const u = event.message?.usage;
+        if (u) {
+          if (u.input_tokens !== undefined) usage.input_tokens = u.input_tokens;
+          if (u.cache_creation_input_tokens !== undefined)
+            usage.cache_creation_input_tokens = u.cache_creation_input_tokens;
+          if (u.cache_read_input_tokens !== undefined)
+            usage.cache_read_input_tokens = u.cache_read_input_tokens;
+          if (u.output_tokens !== undefined)
+            usage.output_tokens = u.output_tokens;
+        }
+        break;
+      }
+
       case "content_block_start": {
         const cb = event.content_block;
         if (!cb || event.index === undefined) break;
@@ -198,9 +276,29 @@ async function parseAnthropicSSE(
         if (event.delta?.stop_reason) {
           stopReason = event.delta.stop_reason;
         }
+        // Final output_tokens (and sometimes updated input counts) ride on
+        // message_delta; merge into the running usage record.
+        const u = event.usage;
+        if (u) {
+          if (u.input_tokens !== undefined) usage.input_tokens = u.input_tokens;
+          if (u.cache_creation_input_tokens !== undefined)
+            usage.cache_creation_input_tokens = u.cache_creation_input_tokens;
+          if (u.cache_read_input_tokens !== undefined)
+            usage.cache_read_input_tokens = u.cache_read_input_tokens;
+          if (u.output_tokens !== undefined)
+            usage.output_tokens = u.output_tokens;
+        }
         break;
       }
     }
+  });
+
+  emit({
+    type: "cache_stats",
+    inputTokens: usage.input_tokens ?? 0,
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
   });
 
   return { contentBlocks: blocks, stopReason };
