@@ -12,6 +12,8 @@ export interface GenerateRequest {
   apiBaseUrl?: string;
   prompt: string;
   paperContext?: string;
+  /** When true, response is streamed as text/plain text deltas. */
+  stream?: boolean;
 }
 
 export interface Prerequisite {

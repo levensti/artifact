@@ -186,10 +186,20 @@ export async function POST(req: NextRequest) {
   // Brave key, the tool returns a sentinel that the chat UI surfaces as an
   // inline "Add Brave Search API key" card rather than the agent verbalizing
   // the failure. The exception: if the user dismissed the card, we drop
-  // web_search so the agent can't even try.
-  const tools = skipWebSearch
-    ? getAllTools().filter((t) => t.name !== "web_search")
-    : getAllTools();
+  // web_search so the agent can't even try. We also drop the paper-internal
+  // tools (read_section / search_paper / lookup_citation) when the paper
+  // hasn't been parsed into structured form — otherwise the agent sees them
+  // in its toolset and calls them only to get a "not parsed yet" error back.
+  const PAPER_PARSED_TOOLS = new Set([
+    "read_section",
+    "search_paper",
+    "lookup_citation",
+  ]);
+  const tools = getAllTools().filter((t) => {
+    if (skipWebSearch && t.name === "web_search") return false;
+    if (!parsedPaper && PAPER_PARSED_TOOLS.has(t.name)) return false;
+    return true;
+  });
   const toolContext: ToolContext = {
     paperContext,
     parsedPaper,
