@@ -26,7 +26,15 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const { model, provider, apiKey, apiBaseUrl, prompt, paperContext } = body;
+  const {
+    model,
+    provider,
+    apiKey,
+    apiBaseUrl,
+    prompt,
+    paperContext,
+    stream,
+  } = body;
 
   if (!isProvider(provider)) {
     return jsonError(invalidApiProviderMessage(), 400);
@@ -39,10 +47,7 @@ export async function POST(req: NextRequest) {
   if (!prompt || typeof prompt !== "string") {
     return jsonError("Prompt is required.", 400);
   }
-  if (
-    prompt.length > 50_000 ||
-    (paperContext && paperContext.length > 500_000)
-  ) {
+  if (paperContext && paperContext.length > 500_000) {
     return jsonError("Request payload too large.", 413);
   }
 
@@ -61,6 +66,33 @@ export async function POST(req: NextRequest) {
       "apiBaseUrl is required for OpenAI-compatible providers.",
       400,
     );
+  }
+
+  if (stream) {
+    try {
+      const upstream = isAnthropicMessagesProvider(provider)
+        ? await openAnthropicStream(model, effectiveApiKey, prompt, paperContext)
+        : await openOpenAICompatibleStream(
+            model,
+            effectiveApiKey,
+            prompt,
+            paperContext,
+            provider as OpenAiCompatibleProvider,
+            provider === "openai_compatible" ? effectiveBaseUrl : undefined,
+          );
+      const isAnthropic = isAnthropicMessagesProvider(provider);
+      const body = transformSseToText(upstream, isAnthropic);
+      return new Response(body, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Transfer-Encoding": "chunked",
+          "Cache-Control": "no-cache",
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return jsonError(message, 500);
+    }
   }
 
   try {
@@ -82,6 +114,137 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return jsonError(message, 500);
   }
+}
+
+async function openAnthropicStream(
+  model: string,
+  apiKey: string,
+  prompt: string,
+  paperContext?: string,
+): Promise<ReadableStream<Uint8Array>> {
+  const systemContent = paperContext
+    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
+    : SYSTEM_PROMPT;
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      system: systemContent,
+      messages: [{ role: "user", content: prompt }],
+      stream: true,
+    }),
+  });
+  if (!response.ok) throw await parseError(response, "Anthropic");
+  if (!response.body) throw new Error("Anthropic returned no stream body.");
+  return response.body;
+}
+
+async function openOpenAICompatibleStream(
+  model: string,
+  apiKey: string,
+  prompt: string,
+  paperContext: string | undefined,
+  provider: OpenAiCompatibleProvider,
+  customOpenAiBaseUrl?: string,
+): Promise<ReadableStream<Uint8Array>> {
+  const baseUrl = openAiCompatibleChatCompletionsUrl(provider, customOpenAiBaseUrl);
+  const systemContent = paperContext
+    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
+    : SYSTEM_PROMPT;
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemContent },
+        { role: "user", content: prompt },
+      ],
+      stream: true,
+    }),
+  });
+  if (!response.ok) throw await parseError(response, providerApiErrorLabel(provider));
+  if (!response.body) throw new Error("Provider returned no stream body.");
+  return response.body;
+}
+
+/**
+ * Read SSE chunks from an upstream provider and emit just the text deltas
+ * as plain UTF-8 to the client. Closes when the upstream stream ends.
+ */
+function transformSseToText(
+  upstream: ReadableStream<Uint8Array>,
+  isAnthropic: boolean,
+): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = upstream.getReader();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          // SSE events are separated by blank lines.
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          for (const evt of events) {
+            const text = parseSseEventText(evt, isAnthropic);
+            if (text) controller.enqueue(encoder.encode(text));
+          }
+        }
+        if (buffer.trim()) {
+          const text = parseSseEventText(buffer, isAnthropic);
+          if (text) controller.enqueue(encoder.encode(text));
+        }
+      } catch (err) {
+        controller.error(err);
+        return;
+      } finally {
+        reader.releaseLock();
+      }
+      controller.close();
+    },
+  });
+}
+
+function parseSseEventText(eventBlock: string, isAnthropic: boolean): string {
+  let text = "";
+  for (const line of eventBlock.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    try {
+      const data = JSON.parse(payload);
+      if (isAnthropic) {
+        if (
+          data?.type === "content_block_delta" &&
+          data?.delta?.type === "text_delta" &&
+          typeof data.delta.text === "string"
+        ) {
+          text += data.delta.text;
+        }
+      } else {
+        const delta = data?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string") text += delta;
+      }
+    } catch {
+      /* ignore malformed events */
+    }
+  }
+  return text;
 }
 
 async function generateAnthropic(
