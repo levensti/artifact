@@ -103,6 +103,7 @@ export default function Sidebar({
   const [importMode, setImportMode] = useState<"review" | "journal" | null>(
     null,
   );
+  const [importInitialFile, setImportInitialFile] = useState<File | null>(null);
   const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -369,15 +370,20 @@ export default function Sidebar({
         open={showNewReview}
         onClose={() => setShowNewReview(false)}
         onCreated={handleReviewCreated}
-        onImport={() => {
+        onImport={(file) => {
           setShowNewReview(false);
+          setImportInitialFile(file ?? null);
           setImportMode("review");
         }}
       />
       <ImportBundleDialog
         open={importMode !== null}
         mode={importMode ?? "review"}
-        onClose={() => setImportMode(null)}
+        initialFile={importInitialFile}
+        onClose={() => {
+          setImportMode(null);
+          setImportInitialFile(null);
+        }}
       />
       <ShareReviewDialog
         review={shareTarget}
