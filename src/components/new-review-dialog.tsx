@@ -30,7 +30,7 @@ interface NewReviewDialogProps {
   open: boolean;
   onClose: () => void;
   onCreated: (reviewId: string) => void;
-  onImport?: () => void;
+  onImport?: (initialFile?: File) => void;
 }
 
 export default function NewReviewDialog({
@@ -46,6 +46,8 @@ export default function NewReviewDialog({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingPdf, setIsDraggingPdf] = useState(false);
+  const [isDraggingImport, setIsDraggingImport] = useState(false);
 
   const arxivId = extractArxivId(url);
   const [existingReview, setExistingReview] = useState<PaperReview | undefined>(
@@ -355,7 +357,36 @@ export default function NewReviewDialog({
                   handleOpenChange(false);
                   onImport?.();
                 }}
-                className="w-full h-full rounded-xl border-2 border-dashed border-border px-4 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm flex items-center justify-center gap-2"
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingImport(true);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+                  if (!isDraggingImport) setIsDraggingImport(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                  setIsDraggingImport(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingImport(false);
+                  const file = e.dataTransfer?.files?.[0];
+                  handleOpenChange(false);
+                  onImport?.(file);
+                }}
+                className={`w-full h-full rounded-xl border-2 border-dashed px-4 text-center transition-all duration-200 hover:shadow-sm flex items-center justify-center gap-2 ${
+                  isDraggingImport
+                    ? "border-primary/50 bg-primary/[0.05]"
+                    : "border-border hover:border-primary/30 hover:bg-primary/[0.03]"
+                }`}
               >
                 <FileDown size={16} className="text-muted-foreground shrink-0" />
                 <span className="text-sm text-muted-foreground">
@@ -421,7 +452,42 @@ export default function NewReviewDialog({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={loading}
-                  className="w-full h-full rounded-xl border-2 border-dashed border-border px-4 text-center transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm disabled:opacity-50 flex items-center justify-center"
+                  onDragEnter={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!loading) setIsDraggingPdf(true);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+                    if (!loading && !isDraggingPdf) setIsDraggingPdf(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                    setIsDraggingPdf(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingPdf(false);
+                    if (loading) return;
+                    const file = e.dataTransfer?.files?.[0];
+                    if (!file) return;
+                    if (!file.name.toLowerCase().endsWith(".pdf")) {
+                      setError("Only .pdf files are supported");
+                      return;
+                    }
+                    setSelectedFile(file);
+                    setError(null);
+                  }}
+                  className={`w-full h-full rounded-xl border-2 border-dashed px-4 text-center transition-all duration-200 hover:shadow-sm disabled:opacity-50 flex items-center justify-center ${
+                    isDraggingPdf
+                      ? "border-primary/50 bg-primary/[0.05]"
+                      : "border-border hover:border-primary/30 hover:bg-primary/[0.03]"
+                  }`}
                 >
                   {selectedFile ? (
                     <div className="flex items-center justify-center gap-2">

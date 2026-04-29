@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileDown, Loader2, Upload } from "lucide-react";
 import {
@@ -38,6 +38,8 @@ interface ImportBundleDialogProps {
   open: boolean;
   mode: ImportMode;
   onClose: () => void;
+  /** Optional pre-loaded file (e.g. forwarded from a parent dropzone). */
+  initialFile?: File | null;
 }
 
 const MODE_COPY: Record<
@@ -69,6 +71,7 @@ export default function ImportBundleDialog({
   open,
   mode,
   onClose,
+  initialFile,
 }: ImportBundleDialogProps) {
   const copy = MODE_COPY[mode];
   const [stage, setStage] = useState<Stage>({ kind: "pick" });
@@ -77,6 +80,7 @@ export default function ImportBundleDialog({
   const [wikiStrategy, setWikiStrategy] =
     useState<WikiCollisionStrategy>("skip");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const router = useRouter();
 
   const reset = useCallback(() => {
@@ -123,6 +127,63 @@ export default function ImportBundleDialog({
     },
     [expectedKind, copy.wrongKindError],
   );
+
+  // If the parent forwarded a file (e.g. dropped on the new-review
+  // dialog's Import tab before this dialog opened), auto-process it
+  // exactly once per `open` cycle.
+  const consumedInitialFileRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      consumedInitialFileRef.current = false;
+      return;
+    }
+    if (consumedInitialFileRef.current) return;
+    if (!initialFile) return;
+    if (stage.kind !== "pick") return;
+    consumedInitialFileRef.current = true;
+    // handleFile is async; setStage runs after the await, not synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void handleFile(initialFile);
+  }, [open, initialFile, stage.kind, handleFile]);
+
+  // Window-level drag listeners while the dialog is open and showing the
+  // picker. Catches drops anywhere on the page so the user doesn't have
+  // to land precisely on the dashed button.
+  useEffect(() => {
+    if (!open) return;
+    if (stage.kind !== "pick") return;
+
+    const onDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+    };
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      setIsDragging(true);
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (e.relatedTarget !== null) return;
+      setIsDragging(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer?.files?.[0];
+      if (file) void handleFile(file);
+    };
+
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [open, stage.kind, handleFile]);
 
   const handleCommit = useCallback(async () => {
     if (stage.kind !== "preview") return;
@@ -190,7 +251,35 @@ export default function ImportBundleDialog({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card px-4 py-8 text-center transition-colors hover:border-primary/40 hover:bg-muted/40"
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+                if (!isDragging) setIsDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                setIsDragging(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
+                const file = e.dataTransfer?.files?.[0];
+                if (file) void handleFile(file);
+              }}
+              className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-card px-4 py-8 text-center transition-colors ${
+                isDragging
+                  ? "border-primary/60 bg-primary/[0.05]"
+                  : "border-border hover:border-primary/40 hover:bg-muted/40"
+              }`}
             >
               <Upload
                 className="size-5 text-muted-foreground"
