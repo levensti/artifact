@@ -1,0 +1,226 @@
+// Artifact persistent store. All domain rows are scoped by `userId` and
+// cascade-deleted when the owning user disappears.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/* ── Auth.js (NextAuth) ────────────────────────────────────────── */
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts Account[]
+  sessions Session[]
+
+  reviews         Review[]
+  deepDives       DeepDive[]
+  wikiPages       WikiPage[]
+  wikiPageSources WikiPageSource[]
+  wikiBacklinks   WikiBacklink[]
+  wikiRevisions   WikiRevision[]
+  settings        Setting[]
+  pdfBlobs        PdfBlob[]
+  parsedPapers    ParsedPaper[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @id
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+/* ── Domain ────────────────────────────────────────────────────── */
+
+model Review {
+  id         String   @id
+  userId     String
+  title      String
+  arxivId    String?
+  pdfPath    String? // PdfBlob id (no FK — PdfBlob may be deleted independently)
+  sourceUrl  String?
+  createdAt  DateTime
+  updatedAt  DateTime
+  importedAt DateTime?
+
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      ReviewMessages?
+  annotations   ReviewAnnotations?
+  prerequisites Prerequisites?
+  deepDives     DeepDive[]
+  wikiSources   WikiPageSource[]
+
+  @@index([userId, createdAt])
+  @@index([userId, arxivId])
+}
+
+model ReviewMessages {
+  id       String @id @default(cuid())
+  reviewId String @unique
+  messages Json
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+}
+
+model ReviewAnnotations {
+  id          String @id @default(cuid())
+  reviewId    String @unique
+  annotations Json
+  review      Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+}
+
+model Prerequisites {
+  id       String @id @default(cuid())
+  reviewId String @unique
+  data     Json
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+}
+
+model DeepDive {
+  id          String   @id
+  userId      String
+  reviewId    String
+  paperTitle  String
+  arxivId     String
+  topic       String
+  explanation String
+  createdAt   DateTime
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, reviewId])
+}
+
+model WikiPage {
+  id        String   @id
+  userId    String
+  slug      String
+  title     String
+  content   String
+  pageType  String
+  createdAt DateTime
+  updatedAt DateTime
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources   WikiPageSource[]
+  backlinks WikiBacklink[]
+  revisions WikiRevision[]
+
+  @@unique([userId, slug])
+  @@index([userId, updatedAt])
+  @@index([userId, pageType])
+}
+
+model WikiPageSource {
+  id       String   @id @default(cuid())
+  userId   String
+  pageId   String
+  reviewId String
+  passage  String?
+  addedAt  DateTime
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  page   WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  review Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, reviewId])
+  @@index([userId, reviewId])
+}
+
+model WikiBacklink {
+  id         String @id @default(cuid())
+  userId     String
+  sourceId   String
+  targetSlug String
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source WikiPage @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetSlug])
+  @@index([userId, targetSlug])
+}
+
+model WikiRevision {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  pageId    String
+  slug      String
+  title     String
+  content   String
+  pageType  String
+  savedAt   DateTime
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  page WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, id])
+}
+
+model Setting {
+  id     String @id @default(cuid())
+  userId String
+  key    String
+  value  String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+}
+
+model PdfBlob {
+  id          String   @id
+  userId      String
+  name        String?
+  storagePath String
+  createdAt   DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ParsedPaper {
+  id     String @id @default(cuid())
+  userId String
+  hash   String
+  parsed Json
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, hash])
+}

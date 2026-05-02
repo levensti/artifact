@@ -141,10 +141,7 @@ export async function importCcSessions(
             ...args.sessions.map((s) => s.meta.sessionId),
           );
         } else {
-          await finalizeWikiIngest({
-            pages: upserts,
-            logEntry: { kind: "journal", label: "Claude Code import (combined)" },
-          });
+          await finalizeWikiIngest({ pages: upserts });
           markImported(args.sessions.map((s) => s.meta.sessionId));
           result.importedSessionIds.push(
             ...args.sessions.map((s) => s.meta.sessionId),
@@ -213,10 +210,7 @@ export async function importCcSessions(
           continue;
         }
 
-        await finalizeWikiIngest({
-          pages: upserts,
-          logEntry: { kind: "journal", label: "Claude Code import" },
-        });
+        await finalizeWikiIngest({ pages: upserts });
 
         // Update the in-memory known-pages list so subsequent sessions
         // in the batch can see what we just wrote.

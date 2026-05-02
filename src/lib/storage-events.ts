@@ -6,3 +6,4 @@ export const DEEP_DIVES_UPDATED_EVENT = "paper-copilot-deep-dives-updated";
 export const EXPLORE_UPDATED_EVENT = "paper-copilot-explore-updated";
 export const KEYS_UPDATED_EVENT = "paper-copilot-keys-updated";
 export const WIKI_UPDATED_EVENT = "paper-copilot-wiki-updated";
+export const USER_UPDATED_EVENT = "paper-copilot-user-updated";

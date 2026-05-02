@@ -28,6 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import NewReviewDialog from "./new-review-dialog";
 import ImportBundleDialog from "./import-bundle-dialog";
 import ShareReviewDialog from "./share-review-dialog";
+import UserMenu from "./user-menu";
 
 function subscribeReviews(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -364,6 +365,7 @@ export default function Sidebar({
           ))}
         </ScrollArea>
 
+        <UserMenu />
       </aside>
 
       <NewReviewDialog

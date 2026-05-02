@@ -2,14 +2,14 @@
  * Browser-side cache for parsed paper structures.
  *
  * Papers are parsed once (via /api/papers/parse) using the user's chosen
- * model+key, then cached in IndexedDB by sha256 of the extracted text.
+ * model+key, then cached server-side keyed by sha256 of the extracted text.
  * Re-opening the same paper hits the cache; chatting about it costs only
  * the per-turn tokens, not the parse.
  */
 
 import type { Provider } from "@/lib/models";
 import type { ParsedPaper } from "@/lib/review-types";
-import { getDb, isBrowser } from "./db";
+import { apiFetch } from "@/lib/client/api";
 
 /**
  * Token-count threshold above which we switch from "send full text" to
@@ -36,17 +36,20 @@ export async function hashPaperText(paperText: string): Promise<string> {
 export async function getCachedParsedPaper(
   hash: string,
 ): Promise<ParsedPaper | null> {
-  if (!isBrowser()) return null;
-  const row = await getDb().parsedPapers.get(hash);
-  return row?.parsed ?? null;
+  const { parsed } = await apiFetch<{ parsed: ParsedPaper | null }>(
+    `/api/parsed-papers/${encodeURIComponent(hash)}`,
+  );
+  return parsed;
 }
 
 export async function cacheParsedPaper(
   hash: string,
   parsed: ParsedPaper,
 ): Promise<void> {
-  if (!isBrowser()) return;
-  await getDb().parsedPapers.put({ hash, parsed });
+  await apiFetch(`/api/parsed-papers/${encodeURIComponent(hash)}`, {
+    method: "PUT",
+    body: { parsed },
+  });
 }
 
 interface ParseRequestPayload {
@@ -71,7 +74,6 @@ export async function parseAndCachePaper(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ paperText, ...payload }),
   });
-
   if (!response.ok) {
     let message = `Paper parse failed: ${response.status}`;
     try {
@@ -82,7 +84,6 @@ export async function parseAndCachePaper(
     }
     throw new Error(message);
   }
-
   const parsed = (await response.json()) as ParsedPaper;
   await cacheParsedPaper(hash, parsed);
   return parsed;

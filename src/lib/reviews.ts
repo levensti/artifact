@@ -7,6 +7,7 @@ import {
   loadMessages,
   saveMessages,
 } from "@/lib/client-data";
+import { normalizeArxivId } from "@/lib/arxiv";
 import type {
   ChatAssistantBlock,
   ChatMessage,
@@ -14,6 +15,7 @@ import type {
 } from "@/lib/review-types";
 
 export { REVIEWS_UPDATED_EVENT } from "@/lib/storage-events";
+export { normalizeArxivId } from "@/lib/arxiv";
 
 export type { ChatAssistantBlock, ChatMessage, PaperReview };
 
@@ -23,11 +25,6 @@ export function getReviews(): PaperReview[] {
 
 export function getReview(id: string): PaperReview | undefined {
   return getReviewCached(id);
-}
-
-/** Canonical id for matching (lowercase, no version suffix). */
-export function normalizeArxivId(raw: string): string {
-  return raw.trim().toLowerCase().replace(/v\d+$/i, "");
 }
 
 export async function createReview(
