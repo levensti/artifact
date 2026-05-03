@@ -30,8 +30,14 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
   return (
     <main className="grid min-h-screen bg-background md:grid-cols-2">
       <BrandPanel>{isSignup ? <SignupPitch /> : <SigninWelcome />}</BrandPanel>
-      <section className="flex items-center justify-center px-6 py-12 text-left sm:px-10">
-        <div className="mx-auto w-full max-w-sm text-left">
+      <section className="relative flex items-center justify-center overflow-hidden px-6 py-12 text-left sm:px-10">
+        {/* Soft primary-tinted radial — keeps the surface from feeling flat */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,color-mix(in_srgb,var(--primary)_7%,transparent),transparent_55%),radial-gradient(circle_at_15%_95%,color-mix(in_srgb,var(--primary)_4%,transparent),transparent_55%)]"
+        />
+
+        <div className="relative mx-auto w-full max-w-sm text-left animate-in fade-in slide-in-from-bottom-2 duration-500">
           {/* Inline brand mark — only when the side panel is hidden */}
           <div className="mb-10 flex items-center gap-2 md:hidden">
             <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -43,10 +49,13 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           </div>
 
           <header className="mb-7">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              {isSignup ? "Create your account" : "Welcome back"}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/70 px-2.5 py-1 text-[10.5px] font-medium tracking-[0.14em] text-muted-foreground uppercase backdrop-blur-sm">
+              {isSignup ? "Create your account" : "Sign in"}
+            </span>
+            <h1 className="mt-4 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[30px]">
+              {isSignup ? "Begin your research journal." : "Welcome back."}
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">
               {isSignup
                 ? "Sign up with Google to start annotating papers and journaling your research."
                 : "Sign in with Google to continue your research."}
@@ -61,7 +70,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           >
             <button
               type="submit"
-              className="group flex w-full items-center justify-center gap-2.5 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground/90 shadow-(--shadow-sm) transition-all duration-150 hover:border-primary/30 hover:shadow-(--shadow-primary) hover:-translate-y-px active:translate-y-0"
+              className="group flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3 text-[14px] font-medium text-foreground/90 shadow-(--shadow-sm) transition-all duration-150 hover:border-primary/35 hover:shadow-(--shadow-primary) hover:-translate-y-px active:translate-y-0"
             >
               <GoogleMark />
               <span>
@@ -70,7 +79,28 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
             </button>
           </form>
 
-          <p className="mt-6 text-sm text-muted-foreground">
+          {/* Trust row — terms/privacy + open source signal */}
+          <p className="mt-5 text-[12px] leading-relaxed text-muted-foreground/85">
+            {isSignup ? (
+              <>
+                By signing up you agree to our terms. We never train on your
+                content — your keys, your machine.
+              </>
+            ) : (
+              <>Welcome back. Your sessions and journal are end-to-end yours.</>
+            )}
+          </p>
+
+          {/* Hairline divider */}
+          <div className="mt-8 flex items-center gap-3 text-muted-foreground/60">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-medium tracking-[0.18em] uppercase">
+              or
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <p className="mt-6 text-[14px] text-muted-foreground">
             {isSignup ? "Already have an account?" : "New to Artifact?"}{" "}
             <Link
               href={`${isSignup ? "/signin" : "/signup"}${cb}`}

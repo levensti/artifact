@@ -15,17 +15,8 @@ export function LandingFooter({ githubUrl }: LandingFooterProps) {
           <span className="font-semibold tracking-tight text-foreground">
             Artifact
           </span>
-          <span className="text-muted-foreground/60">— stay at the frontier</span>
         </div>
         <div className="flex items-center gap-5">
-          <a
-            href={githubUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Open source on GitHub
-          </a>
           <span className="text-muted-foreground/60">
             © {new Date().getFullYear()} Artifact
           </span>

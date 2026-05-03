@@ -4,6 +4,7 @@ import { auth } from "@/server/auth";
 import { getAppOrigin } from "@/lib/app-origin";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { LandingHero } from "@/components/landing/landing-hero";
+import { LandingMarquee } from "@/components/landing/landing-marquee";
 import { LandingPillars } from "@/components/landing/landing-pillars";
 import { LandingFooter } from "@/components/landing/landing-footer";
 
@@ -18,10 +19,13 @@ export const metadata: Metadata = {
 
 export default async function LandingPage() {
   const appOrigin = getAppOrigin();
-  // Belt-and-braces: the proxy already bounces authed apex visitors to the
-  // app subdomain, but if someone reaches /landing directly on the app host
-  // we still send them onward. If auth isn't configured (e.g. local dev
-  // without secrets), `auth()` throws — fall through and render the page.
+  // The proxy is the source of truth for auth-aware host routing — apex
+  // hits from authed users are bounced to the app, and direct hits on
+  // `/landing` from either host are redirected away. This guard is a
+  // defensive backup so that if the proxy is ever bypassed (or the route
+  // is reached through some other means) authed users still don't see the
+  // marketing page. If auth isn't configured (e.g. local dev without
+  // secrets), `auth()` throws — fall through and render the page.
   let isAuthed = false;
   try {
     const session = await auth();
@@ -40,6 +44,7 @@ export default async function LandingPage() {
       <LandingNav signupHref={signupHref} githubUrl={GITHUB_URL} />
       <main>
         <LandingHero signupHref={signupHref} githubUrl={GITHUB_URL} />
+        <LandingMarquee />
         <LandingPillars />
       </main>
       <LandingFooter githubUrl={GITHUB_URL} />

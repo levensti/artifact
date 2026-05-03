@@ -29,20 +29,20 @@ export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
       <div className="relative mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-14 px-6 pt-16 pb-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-20 lg:px-10 lg:pt-24 lg:pb-28">
         {/* Left: copy + CTA */}
         <div className="relative max-w-xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/70 px-2.5 py-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase backdrop-blur-sm">
             <Sparkles className="size-3 text-primary/70" strokeWidth={2} />
-            Open source · BYOK
+            Open source
           </span>
 
-          <h1 className="mt-6 text-[40px] font-semibold leading-[1.05] tracking-[-0.035em] text-foreground sm:text-[52px] lg:text-[60px]">
-            Stay at the
+          <h1 className="mt-6 text-[42px] font-semibold leading-[1.02] tracking-[-0.035em] text-foreground sm:text-[54px] lg:text-[64px]">
+            Discover the
             <br />
-            <span className="bg-gradient-to-br from-primary via-primary/90 to-primary/70 bg-clip-text text-transparent">
+            <span className="bg-linear-to-br from-primary via-primary/90 to-primary/70 bg-clip-text text-transparent">
               research frontier.
             </span>
           </h1>
 
-          <p className="mt-6 max-w-[34ch] text-[15px] leading-relaxed text-muted-foreground sm:text-base">
+          <p className="mt-6 max-w-[36ch] text-[15px] leading-relaxed text-muted-foreground sm:text-[15.5px]">
             An AI-paired workspace for researchers. Read papers deeply, journal
             your learnings automatically, and never lose a thread.
           </p>
@@ -87,7 +87,10 @@ function HeroMock() {
         className="absolute inset-x-6 bottom-2 h-12 rounded-full bg-primary/10 blur-2xl"
       />
 
-      <div className="relative mx-auto w-full max-w-[520px] rotate-[-1deg] animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div
+        className="relative mx-auto w-full max-w-[520px] animate-in fade-in slide-in-from-bottom-4 duration-700 landing-float"
+        style={{ ["--rot" as string]: "-1deg" } as React.CSSProperties}
+      >
         {/* Paper card */}
         <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-lg)]">
           {/* Header chrome */}
@@ -135,13 +138,13 @@ function HeroMock() {
               <span>3 annotations · 2 questions</span>
               <span className="inline-flex items-center gap-1">
                 <span className="size-1.5 rounded-full bg-success" />
-                Auto-journaling
+                Summarizing...
               </span>
             </div>
           </div>
         </div>
 
-        {/* Floating chat bubble — question */}
+        {/* Floating chat bubble — question with blinking caret */}
         <div
           className="absolute -right-6 top-20 w-[260px] animate-in fade-in slide-in-from-right-2 rotate-[2deg] rounded-xl border border-border/70 bg-card p-3 shadow-[var(--shadow-md)] duration-700"
           style={{ animationDelay: "180ms", animationFillMode: "backwards" }}
@@ -156,6 +159,7 @@ function HeroMock() {
               </div>
               <p className="mt-0.5 text-[12px] leading-snug text-foreground">
                 What&apos;s the intuition behind multi-head attention?
+                <span className="landing-caret text-primary" />
               </p>
             </div>
           </div>
