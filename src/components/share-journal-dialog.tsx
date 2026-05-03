@@ -34,12 +34,11 @@ interface ShareJournalDialogProps {
 type LinkState =
   | { kind: "idle" }
   | { kind: "creating" }
-  | { kind: "ready"; token: string; url: string; reused: boolean; depth: number }
+  | { kind: "ready"; token: string; url: string; reused: boolean }
   | { kind: "error"; message: string };
 
 export default function ShareJournalDialog({ page, onClose }: ShareJournalDialogProps) {
   const [linkState, setLinkState] = useState<LinkState>({ kind: "idle" });
-  const [includeLinked, setIncludeLinked] = useState(false);
   const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
 
@@ -47,42 +46,27 @@ export default function ShareJournalDialog({ page, onClose }: ShareJournalDialog
   useEffect(() => {
     if (!page) {
       setLinkState({ kind: "idle" });
-      setIncludeLinked(false);
       setCopied(false);
       return;
     }
     if (linkState.kind !== "idle") return;
-    void mintLink(page.slug, 0);
+    void mintLink(page.slug);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page?.slug]);
 
-  // When the user toggles "include linked pages", mint a fresh link
-  // for the new depth. The previous link still exists and works at the
-  // old depth — the user can revoke explicitly if needed. This avoids
-  // surprising URL changes when the toggle is flipped accidentally.
-  useEffect(() => {
-    if (!page) return;
-    const desiredDepth = includeLinked ? 1 : 0;
-    if (linkState.kind === "ready" && linkState.depth === desiredDepth) return;
-    if (linkState.kind === "creating") return;
-    void mintLink(page.slug, desiredDepth);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeLinked]);
-
-  async function mintLink(slug: string, depth: number) {
+  async function mintLink(slug: string) {
     setLinkState({ kind: "creating" });
     try {
       const result = await createShareLink({
         kind: "wiki",
         wikiSlug: slug,
-        wikiDepth: depth,
+        wikiDepth: 0,
       });
       setLinkState({
         kind: "ready",
         token: result.token,
         url: buildShareUrl(result.token),
         reused: result.reused,
-        depth,
       });
     } catch (err) {
       setLinkState({
@@ -114,7 +98,7 @@ export default function ShareJournalDialog({ page, onClose }: ShareJournalDialog
     setRevoking(true);
     try {
       await revokeShareLink(linkState.token);
-      await mintLink(page.slug, includeLinked ? 1 : 0);
+      await mintLink(page.slug);
     } catch (err) {
       setLinkState({
         kind: "error",
@@ -174,13 +158,7 @@ export default function ShareJournalDialog({ page, onClose }: ShareJournalDialog
           revoking={revoking}
           onCopy={handleCopy}
           onRevoke={handleRevoke}
-          onRetry={() => page && mintLink(page.slug, includeLinked ? 1 : 0)}
-        />
-
-        <DepthToggle
-          checked={includeLinked}
-          onChange={setIncludeLinked}
-          disabled={isWorking}
+          onRetry={() => page && mintLink(page.slug)}
         />
       </DialogContent>
     </Dialog>
@@ -280,52 +258,6 @@ function LinkBlock({
     );
   }
   return null;
-}
-
-function DepthToggle({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-card/30 px-3 py-2.5 transition-colors hover:bg-card/60",
-        disabled && "pointer-events-none opacity-60",
-      )}
-    >
-      <span className="relative mt-0.5 inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-muted transition-colors data-[on=true]:bg-primary"
-        data-on={checked}
-      >
-        <input
-          type="checkbox"
-          className="peer sr-only"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-        />
-        <span
-          className={cn(
-            "absolute left-0.5 size-3 rounded-full bg-card shadow-sm transition-transform",
-            checked ? "translate-x-3" : "translate-x-0",
-          )}
-        />
-      </span>
-      <span className="flex-1">
-        <span className="block text-[12.5px] font-medium text-foreground">
-          Include linked pages
-        </span>
-        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
-          Pull in pages directly referenced via{" "}
-          <code className="rounded bg-muted px-1 py-px text-[10.5px]">[[link]]</code>{" "}
-          on this page.
-        </span>
-      </span>
-    </label>
-  );
 }
 
 function fallbackCopy(text: string) {
