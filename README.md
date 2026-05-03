@@ -46,6 +46,11 @@ AUTH_GOOGLE_SECRET=""
 SUPABASE_URL="https://<project-ref>.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY=""
 SUPABASE_BUCKET="learning-material"
+
+# Encryption-at-rest for stored API keys (32 bytes, base64).
+# Generate with `openssl rand -base64 32`. Rotating this invalidates every
+# encrypted secret in the DB — keep it stable per environment.
+ENCRYPTION_KEY=""
 ```
 
 ### 3. Install + migrate + run

@@ -21,15 +21,17 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  reviews         Review[]
-  deepDives       DeepDive[]
-  wikiPages       WikiPage[]
-  wikiPageSources WikiPageSource[]
-  wikiBacklinks   WikiBacklink[]
-  wikiRevisions   WikiRevision[]
-  settings        Setting[]
-  pdfBlobs        PdfBlob[]
-  parsedPapers    ParsedPaper[]
+  reviews           Review[]
+  deepDives         DeepDive[]
+  wikiPages         WikiPage[]
+  wikiPageSources   WikiPageSource[]
+  wikiBacklinks     WikiBacklink[]
+  wikiRevisions     WikiRevision[]
+  apiKeys           ApiKey[]
+  inferenceProfiles InferenceProfile[]
+  preferences       UserPreferences?
+  pdfBlobs          PdfBlob[]
+  parsedPapers      ParsedPaper[]
 }
 
 model Account {
@@ -193,15 +195,49 @@ model WikiRevision {
   @@index([pageId, id])
 }
 
-model Setting {
-  id     String @id @default(cuid())
-  userId String
-  key    String
-  value  String
+/// API key for an external service (LLM provider or tool). The `value`
+/// column holds the encrypted secret; see src/server/crypto.ts. The
+/// `provider` discriminator currently spans LLM providers ("anthropic",
+/// "openai", "xai") and tool keys ("brave").
+model ApiKey {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, key])
+  @@unique([userId, provider])
+}
+
+/// One named OpenAI- or Anthropic-compatible inference endpoint. The
+/// `apiKey` column holds the encrypted secret.
+model InferenceProfile {
+  id                String   @id @default(cuid())
+  userId            String
+  label             String
+  kind              String
+  baseUrl           String
+  apiKey            String
+  supportsStreaming Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Per-user UI preferences. `selectedModel` holds the currently-selected
+/// model as JSON because the Model shape is denormalized (id, label,
+/// provider, modelId, optional profileId) and is never queried by field.
+model UserPreferences {
+  userId        String  @id
+  selectedModel Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model PdfBlob {

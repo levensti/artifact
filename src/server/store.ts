@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type { PrerequisitesData } from "@/lib/explore";
@@ -611,17 +611,15 @@ async function rebuildBacklinks(
 /* ── Settings ─────────────────────────────────────────────────── */
 
 import {
-  BUILTIN_PROVIDER_ORDER,
   isInferenceProviderType,
   type InferenceProviderProfile,
   type Model,
   type Provider,
 } from "@/lib/models";
+import { decrypt, encrypt } from "./crypto";
 
-const INFERENCE_PROFILES_KEY = "inference_profiles";
-const SELECTED_MODEL_KEY = "selected_model";
-const API_KEY_PREFIX = "api_key:";
-const BRAVE_SEARCH_API_KEY = "brave_search_api_key";
+/** Pseudo-provider identifying the Brave Search tool key in the ApiKey table. */
+const BRAVE_PROVIDER = "brave";
 
 export interface SettingsSnapshot {
   keys: Partial<Record<Provider, string>>;
@@ -631,35 +629,33 @@ export interface SettingsSnapshot {
 }
 
 export async function getSettings(userId: string): Promise<SettingsSnapshot> {
-  const rows = await prisma.setting.findMany({ where: { userId } });
-  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const [apiKeys, profiles, prefs] = await Promise.all([
+    prisma.apiKey.findMany({ where: { userId } }),
+    prisma.inferenceProfile.findMany({ where: { userId } }),
+    prisma.userPreferences.findUnique({ where: { userId } }),
+  ]);
 
   const keys: Partial<Record<Provider, string>> = {};
-  for (const p of BUILTIN_PROVIDER_ORDER) {
-    const v = map.get(`${API_KEY_PREFIX}${p}`);
-    if (v) keys[p] = v;
-  }
-
-  let inferenceProfiles: InferenceProviderProfile[] = [];
-  const profilesRaw = map.get(INFERENCE_PROFILES_KEY);
-  if (profilesRaw) {
-    try {
-      const parsed = JSON.parse(profilesRaw) as unknown;
-      if (Array.isArray(parsed)) inferenceProfiles = parsed as InferenceProviderProfile[];
-    } catch {
-      /* ignore */
+  let braveSearchApiKey: string | null = null;
+  for (const row of apiKeys) {
+    const value = decrypt(row.value);
+    if (row.provider === BRAVE_PROVIDER) {
+      braveSearchApiKey = value;
+    } else {
+      keys[row.provider as Provider] = value;
     }
   }
 
-  let selectedModel: Model | null = null;
-  const modelRaw = map.get(SELECTED_MODEL_KEY);
-  if (modelRaw) {
-    try {
-      selectedModel = JSON.parse(modelRaw) as Model;
-    } catch {
-      selectedModel = null;
-    }
-  }
+  const inferenceProfiles: InferenceProviderProfile[] = profiles.map((p) => ({
+    id: p.id,
+    label: p.label,
+    kind: p.kind as InferenceProviderProfile["kind"],
+    baseUrl: p.baseUrl,
+    apiKey: decrypt(p.apiKey),
+    supportsStreaming: p.supportsStreaming,
+  }));
+
+  let selectedModel = (prefs?.selectedModel as unknown as Model | null) ?? null;
   if (
     selectedModel &&
     isInferenceProviderType(selectedModel.provider) &&
@@ -669,12 +665,7 @@ export async function getSettings(userId: string): Promise<SettingsSnapshot> {
     selectedModel = null;
   }
 
-  return {
-    keys,
-    inferenceProfiles,
-    selectedModel,
-    braveSearchApiKey: map.get(BRAVE_SEARCH_API_KEY) || null,
-  };
+  return { keys, inferenceProfiles, selectedModel, braveSearchApiKey };
 }
 
 export interface SettingsPatch {
@@ -689,41 +680,69 @@ export async function patchSettings(
   patch: SettingsPatch,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    const setKey = async (key: string, value: string) =>
-      tx.setting.upsert({
-        where: { userId_key: { userId, key } },
-        create: { userId, key, value },
-        update: { value },
+    const upsertKey = (provider: string, value: string) =>
+      tx.apiKey.upsert({
+        where: { userId_provider: { userId, provider } },
+        create: { userId, provider, value: encrypt(value) },
+        update: { value: encrypt(value) },
       });
-    const deleteKey = async (key: string) =>
-      tx.setting.deleteMany({ where: { userId, key } });
+    const deleteKey = (provider: string) =>
+      tx.apiKey.deleteMany({ where: { userId, provider } });
 
     if (patch.keys) {
-      for (const [p, v] of Object.entries(patch.keys) as [Provider, string | null | undefined][]) {
-        const k = `${API_KEY_PREFIX}${p}`;
+      for (const [provider, v] of Object.entries(patch.keys) as [
+        Provider,
+        string | null | undefined,
+      ][]) {
         if (v === null || v === undefined || v === "") {
-          await deleteKey(k);
+          await deleteKey(provider);
         } else {
-          await setKey(k, v);
+          await upsertKey(provider, v);
         }
       }
     }
+
     if (patch.inferenceProfiles !== undefined && patch.inferenceProfiles !== null) {
-      await setKey(INFERENCE_PROFILES_KEY, JSON.stringify(patch.inferenceProfiles));
-    }
-    if ("selectedModel" in patch) {
-      if (patch.selectedModel) {
-        await setKey(SELECTED_MODEL_KEY, JSON.stringify(patch.selectedModel));
-      } else {
-        await deleteKey(SELECTED_MODEL_KEY);
+      const next = patch.inferenceProfiles;
+      const keepIds = next.map((p) => p.id);
+      await tx.inferenceProfile.deleteMany({
+        where: keepIds.length
+          ? { userId, NOT: { id: { in: keepIds } } }
+          : { userId },
+      });
+      for (const p of next) {
+        const data = {
+          label: p.label,
+          kind: p.kind,
+          baseUrl: p.baseUrl,
+          apiKey: encrypt(p.apiKey),
+          supportsStreaming: p.supportsStreaming !== false,
+        };
+        await tx.inferenceProfile.upsert({
+          where: { id: p.id },
+          create: { id: p.id, userId, ...data },
+          update: data,
+        });
       }
     }
+
+    if ("selectedModel" in patch) {
+      const value = patch.selectedModel
+        ? (patch.selectedModel as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull;
+      await tx.userPreferences.upsert({
+        where: { userId },
+        create: { userId, selectedModel: value },
+        update: { selectedModel: value },
+      });
+    }
+
     if ("braveSearchApiKey" in patch) {
       const v = patch.braveSearchApiKey;
       if (v === null || v === undefined || v === "") {
-        await deleteKey(BRAVE_SEARCH_API_KEY);
+        await deleteKey(BRAVE_PROVIDER);
       } else {
-        await setKey(BRAVE_SEARCH_API_KEY, v);
+        await upsertKey(BRAVE_PROVIDER, v);
       }
     }
   });
