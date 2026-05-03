@@ -1,5 +1,5 @@
 /** Machine-readable signal at end of assistant text; stripped before display. Client runs the learning map pipeline when present. */
-export const LEARNING_MAP_SENTINEL = "[[paper-copilot:learning-map]]";
+export const LEARNING_MAP_SENTINEL = "[[artifact:learning-map]]";
 
 export function stripLearningMapSentinel(content: string): {
   text: string;

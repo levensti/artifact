@@ -18,7 +18,7 @@
  *   );
  */
 
-const WIKI_INGEST_UPDATED_EVENT = "paper-copilot-wiki-ingest-updated";
+const WIKI_INGEST_UPDATED_EVENT = "artifact-wiki-ingest-updated";
 
 export type WikiIngestKind = "journal" | "other";
 

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       }
       response = await fetch(url, {
         headers: {
-          "User-Agent": "PaperCopilot/1.0 (academic research tool; mailto:contact@paper-copilot.dev)",
+          "User-Agent": "Artifact/1.0 (academic research tool)",
         },
         next: { revalidate: 3600 },
       });

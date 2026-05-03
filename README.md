@@ -14,7 +14,7 @@ Once a source is open, you get the content next to Assistant and Notes. Ask sele
 
 **Try our hosted solution for free (no paid tier):** [withartifact.com](https://withartifact.com) — sign in with Google and add your API keys to start reading.
 
-![Paper review — PDF with AI assistant](docs/paper-copilot.png)
+![Paper review — PDF with AI assistant](docs/paper-review.png)
 
 **Self hosting:** Easily self-host or run locally using the instructions below.
 
