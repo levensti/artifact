@@ -55,12 +55,12 @@ export default function ShareLandingClient({
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const autoFiredRef = useRef(false);
 
-  const handleImport = async (options: { force?: boolean } = {}) => {
+  const handleImport = async () => {
     setStage({ kind: "importing" });
     try {
       const result = await apiFetch<ImportResult>(
         `/api/shares/${encodeURIComponent(token)}/import`,
-        { method: "POST", body: options },
+        { method: "POST" },
       );
       setStage({ kind: "imported", result });
       // Brief pause so the "Imported!" state is visible before navigation.
@@ -290,7 +290,7 @@ function CtaArea({
   isOwner: boolean;
   stage: Stage;
   preview: SharePreview;
-  onImport: (options?: { force?: boolean }) => void;
+  onImport: () => void;
 }) {
   const router = useRouter();
   const callbackUrl = `${landingPath}?autoImport=1`;
@@ -308,25 +308,6 @@ function CtaArea({
               >
             ).rootSlug,
           )}`;
-    // The owner sees a forced-clone affordance below the primary CTA so
-    // they can exercise the recipient flow against their own share —
-    // useful for QA / dogfooding without needing a second account.
-    if (stage.kind === "importing") {
-      return (
-        <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-4 py-3 text-[13px] text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" strokeWidth={2} />
-          <span>Cloning a copy into your library…</span>
-        </div>
-      );
-    }
-    if (stage.kind === "imported") {
-      return (
-        <div className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-[13px] text-success">
-          <Check className="size-4" strokeWidth={2.25} />
-          <span>Cloned — opening it now…</span>
-        </div>
-      );
-    }
     return (
       <div className="space-y-3">
         <p className="text-[12.5px] text-muted-foreground">
@@ -343,16 +324,6 @@ function CtaArea({
             strokeWidth={2}
           />
         </button>
-        <button
-          type="button"
-          onClick={() => onImport({ force: true })}
-          className="text-[12px] text-muted-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
-        >
-          Or test the recipient flow — import a copy into your own library
-        </button>
-        {stage.kind === "error" ? (
-          <p className="text-[12px] text-destructive">{stage.message}</p>
-        ) : null}
       </div>
     );
   }
