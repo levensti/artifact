@@ -29,29 +29,9 @@ Self-hosting requires a Postgres database, an object storage bucket, and a Googl
 
 ### 2. Configure environment
 
-Create a `.env` file at root and fill in:
+Copy [`.env.example`](./.env.example) to `.env` and fill in the required values. The example file documents every variable inline — what it does, where to get the value, and which are local vs. production-only.
 
-```env
-# Postgres connection strings from Supabase → Connect
-DATABASE_URL="..."   # pooled (port 6543, ?pgbouncer=true)
-DIRECT_URL="..."     # direct (port 5432)
-
-# Auth.js
-AUTH_SECRET=""       # openssl rand -base64 32
-AUTH_URL="http://localhost:3000"
-AUTH_GOOGLE_ID=""
-AUTH_GOOGLE_SECRET=""
-
-# Supabase Storage
-SUPABASE_URL="https://<project-ref>.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY=""
-SUPABASE_BUCKET="learning-material"
-
-# Encryption-at-rest for stored API keys (32 bytes, base64).
-# Generate with `openssl rand -base64 32`. Rotating this invalidates every
-# encrypted secret in the DB — keep it stable per environment.
-ENCRYPTION_KEY=""
-```
+For local dev you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`. The multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`) are production-only — leave them unset locally.
 
 ### 3. Install + migrate + run
 
