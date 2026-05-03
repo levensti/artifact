@@ -5,12 +5,12 @@ import { auth } from "@/server/auth";
  * Host-aware routing:
  *   • Apex (e.g. withartifact.com) — marketing only. `/` is rewritten to
  *     the internal `/landing` route (URL stays `/`). Direct access to
- *     `/landing` is bounced back to `/` so the marketing surface only ever
- *     exists at the apex root. All other paths redirect to the app
- *     subdomain. Authenticated visitors are bounced straight to the app.
+ *     `/landing` returns 404 — it's not a public URL on either host. All
+ *     other paths redirect to the app subdomain. Authenticated visitors
+ *     are bounced straight to the app.
  *   • App subdomain (e.g. app.withartifact.com) — full app + auth flow.
- *     Marketing has no presence here: `/landing` redirects to the apex
- *     and is not in the open-route allowlist.
+ *     Marketing has no presence here: `/landing` returns 404, and it is
+ *     not in the open-route allowlist.
  *   • Localhost / unknown hosts — treated as the app subdomain so dev and
  *     preview deploys work without env config.
  *
@@ -35,6 +35,14 @@ export default auth((req) => {
   const { nextUrl } = req;
   const host = req.headers.get("host");
 
+  // /landing is an internal render target only (the apex `/` rewrites to
+  // it). It is never a public URL on any host, so direct hits 404. The
+  // rewrite below still works because middleware does not re-run for
+  // internal rewrites — Next renders the /landing route in place.
+  if (nextUrl.pathname === "/landing") {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   // ── Apex: marketing landing only ──────────────────────────────
   if (isApexHost(host)) {
     // Already-authenticated visitors get sent straight to the app — the
@@ -45,14 +53,6 @@ export default auth((req) => {
         `https://${APP_HOST}`,
       );
       return NextResponse.redirect(target, 308);
-    }
-    // /landing is an internal render target only — never a public URL.
-    // If someone types it on the apex, send them to the marketing root.
-    if (nextUrl.pathname === "/landing") {
-      const url = nextUrl.clone();
-      url.pathname = "/";
-      url.search = "";
-      return NextResponse.redirect(url, 308);
     }
     if (nextUrl.pathname === "/") {
       // Apex root → marketing landing page (rewrite — URL stays `/`).
@@ -74,17 +74,6 @@ export default auth((req) => {
 
   // ── App subdomain (and localhost / preview) ───────────────────
   const isAuthed = !!req.auth?.user;
-
-  // Marketing has no presence on the app host. Bounce any direct hit
-  // on /landing to the apex marketing root (or to /signup in dev where
-  // no apex is configured, since unauthed visitors belong there anyway).
-  if (nextUrl.pathname === "/landing") {
-    const apex = APEX_HOSTS[0];
-    if (apex) {
-      return NextResponse.redirect(new URL("/", `https://${apex}`), 308);
-    }
-    return NextResponse.redirect(new URL("/signup", nextUrl.origin), 308);
-  }
 
   // Share landing pages and their public metadata routes need to load
   // for unauthenticated visitors — the whole point is that anyone with
