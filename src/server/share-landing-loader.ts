@@ -45,9 +45,9 @@ async function loadShareImpl(token: string): Promise<LoaderResult> {
 
 export interface BuildMetadataArgs {
   preview: SharePreview;
-  /// Path the OG image lives at, e.g. `/share-review/<token>/og`. Page
-  /// passes this so the meta links to its sibling route, not a
-  /// hard-coded path that could drift.
+  /// Path the OG image lives at, e.g. `/share/<token>/og`. Page passes
+  /// this so the meta links to its sibling route, not a hard-coded
+  /// path that could drift.
   ogPath: string;
 }
 

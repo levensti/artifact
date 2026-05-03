@@ -23,7 +23,7 @@ interface Props {
   isOwner: boolean;
   isAuthed: boolean;
   autoImport: boolean;
-  /// Canonical path for this landing page (e.g. `/share-review/<token>`).
+  /// Canonical path for this landing page (e.g. `/share/<token>`).
   /// Used to build the `?callbackUrl=` for the auth round-trip so the
   /// visitor lands back here after sign-in/sign-up.
   landingPath: string;
@@ -55,12 +55,12 @@ export default function ShareLandingClient({
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const autoFiredRef = useRef(false);
 
-  const handleImport = async () => {
+  const handleImport = async (options: { force?: boolean } = {}) => {
     setStage({ kind: "importing" });
     try {
       const result = await apiFetch<ImportResult>(
         `/api/shares/${encodeURIComponent(token)}/import`,
-        { method: "POST" },
+        { method: "POST", body: options },
       );
       setStage({ kind: "imported", result });
       // Brief pause so the "Imported!" state is visible before navigation.
@@ -118,8 +118,8 @@ export default function ShareLandingClient({
           </h1>
 
           <p className="mt-3 text-[13.5px] leading-relaxed text-muted-foreground">
-            One click and a copy lands in your library — chats, annotations,
-            notes, and all. The original stays exactly where it is.
+            One click and a copy lands in your workspace: chats, annotations,
+            notes, and all.
           </p>
 
           <div className="mt-7">
@@ -140,8 +140,6 @@ export default function ShareLandingClient({
               onImport={handleImport}
             />
           </div>
-
-          <Footnote isAuthed={isAuthed} />
         </div>
       </section>
     </main>
@@ -155,7 +153,9 @@ function Eyebrow({ kind }: { kind: "review" | "wiki" }) {
   return (
     <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-primary/80">
       <Icon className="size-3.5" strokeWidth={1.8} />
-      <span>{kind === "review" ? "Shared paper review" : "Shared journal entry"}</span>
+      <span>
+        {kind === "review" ? "Shared paper review" : "Shared journal entry"}
+      </span>
     </div>
   );
 }
@@ -174,10 +174,10 @@ function ReviewCard({
       : "Unknown source";
   const sourceUrl = payload.arxivId
     ? `https://arxiv.org/abs/${encodeURIComponent(payload.arxivId)}`
-    : payload.sourceUrl ?? null;
+    : (payload.sourceUrl ?? null);
 
   return (
-    <section className="rounded-xl border border-border/70 bg-card p-5 shadow-[var(--shadow-sm)]">
+    <section className="rounded-xl border border-border/70 bg-card p-5 shadow-(--shadow-sm)">
       <h2 className="text-balance text-[16px] font-semibold leading-snug tracking-tight text-foreground">
         {payload.title}
       </h2>
@@ -192,7 +192,9 @@ function ReviewCard({
           <ExternalLink className="size-3" strokeWidth={1.75} />
         </a>
       ) : (
-        <p className="mt-1.5 text-[12px] text-muted-foreground">{sourceLabel}</p>
+        <p className="mt-1.5 text-[12px] text-muted-foreground">
+          {sourceLabel}
+        </p>
       )}
 
       <CountPills counts={payload.counts} />
@@ -246,7 +248,7 @@ function WikiCard({
 }) {
   const isDigest = payload.pageType === "digest";
   return (
-    <section className="rounded-xl border border-border/70 bg-card p-5 shadow-[var(--shadow-sm)]">
+    <section className="rounded-xl border border-border/70 bg-card p-5 shadow-(--shadow-sm)">
       <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/60">
         {isDigest ? (
           <Sparkles className="size-2.5" strokeWidth={2} />
@@ -288,7 +290,7 @@ function CtaArea({
   isOwner: boolean;
   stage: Stage;
   preview: SharePreview;
-  onImport: () => void;
+  onImport: (options?: { force?: boolean }) => void;
 }) {
   const router = useRouter();
   const callbackUrl = `${landingPath}?autoImport=1`;
@@ -299,8 +301,32 @@ function CtaArea({
       preview.payload.kind === "review"
         ? `/review/${(preview.payload as Extract<SharePreview["payload"], { kind: "review" }>).reviewId}`
         : `/journal?page=${encodeURIComponent(
-            (preview.payload as Extract<SharePreview["payload"], { kind: "wiki" }>).rootSlug,
+            (
+              preview.payload as Extract<
+                SharePreview["payload"],
+                { kind: "wiki" }
+              >
+            ).rootSlug,
           )}`;
+    // The owner sees a forced-clone affordance below the primary CTA so
+    // they can exercise the recipient flow against their own share —
+    // useful for QA / dogfooding without needing a second account.
+    if (stage.kind === "importing") {
+      return (
+        <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-4 py-3 text-[13px] text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+          <span>Cloning a copy into your library…</span>
+        </div>
+      );
+    }
+    if (stage.kind === "imported") {
+      return (
+        <div className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-[13px] text-success">
+          <Check className="size-4" strokeWidth={2.25} />
+          <span>Cloned — opening it now…</span>
+        </div>
+      );
+    }
     return (
       <div className="space-y-3">
         <p className="text-[12.5px] text-muted-foreground">
@@ -317,6 +343,16 @@ function CtaArea({
             strokeWidth={2}
           />
         </button>
+        <button
+          type="button"
+          onClick={() => onImport({ force: true })}
+          className="text-[12px] text-muted-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Or test the recipient flow — import a copy into your own library
+        </button>
+        {stage.kind === "error" ? (
+          <p className="text-[12px] text-destructive">{stage.message}</p>
+        ) : null}
       </div>
     );
   }
@@ -338,7 +374,7 @@ function CtaArea({
         </div>
         <button
           type="button"
-          onClick={onImport}
+          onClick={() => onImport()}
           className="text-[13px] font-medium text-primary underline-offset-4 hover:underline"
         >
           Try again
@@ -352,7 +388,7 @@ function CtaArea({
     return (
       <button
         type="button"
-        onClick={onImport}
+        onClick={() => onImport()}
         disabled={importing}
         className={cn(
           primaryBtnCls,
@@ -403,23 +439,13 @@ function CtaArea({
 const primaryBtnCls =
   "group inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-[13.5px] font-medium text-primary-foreground shadow-[var(--shadow-primary)] transition-all duration-150 hover:-translate-y-px hover:shadow-[var(--shadow-md)]";
 
-function Footnote({ isAuthed }: { isAuthed: boolean }) {
-  return (
-    <p className="mt-10 text-[11.5px] leading-relaxed text-muted-foreground/55">
-      {isAuthed
-        ? "Importing keeps the original untouched. You can edit, annotate, and continue exploring as if it was your own."
-        : "We use your Google account only to identify you. Your API keys stay on your machine."}
-    </p>
-  );
-}
-
 /* ── Revoked state ─────────────────────────────────────────────── */
 
 function RevokedView() {
   return (
-    <main className="grid min-h-screen place-items-center bg-[var(--reader-mat)] px-6 text-center">
+    <main className="grid min-h-screen place-items-center bg-reader-mat px-6 text-center">
       <div className="max-w-md">
-        <span className="mx-auto mb-6 flex size-12 items-center justify-center rounded-2xl bg-card shadow-[var(--shadow-sm)]">
+        <span className="mx-auto mb-6 flex size-12 items-center justify-center rounded-2xl bg-card shadow-(--shadow-sm)">
           <BrandGlyph className="size-5 text-primary" />
         </span>
         <h1 className="text-xl font-semibold tracking-tight text-foreground">

@@ -11,8 +11,6 @@ interface PageContext {
   searchParams: Promise<{ autoImport?: string }>;
 }
 
-const SEGMENT = "share-review";
-
 export async function generateMetadata({
   params,
 }: PageContext): Promise<Metadata> {
@@ -23,11 +21,11 @@ export async function generateMetadata({
   }
   return buildShareMetadata({
     preview: result.preview,
-    ogPath: `/${SEGMENT}/${token}/og`,
+    ogPath: `/share/${token}/og`,
   });
 }
 
-export default async function SharedReviewPage({
+export default async function SharePage({
   params,
   searchParams,
 }: PageContext) {
@@ -42,7 +40,7 @@ export default async function SharedReviewPage({
   return (
     <ShareLandingClient
       token={token}
-      landingPath={`/${SEGMENT}/${token}`}
+      landingPath={`/share/${token}`}
       state={result.state}
       preview={result.preview ?? null}
       isOwner={result.isOwner}

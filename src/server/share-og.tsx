@@ -5,10 +5,9 @@ import { getSharePreview } from "./shares";
 const WIDTH = 1200;
 const HEIGHT = 630;
 
-/// Render the 1200×630 OG image for a share token. Used by both the
-/// /share-review and /share-journal og routes — the image content is
-/// driven entirely by the share's stored kind, so the URL prefix is
-/// presentation only.
+/// Render the 1200×630 OG image for a share token. The kind label
+/// (Paper review / Journal entry) and content are driven entirely by
+/// the share's stored kind.
 export async function renderShareOgImage(token: string): Promise<Response> {
   const preview = await getSharePreview(token).catch(() => null);
   if (!preview) return renderFallback();

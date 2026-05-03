@@ -80,7 +80,7 @@ export default function ShareJournalDialog({ page, onClose }: ShareJournalDialog
       setLinkState({
         kind: "ready",
         token: result.token,
-        url: buildShareUrl(result.token, "wiki"),
+        url: buildShareUrl(result.token),
         reused: result.reused,
         depth,
       });

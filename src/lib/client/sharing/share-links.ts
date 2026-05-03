@@ -76,21 +76,30 @@ export async function revokeShareLink(token: string): Promise<void> {
   );
 }
 
-export async function importShareLink(token: string): Promise<ImportShareResult> {
+export interface ImportShareOptions {
+  /// Owner-only escape hatch: clone the share into the owner's own
+  /// account instead of short-circuiting to the original. For testing
+  /// the recipient flow on one's own share.
+  force?: boolean;
+}
+
+export async function importShareLink(
+  token: string,
+  options: ImportShareOptions = {},
+): Promise<ImportShareResult> {
   return apiFetch<ImportShareResult>(
     `/api/shares/${encodeURIComponent(token)}/import`,
-    { method: "POST" },
+    { method: "POST", body: options },
   );
 }
 
 /**
- * Build the absolute share URL for a token. Kind picks the prefix
- * (`/share-review/...` vs `/share-journal/...`) so unfurls describe
- * what's inside without having to fetch metadata.
+ * Build the absolute share URL for a token. Single opaque path; the
+ * landing page's OG image surfaces what kind of artifact is inside
+ * when the link is unfurled.
  */
-export function buildShareUrl(token: string, kind: ShareKind): string {
-  const segment = kind === "wiki" ? "share-journal" : "share-review";
-  const path = `/${segment}/${token}`;
+export function buildShareUrl(token: string): string {
+  const path = `/share/${token}`;
   if (typeof window === "undefined") return path;
   return `${window.location.origin}${path}`;
 }

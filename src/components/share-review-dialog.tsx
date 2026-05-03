@@ -65,7 +65,7 @@ export default function ShareReviewDialog({
       setLinkState({
         kind: "ready",
         token: result.token,
-        url: buildShareUrl(result.token, "review"),
+        url: buildShareUrl(result.token),
         reused: result.reused,
       });
     } catch (err) {

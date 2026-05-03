@@ -58,8 +58,7 @@ export default auth((req) => {
   // for unauthenticated visitors — the whole point is that anyone with
   // the link can see the preview before deciding to sign up.
   const isPublicShareRoute =
-    nextUrl.pathname.startsWith("/share-review/") ||
-    nextUrl.pathname.startsWith("/share-journal/") ||
+    nextUrl.pathname.startsWith("/share/") ||
     /^\/api\/shares\/[^/]+\/preview\/?$/.test(nextUrl.pathname);
 
   const isOpen =

@@ -61,7 +61,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           >
             <button
               type="submit"
-              className="group flex w-full items-center justify-center gap-2.5 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground/90 shadow-[var(--shadow-sm)] transition-all duration-150 hover:border-primary/30 hover:shadow-[var(--shadow-primary)] hover:-translate-y-px active:translate-y-0"
+              className="group flex w-full items-center justify-center gap-2.5 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground/90 shadow-(--shadow-sm) transition-all duration-150 hover:border-primary/30 hover:shadow-(--shadow-primary) hover:-translate-y-px active:translate-y-0"
             >
               <GoogleMark />
               <span>
@@ -78,11 +78,6 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
             >
               {isSignup ? "Sign in" : "Create an account"}
             </Link>
-          </p>
-
-          <p className="mt-10 text-xs leading-relaxed text-muted-foreground/55">
-            By continuing, you agree to our terms and acknowledge our privacy
-            policy. We use your Google account only to identify you.
           </p>
         </div>
       </section>
