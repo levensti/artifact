@@ -212,8 +212,7 @@ model ApiKey {
   @@unique([userId, provider])
 }
 
-/// One named OpenAI- or Anthropic-compatible inference endpoint. The
-/// `apiKey` column holds the encrypted secret.
+/// One named OpenAI- or Anthropic-compatible inference endpoint.
 model InferenceProfile {
   id                String   @id @default(cuid())
   userId            String
