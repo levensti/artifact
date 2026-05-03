@@ -126,7 +126,7 @@ export default function JournalCheckpointModal({
       if (modeSnapshot === "new") {
         const existing = await loadWikiPages();
         const slugs = new Set(existing.map((p) => p.slug));
-        const initialTitle = `${paperTitle} — ${formatDateLabel(new Date())}`;
+        const initialTitle = `${paperTitle} · ${formatDateLabel(new Date())}`;
         slug = uniquifySlug(buildSessionSlug(initialTitle), slugs);
         await saveWikiPage({
           slug,
@@ -147,7 +147,7 @@ export default function JournalCheckpointModal({
         slug = target.slug;
         existingTitle = target.title;
         existingMarkdown = target.content.trimEnd();
-        appendPrefix = `${existingMarkdown}\n\n## Update — ${formatDateLabel(
+        appendPrefix = `${existingMarkdown}\n\n## Update · ${formatDateLabel(
           new Date(),
         )}\n\n`;
         await updateWikiPage(slug, { content: appendPrefix });

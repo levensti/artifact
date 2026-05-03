@@ -4,17 +4,17 @@ const PILLARS: Pillar[] = [
   {
     icon: BookOpen,
     title: "Study anything",
-    body: "Open arXiv links, drop in PDFs, or pair with any web page. Selection-scoped chat keeps every answer cited back to the source.",
+    body: "Open arXiv links, drop in PDFs, or pair with any web page. Every answer stays cited to the passage you highlighted.",
   },
   {
     icon: PenLine,
     title: "Document automatically",
-    body: "One click promotes a chat into a wiki entry. Learnings aggregate across sessions into a journal that builds itself.",
+    body: "Turn any chat into a wiki entry with one click. Sessions aggregate into a journal that builds itself.",
   },
   {
     icon: KeyRound,
     title: "Your keys, your machine",
-    body: "Bring your own keys for Anthropic, OpenAI, xAI, OpenRouter — or run locally with Ollama, LM Studio, or llama.cpp.",
+    body: "Bring your own keys for Anthropic, OpenAI, xAI, and OpenRouter, or run locally with Ollama, LM Studio, and llama.cpp.",
   },
 ];
 
@@ -31,14 +31,14 @@ export function LandingPillars() {
         <div className="grid grid-cols-1 items-end gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
           <div className="max-w-2xl">
             <div className="text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
-              What Artifact gives you
+              How researchers use it
             </div>
             <h2 className="mt-3 text-[30px] font-semibold leading-[1.08] tracking-[-0.025em] text-foreground sm:text-[36px] lg:text-[40px]">
-              A workspace that thinks alongside you.
+              A workspace built for the frontier.
             </h2>
           </div>
           <p className="max-w-prose text-[14.5px] leading-relaxed text-muted-foreground lg:text-[15px]">
-            Designed for the way researchers actually read — deep, recursive,
+            Designed for the way researchers actually read: deep, recursive,
             and noisy with half-formed questions. Artifact captures the trail
             you leave behind.
           </p>

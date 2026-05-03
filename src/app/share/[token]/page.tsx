@@ -17,7 +17,7 @@ export async function generateMetadata({
   const { token } = await params;
   const result = await loadShare(token).catch(() => null);
   if (!result || result.state !== "ok" || !result.preview) {
-    return { title: "Shared on Artifact" };
+    return { title: { absolute: "Shared on Artifact" } };
   }
   return buildShareMetadata({
     preview: result.preview,

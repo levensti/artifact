@@ -73,7 +73,7 @@ export function buildShareMetadata({
   const ogUrl = `${ogPath}?v=${ogVersion}`;
 
   return {
-    title,
+    title: { absolute: title },
     description,
     openGraph: {
       title,

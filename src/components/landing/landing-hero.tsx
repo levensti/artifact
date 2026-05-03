@@ -43,8 +43,8 @@ export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
           </h1>
 
           <p className="mt-6 max-w-[36ch] text-[15px] leading-relaxed text-muted-foreground sm:text-[15.5px]">
-            An AI-paired workspace for researchers. Read papers deeply, journal
-            your learnings automatically, and never lose a thread.
+            A workspace for researchers. Read papers deeply, journal your
+            learnings automatically, and never lose a thread.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-3">

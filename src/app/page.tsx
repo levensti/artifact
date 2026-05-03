@@ -18,12 +18,12 @@ export async function generateMetadata(): Promise<Metadata> {
   const h = await headers();
   if (isApexHost(h.get("host"))) {
     return {
-      title: "Artifact — AI-paired workspace for researchers",
+      title: { absolute: "Artifact: Discover the frontier" },
       description:
-        "Read papers deeply, journal your learnings automatically, and never lose a thread. Open source. Bring your own keys.",
+        "A workspace for researchers. Read papers deeply, journal your learnings automatically, and never lose a thread. Open source. Bring your own keys.",
     };
   }
-  return { title: "Artifact" };
+  return { title: { absolute: "Artifact" } };
 }
 
 export default async function RootPage() {

@@ -35,7 +35,7 @@ export default function HomeClient() {
               What are you working on?
             </h1>
             <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-              Pick a starting point — everything you do builds your journal
+              Pick a starting point. Everything you do builds your journal
               automatically.
             </p>
           </div>
@@ -114,7 +114,7 @@ export default function HomeClient() {
                   <ArrowRight className="size-3.5 text-muted-foreground/30 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary/50" />
                 </div>
                 <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground/70">
-                  Continue where a collaborator left off — import a review
+                  Continue where a collaborator left off. Import a review
                   bundle with annotations, notes, and chat history.
                 </p>
               </div>

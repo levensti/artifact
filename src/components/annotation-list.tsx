@@ -239,7 +239,7 @@ function AnnotationCard({
                   <span className="font-medium tabular-nums text-foreground/85">
                     {annotation.thread.length}
                   </span>{" "}
-                  {annotation.thread.length === 1 ? "message" : "messages"} —
+                  {annotation.thread.length === 1 ? "message" : "messages"} ·
                   open in assistant
                 </p>
                 <ChevronRight
