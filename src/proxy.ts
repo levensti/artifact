@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/server/auth";
+import { isApexHost } from "@/lib/host";
 
 /**
  * Host-aware routing:
- *   • Apex (e.g. withartifact.com) — marketing only. `/` is rewritten to
- *     the internal `/landing` route (URL stays `/`). Direct access to
- *     `/landing` returns 404 — it's not a public URL on either host. All
- *     other paths redirect to the app subdomain. Authenticated visitors
- *     are bounced straight to the app.
+ *   • Apex (e.g. withartifact.com) — marketing only. The root `/` is
+ *     rendered by `app/page.tsx`, which host-discriminates and shows the
+ *     marketing surface. Authenticated visitors are bounced straight to
+ *     the app. All other paths redirect to the app subdomain. There is
+ *     no `/landing` route — direct hits to `/landing` 404 naturally on
+ *     either host.
  *   • App subdomain (e.g. app.withartifact.com) — full app + auth flow.
- *     Marketing has no presence here: `/landing` returns 404, and it is
- *     not in the open-route allowlist.
  *   • Localhost / unknown hosts — treated as the app subdomain so dev and
  *     preview deploys work without env config.
  *
@@ -18,30 +18,11 @@ import { auth } from "@/server/auth";
  *   APEX_HOSTS  — comma-separated bare hostnames (no scheme/port)
  *   APP_HOST    — bare hostname of the app subdomain
  */
-const APEX_HOSTS = (process.env.APEX_HOSTS ?? "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
 const APP_HOST = process.env.APP_HOST?.trim() || null;
-
-function isApexHost(host: string | null | undefined): boolean {
-  if (!host) return false;
-  const bare = host.split(":")[0];
-  return APEX_HOSTS.includes(bare);
-}
 
 export default auth((req) => {
   const { nextUrl } = req;
   const host = req.headers.get("host");
-
-  // /landing is an internal render target only (the apex `/` rewrites to
-  // it). It is never a public URL on any host, so direct hits 404. The
-  // rewrite below still works because middleware does not re-run for
-  // internal rewrites — Next renders the /landing route in place.
-  if (nextUrl.pathname === "/landing") {
-    return new NextResponse("Not Found", { status: 404 });
-  }
 
   // ── Apex: marketing landing only ──────────────────────────────
   if (isApexHost(host)) {
@@ -55,13 +36,11 @@ export default auth((req) => {
       return NextResponse.redirect(target, 308);
     }
     if (nextUrl.pathname === "/") {
-      // Apex root → marketing landing page (rewrite — URL stays `/`).
-      const url = nextUrl.clone();
-      url.pathname = "/landing";
-      return NextResponse.rewrite(url);
+      // Apex root → let app/page.tsx render the marketing surface.
+      return NextResponse.next();
     }
     // Auth lives only on the app subdomain — bounce apex auth URLs across.
-    // Falls through to the generic apex→app redirect below if APP_HOST is unset.
+    // Falls through to next() if APP_HOST is unset (dev / preview).
     if (APP_HOST) {
       const target = new URL(
         nextUrl.pathname + nextUrl.search,
