@@ -1,12 +1,10 @@
 /**
- * Client-side data layer. All reads and writes go to the Dexie-backed
- * store in src/lib/client/store.ts. This module preserves the public
- * API the rest of the app already depends on — every exported function
- * matches its pre-migration signature, so callers remain untouched.
+ * Client-side data layer. All reads and writes go through the app's API
+ * routes (see src/app/api/*) which back onto Postgres via Prisma.
  *
- * In-memory caches sit in front of Dexie so that UI render paths can
- * call `getReviewsSnapshot()` / `getWikiCacheSnapshot()` synchronously,
- * the same way they did when the data lived on the server.
+ * In-memory caches sit in front of the network so that UI render paths
+ * can call `getReviewsSnapshot()` / `getWikiCacheSnapshot()` synchronously,
+ * the same way they did when the data lived in IndexedDB.
  */
 
 import type { InferenceProviderProfile, Provider } from "@/lib/models";
@@ -21,7 +19,6 @@ import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type { PrerequisitesData } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
-import { normalizeArxivId } from "@/lib/reviews";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
@@ -29,34 +26,40 @@ import {
   EXPLORE_UPDATED_EVENT,
   KEYS_UPDATED_EVENT,
   WIKI_UPDATED_EVENT,
+  USER_UPDATED_EVENT,
 } from "@/lib/storage-events";
-import * as store from "@/lib/client/store";
+import { apiFetch } from "@/lib/client/api";
 
-let hydratePromise: Promise<void> | null = null;
-
-let reviewsCache: PaperReview[] = [];
-
-type SettingsCache = {
+interface SettingsCache {
   keys: Partial<Record<Provider, string>>;
   inferenceProfiles: InferenceProviderProfile[];
   selectedModel: Model | null;
   braveSearchApiKey: string | null;
-};
+}
 
-let settingsCache: SettingsCache = {
+const EMPTY_SETTINGS: SettingsCache = {
   keys: {},
   inferenceProfiles: [],
   selectedModel: null,
   braveSearchApiKey: null,
 };
+
+export interface CurrentUser {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+}
+
+let hydratePromise: Promise<void> | null = null;
+let reviewsCache: PaperReview[] = [];
+let settingsCache: SettingsCache = EMPTY_SETTINGS;
 let deepDivesCache: DeepDiveSession[] = [];
+let currentUser: CurrentUser | null = null;
 
 const messagesCache = new Map<string, ChatMessage[]>();
 const annotationsCache = new Map<string, Annotation[]>();
-const exploreCache = new Map<
-  string,
-  { prerequisites: PrerequisitesData | null }
->();
+const exploreCache = new Map<string, { prerequisites: PrerequisitesData | null }>();
 
 function dispatch(name: string): void {
   if (typeof window === "undefined") return;
@@ -67,10 +70,16 @@ export async function hydrateClientStore(): Promise<void> {
   if (typeof window === "undefined") return;
   if (hydratePromise) return hydratePromise;
   hydratePromise = (async () => {
-    const boot = await store.getBootstrap();
+    const boot = await apiFetch<{
+      reviews: PaperReview[];
+      settings: SettingsCache;
+      deepDives: DeepDiveSession[];
+      user: CurrentUser | null;
+    }>("/api/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
     deepDivesCache = boot.deepDives;
+    currentUser = boot.user;
     messagesCache.clear();
     annotationsCache.clear();
     exploreCache.clear();
@@ -78,8 +87,13 @@ export async function hydrateClientStore(): Promise<void> {
     dispatch(KEYS_UPDATED_EVENT);
     dispatch(EXPLORE_UPDATED_EVENT);
     dispatch(DEEP_DIVES_UPDATED_EVENT);
+    dispatch(USER_UPDATED_EVENT);
   })();
   return hydratePromise;
+}
+
+export function getCurrentUser(): CurrentUser | null {
+  return currentUser;
 }
 
 /* ── Reviews ── */
@@ -89,7 +103,8 @@ export function getReviewsSnapshot(): PaperReview[] {
 }
 
 export async function refreshReviews(): Promise<void> {
-  reviewsCache = await store.listReviews();
+  const { reviews } = await apiFetch<{ reviews: PaperReview[] }>("/api/reviews");
+  reviewsCache = reviews;
   dispatch(REVIEWS_UPDATED_EVENT);
 }
 
@@ -101,23 +116,10 @@ export async function createReview(
   arxivId: string,
   title: string,
 ): Promise<PaperReview> {
-  const canonical = normalizeArxivId(arxivId);
-  const existing = await store.getReviewByArxivId(canonical);
-  if (existing) {
-    await refreshReviews();
-    return existing;
-  }
-  const now = new Date().toISOString();
-  const review: PaperReview = {
-    id: crypto.randomUUID(),
-    title: title || `arXiv:${canonical}`,
-    arxivId: canonical,
-    createdAt: now,
-    updatedAt: now,
-    pdfPath: null,
-    sourceUrl: null,
-  };
-  await store.insertReview(review);
+  const { review } = await apiFetch<{ review: PaperReview }>("/api/reviews", {
+    method: "POST",
+    body: { kind: "arxiv", arxivId, title },
+  });
   await refreshReviews();
   return review;
 }
@@ -126,18 +128,10 @@ export async function createLocalPdfReview(
   pdfPath: string,
   title: string,
 ): Promise<PaperReview> {
-  const now = new Date().toISOString();
-  const fallback = pdfPath.split("/").pop()?.replace(/\.pdf$/i, "") || "Local PDF";
-  const review: PaperReview = {
-    id: crypto.randomUUID(),
-    title: title || fallback,
-    arxivId: null,
-    createdAt: now,
-    updatedAt: now,
-    pdfPath,
-    sourceUrl: null,
-  };
-  await store.insertReview(review);
+  const { review } = await apiFetch<{ review: PaperReview }>("/api/reviews", {
+    method: "POST",
+    body: { kind: "local", pdfPath, title },
+  });
   await refreshReviews();
   return review;
 }
@@ -146,23 +140,16 @@ export async function createWebReview(
   sourceUrl: string,
   title: string,
 ): Promise<PaperReview> {
-  const now = new Date().toISOString();
-  const review: PaperReview = {
-    id: crypto.randomUUID(),
-    title: title || sourceUrl,
-    arxivId: null,
-    createdAt: now,
-    updatedAt: now,
-    pdfPath: null,
-    sourceUrl,
-  };
-  await store.insertReview(review);
+  const { review } = await apiFetch<{ review: PaperReview }>("/api/reviews", {
+    method: "POST",
+    body: { kind: "web", sourceUrl, title },
+  });
   await refreshReviews();
   return review;
 }
 
 export async function deleteReview(id: string): Promise<void> {
-  await store.deleteReview(id);
+  await apiFetch(`/api/reviews/${encodeURIComponent(id)}`, { method: "DELETE" });
   messagesCache.delete(id);
   annotationsCache.delete(id);
   exploreCache.delete(id);
@@ -175,9 +162,11 @@ export async function loadMessages(reviewId: string): Promise<ChatMessage[]> {
   if (!reviewId?.trim()) return [];
   const cached = messagesCache.get(reviewId);
   if (cached) return cached;
-  const list = await store.getMessages(reviewId);
-  messagesCache.set(reviewId, list);
-  return list;
+  const { messages } = await apiFetch<{ messages: ChatMessage[] }>(
+    `/api/reviews/${encodeURIComponent(reviewId)}/messages`,
+  );
+  messagesCache.set(reviewId, messages);
+  return messages;
 }
 
 export async function saveMessages(
@@ -185,7 +174,10 @@ export async function saveMessages(
   messages: ChatMessage[],
 ): Promise<void> {
   messagesCache.set(reviewId, messages);
-  await store.setMessages(reviewId, messages);
+  await apiFetch(`/api/reviews/${encodeURIComponent(reviewId)}/messages`, {
+    method: "PUT",
+    body: { messages },
+  });
 }
 
 /* ── Annotations ── */
@@ -194,9 +186,11 @@ export async function loadAnnotations(reviewId: string): Promise<Annotation[]> {
   if (!reviewId?.trim()) return [];
   const cached = annotationsCache.get(reviewId);
   if (cached) return cached;
-  const list = await store.getAnnotations(reviewId);
-  annotationsCache.set(reviewId, list);
-  return list;
+  const { annotations } = await apiFetch<{ annotations: Annotation[] }>(
+    `/api/reviews/${encodeURIComponent(reviewId)}/annotations`,
+  );
+  annotationsCache.set(reviewId, annotations);
+  return annotations;
 }
 
 export async function saveAnnotations(
@@ -204,7 +198,10 @@ export async function saveAnnotations(
   annotations: Annotation[],
 ): Promise<void> {
   annotationsCache.set(reviewId, annotations);
-  await store.setAnnotations(reviewId, annotations);
+  await apiFetch(`/api/reviews/${encodeURIComponent(reviewId)}/annotations`, {
+    method: "PUT",
+    body: { annotations },
+  });
   dispatch(ANNOTATIONS_UPDATED_EVENT);
 }
 
@@ -215,22 +212,23 @@ export function getDeepDivesSnapshot(): DeepDiveSession[] {
 }
 
 export async function refreshDeepDives(): Promise<void> {
-  deepDivesCache = await store.listDeepDives();
+  const { deepDives } = await apiFetch<{ deepDives: DeepDiveSession[] }>(
+    "/api/deep-dives",
+  );
+  deepDivesCache = deepDives;
   dispatch(DEEP_DIVES_UPDATED_EVENT);
 }
 
 export async function saveDeepDive(
   payload: Omit<DeepDiveSession, "id" | "createdAt">,
 ): Promise<DeepDiveSession> {
-  const session: DeepDiveSession = {
-    ...payload,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-  };
-  await store.insertDeepDive(session);
-  deepDivesCache = [session, ...deepDivesCache.filter((d) => d.id !== session.id)];
+  const { deepDive } = await apiFetch<{ deepDive: DeepDiveSession }>(
+    "/api/deep-dives",
+    { method: "POST", body: payload },
+  );
+  deepDivesCache = [deepDive, ...deepDivesCache.filter((d) => d.id !== deepDive.id)];
   dispatch(DEEP_DIVES_UPDATED_EVENT);
-  return session;
+  return deepDive;
 }
 
 /* ── Explore (prerequisites) ── */
@@ -238,12 +236,12 @@ export async function saveDeepDive(
 export async function loadExplore(
   reviewId: string,
 ): Promise<{ prerequisites: PrerequisitesData | null }> {
-  if (!reviewId?.trim()) {
-    return { prerequisites: null };
-  }
+  if (!reviewId?.trim()) return { prerequisites: null };
   const cached = exploreCache.get(reviewId);
   if (cached) return cached;
-  const prerequisites = await store.getPrerequisites(reviewId);
+  const { prerequisites } = await apiFetch<{
+    prerequisites: PrerequisitesData | null;
+  }>(`/api/reviews/${encodeURIComponent(reviewId)}/prerequisites`);
   const data = { prerequisites };
   exploreCache.set(reviewId, data);
   return data;
@@ -254,13 +252,19 @@ export async function savePrerequisites(
   prerequisites: PrerequisitesData,
 ): Promise<void> {
   exploreCache.set(reviewId, { prerequisites });
-  await store.setPrerequisites(reviewId, prerequisites);
+  await apiFetch(
+    `/api/reviews/${encodeURIComponent(reviewId)}/prerequisites`,
+    { method: "PUT", body: { prerequisites } },
+  );
   dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 export async function clearExploreData(reviewId: string): Promise<void> {
   exploreCache.delete(reviewId);
-  await store.clearExploreData(reviewId);
+  await apiFetch(
+    `/api/reviews/${encodeURIComponent(reviewId)}/prerequisites`,
+    { method: "DELETE" },
+  );
   dispatch(EXPLORE_UPDATED_EVENT);
 }
 
@@ -295,23 +299,21 @@ function upsertWikiPageInCache(page: WikiPage): void {
   }
 }
 
-/** Synchronous snapshot for useSyncExternalStore. null until first load. */
 export function getWikiCacheSnapshot(): WikiPage[] | null {
   return wikiPagesCache;
 }
 
-/** Fetch all wiki pages (cached). Safe to call repeatedly. */
 export async function loadWikiPages(): Promise<WikiPage[]> {
   if (wikiPagesCache) return wikiPagesCache;
   if (wikiPagesInflight) return wikiPagesInflight;
   const gen = wikiCacheGeneration;
   wikiPagesInflight = (async () => {
     try {
-      const list = await store.listWikiPages();
-      if (gen !== wikiCacheGeneration) return list;
-      wikiPagesCache = list;
+      const { pages } = await apiFetch<{ pages: WikiPage[] }>("/api/wiki/pages");
+      if (gen !== wikiCacheGeneration) return pages;
+      wikiPagesCache = pages;
       notifyWikiUpdated();
-      return list;
+      return pages;
     } finally {
       if (gen === wikiCacheGeneration) wikiPagesInflight = null;
     }
@@ -319,14 +321,15 @@ export async function loadWikiPages(): Promise<WikiPage[]> {
   return wikiPagesInflight;
 }
 
-/** Fetch a single wiki page by slug, or null if it doesn't exist. */
 export async function loadWikiPage(slug: string): Promise<WikiPage | null> {
   if (!slug?.trim()) return null;
   if (wikiPagesCache) {
     const hit = wikiPagesCache.find((p) => p.slug === slug);
     if (hit) return hit;
   }
-  const page = await store.getWikiPageBySlug(slug);
+  const { page } = await apiFetch<{ page: WikiPage | null }>(
+    `/api/wiki/pages/${encodeURIComponent(slug)}`,
+  );
   if (page) upsertWikiPageInCache(page);
   return page;
 }
@@ -340,84 +343,66 @@ export interface SaveWikiPageInput {
   reviewId?: string;
 }
 
-/** Create or upsert a wiki page. Always dispatches WIKI_UPDATED_EVENT. */
-export async function saveWikiPage(
-  input: SaveWikiPageInput,
-): Promise<WikiPage> {
-  const existing = await store.getWikiPageBySlug(input.slug);
-  const id = existing?.id ?? crypto.randomUUID();
-  await store.upsertWikiPage({
-    id,
-    slug: input.slug,
-    title: input.title,
-    content: input.content,
-    pageType: input.pageType,
-  });
-  if (input.reviewId) {
-    await store.addWikiPageSource(id, input.reviewId);
-    wikiIngestedCache.set(input.reviewId, true);
-  }
-  const saved = await store.getWikiPageBySlug(input.slug);
-  if (!saved) throw new Error(`saveWikiPage: page disappeared after upsert: ${input.slug}`);
-  upsertWikiPageInCache(saved);
+export async function saveWikiPage(input: SaveWikiPageInput): Promise<WikiPage> {
+  const { page } = await apiFetch<{ page: WikiPage }>(
+    `/api/wiki/pages/${encodeURIComponent(input.slug)}`,
+    {
+      method: "PUT",
+      body: {
+        title: input.title,
+        content: input.content,
+        pageType: input.pageType,
+        reviewId: input.reviewId,
+      },
+    },
+  );
+  if (input.reviewId) wikiIngestedCache.set(input.reviewId, true);
+  upsertWikiPageInCache(page);
   notifyWikiUpdated();
-  return saved;
+  return page;
 }
 
-/** Partial update of an existing wiki page. */
 export async function updateWikiPage(
   slug: string,
   patch: { title?: string; content?: string; pageType?: WikiPageType },
 ): Promise<WikiPage> {
-  const existing = await store.getWikiPageBySlug(slug);
+  const existing = await loadWikiPage(slug);
   if (!existing) throw new Error(`updateWikiPage: page not found: ${slug}`);
-  await store.upsertWikiPage({
-    id: existing.id,
+  return saveWikiPage({
     slug,
     title: patch.title ?? existing.title,
     content: patch.content ?? existing.content,
     pageType: patch.pageType ?? existing.pageType,
   });
-  const saved = await store.getWikiPageBySlug(slug);
-  if (!saved) throw new Error(`updateWikiPage: page disappeared: ${slug}`);
-  upsertWikiPageInCache(saved);
-  notifyWikiUpdated();
-  return saved;
 }
 
-/** Delete a wiki page by slug. */
 export async function deleteWikiPage(slug: string): Promise<void> {
-  const existing = await store.getWikiPageBySlug(slug);
-  if (!existing) return;
-  await store.deleteWikiPage(existing.id);
+  await apiFetch(`/api/wiki/pages/${encodeURIComponent(slug)}`, {
+    method: "DELETE",
+  });
   if (wikiPagesCache) {
     wikiPagesCache = wikiPagesCache.filter((p) => p.slug !== slug);
   }
   notifyWikiUpdated();
 }
 
-/** Has this review already been ingested into the wiki? */
 export async function checkWikiIngested(reviewId: string): Promise<boolean> {
   if (!reviewId?.trim()) return false;
   const cached = wikiIngestedCache.get(reviewId);
   if (cached !== undefined) return cached;
-  const ingested = await store.hasWikiSourcesForReview(reviewId);
+  const { ingested } = await apiFetch<{ ingested: boolean }>(
+    `/api/wiki/ingested?reviewId=${encodeURIComponent(reviewId)}`,
+  );
   wikiIngestedCache.set(reviewId, ingested);
   return ingested;
 }
 
-/**
- * Clear local wiki cache and notify subscribers. Used by ingest
- * pipelines after they finish writing so readers re-fetch fresh data.
- */
 export function invalidateWikiCache(): void {
   wikiCacheGeneration++;
   wikiPagesCache = null;
   wikiPagesInflight = null;
   notifyWikiUpdated();
 }
-
-/* ── Wiki finalize / enriched metadata helpers ─────────────────── */
 
 export interface WikiFinalizePage {
   slug: string;
@@ -429,26 +414,19 @@ export interface WikiFinalizePage {
 
 export interface WikiFinalizeInput {
   pages: WikiFinalizePage[];
-  logEntry?: { label: string; kind?: string };
 }
 
-/**
- * Atomically finalize a journal-write batch inside a single Dexie
- * transaction. Fires WIKI_UPDATED_EVENT on success.
- */
 export async function finalizeWikiIngest(
   input: WikiFinalizeInput,
 ): Promise<{ savedSlugs: string[] }> {
-  const res = await store.wikiIngestFinalize(input);
-  wikiCacheGeneration++;
-  wikiPagesCache = null;
-  wikiPagesInflight = null;
+  const res = await apiFetch<{ savedSlugs: string[] }>("/api/wiki/ingest", {
+    method: "POST",
+    body: input,
+  });
+  invalidateWikiCache();
   for (const page of input.pages) {
-    if (page.source?.reviewId) {
-      wikiIngestedCache.set(page.source.reviewId, true);
-    }
+    if (page.source?.reviewId) wikiIngestedCache.set(page.source.reviewId, true);
   }
-  notifyWikiUpdated();
   return res;
 }
 
@@ -478,16 +456,12 @@ export interface WikiPageMetadata {
   revisions: WikiRevisionSummary[];
 }
 
-/** Fetch backlinks, sources, and revisions for a page. */
 export async function loadWikiPageMetadata(
   slug: string,
 ): Promise<WikiPageMetadata> {
-  const [backlinks, sources, revisions] = await Promise.all([
-    store.getWikiBacklinks(slug),
-    store.getWikiPageSources(slug),
-    store.listWikiRevisions(slug),
-  ]);
-  return { backlinks, sources, revisions };
+  return apiFetch<WikiPageMetadata>(
+    `/api/wiki/pages/${encodeURIComponent(slug)}/metadata`,
+  );
 }
 
 export interface WikiRevision {
@@ -498,9 +472,11 @@ export interface WikiRevision {
   savedAt: string;
 }
 
-/** Fetch a single historical revision by id. */
 export async function loadWikiRevision(id: number): Promise<WikiRevision | null> {
-  return store.getWikiRevision(id);
+  const { revision } = await apiFetch<{ revision: WikiRevision | null }>(
+    `/api/wiki/revisions/${id}`,
+  );
+  return revision;
 }
 
 /* ── Settings / keys ── */
@@ -519,13 +495,11 @@ export function getInferenceProfile(
   return settingsCache.inferenceProfiles.find((p) => p.id === id);
 }
 
-/** Built-in provider (Anthropic, OpenAI, …) has a saved key. */
 export function isBuiltinProviderReady(provider: Provider): boolean {
   if (isInferenceProviderType(provider)) return false;
   return !!getApiKey(provider);
 }
 
-/** Model can be used for API calls (built-in key or inference profile complete). */
 export function isModelReady(model: Model): boolean {
   if (isInferenceProviderType(model.provider)) {
     if (!model.profileId) return false;
@@ -549,26 +523,34 @@ export function hasAnySavedApiKey(): boolean {
   return settingsCache.inferenceProfiles.some(hasInferenceCredentials);
 }
 
-async function reloadSettingsCache(): Promise<void> {
-  settingsCache = await store.getSettings();
+interface SettingsPatchBody {
+  keys?: Partial<Record<Provider, string | null>>;
+  inferenceProfiles?: InferenceProviderProfile[] | null;
+  selectedModel?: Model | null;
+  braveSearchApiKey?: string | null;
+}
+
+async function patchSettings(patch: SettingsPatchBody): Promise<void> {
+  const { settings } = await apiFetch<{ settings: SettingsCache }>(
+    "/api/settings",
+    { method: "PATCH", body: patch },
+  );
+  settingsCache = settings;
   dispatch(KEYS_UPDATED_EVENT);
 }
 
 export async function setApiKey(provider: Provider, key: string): Promise<void> {
-  await store.patchSettings({ keys: { [provider]: key } });
-  await reloadSettingsCache();
+  await patchSettings({ keys: { [provider]: key } });
 }
 
 export async function saveInferenceProfiles(
   profiles: InferenceProviderProfile[],
 ): Promise<void> {
-  await store.patchSettings({ inferenceProfiles: profiles });
-  await reloadSettingsCache();
+  await patchSettings({ inferenceProfiles: profiles });
 }
 
 export async function clearApiKey(provider: Provider): Promise<void> {
-  await store.patchSettings({ keys: { [provider]: null } });
-  await reloadSettingsCache();
+  await patchSettings({ keys: { [provider]: null } });
 }
 
 /* ── Tool keys (currently just Brave Search) ── */
@@ -582,18 +564,15 @@ export function hasBraveSearchApiKey(): boolean {
 }
 
 export async function setBraveSearchApiKey(key: string): Promise<void> {
-  await store.patchSettings({ braveSearchApiKey: key });
-  await reloadSettingsCache();
+  await patchSettings({ braveSearchApiKey: key });
 }
 
 export async function clearBraveSearchApiKey(): Promise<void> {
-  await store.patchSettings({ braveSearchApiKey: null });
-  await reloadSettingsCache();
+  await patchSettings({ braveSearchApiKey: null });
 }
 
 export async function saveSelectedModel(model: Model | null): Promise<void> {
-  await store.patchSettings({ selectedModel: model });
-  await reloadSettingsCache();
+  await patchSettings({ selectedModel: model });
 }
 
 export function getSavedSelectedModel(): Model | null {
@@ -603,5 +582,9 @@ export function getSavedSelectedModel(): Model | null {
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {
-  await reloadSettingsCache();
+  const { settings } = await apiFetch<{ settings: SettingsCache }>(
+    "/api/settings",
+  );
+  settingsCache = settings;
+  dispatch(KEYS_UPDATED_EVENT);
 }
