@@ -3,8 +3,10 @@ import { auth } from "@/server/auth";
 
 /**
  * Host-aware routing:
- *   • Apex (e.g. withartifact.com) — public landing only. `/` is rewritten
- *     to `/landing`; everything else is redirected to the app subdomain.
+ *   • Apex (e.g. withartifact.com) — marketing only. `/` is rewritten to
+ *     `/landing`; everything else (including `/signin` and `/signup`) is
+ *     redirected to the app subdomain. Already-authenticated visitors are
+ *     bounced straight to the app.
  *   • App subdomain (e.g. app.withartifact.com) — full app + auth flow.
  *   • Localhost / unknown hosts — treated as the app subdomain so dev and
  *     preview deploys work without env config.
@@ -30,12 +32,10 @@ export default auth((req) => {
   const { nextUrl } = req;
   const host = req.headers.get("host");
 
-  // ── Apex: public sign-in / sign-up surface only ───────────────
+  // ── Apex: marketing landing only ──────────────────────────────
   if (isApexHost(host)) {
-    // Already-authenticated visitors don't belong on the apex auth pages —
-    // they'd hit the `redirect(callbackUrl ?? "/")` in <AuthPage>, bounce
-    // back to apex `/`, get rewritten to `/signup` again, and loop. Send
-    // them straight to the app subdomain instead.
+    // Already-authenticated visitors get sent straight to the app — the
+    // landing page is for prospects, not for return visits.
     if (req.auth?.user && APP_HOST) {
       const target = new URL(
         nextUrl.pathname + nextUrl.search,
@@ -44,14 +44,13 @@ export default auth((req) => {
       return NextResponse.redirect(target, 308);
     }
     if (nextUrl.pathname === "/") {
-      // New users hit the apex first — default them into the sign-up flow.
+      // Apex root → marketing landing page.
       const url = nextUrl.clone();
-      url.pathname = "/signup";
+      url.pathname = "/landing";
       return NextResponse.rewrite(url);
     }
-    if (nextUrl.pathname === "/signin" || nextUrl.pathname === "/signup") {
-      return; // serve the page on apex directly
-    }
+    // Auth lives only on the app subdomain — bounce apex auth URLs across.
+    // Falls through to the generic apex→app redirect below if APP_HOST is unset.
     if (APP_HOST) {
       const target = new URL(
         nextUrl.pathname + nextUrl.search,
@@ -75,6 +74,7 @@ export default auth((req) => {
   const isOpen =
     nextUrl.pathname === "/signin" ||
     nextUrl.pathname === "/signup" ||
+    nextUrl.pathname === "/landing" ||
     nextUrl.pathname.startsWith("/api/auth/") ||
     isPublicShareRoute;
   if (isOpen) return;
