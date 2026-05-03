@@ -37,7 +37,10 @@ type LinkState =
   | { kind: "ready"; token: string; url: string; reused: boolean }
   | { kind: "error"; message: string };
 
-export default function ShareJournalDialog({ page, onClose }: ShareJournalDialogProps) {
+export default function ShareJournalDialog({
+  page,
+  onClose,
+}: ShareJournalDialogProps) {
   const [linkState, setLinkState] = useState<LinkState>({ kind: "idle" });
   const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
@@ -120,11 +123,11 @@ export default function ShareJournalDialog({ page, onClose }: ShareJournalDialog
         if (!next && !isWorking) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[460px]">
+      <DialogContent className="sm:max-w-115">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <Share2 className="size-[14px]" strokeWidth={2} />
+              <Share2 className="size-3.5" strokeWidth={2} />
             </span>
             <DialogTitle>Share this entry</DialogTitle>
           </div>
@@ -205,7 +208,7 @@ function LinkBlock({
   if (state.kind === "ready") {
     return (
       <div className="space-y-2">
-        <div className="group flex items-stretch gap-1.5 rounded-lg border border-border bg-card p-1 shadow-[var(--shadow-sm)] transition-shadow focus-within:shadow-[var(--shadow-primary)]">
+        <div className="group flex items-stretch gap-1.5 rounded-lg border border-border bg-card p-1 shadow-(--shadow-sm) transition-shadow focus-within:shadow-(--shadow-primary)">
           <div className="flex items-center pl-2.5 text-muted-foreground/70">
             <Link2 className="size-3.5" strokeWidth={2} />
           </div>

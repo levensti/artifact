@@ -1,15 +1,23 @@
 "use client";
 
-import { ArrowRight, FileText, Terminal, FileDown } from "lucide-react";
+import {
+  ArrowRight,
+  FileText,
+  Terminal,
+  FileDown,
+  FolderPlus,
+} from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { useState } from "react";
 import NewReviewDialog from "@/components/new-review-dialog";
+import NewProjectDialog from "@/components/new-project-dialog";
 import ImportBundleDialog from "@/components/import-bundle-dialog";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
   const [showNewReview, setShowNewReview] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
   const router = useRouter();
 
   return (
@@ -119,6 +127,32 @@ export default function Home() {
                 </p>
               </div>
             </button>
+
+            {/* Lane 4: Start a project */}
+            <button
+              type="button"
+              onClick={() => setShowNewProject(true)}
+              className="group flex w-full items-start gap-4 rounded-xl border border-border/70 bg-card px-5 py-4 text-left transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:-translate-y-px active:translate-y-0 active:shadow-[var(--shadow-sm)]"
+            >
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--badge-accent-bg)] transition-colors duration-200 group-hover:bg-primary/15">
+                <FolderPlus
+                  className="size-[18px] text-primary/60 transition-colors duration-200 group-hover:text-primary/80"
+                  strokeWidth={1.6}
+                />
+              </div>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-foreground/90 transition-colors group-hover:text-foreground">
+                    Start a project
+                  </span>
+                  <ArrowRight className="size-3.5 text-muted-foreground/30 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary/50" />
+                </div>
+                <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground/70">
+                  Group several papers into a focused workspace — your
+                  reading thread, your team&apos;s literature review, your thesis.
+                </p>
+              </div>
+            </button>
           </div>
         </div>
       </div>
@@ -135,6 +169,11 @@ export default function Home() {
         open={showImport}
         mode="review"
         onClose={() => setShowImport(false)}
+      />
+      <NewProjectDialog
+        open={showNewProject}
+        onClose={() => setShowNewProject(false)}
+        onCreated={(p) => router.push(`/projects/${p.id}`)}
       />
     </DashboardLayout>
   );

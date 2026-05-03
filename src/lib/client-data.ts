@@ -19,6 +19,7 @@ import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type { PrerequisitesData } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
+import type { Project } from "@/lib/projects";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
@@ -27,6 +28,7 @@ import {
   KEYS_UPDATED_EVENT,
   WIKI_UPDATED_EVENT,
   USER_UPDATED_EVENT,
+  PROJECTS_UPDATED_EVENT,
 } from "@/lib/storage-events";
 import { apiFetch } from "@/lib/client/api";
 
@@ -55,6 +57,7 @@ let hydratePromise: Promise<void> | null = null;
 let reviewsCache: PaperReview[] = [];
 let settingsCache: SettingsCache = EMPTY_SETTINGS;
 let deepDivesCache: DeepDiveSession[] = [];
+let projectsCache: Project[] = [];
 let currentUser: CurrentUser | null = null;
 
 const messagesCache = new Map<string, ChatMessage[]>();
@@ -74,11 +77,13 @@ export async function hydrateClientStore(): Promise<void> {
       reviews: PaperReview[];
       settings: SettingsCache;
       deepDives: DeepDiveSession[];
+      projects: Project[];
       user: CurrentUser | null;
     }>("/api/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
     deepDivesCache = boot.deepDives;
+    projectsCache = boot.projects ?? [];
     currentUser = boot.user;
     messagesCache.clear();
     annotationsCache.clear();
@@ -87,9 +92,102 @@ export async function hydrateClientStore(): Promise<void> {
     dispatch(KEYS_UPDATED_EVENT);
     dispatch(EXPLORE_UPDATED_EVENT);
     dispatch(DEEP_DIVES_UPDATED_EVENT);
+    dispatch(PROJECTS_UPDATED_EVENT);
     dispatch(USER_UPDATED_EVENT);
   })();
   return hydratePromise;
+}
+
+/* ── Projects ── */
+
+export function getProjectsSnapshot(): Project[] {
+  return projectsCache;
+}
+
+export async function refreshProjects(): Promise<void> {
+  const { projects } = await apiFetch<{ projects: Project[] }>("/api/projects");
+  projectsCache = projects;
+  dispatch(PROJECTS_UPDATED_EVENT);
+}
+
+export async function createProject(
+  name: string,
+  description?: string | null,
+  color?: string | null,
+): Promise<Project> {
+  const { project } = await apiFetch<{ project: Project }>("/api/projects", {
+    method: "POST",
+    body: { name, description: description ?? null, color: color ?? null },
+  });
+  projectsCache = [project, ...projectsCache];
+  dispatch(PROJECTS_UPDATED_EVENT);
+  return project;
+}
+
+export async function updateProject(
+  id: string,
+  patch: {
+    name?: string;
+    description?: string | null;
+    notes?: string | null;
+    color?: string | null;
+    archived?: boolean;
+  },
+): Promise<Project> {
+  const { project } = await apiFetch<{ project: Project }>(
+    `/api/projects/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: patch },
+  );
+  projectsCache = projectsCache.map((p) => (p.id === project.id ? project : p));
+  dispatch(PROJECTS_UPDATED_EVENT);
+  return project;
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await apiFetch(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
+  projectsCache = projectsCache.filter((p) => p.id !== id);
+  dispatch(PROJECTS_UPDATED_EVENT);
+}
+
+export async function addReviewToProject(
+  projectId: string,
+  reviewId: string,
+): Promise<void> {
+  await apiFetch(
+    `/api/projects/${encodeURIComponent(projectId)}/reviews`,
+    { method: "POST", body: { reviewId } },
+  );
+  // Member count changed — easiest to refresh the project list.
+  await refreshProjects();
+}
+
+export async function removeReviewFromProject(
+  projectId: string,
+  reviewId: string,
+): Promise<void> {
+  await apiFetch(
+    `/api/projects/${encodeURIComponent(projectId)}/reviews`,
+    { method: "DELETE", body: { reviewId } },
+  );
+  await refreshProjects();
+}
+
+export async function setReviewProjects(
+  reviewId: string,
+  projectIds: string[],
+): Promise<void> {
+  await apiFetch(
+    `/api/reviews/${encodeURIComponent(reviewId)}/projects`,
+    { method: "PUT", body: { projectIds } },
+  );
+  await refreshProjects();
+}
+
+export async function loadReviewProjects(reviewId: string): Promise<string[]> {
+  const { projectIds } = await apiFetch<{ projectIds: string[] }>(
+    `/api/reviews/${encodeURIComponent(reviewId)}/projects`,
+  );
+  return projectIds;
 }
 
 export function getCurrentUser(): CurrentUser | null {

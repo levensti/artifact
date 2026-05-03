@@ -33,6 +33,7 @@ model User {
   pdfBlobs          PdfBlob[]
   parsedPapers      ParsedPaper[]
   shares            Share[]
+  projects          Project[]
 }
 
 model Account {
@@ -97,6 +98,7 @@ model Review {
   deepDives     DeepDive[]
   wikiSources   WikiPageSource[]
   shares        Share[]
+  projects      ProjectReview[]
 
   @@index([userId, createdAt])
   @@index([userId, arxivId])
@@ -299,4 +301,61 @@ model Share {
   @@index([userId, createdAt])
   @@index([reviewId])
   @@index([wikiPageId])
+}
+
+/// A user-scoped workspace that groups multiple reviews around a topic
+/// or research thread. Membership is many-to-many via ProjectReview, so
+/// the same paper can belong to several projects (e.g. a paper relevant
+/// to both an "RLHF" project and a "preference modeling" project).
+model Project {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  /// Stable URL slug, unique per user. Generated from `name` on create
+  /// and disambiguated with a numeric suffix on collision.
+  slug        String
+  description String?
+  /// Free-form project notes — markdown, jotted thoughts, open
+  /// questions. Distinct from ProjectMessages (chat); this is the
+  /// user's own scratchpad pinned to the project.
+  notes       String?
+  /// Optional accent color (e.g. hex string) for sidebar / card UI.
+  color       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// Soft-archive. Archived projects stay visible behind a toggle but
+  /// are excluded from the default list.
+  archivedAt  DateTime?
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews  ProjectReview[]
+  messages ProjectMessages?
+
+  @@unique([userId, slug])
+  @@index([userId, updatedAt])
+}
+
+/// Cross-paper chat thread for a project. Mirrors the ReviewMessages
+/// shape: a single Json blob keyed by projectId. Messages reference the
+/// same `ChatMessage` JSON used in per-review chats so the renderer is
+/// shared.
+model ProjectMessages {
+  id        String  @id @default(cuid())
+  projectId String  @unique
+  messages  Json
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/// Membership: a review may belong to many projects. Cascades from both
+/// sides so deleting a project or a review cleans up the join rows.
+model ProjectReview {
+  projectId String
+  reviewId  String
+  addedAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  review  Review  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, reviewId])
+  @@index([reviewId])
 }

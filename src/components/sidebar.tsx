@@ -1,11 +1,17 @@
 "use client";
 
+/* Hydration: localStorage after mount (avoids SSR/client mismatch). */
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
+  ChevronRight,
   FilePen,
   FilePlus,
   AlertCircle,
+  Folder,
+  FolderOpen,
+  FolderPlus,
   Share2,
 } from "lucide-react";
 import { canShareReview } from "@/lib/client/sharing/share-links";
@@ -14,8 +20,9 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
+import { getProjects, type Project } from "@/lib/projects";
 import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
-import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
+import { PROJECTS_UPDATED_EVENT, WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import {
   getWikiIngestError,
   getWikiIngestSnapshot,
@@ -28,15 +35,19 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import NewReviewDialog from "./new-review-dialog";
 import ImportBundleDialog from "./import-bundle-dialog";
 import ShareReviewDialog from "./share-review-dialog";
+import NewProjectDialog from "./new-project-dialog";
+import AddToProjectDialog from "./add-to-project-dialog";
 import UserMenu from "./user-menu";
 
 function subscribeReviews(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
   window.addEventListener(WIKI_UPDATED_EVENT, onStoreChange);
+  window.addEventListener(PROJECTS_UPDATED_EVENT, onStoreChange);
   return () => {
     window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
     window.removeEventListener(WIKI_UPDATED_EVENT, onStoreChange);
+    window.removeEventListener(PROJECTS_UPDATED_EVENT, onStoreChange);
   };
 }
 
@@ -45,11 +56,12 @@ function reviewsSnapshot() {
   return JSON.stringify({
     reviews: getReviews(),
     wikiPageCount: wikiPages.length,
+    projects: getProjects(),
   });
 }
 
 function reviewsServerSnapshot() {
-  return JSON.stringify({ reviews: [], wikiPageCount: 0 });
+  return JSON.stringify({ reviews: [], wikiPageCount: 0, projects: [] });
 }
 
 interface SidebarProps {
@@ -67,16 +79,73 @@ export default function Sidebar({
     reviewsSnapshot,
     reviewsServerSnapshot,
   );
-  const { reviews, wikiPageCount } = useMemo(() => {
+  const { reviews, wikiPageCount, projects } = useMemo(() => {
     const parsed = JSON.parse(reviewsJson) as {
       reviews: PaperReview[];
       wikiPageCount: number;
+      projects: Project[];
     };
     return {
       reviews: parsed.reviews ?? [],
       wikiPageCount: parsed.wikiPageCount ?? 0,
+      projects: parsed.projects ?? [],
     };
   }, [reviewsJson]);
+  const activeProjects = useMemo(
+    () => projects.filter((p) => !p.archivedAt),
+    [projects],
+  );
+  const router = useRouter();
+  const pathname = usePathname();
+  // User-controlled expand state, persisted to localStorage so it
+  // survives reloads (and the sidebar's own collapse cycle).
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem("artifact-sidebar-projects-expanded");
+    if (!raw) return;
+    try {
+      const ids = JSON.parse(raw);
+      if (Array.isArray(ids)) setExpandedProjects(new Set(ids as string[]));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const persistExpanded = (next: Set<string>) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      "artifact-sidebar-projects-expanded",
+      JSON.stringify(Array.from(next)),
+    );
+  };
+  const toggleExpanded = (id: string) => {
+    setExpandedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      persistExpanded(next);
+      return next;
+    });
+  };
+  // Auto-expand the project whose workspace is currently open.
+  // Derived from `pathname` rather than mutating state in an effect:
+  // we union the user-controlled set with the route-implied id at
+  // render time. Collapse-via-toggle still wins because the user's
+  // explicit set takes priority during a single navigation.
+  const routeProjectId = useMemo(() => {
+    if (!pathname.startsWith("/projects/")) return null;
+    const seg = pathname.split("/")[2];
+    return seg || null;
+  }, [pathname]);
+  const effectiveExpanded = useMemo(() => {
+    if (!routeProjectId) return expandedProjects;
+    if (expandedProjects.has(routeProjectId)) return expandedProjects;
+    const next = new Set(expandedProjects);
+    next.add(routeProjectId);
+    return next;
+  }, [expandedProjects, routeProjectId]);
 
   // Ambient ingest status — shows a pulsing dot + label beside the
   // Journal button whenever a background wiki operation is in flight.
@@ -101,13 +170,14 @@ export default function Sidebar({
     return `${activeIngests.length} running`;
   }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [addToProjectTarget, setAddToProjectTarget] =
+    useState<PaperReview | null>(null);
   const [importMode, setImportMode] = useState<"review" | "journal" | null>(
     null,
   );
   const [importInitialFile, setImportInitialFile] = useState<File | null>(null);
   const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
-  const router = useRouter();
-  const pathname = usePathname();
 
   // Ensure wiki cache is populated so the snapshot picks up page counts
   useEffect(() => {
@@ -275,6 +345,138 @@ export default function Sidebar({
         </div>
 
         <div className="mx-2 mt-3 mb-1 shrink-0 border-t border-sidebar-border/60 pt-2">
+          <div className="flex items-center justify-between gap-1 px-2 py-1">
+            <p className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
+              Projects
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowNewProject(true)}
+              title="New project"
+              aria-label="New project"
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            >
+              <FolderPlus className="size-3" strokeWidth={2} />
+            </button>
+          </div>
+          {activeProjects.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowNewProject(true)}
+              className="mx-1 mt-0.5 flex w-[calc(100%-0.5rem)] items-center gap-1.5 rounded-md px-2 py-1 text-left text-[12px] italic text-muted-foreground/60 transition-colors hover:bg-sidebar-accent/40 hover:text-foreground/80"
+            >
+              <Folder className="size-3" strokeWidth={1.75} />
+              No projects — create one
+            </button>
+          ) : (
+            <div className="mb-1 flex max-h-[40vh] flex-col gap-0.5 overflow-y-auto px-1">
+              {activeProjects.map((p) => {
+                const isActive = pathname === `/projects/${p.id}`;
+                const expanded = effectiveExpanded.has(p.id);
+                const reviewById = new Map(
+                  reviews.map((r) => [r.id, r] as const),
+                );
+                const memberRows = p.reviewIds
+                  .map((id) => reviewById.get(id))
+                  .filter((r): r is PaperReview => Boolean(r));
+                return (
+                  <div key={p.id} className="flex flex-col">
+                    <div
+                      className={cn(
+                        "group/proj relative flex items-center gap-0.5 rounded-md px-1 transition-colors",
+                        isActive
+                          ? "bg-sidebar-accent font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(p.id)}
+                        title={expanded ? "Collapse" : "Expand"}
+                        aria-label={
+                          expanded
+                            ? `Collapse ${p.name}`
+                            : `Expand ${p.name}`
+                        }
+                        className="inline-flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground"
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "size-3 transition-transform",
+                            expanded && "rotate-90",
+                          )}
+                          strokeWidth={2}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/projects/${p.id}`)}
+                        onDoubleClick={() => toggleExpanded(p.id)}
+                        title={p.name}
+                        className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-1 text-left text-[12px]"
+                      >
+                        {expanded ? (
+                          <FolderOpen
+                            className="size-3 shrink-0 opacity-70"
+                            strokeWidth={1.75}
+                          />
+                        ) : (
+                          <Folder
+                            className="size-3 shrink-0 opacity-70"
+                            strokeWidth={1.75}
+                          />
+                        )}
+                        <span className="min-w-0 flex-1 truncate">
+                          {p.name}
+                        </span>
+                        {p.reviewCount > 0 ? (
+                          <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/60">
+                            {p.reviewCount}
+                          </span>
+                        ) : null}
+                      </button>
+                    </div>
+                    {expanded ? (
+                      <div className="ml-3.5 mt-0.5 mb-1 flex flex-col gap-0.5 border-l border-sidebar-border/60 pl-1.5">
+                        {memberRows.length === 0 ? (
+                          <p className="px-2 py-0.5 text-[11px] italic text-muted-foreground/60">
+                            No papers yet
+                          </p>
+                        ) : (
+                          memberRows.map((r) => {
+                            const isReviewActive =
+                              pathname === `/review/${r.id}`;
+                            return (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => router.push(`/review/${r.id}`)}
+                                title={r.title}
+                                className={cn(
+                                  "flex items-start gap-1.5 rounded px-2 py-0.5 text-left text-[11.5px] leading-snug transition-colors",
+                                  isReviewActive
+                                    ? "bg-sidebar-accent font-medium text-foreground"
+                                    : "text-muted-foreground/85 hover:bg-sidebar-accent/50 hover:text-foreground",
+                                )}
+                              >
+                                <span className="mt-0.5 inline-block size-1 shrink-0 rounded-full bg-current opacity-40" />
+                                <span className="min-w-0 flex-1 truncate">
+                                  {r.title}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="mx-2 mb-1 mt-2 shrink-0 border-t border-sidebar-border/60 pt-2">
           <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
             Reviews
           </p>
@@ -346,6 +548,24 @@ export default function Sidebar({
                           {sharerFirstName ? `From ${sharerFirstName}` : "Imported"}
                         </span>
                       ) : null}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAddToProjectTarget(review);
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        title="Add to project"
+                        aria-label={`Add ${review.title} to a project`}
+                        className={cn(
+                          "mt-px inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60",
+                          isActive
+                            ? "opacity-90"
+                            : "opacity-40 group-hover:opacity-90 group-focus-within:opacity-90",
+                        )}
+                      >
+                        <FolderPlus className="size-3" strokeWidth={2} />
+                      </button>
                       {shareable ? (
                         <button
                           type="button"
@@ -399,6 +619,17 @@ export default function Sidebar({
       <ShareReviewDialog
         review={shareTarget}
         onClose={() => setShareTarget(null)}
+      />
+      <NewProjectDialog
+        open={showNewProject}
+        onClose={() => setShowNewProject(false)}
+        onCreated={(p) => router.push(`/projects/${p.id}`)}
+      />
+      <AddToProjectDialog
+        open={addToProjectTarget !== null}
+        reviewId={addToProjectTarget?.id ?? null}
+        reviewTitle={addToProjectTarget?.title ?? null}
+        onClose={() => setAddToProjectTarget(null)}
       />
     </>
   );
