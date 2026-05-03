@@ -19,7 +19,7 @@ export function BrandPanel({ children }: BrandPanelProps) {
       <svg
         viewBox="4 4 24 24"
         aria-hidden
-        className="pointer-events-none absolute -right-20 -top-20 size-[460px] opacity-[0.07]"
+        className="pointer-events-none absolute -right-20 -top-20 size-[460px] opacity-[0.08]"
       >
         <path
           d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z"
@@ -29,7 +29,7 @@ export function BrandPanel({ children }: BrandPanelProps) {
       </svg>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_85%,rgba(255,255,255,0.08),transparent_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_85%,rgba(255,255,255,0.10),transparent_55%),radial-gradient(circle_at_85%_5%,rgba(255,255,255,0.05),transparent_50%)]"
       />
 
       <header className="relative flex items-center gap-3">
@@ -41,8 +41,8 @@ export function BrandPanel({ children }: BrandPanelProps) {
 
       {children}
 
-      <footer className="relative text-xs text-primary-foreground/55">
-        © {new Date().getFullYear()} Artifact
+      <footer className="relative flex items-center justify-between text-xs text-primary-foreground/55">
+        <span>© {new Date().getFullYear()} Artifact</span>
       </footer>
     </section>
   );
@@ -51,7 +51,7 @@ export function BrandPanel({ children }: BrandPanelProps) {
 export function SignupPitch() {
   return (
     <div className="relative max-w-md">
-      <h2 className="text-3xl font-semibold leading-tight tracking-tight">
+      <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em]">
         Discover the frontier.
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
@@ -89,11 +89,12 @@ export function SignupPitch() {
 export function SigninWelcome() {
   return (
     <div className="relative max-w-md">
-      <h2 className="text-3xl font-semibold leading-tight tracking-tight">
-        Welcome back!
+      <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em]">
+        Welcome back.
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
-        Pick up where you left off.
+        Pick up where you left off. Your annotations, journal, and chats are
+        right where you left them.
       </p>
     </div>
   );

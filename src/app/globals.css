@@ -633,6 +633,41 @@
   html { @apply font-sans; }
 }
 
+/* ── Landing page atmospherics ─────────────────────────────────── */
+@keyframes landing-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+.landing-marquee-track {
+  animation: landing-marquee 60s linear infinite;
+  will-change: transform;
+}
+.landing-marquee:hover .landing-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes landing-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.landing-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  vertical-align: -0.12em;
+  background: currentColor;
+  margin-left: 1px;
+  animation: landing-caret 1.05s steps(1, end) infinite;
+}
+
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0) rotate(var(--rot, 0deg)); }
+  50% { transform: translateY(-6px) rotate(var(--rot, 0deg)); }
+}
+.landing-float {
+  animation: landing-float 7s ease-in-out infinite;
+}
+
 /* Safe areas for notched phones and home indicators */
 .safe-area-p {
   padding-top: env(safe-area-inset-top, 0px);
