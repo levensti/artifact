@@ -35,7 +35,7 @@ export default function UserMenu() {
 
   return (
     <div className="shrink-0 border-t border-sidebar-border px-2 py-2">
-      <div className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-sidebar-accent/60">
+      <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
         <Avatar user={user} />
         <div className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-[13px] font-medium text-foreground">
@@ -54,7 +54,6 @@ export default function UserMenu() {
             aria-label="Sign out"
             className={cn(
               "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors duration-150",
-              "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
               "hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60",
             )}
           >
