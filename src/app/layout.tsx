@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -33,6 +34,7 @@ export default function RootLayout({
     >
       <body className="h-full overflow-hidden">
         <TooltipProvider delay={200}>{children}</TooltipProvider>
+        <Analytics />
       </body>
     </html>
   );
