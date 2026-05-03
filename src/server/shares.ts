@@ -389,13 +389,6 @@ export interface ImportShareResult {
 const asJson = <T>(value: T): Prisma.InputJsonValue =>
   value as unknown as Prisma.InputJsonValue;
 
-export interface ImportShareOptions {
-  /// Bypass the "already owner → return original" short-circuit and
-  /// produce a real clone. Used by the owner-side "import a copy"
-  /// affordance for testing the recipient flow on one's own account.
-  force?: boolean;
-}
-
 /**
  * Clone-import the share into the recipient's account. Reads owner's
  * row directly from Postgres — no untrusted bundle JSON ever touches
@@ -404,13 +397,12 @@ export interface ImportShareOptions {
 export async function importShare(
   token: string,
   recipientUserId: string,
-  options: ImportShareOptions = {},
 ): Promise<ImportShareResult> {
   const share = await prisma.share.findUnique({ where: { token } });
   if (!share) throw new HttpError(404, "Share not found");
   if (share.revokedAt) throw new HttpError(410, "This share has been revoked");
 
-  if (share.userId === recipientUserId && !options.force) {
+  if (share.userId === recipientUserId) {
     if (share.kind === "review" && share.reviewId) {
       return { kind: "review", finalReviewId: share.reviewId, alreadyOwner: true };
     }

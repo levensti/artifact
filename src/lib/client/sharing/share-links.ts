@@ -76,20 +76,10 @@ export async function revokeShareLink(token: string): Promise<void> {
   );
 }
 
-export interface ImportShareOptions {
-  /// Owner-only escape hatch: clone the share into the owner's own
-  /// account instead of short-circuiting to the original. For testing
-  /// the recipient flow on one's own share.
-  force?: boolean;
-}
-
-export async function importShareLink(
-  token: string,
-  options: ImportShareOptions = {},
-): Promise<ImportShareResult> {
+export async function importShareLink(token: string): Promise<ImportShareResult> {
   return apiFetch<ImportShareResult>(
     `/api/shares/${encodeURIComponent(token)}/import`,
-    { method: "POST", body: options },
+    { method: "POST" },
   );
 }
 
