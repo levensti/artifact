@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  BookMarked,
   Check,
   Copy,
   Link2,
@@ -23,50 +24,65 @@ import {
   revokeShareLink,
 } from "@/lib/client/sharing/share-links";
 import { cn } from "@/lib/utils";
-import type { PaperReview } from "@/lib/reviews";
+import type { WikiPage } from "@/lib/wiki";
 
-interface ShareReviewDialogProps {
-  review: PaperReview | null;
+interface ShareJournalDialogProps {
+  page: WikiPage | null;
   onClose: () => void;
 }
 
 type LinkState =
   | { kind: "idle" }
   | { kind: "creating" }
-  | { kind: "ready"; token: string; url: string; reused: boolean }
+  | { kind: "ready"; token: string; url: string; reused: boolean; depth: number }
   | { kind: "error"; message: string };
 
-export default function ShareReviewDialog({
-  review,
-  onClose,
-}: ShareReviewDialogProps) {
+export default function ShareJournalDialog({ page, onClose }: ShareJournalDialogProps) {
   const [linkState, setLinkState] = useState<LinkState>({ kind: "idle" });
+  const [includeLinked, setIncludeLinked] = useState(false);
   const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
 
-  // Auto-mint a link as soon as the dialog opens for a review. Sharing
-  // should feel like one tap — the link is ready before the user even
-  // looks for the button.
+  // Close → reset.
   useEffect(() => {
-    if (!review) {
+    if (!page) {
       setLinkState({ kind: "idle" });
+      setIncludeLinked(false);
       setCopied(false);
       return;
     }
     if (linkState.kind !== "idle") return;
-    void mintLink(review.id);
+    void mintLink(page.slug, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [review?.id]);
+  }, [page?.slug]);
 
-  async function mintLink(reviewId: string) {
+  // When the user toggles "include linked pages", mint a fresh link
+  // for the new depth. The previous link still exists and works at the
+  // old depth — the user can revoke explicitly if needed. This avoids
+  // surprising URL changes when the toggle is flipped accidentally.
+  useEffect(() => {
+    if (!page) return;
+    const desiredDepth = includeLinked ? 1 : 0;
+    if (linkState.kind === "ready" && linkState.depth === desiredDepth) return;
+    if (linkState.kind === "creating") return;
+    void mintLink(page.slug, desiredDepth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeLinked]);
+
+  async function mintLink(slug: string, depth: number) {
     setLinkState({ kind: "creating" });
     try {
-      const result = await createShareLink({ kind: "review", reviewId });
+      const result = await createShareLink({
+        kind: "wiki",
+        wikiSlug: slug,
+        wikiDepth: depth,
+      });
       setLinkState({
         kind: "ready",
         token: result.token,
-        url: buildShareUrl(result.token, "review"),
+        url: buildShareUrl(result.token, "wiki"),
         reused: result.reused,
+        depth,
       });
     } catch (err) {
       setLinkState({
@@ -80,19 +96,15 @@ export default function ShareReviewDialog({
     if (linkState.kind !== "ready") return;
     try {
       await navigator.clipboard.writeText(linkState.url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
     } catch {
-      // Clipboard API can fail in non-secure contexts (e.g. http preview).
-      // Fall back to selection-based copy.
       fallbackCopy(linkState.url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
   }
 
   async function handleRevoke() {
-    if (linkState.kind !== "ready" || !review) return;
+    if (linkState.kind !== "ready" || !page) return;
     if (
       !window.confirm(
         "Revoke this link? Anyone holding it will no longer be able to import.",
@@ -102,10 +114,7 @@ export default function ShareReviewDialog({
     setRevoking(true);
     try {
       await revokeShareLink(linkState.token);
-      // Mint a fresh one so the dialog stays useful — revoking the old
-      // is the common "I shared with the wrong person" path, and the
-      // user almost always wants a clean new URL right after.
-      await mintLink(review.id);
+      await mintLink(page.slug, includeLinked ? 1 : 0);
     } catch (err) {
       setLinkState({
         kind: "error",
@@ -116,15 +125,13 @@ export default function ShareReviewDialog({
     }
   }
 
-  const sourceLabel = review?.arxivId
-    ? `arXiv:${review.arxivId}`
-    : (review?.sourceUrl ?? "Unknown source");
-
   const isWorking = linkState.kind === "creating" || revoking;
+
+  const isDigest = page?.pageType === "digest";
 
   return (
     <Dialog
-      open={review !== null}
+      open={page !== null}
       onOpenChange={(next) => {
         if (!next && !isWorking) onClose();
       }}
@@ -133,51 +140,52 @@ export default function ShareReviewDialog({
         <DialogHeader>
           <div className="flex items-center gap-2">
             <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <Share2 className="size-3.5" strokeWidth={2} />
+              <Share2 className="size-[14px]" strokeWidth={2} />
             </span>
-            <DialogTitle>Share this review</DialogTitle>
+            <DialogTitle>Share this entry</DialogTitle>
           </div>
           <DialogDescription>
-            Anyone with the link can import a copy of your review, including
-            chats, annotations, deep dives, etc, into their own Artifact
-            workspace.
+            Anyone with the link can import a copy into their own journal.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Subject card — what's being shared */}
-        {review ? (
+        {page ? (
           <div className="rounded-lg border border-border/70 bg-card/50 px-3.5 py-3">
             <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              <Sparkles className="size-2.5" strokeWidth={2} />
-              <span>Sharing</span>
+              {isDigest ? (
+                <Sparkles className="size-2.5" strokeWidth={2} />
+              ) : (
+                <BookMarked className="size-2.5" strokeWidth={2} />
+              )}
+              <span>{isDigest ? "Weekly digest" : "Study session"}</span>
             </div>
             <p
               className="mt-1 truncate text-[13.5px] font-medium text-foreground"
-              title={review.title}
+              title={page.title}
             >
-              {review.title}
-            </p>
-            <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground/85">
-              {sourceLabel}
+              {page.title}
             </p>
           </div>
         ) : null}
 
-        {/* The link */}
         <LinkBlock
           state={linkState}
           copied={copied}
           revoking={revoking}
           onCopy={handleCopy}
           onRevoke={handleRevoke}
-          onRetry={() => review && mintLink(review.id)}
+          onRetry={() => page && mintLink(page.slug, includeLinked ? 1 : 0)}
+        />
+
+        <DepthToggle
+          checked={includeLinked}
+          onChange={setIncludeLinked}
+          disabled={isWorking}
         />
       </DialogContent>
     </Dialog>
   );
 }
-
-/* ── Pieces ────────────────────────────────────────────────────── */
 
 function LinkBlock({
   state,
@@ -254,19 +262,70 @@ function LinkBlock({
           </button>
         </div>
         <div className="flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground/65">
+          <span>
+            {state.reused
+              ? "Existing link — anyone with it can already import."
+              : "Link generated. No expiry — revoke any time."}
+          </span>
           <button
             type="button"
             onClick={onRevoke}
             disabled={revoking}
             className="text-[11px] underline-offset-4 transition-colors hover:text-destructive hover:underline disabled:opacity-50"
           >
-            {revoking ? "Revoking…" : "Revoke share link"}
+            {revoking ? "Revoking…" : "Revoke"}
           </button>
         </div>
       </div>
     );
   }
   return null;
+}
+
+function DepthToggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-card/30 px-3 py-2.5 transition-colors hover:bg-card/60",
+        disabled && "pointer-events-none opacity-60",
+      )}
+    >
+      <span className="relative mt-0.5 inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-muted transition-colors data-[on=true]:bg-primary"
+        data-on={checked}
+      >
+        <input
+          type="checkbox"
+          className="peer sr-only"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span
+          className={cn(
+            "absolute left-0.5 size-3 rounded-full bg-card shadow-sm transition-transform",
+            checked ? "translate-x-3" : "translate-x-0",
+          )}
+        />
+      </span>
+      <span className="flex-1">
+        <span className="block text-[12.5px] font-medium text-foreground">
+          Include linked pages
+        </span>
+        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
+          Pull in pages directly referenced via{" "}
+          <code className="rounded bg-muted px-1 py-px text-[10.5px]">[[link]]</code>{" "}
+          on this page.
+        </span>
+      </span>
+    </label>
+  );
 }
 
 function fallbackCopy(text: string) {
