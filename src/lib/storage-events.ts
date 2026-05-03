@@ -1,9 +1,9 @@
 /** CustomEvent names for cross-component cache invalidation (same tab). */
 
-export const REVIEWS_UPDATED_EVENT = "paper-copilot-reviews-updated";
-export const ANNOTATIONS_UPDATED_EVENT = "paper-copilot-annotations-updated";
-export const DEEP_DIVES_UPDATED_EVENT = "paper-copilot-deep-dives-updated";
-export const EXPLORE_UPDATED_EVENT = "paper-copilot-explore-updated";
-export const KEYS_UPDATED_EVENT = "paper-copilot-keys-updated";
-export const WIKI_UPDATED_EVENT = "paper-copilot-wiki-updated";
-export const USER_UPDATED_EVENT = "paper-copilot-user-updated";
+export const REVIEWS_UPDATED_EVENT = "artifact-reviews-updated";
+export const ANNOTATIONS_UPDATED_EVENT = "artifact-annotations-updated";
+export const DEEP_DIVES_UPDATED_EVENT = "artifact-deep-dives-updated";
+export const EXPLORE_UPDATED_EVENT = "artifact-explore-updated";
+export const KEYS_UPDATED_EVENT = "artifact-keys-updated";
+export const WIKI_UPDATED_EVENT = "artifact-wiki-updated";
+export const USER_UPDATED_EVENT = "artifact-user-updated";

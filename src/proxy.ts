@@ -65,10 +65,18 @@ export default auth((req) => {
   // ── App subdomain (and localhost / preview) ───────────────────
   const isAuthed = !!req.auth?.user;
 
+  // Share landing pages and their public metadata routes need to load
+  // for unauthenticated visitors — the whole point is that anyone with
+  // the link can see the preview before deciding to sign up.
+  const isPublicShareRoute =
+    nextUrl.pathname.startsWith("/share/") ||
+    /^\/api\/shares\/[^/]+\/preview\/?$/.test(nextUrl.pathname);
+
   const isOpen =
     nextUrl.pathname === "/signin" ||
     nextUrl.pathname === "/signup" ||
-    nextUrl.pathname.startsWith("/api/auth/");
+    nextUrl.pathname.startsWith("/api/auth/") ||
+    isPublicShareRoute;
   if (isOpen) return;
 
   if (!isAuthed) {

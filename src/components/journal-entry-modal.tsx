@@ -19,10 +19,10 @@ import {
 } from "lucide-react";
 import type { WikiPage } from "@/lib/wiki";
 import { updateWikiPage } from "@/lib/client-data";
-import { exportWikiToFile } from "@/lib/client/sharing/export-wiki";
 import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
 import MarkdownMessage from "./markdown-message";
+import ShareJournalDialog from "./share-journal-dialog";
 import WikiEditor from "./wiki-editor";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -40,9 +40,7 @@ export default function JournalEntryModal({
   const [draftTitle, setDraftTitle] = useState(page.title);
   const [draftContent, setDraftContent] = useState(page.content);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [shareStatus, setShareStatus] = useState<
-    "idle" | "sharing" | "error"
-  >("idle");
+  const [shareOpen, setShareOpen] = useState(false);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -152,16 +150,7 @@ export default function JournalEntryModal({
   const isDigest = page.pageType === "digest";
   const updatedLabel = formatRelative(page.updatedAt);
 
-  const handleShare = async () => {
-    setShareStatus("sharing");
-    try {
-      await exportWikiToFile(page.slug, { depth: 1 });
-      setShareStatus("idle");
-    } catch {
-      setShareStatus("error");
-      setTimeout(() => setShareStatus("idle"), 2000);
-    }
-  };
+  const handleShare = () => setShareOpen(true);
 
   return (
     <div className="fixed inset-0 z-50 animate-in fade-in duration-150" style={{ background: 'var(--reader-mat)' }}>
@@ -195,16 +184,11 @@ export default function JournalEntryModal({
           <button
             type="button"
             onClick={handleShare}
-            disabled={shareStatus === "sharing"}
-            title="Export as shareable file"
+            title="Share this entry"
             aria-label="Share entry"
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
           >
-            {shareStatus === "sharing" ? (
-              <Loader2 className="size-3 animate-spin" strokeWidth={2} />
-            ) : (
-              <Share2 className="size-3" strokeWidth={1.75} />
-            )}
+            <Share2 className="size-3" strokeWidth={1.75} />
             <span className="hidden sm:inline">Share</span>
           </button>
 
@@ -297,6 +281,11 @@ export default function JournalEntryModal({
           )}
         </article>
       </div>
+
+      <ShareJournalDialog
+        page={shareOpen ? page : null}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   );
 }

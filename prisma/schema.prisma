@@ -32,6 +32,7 @@ model User {
   preferences       UserPreferences?
   pdfBlobs          PdfBlob[]
   parsedPapers      ParsedPaper[]
+  shares            Share[]
 }
 
 model Account {
@@ -80,6 +81,14 @@ model Review {
   createdAt  DateTime
   updatedAt  DateTime
   importedAt DateTime?
+  /// Token of the share this review was imported from. Stored, not
+  /// enforced via FK — the share row may be revoked or the owner may have
+  /// deleted their copy. Drives the "Imported from {Owner}" badge.
+  importedFromShareToken String?
+  /// Snapshot of the sharer's display name at import time. Captured so the
+  /// badge survives the original sharer renaming, deleting their account,
+  /// or revoking the share.
+  importedFromName       String?
 
   user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages      ReviewMessages?
@@ -87,6 +96,7 @@ model Review {
   prerequisites Prerequisites?
   deepDives     DeepDive[]
   wikiSources   WikiPageSource[]
+  shares        Share[]
 
   @@index([userId, createdAt])
   @@index([userId, arxivId])
@@ -144,6 +154,7 @@ model WikiPage {
   sources   WikiPageSource[]
   backlinks WikiBacklink[]
   revisions WikiRevision[]
+  shares    Share[]
 
   @@unique([userId, slug])
   @@index([userId, updatedAt])
@@ -258,4 +269,34 @@ model ParsedPaper {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, hash])
+}
+
+/// A shareable link pointing at one review or one wiki page. The token
+/// is the primary key (cuid → ~128 bits, URL-safe) and `kind`
+/// discriminates which FK is populated. `onDelete: Cascade` from Review
+/// and WikiPage means deleting the underlying record automatically
+/// invalidates all of its shares — no orphans, no manual cleanup.
+model Share {
+  token        String    @id @default(cuid())
+  userId       String
+  kind         String // "review" | "wiki"
+  reviewId     String?
+  wikiPageId   String?
+  /// For wiki shares: how many `[[slug]]` hops to traverse when cloning
+  /// linked pages. Default 0 (root only); user opts in to deeper sharing.
+  wikiDepth    Int?
+  createdAt    DateTime  @default(now())
+  /// Soft-delete. Lookups filter on `revokedAt = null`.
+  revokedAt    DateTime?
+  /// Owner-facing telemetry. Cheap to maintain.
+  lastAccessAt DateTime?
+  accessCount  Int       @default(0)
+
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review Review?   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  page   WikiPage? @relation(fields: [wikiPageId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([reviewId])
+  @@index([wikiPageId])
 }

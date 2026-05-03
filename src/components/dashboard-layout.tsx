@@ -12,8 +12,8 @@ import SettingsDialog from "./settings-dialog";
 import { SettingsOpenerProvider } from "./settings-opener-context";
 import DataHydration from "./data-hydration";
 
-const SIDEBAR_KEY = "paper-copilot-sidebar-collapsed";
-const OPEN_SETTINGS_FLAG = "paper-copilot-open-settings";
+const SIDEBAR_KEY = "artifact-sidebar-collapsed";
+const OPEN_SETTINGS_FLAG = "artifact-open-settings";
 
 const NARROW_MQ = BREAKPOINTS.NARROW;
 

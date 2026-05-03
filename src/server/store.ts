@@ -93,6 +93,8 @@ function rowToReview(r: {
   createdAt: Date;
   updatedAt: Date;
   importedAt: Date | null;
+  importedFromShareToken?: string | null;
+  importedFromName?: string | null;
 }): PaperReview {
   return {
     id: r.id,
@@ -103,6 +105,10 @@ function rowToReview(r: {
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
     ...(r.importedAt ? { importedAt: r.importedAt.toISOString() } : {}),
+    ...(r.importedFromShareToken
+      ? { importedFromShareToken: r.importedFromShareToken }
+      : {}),
+    ...(r.importedFromName ? { importedFromName: r.importedFromName } : {}),
   };
 }
 

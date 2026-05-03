@@ -81,7 +81,7 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
     if (attempt > 0) await sleep(2000 * attempt);
 
     const response = await fetch(url, {
-      headers: { "User-Agent": "PaperCopilot/1.0 (academic research tool)" },
+      headers: { "User-Agent": "Artifact/1.0 (academic research tool)" },
     });
 
     if (response.status === 429) {

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const OPEN_SETTINGS_FLAG = "paper-copilot-open-settings";
+const OPEN_SETTINGS_FLAG = "artifact-open-settings";
 
 /**
  * Legacy /settings URL: hand off to home and open Manage API keys.

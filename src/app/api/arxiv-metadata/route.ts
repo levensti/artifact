@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const url = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`;
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "PaperCopilot/1.0 (https://github.com; academic use)",
+        "User-Agent": "Artifact/1.0 (academic research tool)",
       },
       next: { revalidate: 86400 },
     });

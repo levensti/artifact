@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const response = await fetch(url, {
-      headers: { "User-Agent": "PaperCopilot/1.0" },
+      headers: { "User-Agent": "Artifact/1.0" },
       redirect: "follow",
     });
 

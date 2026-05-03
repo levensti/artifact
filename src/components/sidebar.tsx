@@ -8,7 +8,7 @@ import {
   AlertCircle,
   Share2,
 } from "lucide-react";
-import { canShareReview } from "@/lib/client/sharing/export-review";
+import { canShareReview } from "@/lib/client/sharing/share-links";
 import {
   getReviews,
   REVIEWS_UPDATED_EVENT,
@@ -301,6 +301,9 @@ export default function Sidebar({
                 {group.items.map((review) => {
                   const isActive = pathname === `/review/${review.id}`;
                   const isImported = Boolean(review.importedAt);
+                  const sharerFirstName = review.importedFromName
+                    ? review.importedFromName.split(/\s+/)[0]
+                    : null;
                   const shareable = canShareReview(review);
                   return (
                     <div
@@ -309,7 +312,9 @@ export default function Sidebar({
                       tabIndex={0}
                       title={
                         isImported
-                          ? `${review.title} — imported from a share`
+                          ? sharerFirstName
+                            ? `${review.title} — imported from ${sharerFirstName}'s share`
+                            : `${review.title} — imported from a share`
                           : review.title
                       }
                       onClick={() => router.push(`/review/${review.id}`)}
@@ -332,9 +337,13 @@ export default function Sidebar({
                       {isImported ? (
                         <span
                           className="mt-px inline-flex shrink-0 items-center rounded-full bg-[var(--badge-imported-bg)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[var(--badge-imported-fg)]"
-                          aria-label="Imported from a shared bundle"
+                          aria-label={
+                            sharerFirstName
+                              ? `Imported from ${sharerFirstName}'s share`
+                              : "Imported from a shared bundle"
+                          }
                         >
-                          Imported
+                          {sharerFirstName ? `From ${sharerFirstName}` : "Imported"}
                         </span>
                       ) : null}
                       {shareable ? (

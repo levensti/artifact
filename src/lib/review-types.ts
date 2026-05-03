@@ -105,4 +105,8 @@ export interface PaperReview {
   sourceUrl: string | null;
   /** ISO timestamp set when this review arrived via share-bundle import. Drives the sidebar "Imported" badge. */
   importedAt?: string;
+  /** Token of the share that produced this clone, when imported via a share link. */
+  importedFromShareToken?: string;
+  /** Display name of the sharer at clone time. Snapshot — survives revocation/rename. */
+  importedFromName?: string;
 }
