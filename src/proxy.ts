@@ -32,6 +32,17 @@ export default auth((req) => {
 
   // ── Apex: public sign-in / sign-up surface only ───────────────
   if (isApexHost(host)) {
+    // Already-authenticated visitors don't belong on the apex auth pages —
+    // they'd hit the `redirect(callbackUrl ?? "/")` in <AuthPage>, bounce
+    // back to apex `/`, get rewritten to `/signup` again, and loop. Send
+    // them straight to the app subdomain instead.
+    if (req.auth?.user && APP_HOST) {
+      const target = new URL(
+        nextUrl.pathname + nextUrl.search,
+        `https://${APP_HOST}`,
+      );
+      return NextResponse.redirect(target, 308);
+    }
     if (nextUrl.pathname === "/") {
       // New users hit the apex first — default them into the sign-up flow.
       const url = nextUrl.clone();
