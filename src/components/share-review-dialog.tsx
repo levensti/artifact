@@ -146,13 +146,13 @@ export default function ShareReviewDialog({
 
         {/* Subject card — what's being shared */}
         {review ? (
-          <div className="rounded-lg border border-border/70 bg-card/50 px-3.5 py-3">
+          <div className="min-w-0 rounded-lg border border-border/70 bg-card/50 px-3.5 py-3">
             <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/60">
               <Sparkles className="size-2.5" strokeWidth={2} />
               <span>Sharing</span>
             </div>
             <p
-              className="mt-1 truncate text-[13.5px] font-medium text-foreground"
+              className="mt-1 line-clamp-2 text-[13.5px] leading-snug font-medium break-words text-foreground"
               title={review.title}
             >
               {review.title}
