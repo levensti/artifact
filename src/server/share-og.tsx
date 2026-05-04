@@ -116,7 +116,7 @@ export async function renderShareOgImage(token: string): Promise<Response> {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "color-mix(in srgb, #1e2b5e 12%, transparent)",
+              background: "rgba(30, 43, 94, 0.12)",
               color: "#1e2b5e",
               fontSize: 18,
               fontWeight: 600,
