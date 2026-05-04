@@ -86,10 +86,11 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    // Run on everything except Next internals, static assets, and the
-    // file-convention OG/Twitter image routes — those are public assets
-    // and the proxy must not redirect them, or unfurl bots end up on
-    // /signin and the social preview comes back blank.
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|opengraph-image|twitter-image|.*\\.svg|.*\\.png).*)",
+    // Run on everything except Next internals, static assets, and public
+    // image endpoints. The OG/Twitter image routes (default + per-share)
+    // must bypass auth middleware entirely: redirecting them traps unfurl
+    // bots on /signin, and even setting auth cookies on the response is
+    // enough for some bots (Apple/iMessage) to silently drop the preview.
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|opengraph-image|twitter-image|share/[^/]+/og|.*\\.svg|.*\\.png).*)",
   ],
 };
