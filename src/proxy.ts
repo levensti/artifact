@@ -86,7 +86,10 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    // Run on everything except Next internals and static assets.
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.svg|.*\\.png).*)",
+    // Run on everything except Next internals, static assets, and the
+    // file-convention OG/Twitter image routes — those are public assets
+    // and the proxy must not redirect them, or unfurl bots end up on
+    // /signin and the social preview comes back blank.
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|opengraph-image|twitter-image|.*\\.svg|.*\\.png).*)",
   ],
 };
