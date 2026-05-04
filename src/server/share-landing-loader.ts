@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { auth } from "./auth";
 import { HttpError } from "./api";
 import { getSharePreview, type SharePreview } from "./shares";
+import { getAppOrigin } from "@/lib/app-origin";
 
 export interface LoaderResult {
   state: "ok" | "revoked" | "missing";
@@ -70,7 +71,15 @@ export function buildShareMetadata({
   // Cache-bust when the share is recreated after revocation by piggybacking
   // on the creation timestamp.
   const ogVersion = String(new Date(preview.createdAt).getTime());
-  const ogUrl = `${ogPath}?v=${ogVersion}`;
+  // Emit an absolute URL pinned to the app subdomain. The site's `metadataBase`
+  // is the apex, but apex requests for `/share/<token>/og` get bounced through
+  // the proxy to the app subdomain. Some unfurl bots (Apple/iMessage) drop the
+  // image after a multi-hop cross-host redirect, so we short-circuit and point
+  // straight at the host that actually serves the route.
+  const appOrigin = getAppOrigin();
+  const ogUrl = appOrigin
+    ? `${appOrigin}${ogPath}?v=${ogVersion}`
+    : `${ogPath}?v=${ogVersion}`;
 
   return {
     title: { absolute: title },
