@@ -2,13 +2,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import {
-  FilePen,
-  FilePlus,
-  AlertCircle,
-  KeyRound,
-  Share2,
-} from "lucide-react";
+import { FilePen, FilePlus, AlertCircle, KeyRound, Share2 } from "lucide-react";
 import { canShareReview } from "@/lib/client/sharing/share-links";
 import {
   getReviews,
@@ -195,8 +189,12 @@ export default function Sidebar({
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-foreground">
                 <svg viewBox="4 4 24 24" aria-hidden className="size-[18px]">
-                  <path d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z" fill="#fafafa" opacity="0.35"/>
-                  <circle cx="22" cy="10" r="3.2" fill="#fafafa"/>
+                  <path
+                    d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z"
+                    fill="#fafafa"
+                    opacity="0.35"
+                  />
+                  <circle cx="22" cy="10" r="3.2" fill="#fafafa" />
                 </svg>
               </span>
               <div className="flex min-w-0 flex-col leading-tight">
@@ -305,24 +303,18 @@ export default function Sidebar({
             onClick={() => openSettings()}
             className="mt-0.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
             aria-label={
-              hasKeys
-                ? "Manage API keys"
-                : "Add an API key to start chatting"
+              hasKeys ? "Manage API keys" : "Add an API key to start chatting"
             }
           >
             <span className="relative flex w-6 shrink-0 items-center justify-center">
-              <KeyRound
-                className="size-[15px] opacity-80"
-                strokeWidth={1.75}
-              />
+              <KeyRound className="size-[15px] opacity-80" strokeWidth={1.75} />
               {!hasKeys ? (
                 <span
                   aria-hidden
                   className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full"
                   style={{
                     background: "var(--primary)",
-                    boxShadow:
-                      "0 0 0 2px var(--sidebar)",
+                    boxShadow: "0 0 0 2px var(--sidebar)",
                   }}
                 />
               ) : null}
@@ -409,19 +401,21 @@ export default function Sidebar({
                           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
                       )}
                     >
-                      <span className="min-w-0 flex-1 break-words">
+                      <span className="min-w-0 flex-1 wrap-break-word">
                         {review.title}
                       </span>
                       {isImported ? (
                         <span
-                          className="mt-px inline-flex shrink-0 items-center rounded-full bg-[var(--badge-imported-bg)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[var(--badge-imported-fg)]"
+                          className="mt-px inline-flex shrink-0 items-center rounded-full bg-(--badge-imported-bg) px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[var(--badge-imported-fg)]"
                           aria-label={
                             sharerFirstName
                               ? `Imported from ${sharerFirstName}'s share`
                               : "Imported from a shared bundle"
                           }
                         >
-                          {sharerFirstName ? `From ${sharerFirstName}` : "Imported"}
+                          {sharerFirstName
+                            ? `From ${sharerFirstName}`
+                            : "Imported"}
                         </span>
                       ) : null}
                       {shareable ? (

@@ -30,6 +30,18 @@ function keysServerSnapshot() {
 }
 
 export default function HomeClient() {
+  // SettingsOpenerProvider is mounted *inside* DashboardLayout, so any hook
+  // that touches that context (useSettingsOpener) has to live in a child
+  // component rendered as a descendant. Splitting the body keeps the hook
+  // call below the provider in the React tree.
+  return (
+    <DashboardLayout>
+      <HomeBody />
+    </DashboardLayout>
+  );
+}
+
+function HomeBody() {
   const [showNewReview, setShowNewReview] = useState(false);
   const router = useRouter();
   const { openSettings } = useSettingsOpener();
@@ -56,7 +68,7 @@ export default function HomeClient() {
   ];
 
   return (
-    <DashboardLayout>
+    <>
       <div
         className="relative flex h-full flex-col overflow-y-auto"
         style={{ background: "var(--reader-mat)" }}
@@ -104,7 +116,7 @@ export default function HomeClient() {
           router.push(`/review/${id}`);
         }}
       />
-    </DashboardLayout>
+    </>
   );
 }
 
