@@ -16,22 +16,6 @@ export interface GenerateRequest {
   stream?: boolean;
 }
 
-export interface Prerequisite {
-  id: string;
-  topic: string;
-  description: string;
-  difficulty: "foundational" | "intermediate" | "advanced";
-  explanation?: string;
-  /** ISO timestamp when the user marked this prerequisite as addressed */
-  completedAt?: string;
-}
-
-export interface PrerequisitesData {
-  prerequisites: Prerequisite[];
-  generatedAt: string;
-  modelUsed: string;
-}
-
 export interface ArxivSearchResult {
   arxivId: string;
   title: string;

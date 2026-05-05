@@ -17,13 +17,11 @@ import { hasInferenceCredentials } from "@/lib/ai-providers";
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type { PrerequisitesData } from "@/lib/explore";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
   DEEP_DIVES_UPDATED_EVENT,
-  EXPLORE_UPDATED_EVENT,
   KEYS_UPDATED_EVENT,
   WIKI_UPDATED_EVENT,
   USER_UPDATED_EVENT,
@@ -59,7 +57,6 @@ let currentUser: CurrentUser | null = null;
 
 const messagesCache = new Map<string, ChatMessage[]>();
 const annotationsCache = new Map<string, Annotation[]>();
-const exploreCache = new Map<string, { prerequisites: PrerequisitesData | null }>();
 
 function dispatch(name: string): void {
   if (typeof window === "undefined") return;
@@ -82,10 +79,8 @@ export async function hydrateClientStore(): Promise<void> {
     currentUser = boot.user;
     messagesCache.clear();
     annotationsCache.clear();
-    exploreCache.clear();
     dispatch(REVIEWS_UPDATED_EVENT);
     dispatch(KEYS_UPDATED_EVENT);
-    dispatch(EXPLORE_UPDATED_EVENT);
     dispatch(DEEP_DIVES_UPDATED_EVENT);
     dispatch(USER_UPDATED_EVENT);
   })();
@@ -152,7 +147,6 @@ export async function deleteReview(id: string): Promise<void> {
   await apiFetch(`/api/reviews/${encodeURIComponent(id)}`, { method: "DELETE" });
   messagesCache.delete(id);
   annotationsCache.delete(id);
-  exploreCache.delete(id);
   await refreshReviews();
 }
 
@@ -229,43 +223,6 @@ export async function saveDeepDive(
   deepDivesCache = [deepDive, ...deepDivesCache.filter((d) => d.id !== deepDive.id)];
   dispatch(DEEP_DIVES_UPDATED_EVENT);
   return deepDive;
-}
-
-/* ── Explore (prerequisites) ── */
-
-export async function loadExplore(
-  reviewId: string,
-): Promise<{ prerequisites: PrerequisitesData | null }> {
-  if (!reviewId?.trim()) return { prerequisites: null };
-  const cached = exploreCache.get(reviewId);
-  if (cached) return cached;
-  const { prerequisites } = await apiFetch<{
-    prerequisites: PrerequisitesData | null;
-  }>(`/api/reviews/${encodeURIComponent(reviewId)}/prerequisites`);
-  const data = { prerequisites };
-  exploreCache.set(reviewId, data);
-  return data;
-}
-
-export async function savePrerequisites(
-  reviewId: string,
-  prerequisites: PrerequisitesData,
-): Promise<void> {
-  exploreCache.set(reviewId, { prerequisites });
-  await apiFetch(
-    `/api/reviews/${encodeURIComponent(reviewId)}/prerequisites`,
-    { method: "PUT", body: { prerequisites } },
-  );
-  dispatch(EXPLORE_UPDATED_EVENT);
-}
-
-export async function clearExploreData(reviewId: string): Promise<void> {
-  exploreCache.delete(reviewId);
-  await apiFetch(
-    `/api/reviews/${encodeURIComponent(reviewId)}/prerequisites`,
-    { method: "DELETE" },
-  );
-  dispatch(EXPLORE_UPDATED_EVENT);
 }
 
 /* ── Wiki (ambient knowledge base) ──────────────────────────────── */

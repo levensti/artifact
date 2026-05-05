@@ -1,30 +1,16 @@
 "use client";
 
 import { AlertCircle, RotateCw } from "lucide-react";
-import type { Model } from "@/lib/models";
 import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
 import type { AnnotationMessage } from "@/lib/annotations";
 import MarkdownMessage from "./markdown-message";
-import LearningEmbed from "./learning-embed";
 import {
   ThinkingIndicator,
   ToolCallStep,
   renderAgentSteps,
 } from "./chat-step-renderers";
 import type { AgentStep } from "@/hooks/use-chat";
-
-/* ------------------------------------------------------------------ */
-/*  Block context (shared by interleaved block renderers)              */
-/* ------------------------------------------------------------------ */
-
-export interface BlockCtx {
-  reviewId: string;
-  arxivId: string;
-  paperTitle: string;
-  paperContext: string;
-  selectedModel: Model | null;
-}
 
 /* ------------------------------------------------------------------ */
 /*  ArXiv hits block                                                   */
@@ -77,10 +63,7 @@ export function hasInterleavedBlocks(blocks: ChatAssistantBlock[]): boolean {
   );
 }
 
-export function renderInterleavedBlocks(
-  blocks: ChatAssistantBlock[],
-  ctx: BlockCtx,
-) {
+export function renderInterleavedBlocks(blocks: ChatAssistantBlock[]) {
   return blocks.map((block, i) => {
     if (block.type === "text_segment") {
       return block.content ? (
@@ -94,18 +77,6 @@ export function renderInterleavedBlocks(
           name={block.name}
           input={block.input}
           output={block.output}
-        />
-      );
-    }
-    if (block.type === "learning_embed") {
-      return (
-        <LearningEmbed
-          key={`le-${i}`}
-          reviewId={block.reviewId}
-          arxivId={ctx.arxivId}
-          paperTitle={ctx.paperTitle}
-          paperContext={ctx.paperContext}
-          selectedModel={ctx.selectedModel}
         />
       );
     }
@@ -130,13 +101,11 @@ export function ChatMessageBubble({
   msg,
   isCurrentlyStreaming,
   agentSteps,
-  blockCtx,
   failure,
 }: {
   msg: ChatMessage | AnnotationMessage;
   isCurrentlyStreaming: boolean;
   agentSteps: AgentStep[];
-  blockCtx: BlockCtx;
   /** When set, render an inline failure indicator beneath this user message. */
   failure?: {
     error: string;
@@ -201,7 +170,7 @@ export function ChatMessageBubble({
     return (
       <div className="max-w-full">
         <div className="border-l-2 border-l-primary/15 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
-          {renderInterleavedBlocks(msg.blocks!, blockCtx)}
+          {renderInterleavedBlocks(msg.blocks!)}
         </div>
       </div>
     );
@@ -211,7 +180,7 @@ export function ChatMessageBubble({
     <div className="max-w-full">
       <div className="rounded-xl border-l-[3px] border-l-primary/30 px-4 py-3 text-sm leading-relaxed bg-card text-card-foreground shadow-sm max-w-full">
         {msg.content ? <MarkdownMessage content={msg.content} /> : null}
-        {hasBlocks ? renderInterleavedBlocks(msg.blocks!, blockCtx) : null}
+        {hasBlocks ? renderInterleavedBlocks(msg.blocks!) : null}
       </div>
     </div>
   );

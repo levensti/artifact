@@ -94,11 +94,6 @@ export const POST = authedRoute(async (userId, request: Request) => {
         data: { reviewId: finalReviewId, annotations: asJson(annotations) },
       });
     }
-    if (bundle.data.prerequisites) {
-      await tx.prerequisites.create({
-        data: { reviewId: finalReviewId, data: asJson(bundle.data.prerequisites) },
-      });
-    }
     for (const dd of deepDives) {
       await tx.deepDive.create({
         data: {

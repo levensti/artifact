@@ -90,13 +90,12 @@ model Review {
   /// or revoking the share.
   importedFromName       String?
 
-  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages      ReviewMessages?
-  annotations   ReviewAnnotations?
-  prerequisites Prerequisites?
-  deepDives     DeepDive[]
-  wikiSources   WikiPageSource[]
-  shares        Share[]
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    ReviewMessages?
+  annotations ReviewAnnotations?
+  deepDives   DeepDive[]
+  wikiSources WikiPageSource[]
+  shares      Share[]
 
   @@index([userId, createdAt])
   @@index([userId, arxivId])
@@ -114,13 +113,6 @@ model ReviewAnnotations {
   reviewId    String @unique
   annotations Json
   review      Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-}
-
-model Prerequisites {
-  id       String @id @default(uuid())
-  reviewId String @unique
-  data     Json
-  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 }
 
 model DeepDive {
