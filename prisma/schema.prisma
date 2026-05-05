@@ -203,7 +203,7 @@ model WikiRevision {
   user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   page WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
-  @@index([pageId, id])
+  @@index([pageId, savedAt])
 }
 
 /// API key for an external service (LLM provider or tool). The `value`
