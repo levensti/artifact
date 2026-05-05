@@ -49,7 +49,7 @@ export async function LandingPage() {
         <LandingMarquee />
         <LandingPillars />
       </main>
-      <LandingFooter githubUrl={GITHUB_URL} />
+      <LandingFooter />
     </div>
   );
 }

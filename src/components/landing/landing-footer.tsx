@@ -1,10 +1,6 @@
 import { BrandGlyph } from "@/components/brand-panel";
 
-export interface LandingFooterProps {
-  githubUrl: string;
-}
-
-export function LandingFooter({ githubUrl }: LandingFooterProps) {
+export function LandingFooter() {
   return (
     <footer className="border-t border-border/60 bg-background">
       <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-6 py-7 text-[12.5px] text-muted-foreground sm:flex-row sm:items-center lg:px-10">

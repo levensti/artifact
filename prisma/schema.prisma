@@ -12,7 +12,7 @@ datasource db {
 /* ── Auth.js (NextAuth) ────────────────────────────────────────── */
 
 model User {
-  id            String    @id @default(cuid())
+  id            String    @id @default(uuid())
   name          String?
   email         String    @unique
   emailVerified DateTime?
@@ -72,7 +72,7 @@ model VerificationToken {
 /* ── Domain ────────────────────────────────────────────────────── */
 
 model Review {
-  id         String   @id
+  id         String   @id @default(uuid())
   userId     String
   title      String
   arxivId    String?
@@ -103,28 +103,28 @@ model Review {
 }
 
 model ReviewMessages {
-  id       String @id @default(cuid())
+  id       String @id @default(uuid())
   reviewId String @unique
   messages Json
   review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 }
 
 model ReviewAnnotations {
-  id          String @id @default(cuid())
+  id          String @id @default(uuid())
   reviewId    String @unique
   annotations Json
   review      Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 }
 
 model Prerequisites {
-  id       String @id @default(cuid())
+  id       String @id @default(uuid())
   reviewId String @unique
   data     Json
   review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 }
 
 model DeepDive {
-  id          String   @id
+  id          String   @id @default(uuid())
   userId      String
   reviewId    String
   paperTitle  String
@@ -141,7 +141,7 @@ model DeepDive {
 }
 
 model WikiPage {
-  id        String   @id
+  id        String   @id @default(uuid())
   userId    String
   slug      String
   title     String
@@ -162,7 +162,7 @@ model WikiPage {
 }
 
 model WikiPageSource {
-  id       String   @id @default(cuid())
+  id       String   @id @default(uuid())
   userId   String
   pageId   String
   reviewId String
@@ -178,7 +178,7 @@ model WikiPageSource {
 }
 
 model WikiBacklink {
-  id         String @id @default(cuid())
+  id         String @id @default(uuid())
   userId     String
   sourceId   String
   targetSlug String
@@ -191,7 +191,7 @@ model WikiBacklink {
 }
 
 model WikiRevision {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   userId    String
   pageId    String
   slug      String
@@ -211,7 +211,7 @@ model WikiRevision {
 /// `provider` discriminator currently spans LLM providers ("anthropic",
 /// "openai", "xai") and tool keys ("brave").
 model ApiKey {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   userId    String
   provider  String
   value     String
@@ -225,7 +225,7 @@ model ApiKey {
 
 /// One named OpenAI- or Anthropic-compatible inference endpoint.
 model InferenceProfile {
-  id                String   @id @default(cuid())
+  id                String   @id @default(uuid())
   userId            String
   label             String
   kind              String
@@ -251,7 +251,7 @@ model UserPreferences {
 }
 
 model PdfBlob {
-  id          String   @id
+  id          String   @id @default(uuid())
   userId      String
   name        String?
   storagePath String
@@ -261,7 +261,7 @@ model PdfBlob {
 }
 
 model ParsedPaper {
-  id     String @id @default(cuid())
+  id     String @id @default(uuid())
   userId String
   hash   String
   parsed Json
@@ -272,12 +272,12 @@ model ParsedPaper {
 }
 
 /// A shareable link pointing at one review or one wiki page. The token
-/// is the primary key (cuid → ~128 bits, URL-safe) and `kind`
+/// is the primary key (uuid v4 → 122 bits, URL-safe) and `kind`
 /// discriminates which FK is populated. `onDelete: Cascade` from Review
 /// and WikiPage means deleting the underlying record automatically
 /// invalidates all of its shares — no orphans, no manual cleanup.
 model Share {
-  token        String    @id @default(cuid())
+  token        String    @id @default(uuid())
   userId       String
   kind         String // "review" | "wiki"
   reviewId     String?
