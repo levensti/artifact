@@ -1,22 +1,64 @@
+import Link from "next/link";
 import { BrandGlyph } from "@/components/brand-panel";
 
-export function LandingFooter() {
+export interface LandingFooterProps {
+  signupHref: string;
+  githubUrl: string;
+}
+
+export function LandingFooter({ signupHref, githubUrl }: LandingFooterProps) {
   return (
-    <footer className="border-t border-border/60 bg-background">
-      <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-6 py-7 text-[12.5px] text-muted-foreground sm:flex-row sm:items-center lg:px-10">
-        <div className="flex items-center gap-2">
-          <span className="flex size-5 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <BrandGlyph className="size-2.5" />
-          </span>
-          <span className="font-semibold tracking-tight text-foreground">
-            Artifact
+    <footer
+      className="mt-16 border-t px-16 py-10 font-sans text-[12px] text-muted-foreground"
+      style={{
+        borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
+      }}
+    >
+      <div className="grid grid-cols-1 gap-x-14 gap-y-6 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-[13px] font-semibold tracking-tight text-foreground"
+            aria-label="Artifact home"
+          >
+            <span className="flex size-[22px] items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <BrandGlyph className="size-3" />
+            </span>
+            <span>Artifact</span>
+          </Link>
+          <span
+            className="text-[12px]"
+            style={{
+              color:
+                "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
+            }}
+          >
+            · A research workspace · MIT licensed
           </span>
         </div>
-        <div className="flex items-center gap-5">
-          <span className="text-muted-foreground/60">
-            © {new Date().getFullYear()} Artifact
+
+        <nav className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <a href={signupHref} className="hover:text-foreground">
+            Open Artifact
+          </a>
+          <a
+            href={githubUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="hover:text-foreground"
+          >
+            GitHub
+          </a>
+          <span
+            className="text-[11px]"
+            style={{
+              color:
+                "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
+            }}
+          >
+            © {new Date().getFullYear()}
           </span>
-        </div>
+        </nav>
       </div>
     </footer>
   );

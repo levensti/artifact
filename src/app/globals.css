@@ -142,7 +142,7 @@
 
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-reading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -633,39 +633,242 @@
   html { @apply font-sans; }
 }
 
-/* ── Landing page atmospherics ─────────────────────────────────── */
-@keyframes landing-marquee {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-50%, 0, 0); }
-}
-.landing-marquee-track {
-  animation: landing-marquee 60s linear infinite;
-  will-change: transform;
-}
-.landing-marquee:hover .landing-marquee-track {
-  animation-play-state: paused;
+/* ── Landing page — folio reading layout ──────────────────────── */
+
+/* Selection on the landing page uses the indigo accent. */
+.landing-root ::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: var(--foreground);
 }
 
-@keyframes landing-caret {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
+/* The "folio" — a sheet of paper laid on the warm reader mat. */
+.landing-folio {
+  max-width: 1180px;
+  margin: 0 auto;
+  background: var(--background);
+  border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+/* Two-column spread: 200px marginalia | body. */
+.landing-spread {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  column-gap: 56px;
+  padding: 0 64px;
+}
+
+.landing-marg {
+  padding-top: 6px;
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+  line-height: 1.55;
+  font-feature-settings: "tnum";
+}
+.landing-marg .folio-no {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--muted-foreground) 75%, transparent);
+  text-transform: uppercase;
+}
+.landing-marg .marg-note {
+  margin-top: 8px;
+  font-family: var(--font-reading);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--muted-foreground) 95%, transparent);
+  text-wrap: pretty;
+}
+.landing-marg .marg-note::before {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 1px;
+  background: color-mix(in srgb, var(--primary) 50%, transparent);
+  margin-bottom: 10px;
+}
+
+/* The comet — a margin manicule that "streaks" across separators. */
+.landing-comet-rule {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--border) 100%, transparent) 8%,
+    color-mix(in srgb, var(--border) 100%, transparent) 92%,
+    transparent 100%
+  );
+  position: relative;
+}
+.landing-comet-rule::after {
+  content: "";
+  position: absolute;
+  left: 22%;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow:
+    -10px 1px 0 -2px color-mix(in srgb, var(--primary) 60%, transparent),
+    -22px 1.5px 0 -3px color-mix(in srgb, var(--primary) 35%, transparent),
+    -38px 2px 0 -3px color-mix(in srgb, var(--primary) 18%, transparent),
+    -56px 2px 0 -3px color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+/* Live "in progress" pulsing dot — used in cover meta + journal margin. */
+@keyframes landing-pulse-dot {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.landing-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: landing-pulse-dot 2.4s ease-in-out infinite;
+}
+.landing-pulse-dot--sm {
+  width: 4px;
+  height: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 50%, transparent);
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+/* Cover (hero). */
+.landing-cover-h1 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: clamp(56px, 9vw, 124px);
+  line-height: 0.94;
+  letter-spacing: -0.045em;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+.landing-cover-h1 .frontier {
+  font-family: var(--font-reading);
+  font-style: italic;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--primary) 92%, transparent);
+  letter-spacing: -0.035em;
+}
+
+/* Section anatomy. */
+.landing-section-title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.032em;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+.landing-section-title .quiet {
+  color: color-mix(in srgb, var(--foreground) 50%, transparent);
+  font-weight: 600;
+}
+
+/* Specimen highlight glyphs (warning + indigo). */
+.landing-hl {
+  background: color-mix(in srgb, var(--warning) 22%, transparent);
+  padding: 0 2px;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.landing-hl-blue {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  padding: 0 2px;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Caret in the paste-link specimen. */
+@keyframes landing-caret-blink {
+  50% { opacity: 0; }
 }
 .landing-caret {
   display: inline-block;
-  width: 1px;
-  height: 1em;
-  vertical-align: -0.12em;
-  background: currentColor;
-  margin-left: 1px;
-  animation: landing-caret 1.05s steps(1, end) infinite;
+  width: 1.5px;
+  height: 14px;
+  background: var(--primary);
+  margin-left: -2px;
+  animation: landing-caret-blink 1s steps(1) infinite;
+  vertical-align: middle;
 }
 
-@keyframes landing-float {
-  0%, 100% { transform: translateY(0) rotate(var(--rot, 0deg)); }
-  50% { transform: translateY(-6px) rotate(var(--rot, 0deg)); }
+/* Journal entry "Journaling…" pill (uses the standard pulse dot). */
+.landing-marg-writing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--primary) 90%, transparent);
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
 }
-.landing-float {
-  animation: landing-float 7s ease-in-out infinite;
+
+/* Journal entry. */
+.landing-journal-entry {
+  border-left: 2px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  padding: 4px 0 4px 28px;
+  margin-top: 36px;
+  max-width: 720px;
+}
+.landing-journal-entry .body {
+  margin-top: 16px;
+  font-family: var(--font-reading);
+  font-size: 16px;
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--foreground) 88%, transparent);
+  text-wrap: pretty;
+}
+.landing-journal-entry .body p { margin: 0 0 14px; }
+.landing-journal-entry .body a.wiki {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 30%, transparent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color 150ms;
+}
+.landing-journal-entry .body a.wiki:hover {
+  text-decoration-color: var(--primary);
+}
+
+/* Responsive — collapse marginalia on narrow viewports. */
+@media (max-width: 880px) {
+  .landing-spread { grid-template-columns: 1fr; padding: 0 24px; column-gap: 0; }
+  .landing-marg { padding-bottom: 16px; }
+  .landing-marg .marg-note::before { display: none; }
+  .landing-cover-h1 {
+    font-size: 56px;
+    line-height: 0.96;
+    letter-spacing: -0.035em;
+  }
+  .landing-section-title { font-size: 32px; }
+}
+
+/* Reduced motion: skip the scroll-reveal animation entirely. The Reveal
+   wrapper still cycles through its data-shown states via IntersectionObserver,
+   but the CSS forces it visible with no transition. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
 }
 
 /* Safe areas for notched phones and home indicators */

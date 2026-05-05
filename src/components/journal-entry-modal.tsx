@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import MarkdownMessage from "./markdown-message";
 import ShareJournalDialog from "./share-journal-dialog";
 import WikiEditor from "./wiki-editor";
+import { MonoLabel } from "@/components/folio";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -168,14 +169,33 @@ export default function JournalEntryModal({
           <span className="hidden sm:inline">Journal</span>
         </button>
 
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-          {isDigest ? (
-            <Sparkles className="size-3 text-primary/50" strokeWidth={1.8} />
-          ) : (
-            <BookMarked className="size-3 text-primary/50" strokeWidth={1.8} />
-          )}
-          <span>{isDigest ? "Weekly digest" : "Study session"}</span>
-          <span className="hidden sm:inline">· Updated {updatedLabel}</span>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="inline-flex size-[18px] items-center justify-center rounded-md"
+            style={{
+              background: isDigest
+                ? "color-mix(in srgb, var(--primary) 14%, transparent)"
+                : "var(--badge-accent-bg)",
+              color: "color-mix(in srgb, var(--primary) 65%, transparent)",
+            }}
+          >
+            {isDigest ? (
+              <Sparkles className="size-2.5" strokeWidth={1.8} />
+            ) : (
+              <BookMarked className="size-2.5" strokeWidth={1.8} />
+            )}
+          </span>
+          <MonoLabel>{isDigest ? "Weekly digest" : "Study session"}</MonoLabel>
+          <span
+            className="hidden font-mono text-[10px] uppercase sm:inline"
+            style={{
+              letterSpacing: "0.06em",
+              color:
+                "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
+            }}
+          >
+            · Updated {updatedLabel}
+          </span>
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -256,10 +276,20 @@ export default function JournalEntryModal({
           )}
 
           {/* Metadata */}
-          <div className="mt-4 mb-8 flex items-center gap-3 text-[11.5px] text-muted-foreground/45">
-            <span>{isDigest ? "Weekly digest" : "Study session"}</span>
-            <span className="size-0.5 rounded-full bg-muted-foreground/30" />
-            <span>Updated {updatedLabel}</span>
+          <div className="mt-4 mb-8 flex items-center gap-3">
+            <MonoLabel>
+              {isDigest ? "Weekly digest" : "Study session"}
+            </MonoLabel>
+            <span
+              className="font-mono text-[10px] uppercase"
+              style={{
+                letterSpacing: "0.06em",
+                color:
+                  "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
+              }}
+            >
+              Updated {updatedLabel}
+            </span>
           </div>
 
           {/* Body — Tiptap when editing, rendered markdown when reading */}

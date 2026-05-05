@@ -8,7 +8,17 @@ interface SelectionPopoverProps {
   onAnnotate: () => void;
 }
 
-export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionPopoverProps) {
+/**
+ * Folio-style selection popover. Renders as a small "card" anchored to
+ * the selected text, the way a marginalia tool would surface beside a
+ * passage. The arrow + card share a hairline border so the whole thing
+ * reads as a single object.
+ */
+export default function SelectionPopover({
+  rect,
+  onAsk,
+  onAnnotate,
+}: SelectionPopoverProps) {
   const vw = typeof window !== "undefined" ? window.innerWidth : 400;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const pad = 8;
@@ -18,37 +28,75 @@ export default function SelectionPopover({ rect, onAsk, onAnnotate }: SelectionP
 
   return (
     <div
-      className="fixed z-50 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-[calc(100vw-1rem)]"
+      className="fixed z-50 max-w-[calc(100vw-1rem)] animate-in fade-in slide-in-from-bottom-1 duration-150"
       style={{
         top: `${top}px`,
         left: `${left}px`,
         transform: "translateX(-50%)",
       }}
     >
-      {/* Arrow */}
+      {/* Arrow — shares the popover's border */}
       <div
-        className="absolute -top-[5px] left-1/2 -translate-x-1/2 size-2.5 rotate-45 bg-foreground"
+        className="absolute -top-[5px] left-1/2 size-2.5 -translate-x-1/2 rotate-45"
+        style={{
+          background: "var(--card)",
+          borderTop: "1px solid var(--border)",
+          borderLeft: "1px solid var(--border)",
+        }}
         aria-hidden
       />
-      <div className="relative flex items-center gap-0.5 rounded-full bg-foreground px-1 py-1 shadow-lg shadow-black/20">
-        <button
-          type="button"
-          onClick={onAsk}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-background transition-colors hover:bg-background/15"
-        >
-          <MessageSquarePlus size={13} strokeWidth={2} />
+      <div
+        className="relative flex items-center gap-0.5 rounded-md border bg-card p-1 shadow-[var(--shadow-md)]"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <PopoverButton onClick={onAsk}>
+          <MessageSquarePlus
+            size={12}
+            strokeWidth={2}
+            style={{
+              color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+            }}
+          />
           Dive deeper
-        </button>
-        <div className="w-px h-4 bg-background/20" aria-hidden />
-        <button
-          type="button"
-          onClick={onAnnotate}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-background transition-colors hover:bg-background/15"
-        >
-          <StickyNote size={13} strokeWidth={2} />
+        </PopoverButton>
+        <span
+          className="h-4 w-px"
+          style={{
+            background:
+              "color-mix(in srgb, var(--border) 80%, transparent)",
+          }}
+          aria-hidden
+        />
+        <PopoverButton onClick={onAnnotate}>
+          <StickyNote
+            size={12}
+            strokeWidth={2}
+            style={{
+              color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+            }}
+          />
           Add note
-        </button>
+        </PopoverButton>
       </div>
     </div>
+  );
+}
+
+function PopoverButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-[11.5px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
+      style={{ letterSpacing: "0.005em" }}
+    >
+      {children}
+    </button>
   );
 }

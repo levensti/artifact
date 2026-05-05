@@ -297,7 +297,7 @@ export default function NewReviewDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Start a review session</DialogTitle>
+          <DialogTitle>Start a review</DialogTitle>
           <DialogDescription>
             {mode === "arxiv"
               ? "Paste a link or search arXiv by keywords."

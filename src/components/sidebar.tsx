@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MonoLabel } from "@/components/folio";
 import NewReviewDialog from "./new-review-dialog";
 import ImportBundleDialog from "./import-bundle-dialog";
 import ShareReviewDialog from "./share-review-dialog";
@@ -183,7 +184,14 @@ export default function Sidebar({
                 <span className="truncate text-[18px] font-bold tracking-[-0.025em] text-foreground">
                   Artifact
                 </span>
-                <span className="truncate text-[11px] font-normal text-muted-foreground/70">
+                <span
+                  className="truncate text-[11px] font-normal italic"
+                  style={{
+                    fontFamily: "var(--font-reading)",
+                    color:
+                      "color-mix(in srgb, var(--primary) 75%, transparent)",
+                  }}
+                >
                   Discover the frontier
                 </span>
               </div>
@@ -275,8 +283,8 @@ export default function Sidebar({
         </div>
 
         <div className="mx-2 mt-3 mb-1 shrink-0 border-t border-sidebar-border/60 pt-2">
-          <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
-            Reviews
+          <p className="px-2 py-1">
+            <MonoLabel>Reviews</MonoLabel>
           </p>
         </div>
 
@@ -294,8 +302,17 @@ export default function Sidebar({
           )}
           {grouped.map((group) => (
             <div key={group.key} className="mb-5 last:mb-0">
-              <p className="sticky top-0 z-10 mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/45 bg-sidebar/95 backdrop-blur-sm">
-                {group.label}
+              <p className="sticky top-0 z-10 mb-1 px-2 py-1 bg-sidebar/95 backdrop-blur-sm">
+                <span
+                  className="font-mono text-[10px] uppercase"
+                  style={{
+                    letterSpacing: "0.16em",
+                    color:
+                      "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
+                  }}
+                >
+                  {group.label}
+                </span>
               </p>
               <div className="flex flex-col gap-0.5">
                 {group.items.map((review) => {

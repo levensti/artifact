@@ -35,6 +35,7 @@ import {
   isFileSystemAccessSupported,
 } from "@/lib/cc-import/handle-store";
 import { getAllImported } from "@/lib/cc-import/imported-store";
+import { MonoLabel } from "@/components/folio";
 
 function dateFromSessionSlug(slug: string): Date | null {
   // Matches both `session-YYYY-MM-DD` and topic-sharded variants like
@@ -319,15 +320,22 @@ function JournalPageInner() {
           className="flex h-full flex-col overflow-y-auto"
           style={{ background: "var(--reader-mat)" }}
         >
-          <div className="mx-auto w-full max-w-160 px-6 pt-[min(14vh,120px)] pb-16">
+          <div className="mx-auto w-full max-w-160 px-6 pt-[min(12vh,112px)] pb-16">
             {/* Header */}
-            <div className="mb-8">
-              <h1 className="text-[22px] font-bold leading-tight tracking-[-0.03em] text-foreground">
+            <div className="mb-9">
+              <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] text-foreground">
                 Journal
               </h1>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                A running log of what you read and build. Entries appear
-                automatically as you work.
+              <p
+                className="mt-2 max-w-[460px] text-[14px] leading-[1.6]"
+                style={{
+                  fontFamily: "var(--font-reading)",
+                  color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+                }}
+              >
+                A running log of what you read and build. Entries appear here
+                as you save chats from a review or import a coding session —
+                or you can write one yourself.
               </p>
             </div>
 
@@ -339,9 +347,9 @@ function JournalPageInner() {
               {/* Today — the active slot */}
               <div className="relative mb-6 pl-10">
                 <div className="absolute left-2.75 top-1.75 size-2.25 rounded-full border-2 border-primary/50 bg-background" />
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary/60">
+                <MonoLabel tone="accent">
                   Today &middot; {todayLabel}
-                </p>
+                </MonoLabel>
                 <div className="mt-3 rounded-xl border border-dashed border-border bg-card/50 px-5 py-5">
                   <p className="text-[13px] font-medium text-foreground/70">
                     Your first entry will appear here
@@ -443,19 +451,25 @@ function JournalPageInner() {
         className="flex h-full flex-col overflow-y-auto"
         style={{ background: "var(--reader-mat)" }}
       >
-        <div className="mx-auto w-full max-w-295 px-5 pb-16 pt-5 sm:px-8">
-          {/* Header + toolbar row */}
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <header>
-              <div className="flex items-baseline gap-2">
-                <h1 className="text-[18px] font-bold leading-none tracking-[-0.025em] text-foreground">
-                  Journal
-                </h1>
-                <span className="text-[11px] tabular-nums text-muted-foreground/50">
-                  {journalEntries.length}{" "}
-                  {journalEntries.length === 1 ? "entry" : "entries"}
-                </span>
-              </div>
+        <div className="mx-auto w-full max-w-295 px-5 pb-16 pt-12 sm:px-8 sm:pt-16">
+          {/* Header + toolbar row — match the landing journal section voice */}
+          <div className="mb-9 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+            <header className="max-w-[520px]">
+              <MonoLabel>Journal</MonoLabel>
+              <h1 className="mt-3 text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-foreground">
+                Everything you&apos;ve read.
+              </h1>
+              <p
+                className="mt-3 text-[14px] leading-[1.6]"
+                style={{
+                  fontFamily: "var(--font-reading)",
+                  color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+                }}
+              >
+                {journalEntries.length}{" "}
+                {journalEntries.length === 1 ? "entry" : "entries"} so far,
+                cross-linked across the topics you keep returning to.
+              </p>
             </header>
 
             <div className="flex items-center gap-2">
@@ -577,8 +591,8 @@ function JournalPageInner() {
             <div className="space-y-7">
               {groupedEntries.map((group) => (
                 <section key={group.key}>
-                  <h2 className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-widest text-muted-foreground/55">
-                    {group.label}
+                  <h2 className="mb-2.5">
+                    <MonoLabel>{group.label}</MonoLabel>
                   </h2>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
                     {group.entries.map((entry) => (

@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
-export const alt = "Artifact: a workspace for researchers to discover the frontier";
+export const alt =
+  "Artifact: a workspace for researchers to discover the frontier";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -14,103 +15,101 @@ const HAIRLINE = "rgba(55, 53, 47, 0.10)";
 
 export default async function OpengraphImage() {
   return new ImageResponse(
-    (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        background: `linear-gradient(180deg, ${PAPER} 0%, ${PAPER_DARK} 100%)`,
+        padding: "72px 80px",
+        fontFamily: "Inter, sans-serif",
+        color: TEXT,
+        position: "relative",
+      }}
+    >
+      <BrandRow />
+
       <div
         style={{
-          width: "100%",
-          height: "100%",
+          marginTop: 92,
           display: "flex",
-          flexDirection: "column",
-          background: `linear-gradient(180deg, ${PAPER} 0%, ${PAPER_DARK} 100%)`,
-          padding: "72px 80px",
-          fontFamily: "Inter, sans-serif",
-          color: TEXT,
-          position: "relative",
+          flexDirection: "row",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: 64,
+          flex: 1,
         }}
       >
-        <BrandRow />
-
         <div
           style={{
-            marginTop: 92,
             display: "flex",
-            flexDirection: "row",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-            gap: 64,
-            flex: 1,
+            flexDirection: "column",
+            maxWidth: 720,
           }}
         >
           <div
             style={{
               display: "flex",
-              flexDirection: "column",
-              maxWidth: 720,
+              fontSize: 16,
+              fontWeight: 600,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: INK,
+              opacity: 0.75,
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                fontSize: 16,
-                fontWeight: 600,
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                color: INK,
-                opacity: 0.75,
-              }}
-            >
-              For researchers
-            </div>
-            <div
-              style={{
-                marginTop: 18,
-                display: "flex",
-                fontSize: 88,
-                fontWeight: 600,
-                letterSpacing: "-0.035em",
-                lineHeight: 1.0,
-                color: TEXT,
-              }}
-            >
-              Discover the frontier.
-            </div>
-            <div
-              style={{
-                marginTop: 22,
-                display: "flex",
-                fontSize: 26,
-                lineHeight: 1.35,
-                color: MUTED,
-                maxWidth: 640,
-              }}
-            >
-              Read papers deeply, journal your learnings automatically,
-              and never lose a thread.
-            </div>
+            For researchers
           </div>
-
-          <PaperCard />
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              fontSize: 88,
+              fontWeight: 600,
+              letterSpacing: "-0.035em",
+              lineHeight: 1.0,
+              color: TEXT,
+            }}
+          >
+            Discover the frontier.
+          </div>
+          <div
+            style={{
+              marginTop: 22,
+              display: "flex",
+              fontSize: 26,
+              lineHeight: 1.35,
+              color: MUTED,
+              maxWidth: 640,
+            }}
+          >
+            Read papers deeply, journal your learnings automatically, and never
+            lose a thread.
+          </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            paddingTop: 24,
-            marginTop: 32,
-            borderTop: `1px solid ${HAIRLINE}`,
-            fontSize: 20,
-            color: MUTED,
-          }}
-        >
-          <div style={{ display: "flex" }}>withartifact.com</div>
-          <div style={{ display: "flex" }}>
-            Open source · MIT licensed · Bring your own keys
-          </div>
+        <PaperCard />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingTop: 24,
+          marginTop: 32,
+          borderTop: `1px solid ${HAIRLINE}`,
+          fontSize: 20,
+          color: MUTED,
+        }}
+      >
+        <div style={{ display: "flex" }}>withartifact.com</div>
+        <div style={{ display: "flex" }}>
+          Open source · MIT licensed · Bring your own keys
         </div>
       </div>
-    ),
+    </div>,
     { ...size },
   );
 }

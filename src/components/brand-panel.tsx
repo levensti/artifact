@@ -51,8 +51,19 @@ export function BrandPanel({ children }: BrandPanelProps) {
 export function SignupPitch() {
   return (
     <div className="relative max-w-md">
-      <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em]">
-        Discover the frontier.
+      <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.03em]">
+        Discover the{" "}
+        <span
+          className="text-primary-foreground/85"
+          style={{
+            fontFamily: "var(--font-reading)",
+            fontStyle: "italic",
+            fontWeight: 500,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          frontier.
+        </span>
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
         Pair with AI to deeply understand research papers, technical blogs, or
@@ -76,7 +87,7 @@ export function SignupPitch() {
         </Feature>
         <Feature
           icon={<KeyRound strokeWidth={1.6} className="size-3.75" />}
-          title="Your keys, your machine"
+          title="Bring your own keys"
         >
           BYOK for Anthropic, OpenAI, xAI, or any OpenAI-compatible API,
           including local Ollama, LM Studio, or llama.cpp.
@@ -89,7 +100,7 @@ export function SignupPitch() {
 export function SigninWelcome() {
   return (
     <div className="relative max-w-md">
-      <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em]">
+      <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.03em]">
         Welcome back.
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
