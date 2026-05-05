@@ -438,7 +438,7 @@ export async function getWikiPageSources(
 }
 
 export interface WikiRevisionSummary {
-  id: number;
+  id: string;
   savedAt: string;
   contentLength: number;
 }
@@ -465,9 +465,9 @@ export async function listWikiRevisions(
 
 export async function getWikiRevision(
   userId: string,
-  id: number,
+  id: string,
 ): Promise<{
-  id: number;
+  id: string;
   slug: string;
   title: string;
   content: string;

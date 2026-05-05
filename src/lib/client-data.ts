@@ -445,7 +445,7 @@ export interface WikiPageSource {
 }
 
 export interface WikiRevisionSummary {
-  id: number;
+  id: string;
   savedAt: string;
   contentLength: number;
 }
@@ -465,14 +465,14 @@ export async function loadWikiPageMetadata(
 }
 
 export interface WikiRevision {
-  id: number;
+  id: string;
   slug: string;
   title: string;
   content: string;
   savedAt: string;
 }
 
-export async function loadWikiRevision(id: number): Promise<WikiRevision | null> {
+export async function loadWikiRevision(id: string): Promise<WikiRevision | null> {
   const { revision } = await apiFetch<{ revision: WikiRevision | null }>(
     `/api/wiki/revisions/${id}`,
   );

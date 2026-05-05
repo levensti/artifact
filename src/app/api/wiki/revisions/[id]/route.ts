@@ -6,10 +6,6 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = authedRoute(async (userId, _req: Request, { params }: Ctx) => {
   const { id } = await params;
-  const revisionId = Number.parseInt(id, 10);
-  if (!Number.isFinite(revisionId)) {
-    return NextResponse.json({ error: "Invalid revision id" }, { status: 400 });
-  }
-  const revision = await store.getWikiRevision(userId, revisionId);
+  const revision = await store.getWikiRevision(userId, id);
   return NextResponse.json({ revision });
 });
