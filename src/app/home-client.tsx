@@ -5,16 +5,48 @@ import DashboardLayout from "@/components/dashboard-layout";
 import { useState } from "react";
 import NewReviewDialog from "@/components/new-review-dialog";
 import ImportBundleDialog from "@/components/import-bundle-dialog";
+import { ItalicAccent, MonoLabel } from "@/components/folio";
 import { useRouter } from "next/navigation";
+
+interface Lane {
+  icon: typeof FileText;
+  title: string;
+  body: string;
+  onClick: () => void;
+}
 
 export default function HomeClient() {
   const [showNewReview, setShowNewReview] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const router = useRouter();
 
+  const lanes: Lane[] = [
+    {
+      icon: FileText,
+      title: "Read a paper",
+      body: "Paste an arXiv link, upload a PDF, or open any web page. Highlight passages and chat with an assistant grounded in the text.",
+      onClick: () => setShowNewReview(true),
+    },
+    {
+      icon: Terminal,
+      title: "Import from Claude Code",
+      body: "Turn coding sessions into journal entries. Daily recaps and weekly digests are generated from your activity.",
+      onClick: () => router.push("/journal"),
+    },
+    {
+      icon: FileDown,
+      title: "Open a shared review",
+      body: "Continue from a colleague's bundle. Annotations, notes, and chat history all come along.",
+      onClick: () => setShowImport(true),
+    },
+  ];
+
   return (
     <DashboardLayout>
-      <div className="relative flex h-full flex-col overflow-y-auto bg-background">
+      <div
+        className="relative flex h-full flex-col overflow-y-auto"
+        style={{ background: "var(--reader-mat)" }}
+      >
         {/* Ambient watermark — the Artifact mark at large scale */}
         <svg
           viewBox="4 4 24 24"
@@ -28,97 +60,31 @@ export default function HomeClient() {
           <circle cx="22" cy="10" r="3.2" fill="currentColor" />
         </svg>
 
-        <div className="mx-auto w-full max-w-[640px] px-6 pt-[min(18vh,160px)] pb-16">
-          {/* Heading */}
-          <div className="mb-10">
-            <h1 className="text-[22px] font-bold leading-tight tracking-[-0.03em] text-foreground">
-              What are you working on?
-            </h1>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-              Pick a starting point. Everything you do builds your journal
-              automatically.
-            </p>
-          </div>
+        <div className="mx-auto w-full max-w-[680px] px-8 pt-[min(14vh,128px)] pb-16">
+          <MonoLabel>Today</MonoLabel>
+          <h1
+            className="mt-4 text-[40px] font-bold leading-[1.02] tracking-[-0.035em] text-foreground"
+            style={{ textWrap: "balance" }}
+          >
+            What are you working on{" "}
+            <ItalicAccent>today?</ItalicAccent>
+          </h1>
+          <p
+            className="mt-4 max-w-[520px] text-[15.5px] leading-[1.65]"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color: "color-mix(in srgb, var(--foreground) 75%, transparent)",
+              textWrap: "pretty",
+            }}
+          >
+            Pick a starting point. Everything you do builds your journal in
+            the background.
+          </p>
 
-          {/* Action lanes */}
-          <div className="flex flex-col gap-3">
-            {/* Lane 1: Read a paper */}
-            <button
-              type="button"
-              onClick={() => setShowNewReview(true)}
-              className="group flex w-full items-start gap-4 rounded-xl border border-border/70 bg-card px-5 py-4 text-left transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:-translate-y-px active:translate-y-0 active:shadow-[var(--shadow-sm)]"
-            >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--badge-accent-bg)] transition-colors duration-200 group-hover:bg-primary/15">
-                <FileText
-                  className="size-[18px] text-primary/60 transition-colors duration-200 group-hover:text-primary/80"
-                  strokeWidth={1.6}
-                />
-              </div>
-              <div className="min-w-0 flex-1 pt-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[14px] font-semibold text-foreground/90 transition-colors group-hover:text-foreground">
-                    Read a paper
-                  </span>
-                  <ArrowRight className="size-3.5 text-muted-foreground/30 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary/50" />
-                </div>
-                <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground/70">
-                  Paste an arXiv link, upload a PDF, or open any web page.
-                  Annotate, highlight, and chat with an AI research assistant.
-                </p>
-              </div>
-            </button>
-
-            {/* Lane 2: Import from Claude Code session */}
-            <button
-              type="button"
-              onClick={() => router.push("/journal")}
-              className="group flex w-full items-start gap-4 rounded-xl border border-border/70 bg-card px-5 py-4 text-left transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:-translate-y-px active:translate-y-0 active:shadow-[var(--shadow-sm)]"
-            >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--badge-accent-bg)] transition-colors duration-200 group-hover:bg-primary/15">
-                <Terminal
-                  className="size-[18px] text-primary/60 transition-colors duration-200 group-hover:text-primary/80"
-                  strokeWidth={1.6}
-                />
-              </div>
-              <div className="min-w-0 flex-1 pt-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[14px] font-semibold text-foreground/90 transition-colors group-hover:text-foreground">
-                    Import from Claude Code
-                  </span>
-                  <ArrowRight className="size-3.5 text-muted-foreground/30 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary/50" />
-                </div>
-                <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground/70">
-                  Turn your coding sessions into journal entries. Daily recaps
-                  and weekly syntheses are generated automatically.
-                </p>
-              </div>
-            </button>
-
-            {/* Lane 3: Open a shared review */}
-            <button
-              type="button"
-              onClick={() => setShowImport(true)}
-              className="group flex w-full items-start gap-4 rounded-xl border border-border/70 bg-card px-5 py-4 text-left transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-primary)] hover:-translate-y-px active:translate-y-0 active:shadow-[var(--shadow-sm)]"
-            >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--badge-accent-bg)] transition-colors duration-200 group-hover:bg-primary/15">
-                <FileDown
-                  className="size-[18px] text-primary/60 transition-colors duration-200 group-hover:text-primary/80"
-                  strokeWidth={1.6}
-                />
-              </div>
-              <div className="min-w-0 flex-1 pt-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[14px] font-semibold text-foreground/90 transition-colors group-hover:text-foreground">
-                    Open a shared review
-                  </span>
-                  <ArrowRight className="size-3.5 text-muted-foreground/30 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary/50" />
-                </div>
-                <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground/70">
-                  Continue where a collaborator left off. Import a review
-                  bundle with annotations, notes, and chat history.
-                </p>
-              </div>
-            </button>
+          <div className="mt-10 flex flex-col gap-2.5">
+            {lanes.map((lane) => (
+              <Lane key={lane.title} lane={lane} />
+            ))}
           </div>
         </div>
       </div>
@@ -137,5 +103,49 @@ export default function HomeClient() {
         onClose={() => setShowImport(false)}
       />
     </DashboardLayout>
+  );
+}
+
+function Lane({ lane }: { lane: Lane }) {
+  const Icon = lane.icon;
+  return (
+    <button
+      type="button"
+      onClick={lane.onClick}
+      className="group flex w-full items-start gap-4 rounded-lg border bg-card px-5 py-4 text-left transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:shadow-[var(--shadow-sm)]"
+      style={{
+        borderColor: "color-mix(in srgb, var(--border) 75%, transparent)",
+      }}
+    >
+      <div
+        className="flex size-9 shrink-0 items-center justify-center rounded-md"
+        style={{ background: "var(--badge-accent-bg)" }}
+      >
+        <Icon
+          className="size-[16px]"
+          style={{
+            color: "color-mix(in srgb, var(--primary) 75%, transparent)",
+          }}
+          strokeWidth={1.6}
+        />
+      </div>
+      <div className="min-w-0 flex-1 pt-px">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[15px] font-semibold tracking-[-0.012em] text-foreground">
+            {lane.title}
+          </h3>
+          <ArrowRight className="size-3.5 text-muted-foreground/40 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary/70" />
+        </div>
+        <p
+          className="mt-1 max-w-[460px] text-[13px] leading-[1.6]"
+          style={{
+            fontFamily: "var(--font-reading)",
+            color: "color-mix(in srgb, var(--foreground) 68%, transparent)",
+          }}
+        >
+          {lane.body}
+        </p>
+      </div>
+    </button>
   );
 }

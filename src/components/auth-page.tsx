@@ -7,6 +7,7 @@ import {
   SigninWelcome,
   SignupPitch,
 } from "@/components/brand-panel";
+import { MonoLabel } from "@/components/folio";
 
 export interface AuthPageProps {
   mode: "signin" | "signup";
@@ -49,16 +50,24 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           </div>
 
           <header className="mb-7">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/70 px-2.5 py-1 text-[10.5px] font-medium tracking-[0.14em] text-muted-foreground uppercase backdrop-blur-sm">
+            <MonoLabel>
               {isSignup ? "Create your account" : "Sign in"}
-            </span>
-            <h1 className="mt-4 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[30px]">
-              {isSignup ? "Begin your research journal." : "Welcome back."}
-            </h1>
-            <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">
+            </MonoLabel>
+            <h1 className="mt-3.5 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[32px]">
               {isSignup
-                ? "Sign up with Google to start annotating papers and journaling your research."
-                : "Sign in with Google to continue your research."}
+                ? "Supercharge your research journey."
+                : "Welcome back."}
+            </h1>
+            <p
+              className="mt-3 text-[14.5px] leading-[1.6]"
+              style={{
+                fontFamily: "var(--font-reading)",
+                color: "color-mix(in srgb, var(--foreground) 72%, transparent)",
+              }}
+            >
+              {isSignup
+                ? "Sign up to start setting up your workspace."
+                : "Sign in to pick up where you left off."}
             </p>
           </header>
 
@@ -82,12 +91,12 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           {/* Trust row — terms/privacy + open source signal */}
           <p className="mt-5 text-[12px] leading-relaxed text-muted-foreground/85">
             {isSignup ? (
-              <>
-                By signing up you agree to our terms. We never train on your
-                content — your keys, your machine.
-              </>
+              <></>
             ) : (
-              <>Welcome back. Your sessions and journal are end-to-end yours.</>
+              <>
+                Welcome back. Your annotations, journal, and chats are right
+                where you left them.
+              </>
             )}
           </p>
 

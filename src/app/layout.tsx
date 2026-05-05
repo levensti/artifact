@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -50,7 +51,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${inter.variable} h-full`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} h-full`}
     >
       <body className="h-full overflow-hidden">
         <TooltipProvider delay={200}>{children}</TooltipProvider>

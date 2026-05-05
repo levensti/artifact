@@ -3,6 +3,7 @@
 import { BookMarked, Sparkles } from "lucide-react";
 import type { WikiPage } from "@/lib/wiki";
 import { cn } from "@/lib/utils";
+import { MonoLabel } from "@/components/folio";
 
 export interface JournalEntry {
   kind: "session" | "digest";
@@ -91,48 +92,104 @@ export default function JournalCard({ entry, onOpen }: JournalCardProps) {
       type="button"
       onClick={() => onOpen(entry.page.slug)}
       className={cn(
-        "group flex w-full flex-col rounded-xl border border-border bg-card px-4 py-4 text-left shadow-sm transition-all duration-200",
-        "hover:border-primary/30 hover:shadow-md hover:shadow-primary/8 hover:-translate-y-px",
+        "group flex w-full flex-col rounded-lg border bg-card px-4 py-4 text-left transition-all duration-200",
+        "hover:-translate-y-px hover:shadow-[var(--shadow-sm)]",
       )}
+      style={{
+        borderColor: isDigest
+          ? "color-mix(in srgb, var(--primary) 18%, transparent)"
+          : "color-mix(in srgb, var(--border) 70%, transparent)",
+        background: isDigest
+          ? "color-mix(in srgb, var(--primary) 4%, var(--card))"
+          : "var(--card)",
+      }}
     >
+      {/* Top row: kind + date with subtle chip glyph */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Icon
-            className={cn(
-              "size-3",
-              isDigest ? "text-warning/60" : "text-primary/50",
-            )}
-            strokeWidth={1.8}
-          />
-          <span className="text-[10.5px] font-medium text-muted-foreground/60">
-            {typeLabel}
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-flex size-[18px] items-center justify-center rounded-md"
+            style={{
+              background: isDigest
+                ? "color-mix(in srgb, var(--primary) 14%, transparent)"
+                : "var(--badge-accent-bg)",
+              color: "color-mix(in srgb, var(--primary) 65%, transparent)",
+            }}
+          >
+            <Icon className="size-2.5" strokeWidth={1.8} />
           </span>
-        </div>
-        <span className="text-[10.5px] tabular-nums text-muted-foreground/45">
+          <MonoLabel>{typeLabel}</MonoLabel>
+        </span>
+        <span
+          className="font-mono text-[10px] tabular-nums"
+          style={{
+            color: "color-mix(in srgb, var(--muted-foreground) 70%, transparent)",
+            letterSpacing: "0.06em",
+          }}
+        >
           {dateLabel}
         </span>
       </div>
 
-      <h3 className="mt-2 line-clamp-2 h-[37px] text-[13.5px] font-semibold leading-snug tracking-[-0.01em] text-foreground/85 transition-colors group-hover:text-foreground">
+      {/* Title */}
+      <h3
+        className="mt-3 line-clamp-2 text-[14px] font-semibold leading-[1.35] tracking-[-0.01em] text-foreground/90 transition-colors group-hover:text-foreground"
+        style={{ minHeight: "38px" }}
+      >
         {entry.page.title}
       </h3>
 
-      <p className="mt-1.5 line-clamp-2 h-[37px] text-[12px] leading-[1.55] text-muted-foreground/55">
+      {/* Excerpt — Inter for the reading flavor */}
+      <p
+        className="mt-1.5 line-clamp-2 text-[12px] leading-[1.55]"
+        style={{
+          fontFamily: "var(--font-reading)",
+          color: "color-mix(in srgb, var(--muted-foreground) 90%, transparent)",
+          minHeight: "37px",
+        }}
+      >
         {excerpt}
       </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-2.5 border-t border-border/40 pt-2.5 text-[10.5px] text-muted-foreground/50 min-h-[28px]">
-        {chips.length > 0
-          ? chips.map((c, i) => (
-              <span key={c.label} className="tabular-nums">
-                {i > 0 ? <span className="mr-2.5 opacity-30">·</span> : null}
-                <span className="font-semibold text-foreground/60">
-                  {c.count}
-                </span>{" "}
-                {c.label}
+      {/* Stats row */}
+      <div
+        className="mt-3 flex flex-wrap items-center gap-x-2.5 pt-2.5 text-[10.5px]"
+        style={{
+          borderTop:
+            "1px solid color-mix(in srgb, var(--border) 50%, transparent)",
+          minHeight: "28px",
+          color: "color-mix(in srgb, var(--muted-foreground) 70%, transparent)",
+          fontFeatureSettings: '"tnum"',
+        }}
+      >
+        {chips.length > 0 ? (
+          chips.map((c, i) => (
+            <span key={c.label} className="inline-flex items-center">
+              {i > 0 ? <span className="mr-2.5 opacity-30">·</span> : null}
+              <span
+                className="font-semibold"
+                style={{
+                  color:
+                    "color-mix(in srgb, var(--foreground) 75%, transparent)",
+                }}
+              >
+                {c.count}
               </span>
-            ))
-          : <span className="text-muted-foreground/30">{isDigest ? "Weekly digest" : "Session"}</span>}
+              <span className="ml-1">{c.label}</span>
+            </span>
+          ))
+        ) : (
+          <span
+            className="italic"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color:
+                "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
+            }}
+          >
+            {isDigest ? "Weekly digest" : "Reading session"}
+          </span>
+        )}
       </div>
     </button>
   );
