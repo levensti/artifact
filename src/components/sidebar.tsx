@@ -6,6 +6,7 @@ import {
   FilePen,
   FilePlus,
   AlertCircle,
+  KeyRound,
   Share2,
 } from "lucide-react";
 import { canShareReview } from "@/lib/client/sharing/share-links";
@@ -15,7 +16,9 @@ import {
   type PaperReview,
 } from "@/lib/reviews";
 import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
-import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
+import { hasAnySavedApiKey } from "@/lib/keys";
+import { KEYS_UPDATED_EVENT, WIKI_UPDATED_EVENT } from "@/lib/storage-events";
+import { useSettingsOpener } from "@/components/settings-opener-context";
 import {
   getWikiIngestError,
   getWikiIngestSnapshot,
@@ -39,6 +42,20 @@ function subscribeReviews(onStoreChange: () => void) {
     window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
     window.removeEventListener(WIKI_UPDATED_EVENT, onStoreChange);
   };
+}
+
+function subscribeKeys(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(KEYS_UPDATED_EVENT, onStoreChange);
+  return () => window.removeEventListener(KEYS_UPDATED_EVENT, onStoreChange);
+}
+
+function keysSnapshot(): string {
+  return hasAnySavedApiKey() ? "1" : "0";
+}
+
+function keysServerSnapshot(): string {
+  return "0";
 }
 
 function reviewsSnapshot() {
@@ -109,6 +126,13 @@ export default function Sidebar({
   const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
   const router = useRouter();
   const pathname = usePathname();
+  const { openSettings } = useSettingsOpener();
+  const keysFlag = useSyncExternalStore(
+    subscribeKeys,
+    keysSnapshot,
+    keysServerSnapshot,
+  );
+  const hasKeys = keysFlag === "1";
 
   // Ensure wiki cache is populated so the snapshot picks up page counts
   useEffect(() => {
@@ -280,6 +304,48 @@ export default function Sidebar({
               </button>
             </div>
           ) : null}
+
+          <button
+            type="button"
+            onClick={() => openSettings()}
+            className="mt-0.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
+            aria-label={
+              hasKeys
+                ? "Manage API keys"
+                : "Add an API key to start chatting"
+            }
+          >
+            <span className="relative flex w-6 shrink-0 items-center justify-center">
+              <KeyRound
+                className="size-[15px] opacity-80"
+                strokeWidth={1.75}
+              />
+              {!hasKeys ? (
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full"
+                  style={{
+                    background: "var(--primary)",
+                    boxShadow:
+                      "0 0 0 2px var(--sidebar)",
+                  }}
+                />
+              ) : null}
+            </span>
+            <span className="truncate">API keys</span>
+            {!hasKeys ? (
+              <span
+                className="ml-auto inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase"
+                style={{
+                  background: "var(--badge-accent-bg)",
+                  color: "var(--badge-accent-fg)",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Set up
+              </span>
+            ) : null}
+          </button>
         </div>
 
         <div className="mx-2 mt-3 mb-1 shrink-0 border-t border-sidebar-border/60 pt-2">

@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Check, ChevronDown, Cpu, Key, Plus, Trash2, CircleCheck, Circle } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Check,
+  ChevronDown,
+  Cpu,
+  Key,
+  Plus,
+  Trash2,
+  CircleCheck,
+  Circle,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isLocalhostUrl } from "@/lib/ai-providers";
 import { BraveSearchKeyRow } from "@/components/brave-search-key-row";
+import { MonoLabel } from "@/components/folio";
 import {
   getApiKey,
   setApiKey,
@@ -36,7 +48,6 @@ import { PROVIDER_META } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 type BuiltinSettingsProvider = keyof typeof PROVIDER_META;
-
 
 interface ProviderRowProps {
   provider: BuiltinSettingsProvider;
@@ -90,21 +101,45 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
       >
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-[11px] font-bold text-muted-foreground">
+        <div
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-[12px] font-semibold"
+          style={{
+            background: "var(--badge-accent-bg)",
+            color: "var(--badge-accent-fg)",
+          }}
+        >
           {meta.label.charAt(0)}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
-          <p className="text-[11px] text-muted-foreground/60 truncate">
-            {hasKey ? "API key configured" : "No API key set"}
+          <p className="text-[13.5px] font-semibold tracking-[-0.005em] text-foreground">
+            {meta.label}
+          </p>
+          <p
+            className="truncate text-[12px] leading-snug"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color: hasKey
+                ? "color-mix(in srgb, var(--success) 80%, transparent)"
+                : "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
+            }}
+          >
+            {hasKey ? "Configured" : "Not set up yet"}
           </p>
         </div>
         {hasKey ? (
-          <CircleCheck size={16} className="shrink-0 text-success" strokeWidth={2} />
+          <CircleCheck
+            size={16}
+            className="shrink-0 text-success"
+            strokeWidth={2}
+          />
         ) : (
-          <Circle size={16} className="shrink-0 text-muted-foreground/30" strokeWidth={1.5} />
+          <Circle
+            size={16}
+            className="shrink-0 text-muted-foreground/30"
+            strokeWidth={1.5}
+          />
         )}
       </button>
 
@@ -112,7 +147,9 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
       <div
         className={cn(
           "grid transition-all duration-200 ease-out",
-          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          expanded
+            ? "grid-rows-[1fr] opacity-100"
+            : "grid-rows-[0fr] opacity-0",
         )}
       >
         <div className="overflow-hidden">
@@ -129,7 +166,9 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
                   onChange={(e) => setValue(e.target.value)}
                   placeholder={placeholder}
                   className="pl-8 pr-9 text-xs h-9"
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSave();
+                  }}
                 />
                 <button
                   type="button"
@@ -147,7 +186,9 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
                   variant={saved ? "outline" : "default"}
                   size="sm"
                   className={
-                    saved ? "text-success border-success/35 gap-1 h-9" : "h-9 gap-1"
+                    saved
+                      ? "text-success border-success/35 gap-1 h-9"
+                      : "h-9 gap-1"
                   }
                 >
                   {saved && <Check size={13} />}
@@ -427,20 +468,28 @@ function InferenceEndpointsSection({
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-xs sm:flex-1"
+          onClick={addProfile}
+        >
+          <Plus size={12} />
+          Add provider
+        </Button>
         {/* Local LLM presets are desktop-only — mobile devices can't host an inference server. */}
         <DropdownMenu>
-          <DropdownMenuTrigger
-            className="hidden sm:flex sm:flex-1 h-8 items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 text-xs font-medium hover:border-border hover:bg-muted/50 transition-colors"
-          >
+          <DropdownMenuTrigger className="hidden h-8 items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground sm:inline-flex">
             <Cpu size={12} />
             Add local LLM
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-44">
+          <DropdownMenuContent align="end" className="min-w-44">
             {LOCAL_LLM_PRESETS.map((preset) => (
               <DropdownMenuItem
                 key={preset.name}
-                className="text-xs cursor-pointer"
+                className="cursor-pointer text-xs"
                 onClick={() => addLocalProfile(preset)}
               >
                 {preset.name}
@@ -448,16 +497,6 @@ function InferenceEndpointsSection({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="sm:flex-1 h-8 text-xs gap-1.5 border-dashed"
-          onClick={addProfile}
-        >
-          <Plus size={12} />
-          Add provider
-        </Button>
       </div>
 
       {profiles.some((p) => isLocalhostUrl(p.baseUrl)) && (
@@ -476,7 +515,9 @@ function LocalLlmDeployedSiteHelp() {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-2 text-left text-muted-foreground hover:text-foreground transition-colors"
       >
-        <span className="font-medium">Using a local LLM on a deployed site?</span>
+        <span className="font-medium">
+          Using a local LLM on a deployed site?
+        </span>
         <ChevronDown
           size={12}
           className={cn("shrink-0 transition-transform", open && "rotate-180")}
@@ -485,9 +526,9 @@ function LocalLlmDeployedSiteHelp() {
       {open && (
         <div className="mt-2 space-y-2 text-muted-foreground/90">
           <p>
-            On <code className="font-mono">localhost</code> dev, this just works.
-            On a deployed (https) site, the server can&apos;t reach your machine,
-            so you have two options:
+            On <code className="font-mono">localhost</code> dev, this just
+            works. On a deployed (https) site, the server can&apos;t reach your
+            machine, so you have two options:
           </p>
           <div className="space-y-1">
             <p className="font-medium text-foreground/80">
@@ -498,7 +539,11 @@ function LocalLlmDeployedSiteHelp() {
               populate from your browser:
             </p>
             <pre className="overflow-x-auto rounded bg-background/60 px-2 py-1 font-mono text-[10px]">
-              OLLAMA_ORIGINS={typeof window !== "undefined" ? window.location.origin : "https://your-site"} ollama serve
+              OLLAMA_ORIGINS=
+              {typeof window !== "undefined"
+                ? window.location.origin
+                : "https://your-site"}{" "}
+              ollama serve
             </pre>
             <p className="text-muted-foreground/70">
               Note: chat itself still won&apos;t work this way — the chat
@@ -637,15 +682,22 @@ export default function SettingsDialog({
         showCloseButton
         className="flex max-h-[min(720px,min(90dvh,85vh))] w-[min(100vw-1rem,32rem)] min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg safe-area-p"
       >
-        <DialogHeader className="shrink-0 border-b border-border/50 px-5 pt-5 pb-4 text-left">
-          <div className="space-y-1">
-            <DialogTitle className="text-[17px] font-bold tracking-[-0.02em]">Settings</DialogTitle>
-            <DialogDescription className="text-[12px] text-muted-foreground/60">
-              {configuredCount > 0
-                ? `${configuredCount} provider${configuredCount === 1 ? "" : "s"} configured · keys stored locally`
-                : "Add an API key to get started — keys never leave your browser."}
-            </DialogDescription>
-          </div>
+        <DialogHeader className="shrink-0 border-b border-border/50 px-6 pt-6 pb-5 text-left">
+          <MonoLabel>Settings</MonoLabel>
+          <DialogTitle className="mt-2.5 text-[24px] font-bold leading-[1.1] tracking-[-0.025em]">
+            Your API keys
+          </DialogTitle>
+          <DialogDescription
+            className="mt-2 text-[13.5px] leading-[1.55]"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+            }}
+          >
+            {configuredCount > 0
+              ? `${configuredCount} provider${configuredCount === 1 ? "" : "s"} configured. Add more to expand your model catalog.`
+              : "Add a key for at least one provider to start chatting. You can connect Anthropic, OpenAI, xAI, or any OpenAI-compatible endpoint, or run inference locally with Ollama, LM Studio, or llama.cpp."}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -668,9 +720,9 @@ export default function SettingsDialog({
                 />
               ),
             )}
-            <div className="pt-2">
-              <h3 className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                Search & external tools
+            <div className="pt-3">
+              <h3 className="px-1 pb-2.5">
+                <MonoLabel>Search &amp; external tools</MonoLabel>
               </h3>
               <BraveSearchKeyRow />
             </div>
