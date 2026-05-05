@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ChevronDown,
-  FileDown,
   FilePen,
   Plus,
   Search,
@@ -17,7 +16,6 @@ import JournalCard, { type JournalEntry } from "@/components/journal-card";
 import JournalEntryModal from "@/components/journal-entry-modal";
 import JournalImportModal from "@/components/journal-import-modal";
 import JournalComposerModal from "@/components/journal-composer-modal";
-import ImportBundleDialog from "@/components/import-bundle-dialog";
 import {
   getSavedSelectedModel,
   hydrateClientStore,
@@ -107,7 +105,6 @@ function JournalPageInner() {
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
-  const [bundleImportOpen, setBundleImportOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [ccNewCount, setCcNewCount] = useState(0);
@@ -245,7 +242,11 @@ function JournalPageInner() {
       const ub = new Date(b.page.updatedAt).getTime();
       return ub - ua;
     });
-    const groups: { key: string; label: string; entries: typeof filteredEntries }[] = [];
+    const groups: {
+      key: string;
+      label: string;
+      entries: typeof filteredEntries;
+    }[] = [];
     const seen = new Map<string, number>();
     for (const e of sorted) {
       const d = new Date(e.page.updatedAt);
@@ -330,12 +331,13 @@ function JournalPageInner() {
                 className="mt-2 max-w-[460px] text-[14px] leading-[1.6]"
                 style={{
                   fontFamily: "var(--font-reading)",
-                  color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+                  color:
+                    "color-mix(in srgb, var(--foreground) 70%, transparent)",
                 }}
               >
-                A running log of what you read and build. Entries appear here
-                as you save chats from a review or import a coding session —
-                or you can write one yourself.
+                A running log of what you read and build. Entries appear here as
+                you save chats from a review or import a coding session — or you
+                can write one yourself.
               </p>
             </div>
 
@@ -347,9 +349,7 @@ function JournalPageInner() {
               {/* Today — the active slot */}
               <div className="relative mb-6 pl-10">
                 <div className="absolute left-2.75 top-1.75 size-2.25 rounded-full border-2 border-primary/50 bg-background" />
-                <MonoLabel tone="accent">
-                  Today &middot; {todayLabel}
-                </MonoLabel>
+                <MonoLabel tone="accent">Today &middot; {todayLabel}</MonoLabel>
                 <div className="mt-3 rounded-xl border border-dashed border-border bg-card/50 px-5 py-5">
                   <p className="text-[13px] font-medium text-foreground/70">
                     Your first entry will appear here
@@ -374,14 +374,6 @@ function JournalPageInner() {
                     >
                       <Terminal className="size-3 text-primary/50 transition-colors group-hover:text-primary/70" />
                       Import from Claude Code
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBundleImportOpen(true)}
-                      className="group inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground/80 transition-all duration-200 hover:border-primary/25 hover:shadow-(--shadow-primary) hover:text-foreground"
-                    >
-                      <FileDown className="size-3 text-primary/50 transition-colors group-hover:text-primary/70" />
-                      Open a shared journal
                     </button>
                   </div>
                 </div>
@@ -421,14 +413,6 @@ function JournalPageInner() {
             }}
           />
         ) : null}
-        <ImportBundleDialog
-          open={bundleImportOpen}
-          mode="journal"
-          onClose={() => {
-            setBundleImportOpen(false);
-            void refreshPages();
-          }}
-        />
         {composerOpen ? (
           <JournalComposerModal
             selectedModel={getSavedSelectedModel()}
@@ -463,7 +447,8 @@ function JournalPageInner() {
                 className="mt-3 text-[14px] leading-[1.6]"
                 style={{
                   fontFamily: "var(--font-reading)",
-                  color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+                  color:
+                    "color-mix(in srgb, var(--foreground) 70%, transparent)",
                 }}
               >
                 {journalEntries.length}{" "}
@@ -559,22 +544,6 @@ function JournalPageInner() {
                           </span>
                         ) : null}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewMenuOpen(false);
-                          setBundleImportOpen(true);
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
-                      >
-                        <FileDown className="size-3.5 shrink-0 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">From shared file</p>
-                          <p className="text-[10px] text-muted-foreground/60">
-                            Open a journal bundle
-                          </p>
-                        </div>
-                      </button>
                     </div>
                   </>
                 ) : null}
@@ -648,15 +617,6 @@ function JournalPageInner() {
           </div>
         </div>
       ) : null}
-
-      <ImportBundleDialog
-        open={bundleImportOpen}
-        mode="journal"
-        onClose={() => {
-          setBundleImportOpen(false);
-          void refreshPages();
-        }}
-      />
 
       {composerOpen ? (
         <JournalComposerModal

@@ -1,16 +1,36 @@
 import Link from "next/link";
+import { ItalicAccent, MonoLabel } from "@/components/folio";
 
 export default function ShareNotFoundView() {
   return (
-    <main className="grid min-h-screen place-items-center bg-[var(--reader-mat)] px-6 text-center">
-      <div className="max-w-sm">
-        <span className="mx-auto mb-6 flex size-12 items-center justify-center rounded-2xl bg-card shadow-[var(--shadow-sm)]">
+    <main
+      className="grid min-h-screen place-items-center px-6 text-center"
+      style={{ background: "var(--reader-mat)" }}
+    >
+      <div className="max-w-md">
+        <span
+          className="mx-auto mb-7 flex size-12 items-center justify-center rounded-md bg-card shadow-[var(--shadow-sm)]"
+          style={{
+            border:
+              "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+          }}
+        >
           <BrandGlyph className="size-5 text-primary" />
         </span>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This share isn&apos;t available
+        <MonoLabel>Share not found</MonoLabel>
+        <h1
+          className="mt-3 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground"
+          style={{ textWrap: "balance" }}
+        >
+          This share isn&apos;t <ItalicAccent>available.</ItalicAccent>
         </h1>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        <p
+          className="mt-4 text-[14px] leading-[1.6]"
+          style={{
+            fontFamily: "var(--font-reading)",
+            color: "color-mix(in srgb, var(--foreground) 72%, transparent)",
+          }}
+        >
           The link may have been revoked, or the underlying review was deleted
           by its owner.
         </p>

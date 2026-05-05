@@ -13,9 +13,9 @@ export function LandingShare() {
         </aside>
         <div>
           <h2 className="landing-section-title">
-            Hand a paper, fully marked up,
+            Share your reviews
             <br />
-            to a colleague.
+            with a colleague.
           </h2>
           <p
             className="mt-[18px] max-w-[620px] text-[17px] leading-[1.65]"
@@ -27,8 +27,8 @@ export function LandingShare() {
           >
             Send a single link. The recipient opens the paper with every
             highlight, every margin note, every chat thread you started. They
-            can read it as-is, or import the bundle into their own workspace
-            and keep going.
+            can read it as-is, or import the bundle into their own workspace and
+            keep going.
           </p>
 
           <div className="mt-9 max-w-[620px]">
@@ -96,10 +96,8 @@ function ShareSpecimen() {
         className="flex items-center gap-2 border-b px-3.5 py-2.5 font-mono text-[11px] text-muted-foreground"
         style={{
           letterSpacing: "0.04em",
-          borderColor:
-            "color-mix(in srgb, var(--border) 70%, transparent)",
-          background:
-            "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
+          borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
+          background: "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
         }}
       >
         <ShareIcon />
@@ -107,10 +105,8 @@ function ShareSpecimen() {
         <span
           className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium"
           style={{
-            background:
-              "color-mix(in srgb, var(--success) 14%, transparent)",
-            color:
-              "color-mix(in srgb, var(--success) 90%, transparent)",
+            background: "color-mix(in srgb, var(--success) 14%, transparent)",
+            color: "color-mix(in srgb, var(--success) 90%, transparent)",
             letterSpacing: "0.02em",
           }}
         >
@@ -126,8 +122,7 @@ function ShareSpecimen() {
         <div
           className="flex items-center gap-2.5 rounded-md border px-3 py-2.5"
           style={{
-            borderColor:
-              "color-mix(in srgb, var(--primary) 22%, transparent)",
+            borderColor: "color-mix(in srgb, var(--primary) 22%, transparent)",
             background:
               "color-mix(in srgb, var(--primary) 4%, var(--background))",
           }}

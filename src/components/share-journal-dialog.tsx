@@ -8,7 +8,6 @@ import {
   Link2,
   Loader2,
   RefreshCcw,
-  Share2,
   Sparkles,
 } from "lucide-react";
 import {
@@ -23,6 +22,7 @@ import {
   createShareLink,
   revokeShareLink,
 } from "@/lib/client/sharing/share-links";
+import { ItalicAccent, MonoLabel } from "@/components/folio";
 import { cn } from "@/lib/utils";
 import type { WikiPage } from "@/lib/wiki";
 
@@ -37,7 +37,10 @@ type LinkState =
   | { kind: "ready"; token: string; url: string; reused: boolean }
   | { kind: "error"; message: string };
 
-export default function ShareJournalDialog({ page, onClose }: ShareJournalDialogProps) {
+export default function ShareJournalDialog({
+  page,
+  onClose,
+}: ShareJournalDialogProps) {
   const [linkState, setLinkState] = useState<LinkState>({ kind: "idle" });
   const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
@@ -120,36 +123,31 @@ export default function ShareJournalDialog({ page, onClose }: ShareJournalDialog
         if (!next && !isWorking) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[460px]">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <Share2 className="size-[14px]" strokeWidth={2} />
-            </span>
-            <DialogTitle>Share this entry</DialogTitle>
-          </div>
-          <DialogDescription>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader className="space-y-2.5">
+          <MonoLabel>Sharing</MonoLabel>
+          <DialogTitle
+            className="text-[22px] font-semibold leading-[1.15] tracking-[-0.022em]"
+            style={{ textWrap: "balance" }}
+          >
+            Share your <ItalicAccent>entry</ItalicAccent> with a colleague.
+          </DialogTitle>
+          <DialogDescription
+            className="text-[13.5px] leading-[1.55]"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+            }}
+          >
             Anyone with the link can import a copy into their own journal.
           </DialogDescription>
         </DialogHeader>
 
         {page ? (
-          <div className="rounded-lg border border-border/70 bg-card/50 px-3.5 py-3">
-            <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              {isDigest ? (
-                <Sparkles className="size-2.5" strokeWidth={2} />
-              ) : (
-                <BookMarked className="size-2.5" strokeWidth={2} />
-              )}
-              <span>{isDigest ? "Weekly digest" : "Study session"}</span>
-            </div>
-            <p
-              className="mt-1 truncate text-[13.5px] font-medium text-foreground"
-              title={page.title}
-            >
-              {page.title}
-            </p>
-          </div>
+          <SubjectCard
+            title={page.title}
+            isDigest={isDigest}
+          />
         ) : null}
 
         <LinkBlock
@@ -162,6 +160,62 @@ export default function ShareJournalDialog({ page, onClose }: ShareJournalDialog
         />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Pieces ────────────────────────────────────────────────────── */
+
+function SubjectCard({
+  title,
+  isDigest,
+}: {
+  title: string;
+  isDigest: boolean;
+}) {
+  const Icon = isDigest ? Sparkles : BookMarked;
+  return (
+    <section
+      className="overflow-hidden rounded-lg border bg-card"
+      style={{
+        borderColor: isDigest
+          ? "color-mix(in srgb, var(--primary) 22%, transparent)"
+          : "color-mix(in srgb, var(--border) 75%, transparent)",
+        background: isDigest
+          ? "color-mix(in srgb, var(--primary) 4%, var(--card))"
+          : "var(--card)",
+      }}
+    >
+      <header
+        className="flex items-center gap-2 border-b px-3.5 py-2"
+        style={{
+          background:
+            "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
+          borderColor:
+            "color-mix(in srgb, var(--border) 70%, transparent)",
+        }}
+      >
+        <span
+          className="inline-flex size-[18px] items-center justify-center rounded-md"
+          style={{
+            background: isDigest
+              ? "color-mix(in srgb, var(--primary) 14%, transparent)"
+              : "var(--badge-accent-bg)",
+            color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+          }}
+        >
+          <Icon className="size-2.5" strokeWidth={1.8} aria-hidden />
+        </span>
+        <MonoLabel>{isDigest ? "Weekly digest" : "Study session"}</MonoLabel>
+      </header>
+      <div className="px-4 py-3">
+        <p
+          className="line-clamp-2 break-words text-[14px] font-semibold leading-[1.35] tracking-[-0.005em] text-foreground"
+          title={title}
+        >
+          {title}
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -182,15 +236,36 @@ function LinkBlock({
 }) {
   if (state.kind === "creating") {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-dashed border-border/70 bg-muted/20 px-3.5 py-3 text-[12.5px] text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
-        <span>Creating link…</span>
+      <div
+        className="flex items-center gap-2 rounded-lg border bg-card px-3.5 py-3 text-[12.5px] text-muted-foreground"
+        style={{
+          borderColor:
+            "color-mix(in srgb, var(--border) 70%, transparent)",
+        }}
+      >
+        <Loader2
+          className="size-3.5 animate-spin"
+          strokeWidth={2}
+          style={{
+            color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+          }}
+        />
+        <span>Creating a fresh link…</span>
       </div>
     );
   }
   if (state.kind === "error") {
     return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3 text-[12.5px] text-destructive">
+      <div
+        className="rounded-lg border px-3.5 py-3 text-[12.5px]"
+        style={{
+          borderColor:
+            "color-mix(in srgb, var(--destructive) 30%, transparent)",
+          background:
+            "color-mix(in srgb, var(--destructive) 5%, transparent)",
+          color: "var(--destructive)",
+        }}
+      >
         <p>{state.message}</p>
         <button
           type="button"
@@ -204,27 +279,54 @@ function LinkBlock({
   }
   if (state.kind === "ready") {
     return (
-      <div className="space-y-2">
-        <div className="group flex items-stretch gap-1.5 rounded-lg border border-border bg-card p-1 shadow-[var(--shadow-sm)] transition-shadow focus-within:shadow-[var(--shadow-primary)]">
-          <div className="flex items-center pl-2.5 text-muted-foreground/70">
-            <Link2 className="size-3.5" strokeWidth={2} />
+      <div className="space-y-2.5">
+        <div
+          className="group flex items-stretch gap-1.5 rounded-lg border bg-card p-1 transition-shadow focus-within:shadow-[var(--shadow-primary)]"
+          style={{
+            borderColor:
+              "color-mix(in srgb, var(--primary) 22%, transparent)",
+            background:
+              "color-mix(in srgb, var(--primary) 4%, var(--card))",
+          }}
+        >
+          <div className="flex items-center pl-2.5">
+            <Link2
+              className="size-3.5"
+              strokeWidth={2}
+              style={{
+                color:
+                  "color-mix(in srgb, var(--primary) 65%, transparent)",
+              }}
+            />
           </div>
           <input
             readOnly
             value={state.url}
             onFocus={(e) => e.currentTarget.select()}
-            className="flex-1 bg-transparent px-1 py-1.5 text-[12.5px] tracking-tight text-foreground outline-none"
+            className="flex-1 bg-transparent px-1 py-1.5 font-mono text-[12px] tracking-tight text-foreground outline-none"
+            style={{ letterSpacing: "0.02em" }}
             aria-label="Share link"
           />
           <button
             type="button"
             onClick={onCopy}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 text-[12px] font-medium transition-all duration-150",
+              "flex shrink-0 items-center gap-1.5 rounded-md px-3 text-[12px] font-medium transition-colors duration-150",
               copied
-                ? "bg-success/15 text-success"
+                ? "text-foreground"
                 : "bg-primary text-primary-foreground hover:bg-primary/90",
             )}
+            style={
+              copied
+                ? {
+                    background:
+                      "color-mix(in srgb, var(--success) 14%, transparent)",
+                    color:
+                      "color-mix(in srgb, var(--success) 90%, transparent)",
+                  }
+                : undefined
+            }
+            aria-label={copied ? "Link copied" : "Copy link"}
           >
             {copied ? (
               <>
@@ -239,19 +341,24 @@ function LinkBlock({
             )}
           </button>
         </div>
-        <div className="flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground/65">
-          <span>
-            {state.reused
-              ? "Existing link — anyone with it can already import."
-              : "Link generated. No expiry — revoke any time."}
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span
+            className="font-mono text-[10.5px] uppercase"
+            style={{
+              letterSpacing: "0.16em",
+              color:
+                "color-mix(in srgb, var(--muted-foreground) 65%, transparent)",
+            }}
+          >
+            {state.reused ? "Existing link" : "Live link"}
           </span>
           <button
             type="button"
             onClick={onRevoke}
             disabled={revoking}
-            className="text-[11px] underline-offset-4 transition-colors hover:text-destructive hover:underline disabled:opacity-50"
+            className="text-[11.5px] text-muted-foreground underline-offset-4 transition-colors hover:text-destructive hover:underline disabled:opacity-50"
           >
-            {revoking ? "Revoking…" : "Revoke"}
+            {revoking ? "Revoking…" : "Revoke link"}
           </button>
         </div>
       </div>
