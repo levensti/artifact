@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, FileText, Terminal, FileDown } from "lucide-react";
+import { ArrowRight, FileText, Terminal } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { useState } from "react";
 import NewReviewDialog from "@/components/new-review-dialog";
@@ -29,15 +29,9 @@ export default function HomeClient() {
     },
     {
       icon: Terminal,
-      title: "Import from Claude Code",
-      body: "Turn coding sessions into journal entries. Daily recaps and weekly digests are generated from your activity.",
+      title: "Import a session from Claude Code",
+      body: "Distill your prior chat histories into focused journal entries.",
       onClick: () => router.push("/journal"),
-    },
-    {
-      icon: FileDown,
-      title: "Open a shared review",
-      body: "Continue from a colleague's bundle. Annotations, notes, and chat history all come along.",
-      onClick: () => setShowImport(true),
     },
   ];
 
@@ -60,26 +54,14 @@ export default function HomeClient() {
           <circle cx="22" cy="10" r="3.2" fill="currentColor" />
         </svg>
 
-        <div className="mx-auto w-full max-w-[680px] px-8 pt-[min(14vh,128px)] pb-16">
+        <div className="mx-auto w-full max-w-170 px-8 pt-[min(14vh,128px)] pb-16">
           <MonoLabel>Today</MonoLabel>
           <h1
             className="mt-4 text-[40px] font-bold leading-[1.02] tracking-[-0.035em] text-foreground"
             style={{ textWrap: "balance" }}
           >
-            What are you working on{" "}
-            <ItalicAccent>today?</ItalicAccent>
+            What would you like to work on <ItalicAccent>today?</ItalicAccent>
           </h1>
-          <p
-            className="mt-4 max-w-[520px] text-[15.5px] leading-[1.65]"
-            style={{
-              fontFamily: "var(--font-reading)",
-              color: "color-mix(in srgb, var(--foreground) 75%, transparent)",
-              textWrap: "pretty",
-            }}
-          >
-            Pick a starting point. Everything you do builds your journal in
-            the background.
-          </p>
 
           <div className="mt-10 flex flex-col gap-2.5">
             {lanes.map((lane) => (

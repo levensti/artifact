@@ -188,20 +188,22 @@ function AnnotationCard({
         "overflow-hidden rounded-xl border bg-card transition-all duration-200 hover:shadow-md hover:shadow-primary/5",
         "cursor-pointer",
         isActive
-          ? isAskAi
-            ? "border-sky-500/35 ring-1 ring-sky-500/10"
-            : "border-primary/40 ring-1 ring-primary/15"
+          ? "border-primary/40 ring-1 ring-primary/15"
           : isHovered
-            ? isAskAi
-              ? "border-sky-500/28"
-              : "border-primary/25"
+            ? "border-primary/25"
             : "border-border",
       )}
     >
       {isAskAi ? (
         <>
           <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
-            <span className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-lg bg-gradient-to-r from-sky-500/15 to-sky-400/8 px-2 py-1 text-[10px] font-semibold leading-tight tracking-tight text-sky-800 shadow-sm shadow-sky-500/10 dark:text-sky-100">
+            <span
+              className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold leading-tight tracking-tight"
+              style={{
+                background: "var(--badge-accent-bg)",
+                color: "var(--badge-accent-fg)",
+              }}
+            >
               <Sparkles className="size-3 shrink-0" strokeWidth={2} />
               Dive deeper
             </span>

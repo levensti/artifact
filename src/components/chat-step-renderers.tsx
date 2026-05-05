@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   BookOpen,
-  BrainCircuit,
   Check,
   ChevronDown,
   ChevronRight,
@@ -51,19 +50,24 @@ const TOOL_ICONS: Record<string, typeof Search> = {
 
 export function ThinkingIndicator() {
   return (
-    <div className="flex items-center gap-2 py-1.5">
-      <BrainCircuit className="size-3.5 text-primary/60 animate-pulse shrink-0" />
-      <span className="text-xs text-muted-foreground font-medium">
-        Thinking…
+    <div
+      className="flex items-center gap-2.5 py-1.5"
+      role="status"
+      aria-label="Thinking"
+    >
+      <span
+        className="font-mono text-[10.5px] uppercase"
+        style={{
+          letterSpacing: "0.18em",
+          color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+        }}
+      >
+        Thinking
       </span>
-      <span className="inline-flex gap-0.75">
-        {[0, 150, 300].map((delay) => (
-          <span
-            key={delay}
-            className="size-1 rounded-full bg-primary/40 animate-bounce"
-            style={{ animationDelay: `${delay}ms`, animationDuration: "1.2s" }}
-          />
-        ))}
+      <span className="inline-flex items-center gap-1.5" aria-hidden>
+        <span className="think-dot" />
+        <span className="think-dot" />
+        <span className="think-dot" />
       </span>
     </div>
   );

@@ -8,6 +8,7 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ItalicAccent, MonoLabel } from "@/components/folio";
 
 /* ------------------------------------------------------------------ */
 /*  Conversation starters                                              */
@@ -57,12 +58,21 @@ export default function ChatEmptyState({
 }) {
   return (
     <div className="flex flex-col pb-4 pt-0 font-sans antialiased">
-      <div className="mb-4 space-y-1 px-2">
-        <p className="text-sm font-semibold leading-snug tracking-tight text-foreground">
-          Research assistant
+      <div className="mb-5 px-2">
+        <MonoLabel>Where to start</MonoLabel>
+        <p className="mt-2 text-[18px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
+          Ask a question, or pick a{" "}
+          <ItalicAccent>starting point.</ItalicAccent>
         </p>
-        <p className="min-h-[2.5rem] text-xs leading-relaxed text-muted-foreground">
-          Ask anything, or pick a starting point below.
+        <p
+          className="mt-1.5 text-[12.5px] leading-[1.55]"
+          style={{
+            fontFamily: "var(--font-reading)",
+            color: "color-mix(in srgb, var(--foreground) 65%, transparent)",
+          }}
+        >
+          The assistant searches arXiv and the web automatically when needed.
+          Highlight any passage in the paper to start a thread tied to it.
         </p>
       </div>
 
@@ -74,20 +84,39 @@ export default function ChatEmptyState({
             disabled={!canSend}
             onClick={() => onSend(s.prompt)}
             className={cn(
-              "group flex min-h-[4.5rem] w-full flex-col items-start gap-2 rounded-xl border border-border bg-card px-3.5 py-3 text-left shadow-sm transition-all duration-200",
+              "group flex min-h-[5rem] w-full flex-col items-start gap-2 rounded-lg border bg-card px-3.5 py-3 text-left transition-all duration-200",
               canSend
-                ? "cursor-pointer hover:border-primary/30 hover:shadow-md hover:shadow-primary/8 hover:-translate-y-px active:translate-y-0 active:shadow-sm"
+                ? "cursor-pointer hover:-translate-y-px hover:border-primary/30 hover:shadow-[var(--shadow-sm)] active:translate-y-0"
                 : "cursor-not-allowed opacity-50",
             )}
+            style={{
+              borderColor: "color-mix(in srgb, var(--border) 75%, transparent)",
+            }}
           >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--badge-accent-bg)] transition-colors group-hover:bg-primary/15">
-              <s.icon className="size-4 text-primary/60" strokeWidth={1.8} />
+            <div
+              className="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors"
+              style={{ background: "var(--badge-accent-bg)" }}
+            >
+              <s.icon
+                className="size-3.5"
+                style={{
+                  color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+                }}
+                strokeWidth={1.7}
+              />
             </div>
             <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="text-[13px] font-semibold leading-snug text-foreground/80 transition-colors group-hover:text-foreground">
+              <p className="text-[12.5px] font-semibold leading-snug tracking-[-0.005em] text-foreground/85 transition-colors group-hover:text-foreground">
                 {s.label}
               </p>
-              <p className="line-clamp-2 text-xs leading-snug text-muted-foreground/70">
+              <p
+                className="line-clamp-2 text-[11.5px] leading-[1.5]"
+                style={{
+                  fontFamily: "var(--font-reading)",
+                  color:
+                    "color-mix(in srgb, var(--muted-foreground) 90%, transparent)",
+                }}
+              >
                 {s.desc}
               </p>
             </div>
@@ -97,10 +126,19 @@ export default function ChatEmptyState({
 
       <div className="mt-5 flex items-start gap-2 px-2">
         <BrainCircuit
-          className="mt-0.5 size-3 shrink-0 text-muted-foreground/40"
+          className="mt-0.5 size-3 shrink-0"
           strokeWidth={1.5}
+          style={{
+            color: "color-mix(in srgb, var(--muted-foreground) 50%, transparent)",
+          }}
         />
-        <span className="text-[10px] leading-snug text-muted-foreground/40 not-italic">
+        <span
+          className="text-[10.5px] leading-snug"
+          style={{
+            color:
+              "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
+          }}
+        >
           Searches arXiv &amp; the web automatically when needed
         </span>
       </div>

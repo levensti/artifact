@@ -33,6 +33,7 @@ import { BraveKeyResumeProvider } from "./brave-key-resume-context";
 import ChatEmptyState from "./chat-empty-state";
 import { ChatMessageBubble } from "./chat-message-bubble";
 import JournalCheckpointModal from "./journal-checkpoint-modal";
+import { MonoLabel } from "@/components/folio";
 import { useChat } from "@/hooks/use-chat";
 
 /* ------------------------------------------------------------------ */
@@ -113,8 +114,9 @@ function ChatQuotePopover({
         className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-md transition-colors hover:bg-accent"
       >
         <MessageSquareQuote
-          className="size-3.5 text-sky-600/90"
+          className="size-3.5"
           strokeWidth={2}
+          style={{ color: "color-mix(in srgb, var(--primary) 72%, transparent)" }}
         />
         Quote in reply
       </button>
@@ -575,10 +577,23 @@ export default function ChatPanel({
     >
       <div className="flex flex-col h-full min-h-0 bg-background">
         {!hideHeader && (
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-linear-to-r from-background to-primary/3 px-4">
-            <span className="text-sm font-bold tracking-tight text-foreground">
-              Assistant
-            </span>
+          <div
+            className="flex h-14 shrink-0 items-center justify-between border-b px-4"
+            style={{
+              borderColor:
+                "color-mix(in srgb, var(--border) 80%, transparent)",
+              background:
+                "linear-gradient(90deg, var(--background), color-mix(in srgb, var(--primary) 3%, var(--background)))",
+            }}
+          >
+            <div className="flex flex-col gap-0.5">
+              <MonoLabel>Assistant</MonoLabel>
+              <span
+                className="text-[15px] font-semibold tracking-[-0.018em] text-foreground"
+              >
+                Ask the paper
+              </span>
+            </div>
             <ModelSelector
               selected={selectedModel}
               onSelect={setSelectedModel}
@@ -595,9 +610,7 @@ export default function ChatPanel({
               {chatThreadAnnotationId && activeThreadAnn ? (
                 <>
                   <div className="flex flex-col gap-2 border-b border-border/80 pb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Selection thread
-                    </span>
+                    <MonoLabel>Selection thread</MonoLabel>
                     <Button
                       type="button"
                       variant="secondary"
@@ -614,13 +627,32 @@ export default function ChatPanel({
                     </Button>
                   </div>
 
-                  <div className="rounded-lg border border-sky-500/25 bg-sky-500/6 px-3 py-2.5">
+                  <div
+                    className="rounded-lg border px-3 py-2.5"
+                    style={{
+                      borderColor:
+                        "color-mix(in srgb, var(--primary) 22%, transparent)",
+                      background:
+                        "color-mix(in srgb, var(--primary) 5%, transparent)",
+                    }}
+                  >
                     <div className="flex gap-2">
                       <MessageSquareQuote
-                        className="mt-0.5 size-4 shrink-0 text-sky-600/90"
+                        className="mt-0.5 size-4 shrink-0"
                         strokeWidth={2}
+                        style={{
+                          color:
+                            "color-mix(in srgb, var(--primary) 72%, transparent)",
+                        }}
                       />
-                      <p className="text-xs italic leading-snug text-muted-foreground">
+                      <p
+                        className="text-xs leading-snug italic"
+                        style={{
+                          fontFamily: "var(--font-reading)",
+                          color:
+                            "color-mix(in srgb, var(--foreground) 72%, transparent)",
+                        }}
+                      >
                         &ldquo;{activeThreadAnn.highlightText}&rdquo;
                       </p>
                     </div>
@@ -708,13 +740,32 @@ export default function ChatPanel({
         )}
 
         {pendingQuote && (
-          <div className="mx-3 mb-2 rounded-lg border border-sky-500/25 bg-sky-500/6 px-3 py-2.5">
+          <div
+            className="mx-3 mb-2 rounded-lg border px-3 py-2.5"
+            style={{
+              borderColor:
+                "color-mix(in srgb, var(--primary) 22%, transparent)",
+              background:
+                "color-mix(in srgb, var(--primary) 5%, transparent)",
+            }}
+          >
             <div className="flex items-start gap-2">
               <MessageSquareQuote
-                className="mt-0.5 size-4 shrink-0 text-sky-600/90"
+                className="mt-0.5 size-4 shrink-0"
                 strokeWidth={2}
+                style={{
+                  color:
+                    "color-mix(in srgb, var(--primary) 72%, transparent)",
+                }}
               />
-              <p className="flex-1 text-xs italic leading-snug text-muted-foreground line-clamp-3">
+              <p
+                className="flex-1 text-xs leading-snug italic line-clamp-3"
+                style={{
+                  fontFamily: "var(--font-reading)",
+                  color:
+                    "color-mix(in srgb, var(--foreground) 72%, transparent)",
+                }}
+              >
                 &ldquo;{pendingQuote}&rdquo;
               </p>
               <button
