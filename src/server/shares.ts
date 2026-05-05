@@ -442,10 +442,9 @@ async function importReviewShare(
   });
   if (!review) throw new HttpError(404, "Underlying review missing");
 
-  const [messagesRow, annotationsRow, prereqRow, deepDives] = await Promise.all([
+  const [messagesRow, annotationsRow, deepDives] = await Promise.all([
     prisma.reviewMessages.findUnique({ where: { reviewId: review.id } }),
     prisma.reviewAnnotations.findUnique({ where: { reviewId: review.id } }),
-    prisma.prerequisites.findUnique({ where: { reviewId: review.id } }),
     prisma.deepDive.findMany({ where: { reviewId: review.id } }),
   ]);
 
@@ -490,12 +489,6 @@ async function importReviewShare(
           data: { reviewId: finalReviewId, annotations: asJson(annotations) },
         });
       }
-    }
-
-    if (prereqRow) {
-      await tx.prerequisites.create({
-        data: { reviewId: finalReviewId, data: asJson(prereqRow.data) },
-      });
     }
 
     for (const dd of deepDives) {

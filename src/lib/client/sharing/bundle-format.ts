@@ -15,7 +15,6 @@
 
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type { PrerequisitesData } from "@/lib/explore";
 import type { ChatMessage, PaperReview } from "@/lib/review-types";
 import type { WikiPage } from "@/lib/wiki";
 
@@ -39,7 +38,6 @@ export interface ReviewBundleData {
   messages: ChatMessage[];
   annotations: Annotation[];
   deepDives: DeepDiveSession[];
-  prerequisites: PrerequisitesData | null;
 }
 
 /** Wiki contents. `pages[0]` is the "root" export; the rest are transitively-linked pages. */
@@ -149,8 +147,6 @@ export function validateBundle(raw: unknown): ValidationResult<AnyBundle> {
       issues.push("bundle.data.annotations: expected array");
     if (!isArr(data.deepDives))
       issues.push("bundle.data.deepDives: expected array");
-    if (!("prerequisites" in data))
-      issues.push("bundle.data.prerequisites: required (nullable)");
   } else {
     if (!isArr(data.pages) || data.pages.length === 0) {
       issues.push("bundle.data.pages: expected non-empty array");

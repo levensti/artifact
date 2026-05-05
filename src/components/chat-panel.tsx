@@ -31,7 +31,7 @@ import ModelSelector from "./model-selector";
 import { useSettingsOpener } from "./settings-opener-context";
 import { BraveKeyResumeProvider } from "./brave-key-resume-context";
 import ChatEmptyState from "./chat-empty-state";
-import { ChatMessageBubble, type BlockCtx } from "./chat-message-bubble";
+import { ChatMessageBubble } from "./chat-message-bubble";
 import JournalCheckpointModal from "./journal-checkpoint-modal";
 import { useChat } from "@/hooks/use-chat";
 
@@ -565,14 +565,6 @@ export default function ChatPanel({
       ? { error: chat.error, canRetry: chat.canRetry, onRetry: handleRetry }
       : null;
 
-  const blockCtx: BlockCtx = {
-    reviewId,
-    arxivId,
-    paperTitle,
-    paperContext,
-    selectedModel,
-  };
-
   /* ---------------------------------------------------------------- */
   /*  JSX                                                              */
   /* ---------------------------------------------------------------- */
@@ -650,7 +642,6 @@ export default function ChatPanel({
                         msg.id === chat.streamingMsgId && chat.isStreaming
                       }
                       agentSteps={chat.agentSteps}
-                      blockCtx={blockCtx}
                       failure={buildFailure(msg.id)}
                     />
                   ))}
@@ -676,7 +667,6 @@ export default function ChatPanel({
                         msg.id === chat.streamingMsgId && chat.isStreaming
                       }
                       agentSteps={chat.agentSteps}
-                      blockCtx={blockCtx}
                       failure={buildFailure(msg.id)}
                     />
                   ))}

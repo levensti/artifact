@@ -3,7 +3,6 @@ import { prisma } from "./db";
 import { Prisma } from "@prisma/client";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type { PrerequisitesData } from "@/lib/explore";
 import type { ChatMessage, PaperReview } from "@/lib/review-types";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import { extractWikiLinkSlugs } from "@/lib/wiki-link-transform";
@@ -112,7 +111,7 @@ function rowToReview(r: {
   };
 }
 
-/* ── Messages / annotations / prerequisites ───────────────────── */
+/* ── Messages / annotations ──────────────────────────────────── */
 
 async function assertReviewOwned(userId: string, reviewId: string): Promise<void> {
   const exists = await prisma.review.findFirst({
@@ -169,36 +168,6 @@ export async function setAnnotations(
       annotations: annotations as unknown as Prisma.InputJsonValue,
     },
   });
-}
-
-export async function getPrerequisites(
-  userId: string,
-  reviewId: string,
-): Promise<PrerequisitesData | null> {
-  await assertReviewOwned(userId, reviewId);
-  const row = await prisma.prerequisites.findUnique({ where: { reviewId } });
-  return (row?.data as unknown as PrerequisitesData | undefined) ?? null;
-}
-
-export async function setPrerequisites(
-  userId: string,
-  reviewId: string,
-  data: PrerequisitesData,
-): Promise<void> {
-  await assertReviewOwned(userId, reviewId);
-  await prisma.prerequisites.upsert({
-    where: { reviewId },
-    create: { reviewId, data: data as unknown as Prisma.InputJsonValue },
-    update: { data: data as unknown as Prisma.InputJsonValue },
-  });
-}
-
-export async function clearPrerequisites(
-  userId: string,
-  reviewId: string,
-): Promise<void> {
-  await assertReviewOwned(userId, reviewId);
-  await prisma.prerequisites.deleteMany({ where: { reviewId } });
 }
 
 /* ── Deep dives ───────────────────────────────────────────────── */
