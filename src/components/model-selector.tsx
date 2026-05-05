@@ -32,6 +32,7 @@ import {
   KEYS_UPDATED_EVENT,
 } from "@/lib/keys";
 import { useSettingsOpener } from "@/components/settings-opener-context";
+import { MonoLabel } from "@/components/folio";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -340,8 +341,8 @@ export default function ModelSelector({
       <Fragment key={provider}>
         {groupIndex > 0 && <DropdownMenuSeparator />}
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            {meta.label}
+          <DropdownMenuLabel className="px-2 pt-1.5 pb-1">
+            <MonoLabel>{meta.label}</MonoLabel>
           </DropdownMenuLabel>
 
           {state.status === "loading" && (
@@ -379,25 +380,33 @@ export default function ModelSelector({
           )}
 
           {state.status === "ok" &&
-            state.models.map((model) => (
-              <DropdownMenuItem
-                key={model.id}
-                className="flex items-center justify-between gap-2 cursor-pointer"
-                onClick={() => onSelect(model)}
-              >
-                <span
+            state.models.map((model) => {
+              const isSelected = selected?.id === model.id;
+              return (
+                <DropdownMenuItem
+                  key={model.id}
                   className={cn(
-                    "text-xs truncate",
-                    selected?.id === model.id && "text-primary font-medium",
+                    "flex items-center justify-between gap-2 cursor-pointer",
+                    isSelected && "bg-[var(--badge-accent-bg)]",
                   )}
+                  onClick={() => onSelect(model)}
                 >
-                  {model.label}
-                </span>
-                {selected?.id === model.id && (
-                  <Check size={12} className="text-primary shrink-0" />
-                )}
-              </DropdownMenuItem>
-            ))}
+                  <span
+                    className={cn(
+                      "truncate text-[12.5px]",
+                      isSelected
+                        ? "font-medium text-foreground"
+                        : "text-foreground/85",
+                    )}
+                  >
+                    {model.label}
+                  </span>
+                  {isSelected && (
+                    <Check size={12} className="shrink-0 text-primary" />
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
         </DropdownMenuGroup>
       </Fragment>
     );
@@ -418,8 +427,8 @@ export default function ModelSelector({
 
             return (
               <Fragment key={prof.id}>
-                <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                  {prof.label}
+                <DropdownMenuLabel className="px-2 pt-1.5 pb-1">
+                  <MonoLabel>{prof.label}</MonoLabel>
                 </DropdownMenuLabel>
 
                 {state.status === "loading" && (
@@ -456,28 +465,36 @@ export default function ModelSelector({
                 )}
 
                 {state.status === "ok" &&
-                  state.models.map((model) => (
-                    <DropdownMenuItem
-                      key={model.id}
-                      className="flex items-center justify-between gap-2 cursor-pointer"
-                      onClick={() => onSelect(model)}
-                    >
-                      <span
+                  state.models.map((model) => {
+                    const isSelected = selected?.id === model.id;
+                    const display = model.label.includes("·")
+                      ? model.label.split("·").pop()?.trim()
+                      : model.label;
+                    return (
+                      <DropdownMenuItem
+                        key={model.id}
                         className={cn(
-                          "text-xs truncate",
-                          selected?.id === model.id &&
-                            "text-primary font-medium",
+                          "flex items-center justify-between gap-2 cursor-pointer",
+                          isSelected && "bg-[var(--badge-accent-bg)]",
                         )}
+                        onClick={() => onSelect(model)}
                       >
-                        {model.label.includes("·")
-                          ? model.label.split("·").pop()?.trim()
-                          : model.label}
-                      </span>
-                      {selected?.id === model.id && (
-                        <Check size={12} className="text-primary shrink-0" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
+                        <span
+                          className={cn(
+                            "truncate text-[12.5px]",
+                            isSelected
+                              ? "font-medium text-foreground"
+                              : "text-foreground/85",
+                          )}
+                        >
+                          {display}
+                        </span>
+                        {isSelected && (
+                          <Check size={12} className="shrink-0 text-primary" />
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })}
               </Fragment>
             );
           })}
@@ -490,19 +507,37 @@ export default function ModelSelector({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          "inline-flex max-w-[min(200px,42vw)] items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs transition-all duration-150 hover:border-border hover:bg-muted/50",
+          "group inline-flex max-w-[min(220px,46vw)] items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12.5px] transition-colors duration-150",
           hasModelSelected
             ? "font-medium text-foreground"
-            : "text-muted-foreground",
+            : !anyKey
+              ? "text-foreground"
+              : "text-muted-foreground",
         )}
+        style={{
+          borderColor: !anyKey
+            ? "color-mix(in srgb, var(--primary) 35%, transparent)"
+            : "color-mix(in srgb, var(--border) 70%, transparent)",
+          background: !anyKey
+            ? "color-mix(in srgb, var(--primary) 6%, transparent)"
+            : "transparent",
+        }}
         aria-label={selected ? `Model: ${selected.label}` : triggerLabel}
       >
-        {showTriggerSpinner ? (
-          <Loader2 className="size-3 animate-spin shrink-0" />
+        {!anyKey ? (
+          <KeyRound
+            className="size-3 shrink-0"
+            strokeWidth={2}
+            style={{
+              color: "color-mix(in srgb, var(--primary) 80%, transparent)",
+            }}
+          />
+        ) : showTriggerSpinner ? (
+          <Loader2 className="size-3 shrink-0 animate-spin" />
         ) : null}
         <span className="truncate">{triggerLabel}</span>
         <ChevronDown
-          className="size-3 shrink-0 text-muted-foreground/50"
+          className="size-3 shrink-0 text-muted-foreground/55 transition-transform duration-150 group-data-[state=open]:rotate-180"
           strokeWidth={2}
         />
       </DropdownMenuTrigger>
@@ -511,17 +546,25 @@ export default function ModelSelector({
         className="w-[min(16rem,calc(100vw-1.5rem))]"
       >
         {!anyKey ? (
-          <div className="px-2 py-3 space-y-2">
-            <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
-              Add an API key in Settings to load available models.
-            </p>
-            <DropdownMenuItem
-              className="text-xs gap-2 cursor-pointer"
-              onClick={() => openSettings()}
+          <div className="px-3 py-3.5">
+            <MonoLabel>Setup needed</MonoLabel>
+            <p
+              className="mt-2 text-[12.5px] leading-[1.55]"
+              style={{
+                fontFamily: "var(--font-reading)",
+                color: "color-mix(in srgb, var(--foreground) 75%, transparent)",
+              }}
             >
-              <KeyRound className="size-3.5 opacity-80" />
-              Open Settings
-            </DropdownMenuItem>
+              Add an API key for any provider to load models.
+            </p>
+            <button
+              type="button"
+              onClick={() => openSettings()}
+              className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[12.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
+            >
+              <KeyRound className="size-3.5" strokeWidth={2} />
+              Add a key
+            </button>
           </div>
         ) : (
           <>
@@ -532,11 +575,11 @@ export default function ModelSelector({
 
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="text-[11px] gap-2 cursor-pointer text-muted-foreground"
+              className="cursor-pointer gap-2 text-[12px] text-muted-foreground"
               onClick={() => openSettings()}
             >
               <Settings className="size-3 opacity-60" />
-              Add more providers…
+              Add more providers
             </DropdownMenuItem>
           </>
         )}

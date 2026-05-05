@@ -1,11 +1,14 @@
 "use client";
 
-import { ArrowRight, FileText, Terminal } from "lucide-react";
+import { ArrowRight, FileText, KeyRound, Terminal } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import NewReviewDialog from "@/components/new-review-dialog";
 import ImportBundleDialog from "@/components/import-bundle-dialog";
 import { ItalicAccent, MonoLabel } from "@/components/folio";
+import { useSettingsOpener } from "@/components/settings-opener-context";
+import { hasAnySavedApiKey } from "@/lib/keys";
+import { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
 import { useRouter } from "next/navigation";
 
 interface Lane {
@@ -15,10 +18,29 @@ interface Lane {
   onClick: () => void;
 }
 
+function subscribeKeys(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(KEYS_UPDATED_EVENT, onChange);
+  return () => window.removeEventListener(KEYS_UPDATED_EVENT, onChange);
+}
+function keysSnapshot() {
+  return hasAnySavedApiKey() ? "1" : "0";
+}
+function keysServerSnapshot() {
+  return "0";
+}
+
 export default function HomeClient() {
   const [showNewReview, setShowNewReview] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const router = useRouter();
+  const { openSettings } = useSettingsOpener();
+  const keysFlag = useSyncExternalStore(
+    subscribeKeys,
+    keysSnapshot,
+    keysServerSnapshot,
+  );
+  const hasKeys = keysFlag === "1";
 
   const lanes: Lane[] = [
     {
@@ -60,8 +82,13 @@ export default function HomeClient() {
             className="mt-4 text-[40px] font-bold leading-[1.02] tracking-[-0.035em] text-foreground"
             style={{ textWrap: "balance" }}
           >
-            What would you like to work on <ItalicAccent>today?</ItalicAccent>
+            What would you like to work on{" "}
+            <ItalicAccent>today?</ItalicAccent>
           </h1>
+
+          {!hasKeys ? (
+            <SetupCallout onOpenSettings={openSettings} />
+          ) : null}
 
           <div className="mt-10 flex flex-col gap-2.5">
             {lanes.map((lane) => (
@@ -85,6 +112,66 @@ export default function HomeClient() {
         onClose={() => setShowImport(false)}
       />
     </DashboardLayout>
+  );
+}
+
+function SetupCallout({
+  onOpenSettings,
+}: {
+  onOpenSettings: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      className="mt-9 flex flex-col gap-3 rounded-lg border bg-card px-5 py-4 sm:flex-row sm:items-center sm:gap-5"
+      style={{
+        borderColor: "color-mix(in srgb, var(--primary) 25%, transparent)",
+        background:
+          "color-mix(in srgb, var(--primary) 4%, var(--card))",
+      }}
+    >
+      <div
+        className="flex size-10 shrink-0 items-center justify-center rounded-md"
+        style={{ background: "var(--badge-accent-bg)" }}
+      >
+        <KeyRound
+          className="size-[18px]"
+          strokeWidth={1.6}
+          style={{
+            color: "color-mix(in srgb, var(--primary) 75%, transparent)",
+          }}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <MonoLabel tone="accent">One-time setup</MonoLabel>
+        </div>
+        <p
+          className="mt-1.5 text-[14px] font-semibold tracking-[-0.005em] text-foreground"
+        >
+          Connect an AI provider to start chatting.
+        </p>
+        <p
+          className="mt-1 text-[12.5px] leading-[1.55]"
+          style={{
+            fontFamily: "var(--font-reading)",
+            color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+          }}
+        >
+          Bring your own keys for Anthropic, OpenAI, xAI, or any
+          OpenAI-compatible endpoint. Or run inference locally with Ollama,
+          LM Studio, or llama.cpp.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => onOpenSettings()}
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px sm:self-auto"
+      >
+        Add a key
+        <ArrowRight className="size-3.5" strokeWidth={2} />
+      </button>
+    </div>
   );
 }
 
