@@ -453,7 +453,7 @@ export async function listWikiRevisions(
   if (!page) return [];
   const rows = await prisma.wikiRevision.findMany({
     where: { userId, pageId: page.id },
-    orderBy: { id: "desc" },
+    orderBy: { savedAt: "desc" },
     take: 20,
   });
   return rows.map((r) => ({
