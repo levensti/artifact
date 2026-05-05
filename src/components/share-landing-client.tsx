@@ -9,11 +9,11 @@ import {
   ExternalLink,
   Loader2,
   Sparkles,
-  Telescope,
 } from "lucide-react";
 import type { SharePreview } from "@/server/shares";
 import { apiFetch } from "@/lib/client/api";
 import { BrandGlyph, BrandPanel, SignupPitch } from "@/components/brand-panel";
+import { ItalicAccent, MonoLabel } from "@/components/folio";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -86,8 +86,14 @@ export default function ShareLandingClient({
   if (state === "revoked") return <RevokedView />;
   if (!preview) return null;
 
+  const sharerName = preview.sharerFirstName ?? "Someone";
+  const isReview = preview.payload.kind === "review";
+
   return (
-    <main className="grid min-h-screen bg-background md:grid-cols-2">
+    <main
+      className="grid min-h-screen md:grid-cols-2"
+      style={{ background: "var(--reader-mat)" }}
+    >
       <BrandPanel>
         <SignupPitch />
       </BrandPanel>
@@ -104,20 +110,28 @@ export default function ShareLandingClient({
             </span>
           </div>
 
-          <Eyebrow kind={preview.payload.kind} />
+          <MonoLabel>
+            {isReview ? "Shared paper review" : "Shared journal entry"}
+          </MonoLabel>
 
-          <h1 className="mt-3 text-balance text-[26px] font-semibold leading-[1.2] tracking-tight text-foreground sm:text-[28px]">
-            <span className="text-foreground">
-              {preview.sharerFirstName ?? "Someone"}
-            </span>{" "}
-            <span className="text-muted-foreground/80">
-              {preview.payload.kind === "review"
-                ? "shared a paper review with you"
-                : "shared a journal entry with you"}
-            </span>
+          <h1
+            className="mt-4 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[32px]"
+            style={{ textWrap: "balance" }}
+          >
+            {sharerName} shared{" "}
+            <ItalicAccent>
+              {isReview ? "a paper review" : "a journal entry"}
+            </ItalicAccent>{" "}
+            with you.
           </h1>
 
-          <p className="mt-3 text-[13.5px] leading-relaxed text-muted-foreground">
+          <p
+            className="mt-4 text-[14px] leading-[1.6]"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color: "color-mix(in srgb, var(--foreground) 72%, transparent)",
+            }}
+          >
             One click and a copy lands in your workspace: chats, annotations,
             notes, and all.
           </p>
@@ -146,21 +160,81 @@ export default function ShareLandingClient({
   );
 }
 
-/* ── Header pieces ─────────────────────────────────────────────── */
+/* ── Resource cards ────────────────────────────────────────────── */
 
-function Eyebrow({ kind }: { kind: "review" | "wiki" }) {
-  const Icon = kind === "review" ? Telescope : Sparkles;
-  return (
-    <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-primary/80">
-      <Icon className="size-3.5" strokeWidth={1.8} />
-      <span>
-        {kind === "review" ? "Shared paper review" : "Shared journal entry"}
-      </span>
-    </div>
-  );
+function KindGlyph({ kind, isDigest }: { kind: "review" | "wiki"; isDigest?: boolean }) {
+  // Inline SVG matches the journal/landing chip-glyph rhythm.
+  if (kind === "review") {
+    return (
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="size-3"
+        aria-hidden
+      >
+        <path d="M3 2.5h6.5L13 6v7.5H3z" />
+        <path d="M9.5 2.5V6H13" />
+      </svg>
+    );
+  }
+  if (isDigest) {
+    return <Sparkles className="size-3" strokeWidth={1.8} aria-hidden />;
+  }
+  return <BookMarked className="size-3" strokeWidth={1.8} aria-hidden />;
 }
 
-/* ── Resource cards ────────────────────────────────────────────── */
+function CardChrome({
+  kind,
+  kindLabel,
+  children,
+  accent,
+}: {
+  kind: "review" | "wiki";
+  kindLabel: string;
+  isDigest?: boolean;
+  children: React.ReactNode;
+  accent?: boolean;
+}) {
+  return (
+    <section
+      className="overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-sm)]"
+      style={{
+        borderColor: accent
+          ? "color-mix(in srgb, var(--primary) 22%, transparent)"
+          : "color-mix(in srgb, var(--border) 75%, transparent)",
+        background: accent
+          ? "color-mix(in srgb, var(--primary) 4%, var(--card))"
+          : "var(--card)",
+      }}
+    >
+      <header
+        className="flex items-center gap-2 border-b px-3.5 py-2.5"
+        style={{
+          background:
+            "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
+          borderColor:
+            "color-mix(in srgb, var(--border) 70%, transparent)",
+        }}
+      >
+        <span
+          className="inline-flex size-[20px] items-center justify-center rounded-md"
+          style={{
+            background: "var(--badge-accent-bg)",
+            color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+          }}
+        >
+          <KindGlyph kind={kind} isDigest={kindLabel === "Weekly digest"} />
+        </span>
+        <MonoLabel>{kindLabel}</MonoLabel>
+      </header>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+}
 
 function ReviewCard({
   payload,
@@ -177,8 +251,11 @@ function ReviewCard({
     : (payload.sourceUrl ?? null);
 
   return (
-    <section className="rounded-xl border border-border/70 bg-card p-5 shadow-(--shadow-sm)">
-      <h2 className="text-balance text-[16px] font-semibold leading-snug tracking-tight text-foreground">
+    <CardChrome kind="review" kindLabel="Paper review">
+      <h2
+        className="text-[16.5px] font-semibold leading-[1.3] tracking-[-0.012em] text-foreground"
+        style={{ textWrap: "balance" }}
+      >
         {payload.title}
       </h2>
       {sourceUrl ? (
@@ -186,19 +263,23 @@ function ReviewCard({
           href={sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1.5 inline-flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+          className="mt-1.5 inline-flex items-center gap-1 font-mono text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
+          style={{ letterSpacing: "0.02em" }}
         >
           {sourceLabel}
           <ExternalLink className="size-3" strokeWidth={1.75} />
         </a>
       ) : (
-        <p className="mt-1.5 text-[12px] text-muted-foreground">
+        <p
+          className="mt-1.5 font-mono text-[11.5px] text-muted-foreground"
+          style={{ letterSpacing: "0.02em" }}
+        >
           {sourceLabel}
         </p>
       )}
 
       <CountPills counts={payload.counts} />
-    </section>
+    </CardChrome>
   );
 }
 
@@ -228,10 +309,22 @@ function CountPills({
   }
   if (items.length === 0) return null;
   return (
-    <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
+    <ul
+      className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[12px]"
+      style={{
+        color: "color-mix(in srgb, var(--muted-foreground) 90%, transparent)",
+        fontFeatureSettings: '"tnum"',
+      }}
+    >
       {items.map(({ label, value }) => (
         <li key={label} className="inline-flex items-baseline gap-1">
-          <span className="font-semibold tabular-nums text-foreground">
+          <span
+            className="font-semibold"
+            style={{
+              color:
+                "color-mix(in srgb, var(--foreground) 80%, transparent)",
+            }}
+          >
             {value}
           </span>
           <span>{label}</span>
@@ -248,30 +341,42 @@ function WikiCard({
 }) {
   const isDigest = payload.pageType === "digest";
   return (
-    <section className="rounded-xl border border-border/70 bg-card p-5 shadow-(--shadow-sm)">
-      <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/60">
-        {isDigest ? (
-          <Sparkles className="size-2.5" strokeWidth={2} />
-        ) : (
-          <BookMarked className="size-2.5" strokeWidth={2} />
-        )}
-        <span>{isDigest ? "Weekly digest" : "Study session"}</span>
-      </div>
-      <h2 className="mt-1.5 text-balance text-[16px] font-semibold leading-snug tracking-tight text-foreground">
+    <CardChrome
+      kind="wiki"
+      kindLabel={isDigest ? "Weekly digest" : "Study session"}
+      accent={isDigest}
+    >
+      <h2
+        className="text-[16.5px] font-semibold leading-[1.3] tracking-[-0.012em] text-foreground"
+        style={{ textWrap: "balance" }}
+      >
         {payload.rootTitle}
       </h2>
       {payload.excerpt ? (
-        <p className="mt-3 line-clamp-4 text-[12.5px] leading-relaxed text-muted-foreground">
+        <p
+          className="mt-3 line-clamp-4 text-[13px] leading-[1.6]"
+          style={{
+            fontFamily: "var(--font-reading)",
+            color:
+              "color-mix(in srgb, var(--muted-foreground) 95%, transparent)",
+          }}
+        >
           {payload.excerpt}
         </p>
       ) : null}
       {payload.depth > 0 && payload.pageCount > 1 ? (
-        <p className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
+        <p
+          className="mt-4 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px]"
+          style={{
+            background: "var(--badge-accent-bg)",
+            color: "var(--badge-accent-fg)",
+          }}
+        >
           + {payload.pageCount - 1} linked{" "}
           {payload.pageCount - 1 === 1 ? "page" : "pages"}
         </p>
       ) : null}
-    </section>
+    </CardChrome>
   );
 }
 
@@ -310,7 +415,13 @@ function CtaArea({
           )}`;
     return (
       <div className="space-y-3">
-        <p className="text-[12.5px] text-muted-foreground">
+        <p
+          className="text-[12.5px] leading-[1.55]"
+          style={{
+            fontFamily: "var(--font-reading)",
+            color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+          }}
+        >
           You created this share. Anyone with the link can import a copy.
         </p>
         <button
@@ -330,9 +441,15 @@ function CtaArea({
 
   if (stage.kind === "imported") {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-[13px] text-success">
+      <div
+        className="flex items-center gap-2 rounded-lg px-4 py-3 text-[13px]"
+        style={{
+          background: "color-mix(in srgb, var(--success) 12%, transparent)",
+          color: "color-mix(in srgb, var(--success) 90%, transparent)",
+        }}
+      >
         <Check className="size-4" strokeWidth={2.25} />
-        <span>Imported — opening it now…</span>
+        <span>Imported. Opening it now…</span>
       </div>
     );
   }
@@ -340,7 +457,16 @@ function CtaArea({
   if (stage.kind === "error") {
     return (
       <div className="space-y-3">
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-[13px] text-destructive">
+        <div
+          className="rounded-lg border px-4 py-3 text-[13px]"
+          style={{
+            borderColor:
+              "color-mix(in srgb, var(--destructive) 30%, transparent)",
+            background:
+              "color-mix(in srgb, var(--destructive) 5%, transparent)",
+            color: "var(--destructive)",
+          }}
+        >
           {stage.message}
         </div>
         <button
@@ -394,7 +520,13 @@ function CtaArea({
           strokeWidth={2}
         />
       </Link>
-      <p className="text-[12.5px] text-muted-foreground">
+      <p
+        className="text-[12.5px] leading-[1.55]"
+        style={{
+          fontFamily: "var(--font-reading)",
+          color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+        }}
+      >
         Already have an account?{" "}
         <Link
           href={`/signin${cb}`}
@@ -414,15 +546,34 @@ const primaryBtnCls =
 
 function RevokedView() {
   return (
-    <main className="grid min-h-screen place-items-center bg-reader-mat px-6 text-center">
+    <main
+      className="grid min-h-screen place-items-center px-6 text-center"
+      style={{ background: "var(--reader-mat)" }}
+    >
       <div className="max-w-md">
-        <span className="mx-auto mb-6 flex size-12 items-center justify-center rounded-2xl bg-card shadow-(--shadow-sm)">
+        <span
+          className="mx-auto mb-7 flex size-12 items-center justify-center rounded-md bg-card shadow-[var(--shadow-sm)]"
+          style={{
+            border:
+              "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+          }}
+        >
           <BrandGlyph className="size-5 text-primary" />
         </span>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This link has been revoked
+        <MonoLabel>Link revoked</MonoLabel>
+        <h1
+          className="mt-3 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground"
+          style={{ textWrap: "balance" }}
+        >
+          This share was <ItalicAccent>taken down.</ItalicAccent>
         </h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">
+        <p
+          className="mt-4 text-[14px] leading-[1.6]"
+          style={{
+            fontFamily: "var(--font-reading)",
+            color: "color-mix(in srgb, var(--foreground) 72%, transparent)",
+          }}
+        >
           The person who shared this changed their mind. Reach out to them
           directly if you&apos;d like access.
         </p>

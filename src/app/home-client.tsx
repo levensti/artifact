@@ -4,7 +4,6 @@ import { ArrowRight, FileText, KeyRound, Terminal } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { useState, useSyncExternalStore } from "react";
 import NewReviewDialog from "@/components/new-review-dialog";
-import ImportBundleDialog from "@/components/import-bundle-dialog";
 import { ItalicAccent, MonoLabel } from "@/components/folio";
 import { useSettingsOpener } from "@/components/settings-opener-context";
 import { hasAnySavedApiKey } from "@/lib/keys";
@@ -32,7 +31,6 @@ function keysServerSnapshot() {
 
 export default function HomeClient() {
   const [showNewReview, setShowNewReview] = useState(false);
-  const [showImport, setShowImport] = useState(false);
   const router = useRouter();
   const { openSettings } = useSettingsOpener();
   const keysFlag = useSyncExternalStore(
@@ -105,11 +103,6 @@ export default function HomeClient() {
           setShowNewReview(false);
           router.push(`/review/${id}`);
         }}
-      />
-      <ImportBundleDialog
-        open={showImport}
-        mode="review"
-        onClose={() => setShowImport(false)}
       />
     </DashboardLayout>
   );

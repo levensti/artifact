@@ -30,7 +30,6 @@ import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MonoLabel } from "@/components/folio";
 import NewReviewDialog from "./new-review-dialog";
-import ImportBundleDialog from "./import-bundle-dialog";
 import ShareReviewDialog from "./share-review-dialog";
 import UserMenu from "./user-menu";
 
@@ -119,10 +118,6 @@ export default function Sidebar({
     return `${activeIngests.length} running`;
   }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
-  const [importMode, setImportMode] = useState<"review" | "journal" | null>(
-    null,
-  );
-  const [importInitialFile, setImportInitialFile] = useState<File | null>(null);
   const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -464,20 +459,6 @@ export default function Sidebar({
         open={showNewReview}
         onClose={() => setShowNewReview(false)}
         onCreated={handleReviewCreated}
-        onImport={(file) => {
-          setShowNewReview(false);
-          setImportInitialFile(file ?? null);
-          setImportMode("review");
-        }}
-      />
-      <ImportBundleDialog
-        open={importMode !== null}
-        mode={importMode ?? "review"}
-        initialFile={importInitialFile}
-        onClose={() => {
-          setImportMode(null);
-          setImportInitialFile(null);
-        }}
       />
       <ShareReviewDialog
         review={shareTarget}
