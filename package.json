@@ -35,7 +35,7 @@
     "dompurify": "^3.3.3",
     "dotenv": "^17.4.2",
     "geist": "^1.7.0",
-    "jsdom": "^29.0.2",
+    "jsdom": "~27.3.0",
     "katex": "^0.16.40",
     "lucide-react": "^1.0.1",
     "next": "16.2.1",
@@ -59,7 +59,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/jsdom": "^28.0.1",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
