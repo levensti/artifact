@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3", "jsdom", "@mozilla/readability"],
+  serverExternalPackages: ["better-sqlite3"],
   turbopack: {
     resolveAlias: {
       canvas: { browser: "" },
