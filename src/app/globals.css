@@ -234,7 +234,7 @@
 .chat-markdown ul, .chat-markdown ol { margin-bottom: 0.625em; padding-left: 1.25em; }
 .chat-markdown ul { list-style-type: disc; }
 .chat-markdown ol { list-style-type: decimal; }
-.chat-markdown li { margin-bottom: 0.45em; }
+.chat-markdown li { margin-bottom: 0.65em; }
 .chat-markdown code {
   font-family: var(--font-mono);
   background: var(--muted);
@@ -260,7 +260,7 @@
   color: var(--muted-foreground);
   margin-bottom: 0.625em;
 }
-.chat-markdown strong { font-weight: 600; color: var(--foreground); }
+.chat-markdown strong { font-weight: 550; color: inherit; }
 .chat-markdown a {
   color: var(--primary);
   text-decoration: none;
@@ -301,6 +301,29 @@
 .chat-markdown a.citation-chip.citation-chip--unresolved:hover {
   background: color-mix(in srgb, var(--muted-foreground) 10%, transparent);
   border-color: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+}
+
+/* ── arXiv chips: bare arxiv.org/abs/ID links ─────────────────── */
+.chat-markdown a.arxiv-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  padding: 0.05em 0.4em;
+  margin: 0 0.1em;
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 5%, transparent);
+  color: var(--muted-foreground);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.chat-markdown a.arxiv-chip:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  color: color-mix(in srgb, var(--primary) 90%, var(--foreground));
 }
 
 /* Brief highlight pulse on a PDF page when a citation chip is clicked.

@@ -178,7 +178,7 @@ export function ChatMessageBubble({
 
   return (
     <div className="max-w-full">
-      <div className="rounded-xl border-l-[3px] border-l-primary/30 px-4 py-3 text-sm leading-relaxed bg-card text-card-foreground shadow-sm max-w-full">
+      <div className="border-l-[3px] border-l-primary/30 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
         {msg.content ? <MarkdownMessage content={msg.content} /> : null}
         {hasBlocks ? renderInterleavedBlocks(msg.blocks!) : null}
       </div>
