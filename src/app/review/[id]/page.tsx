@@ -323,9 +323,26 @@ export default function ReviewPage() {
       setActiveAnnotationId(ann.id);
       setChatThreadAnnotationId(ann.id);
     });
+    // Reveal the assistant so the user lands on the thread they just
+    // started rather than a still-collapsed rail. On narrow viewports
+    // the rail lives behind an overlay (notesOpen/assistantOpen mutex);
+    // on wide viewports it has a collapsed strip mode.
+    if (narrowViewport) {
+      setAssistantOpen(true);
+      setNotesOpen(false);
+    } else if (assistantCollapsed) {
+      toggleAssistantCollapsed();
+    }
     setSelectionInfo(null);
     window.getSelection()?.removeAllRanges();
-  }, [selectionInfo, review, refreshAnnotations]);
+  }, [
+    selectionInfo,
+    review,
+    refreshAnnotations,
+    narrowViewport,
+    assistantCollapsed,
+    toggleAssistantCollapsed,
+  ]);
 
   const handleAnnotateSelection = useCallback(() => {
     if (selectionInfo && review) {
@@ -341,10 +358,23 @@ export default function ReviewPage() {
         setActiveAnnotationId(ann.id);
         setChatThreadAnnotationId(null);
       });
+      if (narrowViewport) {
+        setNotesOpen(true);
+        setAssistantOpen(false);
+      } else if (notesCollapsed) {
+        toggleNotesCollapsed();
+      }
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
     }
-  }, [selectionInfo, review, refreshAnnotations]);
+  }, [
+    selectionInfo,
+    review,
+    refreshAnnotations,
+    narrowViewport,
+    notesCollapsed,
+    toggleNotesCollapsed,
+  ]);
 
   const handleAnnotationSelect = useCallback(
     (id: string) => {
