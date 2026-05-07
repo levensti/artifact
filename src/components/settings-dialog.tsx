@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Eye,
   EyeOff,
   Check,
   ChevronDown,
   Cpu,
+  ExternalLink,
   Key,
   Plus,
   Trash2,
@@ -55,18 +56,26 @@ interface ProviderRowProps {
   docsUrl: string;
 }
 
-export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
+export function ProviderRow({
+  provider,
+  placeholder,
+  docsUrl,
+}: ProviderRowProps) {
   const meta = PROVIDER_META[provider];
+  const [stored, setStored] = useState(() => getApiKey(provider) ?? "");
   const [value, setValue] = useState(() => getApiKey(provider) ?? "");
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [hasKey, setHasKey] = useState(() => !!getApiKey(provider));
   const [expanded, setExpanded] = useState(false);
+
+  const hasKey = !!stored;
+  const dirty = value.trim() !== stored.trim();
 
   useEffect(() => {
     const sync = () => {
-      setValue(getApiKey(provider) ?? "");
-      setHasKey(!!getApiKey(provider));
+      const next = getApiKey(provider) ?? "";
+      setStored(next);
+      setValue(next);
     };
     sync();
     window.addEventListener(KEYS_UPDATED_EVENT, sync);
@@ -75,19 +84,18 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
 
   const handleSave = () => {
     const trimmed = value.trim();
-    if (!trimmed) return;
+    if (!trimmed || !dirty) return;
     void setApiKey(provider, trimmed).then(() => {
-      setHasKey(true);
+      setStored(trimmed);
       setSaved(true);
-      setExpanded(false);
       setTimeout(() => setSaved(false), 2000);
     });
   };
 
   const handleClear = () => {
     void clearApiKey(provider).then(() => {
+      setStored("");
       setValue("");
-      setHasKey(false);
       setVisible(false);
     });
   };
@@ -97,10 +105,10 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
       data-settings-provider={provider}
       className="rounded-xl border border-border/60 bg-card transition-all duration-200"
     >
-      {/* Header row — always visible */}
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
         className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
       >
         <div
@@ -128,22 +136,27 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
             {hasKey ? "Configured" : "Not set up yet"}
           </p>
         </div>
-        {hasKey ? (
-          <CircleCheck
-            size={16}
-            className="shrink-0 text-success"
+        <div className="flex items-center gap-2 shrink-0">
+          {hasKey ? (
+            <CircleCheck size={16} className="text-success" strokeWidth={2} />
+          ) : (
+            <Circle
+              size={16}
+              className="text-muted-foreground/30"
+              strokeWidth={1.5}
+            />
+          )}
+          <ChevronDown
+            size={14}
+            className={cn(
+              "text-muted-foreground/50 transition-transform duration-150",
+              expanded && "rotate-180",
+            )}
             strokeWidth={2}
           />
-        ) : (
-          <Circle
-            size={16}
-            className="shrink-0 text-muted-foreground/30"
-            strokeWidth={1.5}
-          />
-        )}
+        </div>
       </button>
 
-      {/* Expandable key input */}
       <div
         className={cn(
           "grid transition-all duration-200 ease-out",
@@ -153,7 +166,7 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
         )}
       >
         <div className="overflow-hidden">
-          <div className="px-4 pb-3.5 pt-0.5 space-y-2.5">
+          <div className="px-4 pb-3.5 pt-0.5 space-y-2">
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative min-w-0">
                 <Key
@@ -182,7 +195,7 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
               <div className="flex gap-2 shrink-0">
                 <Button
                   onClick={handleSave}
-                  disabled={!value.trim()}
+                  disabled={!value.trim() || !dirty}
                   variant={saved ? "outline" : "default"}
                   size="sm"
                   className={
@@ -192,17 +205,13 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
                   }
                 >
                   {saved && <Check size={13} />}
-                  {saved ? "Saved" : "Save"}
+                  {saved ? "Saved" : hasKey ? "Replace" : "Save"}
                 </Button>
                 {hasKey && (
-                  <button
-                    type="button"
-                    onClick={handleClear}
-                    className="flex items-center justify-center size-9 shrink-0 rounded-md border border-destructive/25 bg-destructive/5 text-destructive/70 hover:text-destructive hover:bg-destructive/15 transition-colors"
+                  <ConfirmTrashButton
+                    onConfirm={handleClear}
                     title="Remove key"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  />
                 )}
               </div>
             </div>
@@ -213,16 +222,77 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
   );
 }
 
+function ConfirmTrashButton({
+  onConfirm,
+  title,
+  size: btnSize = 9,
+}: {
+  onConfirm: () => void;
+  title: string;
+  /** Tailwind size unit — 9 → size-9 (36px), 8 → size-8 (32px). */
+  size?: 8 | 9;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
+
+  const handleClick = () => {
+    if (confirming) {
+      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+      setConfirming(false);
+      onConfirm();
+      return;
+    }
+    setConfirming(true);
+    timeoutRef.current = window.setTimeout(() => {
+      setConfirming(false);
+    }, 2500);
+  };
+
+  const sizeClass = btnSize === 9 ? "size-9" : "size-8";
+  const iconSize = btnSize === 9 ? 14 : 13;
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      onBlur={() => {
+        if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+        setConfirming(false);
+      }}
+      className={cn(
+        "flex items-center justify-center shrink-0 rounded-md transition-colors",
+        sizeClass,
+        confirming
+          ? "border border-destructive bg-destructive text-destructive-foreground"
+          : "border border-destructive/25 bg-destructive/5 text-destructive/70 hover:text-destructive hover:bg-destructive/15",
+      )}
+      title={confirming ? "Click again to confirm" : title}
+      aria-label={confirming ? "Click again to confirm" : title}
+    >
+      {confirming ? <Check size={iconSize} /> : <Trash2 size={iconSize} />}
+    </button>
+  );
+}
+
 function InferenceProfileCard({
   profile,
   onUpdate,
   onRemove,
   basePlaceholder,
+  isDraft,
 }: {
   profile: InferenceProviderProfile;
   onUpdate: (patch: Partial<InferenceProviderProfile>) => void;
   onRemove: () => void;
   basePlaceholder: string;
+  isDraft: boolean;
 }) {
   const [label, setLabel] = useState(profile.label);
   const [baseUrl, setBaseUrl] = useState(profile.baseUrl);
@@ -232,6 +302,10 @@ function InferenceProfileCard({
   );
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Drafts open expanded so the user can fill them in immediately;
+  // already-saved profiles default collapsed so a list of three of
+  // them doesn't become a wall of inputs.
+  const [expanded, setExpanded] = useState(isDraft);
 
   useEffect(() => {
     setLabel(profile.label);
@@ -251,6 +325,18 @@ function InferenceProfileCard({
     }
   };
 
+  const dirty =
+    label !== profile.label ||
+    baseUrl !== profile.baseUrl ||
+    apiKey !== profile.apiKey ||
+    supportsStreaming !== (profile.supportsStreaming !== false);
+
+  // A persisted profile is "configured" when it has the minimum
+  // credentials to be usable (label + baseUrl). Drafts never count
+  // until they're committed, so they always read as not configured.
+  const configured =
+    !isDraft && !!profile.label.trim() && !!profile.baseUrl.trim();
+
   const handleSave = () => {
     if (!isValidUrl(baseUrl.trim())) {
       setUrlError("Enter a valid URL (e.g. https://api.example.com/v1)");
@@ -267,94 +353,170 @@ function InferenceProfileCard({
     setTimeout(() => setSaved(false), 2000);
   };
 
+  // Header strings reflect live edits so collapsing mid-typing doesn't
+  // hide the user's in-progress changes — but the configured pill stays
+  // tied to persisted state so it accurately reports whether the saved
+  // profile is usable.
+  const headerTitle = label.trim() || "Custom provider";
+  const headerSubtitle =
+    baseUrl.trim() ||
+    (isDraft ? "Not configured yet" : "Set a base URL to enable");
+
   return (
     <div
       data-settings-profile={profile.id}
-      className="rounded-lg border border-border/50 bg-background/50 p-3 space-y-2.5"
+      className="rounded-lg border border-border/50 bg-background/50 transition-all duration-200"
     >
-      <Input
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-        placeholder="Provider name"
-        className="text-xs h-8 font-medium"
-        spellCheck={false}
-      />
-
-      <div className="space-y-1">
-        <label className="text-[10px] font-medium text-muted-foreground/70">
-          API base URL
-        </label>
-        <Input
-          type="url"
-          value={baseUrl}
-          onChange={(e) => {
-            setBaseUrl(e.target.value);
-            setUrlError("");
-          }}
-          placeholder={basePlaceholder}
-          className={`text-xs h-8${urlError ? " border-destructive" : ""}`}
-          autoComplete="off"
-          spellCheck={false}
-        />
-        {urlError && <p className="text-[10px] text-destructive">{urlError}</p>}
-      </div>
-
-      {!isLocalhostUrl(baseUrl) && (
-        <div className="relative">
-          <Key
-            size={12}
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
-          />
-          <Input
-            type={visible ? "text" : "password"}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="API key"
-            className="pl-7 pr-8 text-xs h-8"
-          />
-          <button
-            type="button"
-            onClick={() => setVisible(!visible)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-            aria-label={visible ? "Hide key" : "Show key"}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
+      >
+        <div className="flex-1 min-w-0">
+          <p className="truncate text-[12.5px] font-semibold tracking-[-0.005em] text-foreground">
+            {headerTitle}
+          </p>
+          <p
+            className="truncate text-[11px] leading-snug"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color: configured
+                ? "color-mix(in srgb, var(--success) 75%, transparent)"
+                : "color-mix(in srgb, var(--muted-foreground) 75%, transparent)",
+            }}
           >
-            {visible ? <EyeOff size={12} /> : <Eye size={12} />}
-          </button>
+            {headerSubtitle}
+          </p>
         </div>
-      )}
+        <div className="flex items-center gap-2 shrink-0">
+          {configured ? (
+            <CircleCheck
+              size={14}
+              className="text-success"
+              strokeWidth={2}
+              aria-label="Configured"
+            />
+          ) : (
+            <Circle
+              size={14}
+              className="text-muted-foreground/30"
+              strokeWidth={1.5}
+              aria-label="Not configured"
+            />
+          )}
+          <ChevronDown
+            size={12}
+            className={cn(
+              "text-muted-foreground/50 transition-transform duration-150",
+              expanded && "rotate-180",
+            )}
+            strokeWidth={2}
+          />
+        </div>
+      </button>
 
-      <label className="flex items-center gap-2 cursor-pointer pt-0.5">
-        <input
-          type="checkbox"
-          checked={supportsStreaming}
-          onChange={(e) => setSupportsStreaming(e.target.checked)}
-          className="size-3.5 rounded border-border accent-primary"
-        />
-        <span className="text-[11px] text-muted-foreground">
-          Supports streaming
-        </span>
-      </label>
+      <div
+        className={cn(
+          "grid transition-all duration-200 ease-out",
+          expanded
+            ? "grid-rows-[1fr] opacity-100"
+            : "grid-rows-[0fr] opacity-0",
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="px-3 pb-3 pt-0.5 space-y-2.5">
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Provider name"
+              className="text-xs h-8 font-medium"
+              spellCheck={false}
+            />
 
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={saved ? "outline" : "default"}
-          className="h-8 text-xs"
-          onClick={handleSave}
-          disabled={!label.trim() || !baseUrl.trim()}
-        >
-          {saved && <Check size={12} className="mr-1" />}
-          {saved ? "Saved" : "Save"}
-        </Button>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="flex items-center justify-center size-8 shrink-0 rounded-md border border-destructive/25 bg-destructive/5 text-destructive/70 hover:text-destructive hover:bg-destructive/15 transition-colors"
-          title="Remove provider"
-        >
-          <Trash2 size={14} />
-        </button>
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium text-muted-foreground/70">
+                API base URL
+              </label>
+              <Input
+                type="url"
+                value={baseUrl}
+                onChange={(e) => {
+                  setBaseUrl(e.target.value);
+                  setUrlError("");
+                }}
+                placeholder={basePlaceholder}
+                className={`text-xs h-8${urlError ? " border-destructive" : ""}`}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {urlError && (
+                <p className="text-[10px] text-destructive">{urlError}</p>
+              )}
+            </div>
+
+            {!isLocalhostUrl(baseUrl) && (
+              <div className="relative">
+                <Key
+                  size={12}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
+                />
+                <Input
+                  type={visible ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="API key"
+                  className="pl-7 pr-8 text-xs h-8"
+                />
+                <button
+                  type="button"
+                  onClick={() => setVisible(!visible)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={visible ? "Hide key" : "Show key"}
+                >
+                  {visible ? <EyeOff size={12} /> : <Eye size={12} />}
+                </button>
+              </div>
+            )}
+
+            <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+              <input
+                type="checkbox"
+                checked={supportsStreaming}
+                onChange={(e) => setSupportsStreaming(e.target.checked)}
+                className="size-3.5 rounded border-border accent-primary"
+              />
+              <span className="text-[11px] text-muted-foreground">
+                Supports streaming
+              </span>
+            </label>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={saved ? "outline" : "default"}
+                className={
+                  saved
+                    ? "text-success border-success/35 gap-1 h-8 text-xs"
+                    : "h-8 text-xs gap-1"
+                }
+                onClick={handleSave}
+                disabled={
+                  !label.trim() || !baseUrl.trim() || (!dirty && !isDraft)
+                }
+              >
+                {saved && <Check size={12} />}
+                {saved ? "Saved" : isDraft ? "Save" : "Update"}
+              </Button>
+              <ConfirmTrashButton
+                onConfirm={onRemove}
+                title={isDraft ? "Discard" : "Remove provider"}
+                size={8}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -384,38 +546,70 @@ function InferenceEndpointsSection({
   basePlaceholder: string;
 }) {
   const [, bump] = useState(0);
-  const profiles = getInferenceProfiles().filter((p) => p.kind === kind);
+  const persisted = getInferenceProfiles().filter((p) => p.kind === kind);
 
-  const updateProfile = useCallback(
+  // Drafts live only in component state — they don't hit storage until
+  // the user clicks Save with valid input. This prevents abandoned
+  // "Add provider" clicks from leaving empty rows behind.
+  const [drafts, setDrafts] = useState<InferenceProviderProfile[]>([]);
+
+  const persistedIds = useMemo(
+    () => new Set(persisted.map((p) => p.id)),
+    [persisted],
+  );
+  const visibleDrafts = drafts.filter((d) => !persistedIds.has(d.id));
+
+  const handleUpdate = useCallback(
     (id: string, patch: Partial<InferenceProviderProfile>) => {
+      const isDraft = drafts.some((d) => d.id === id);
+      if (isDraft) {
+        const draft = drafts.find((d) => d.id === id)!;
+        const promoted = { ...draft, ...patch };
+        void saveInferenceProfiles([...getInferenceProfiles(), promoted]).then(
+          () => {
+            setDrafts((ds) => ds.filter((d) => d.id !== id));
+            bump((n) => n + 1);
+          },
+        );
+        return;
+      }
       const all = getInferenceProfiles();
       const next = all.map((p) => (p.id === id ? { ...p, ...patch } : p));
       void saveInferenceProfiles(next).then(() => bump((n) => n + 1));
     },
-    [],
+    [drafts],
   );
 
-  const removeProfile = useCallback((id: string) => {
-    void saveInferenceProfiles(
-      getInferenceProfiles().filter((p) => p.id !== id),
-    ).then(() => bump((n) => n + 1));
-  }, []);
+  const handleRemove = useCallback(
+    (id: string) => {
+      if (drafts.some((d) => d.id === id)) {
+        setDrafts((ds) => ds.filter((d) => d.id !== id));
+        return;
+      }
+      void saveInferenceProfiles(
+        getInferenceProfiles().filter((p) => p.id !== id),
+      ).then(() => bump((n) => n + 1));
+    },
+    [drafts],
+  );
 
-  const addProfile = useCallback(() => {
-    const next: InferenceProviderProfile = {
-      id: crypto.randomUUID(),
-      label: "",
-      kind,
-      baseUrl: "",
-      apiKey: "",
-    };
-    void saveInferenceProfiles([...getInferenceProfiles(), next]).then(() =>
-      bump((n) => n + 1),
-    );
+  const addDraft = useCallback(() => {
+    setDrafts((ds) => [
+      ...ds,
+      {
+        id: crypto.randomUUID(),
+        label: "",
+        kind,
+        baseUrl: "",
+        apiKey: "",
+      },
+    ]);
   }, [kind]);
 
   const addLocalProfile = useCallback(
     (preset: LocalLlmPreset) => {
+      // Local presets ship with valid label + baseUrl, so we persist
+      // them directly — no draft step needed.
       const next: InferenceProviderProfile = {
         id: crypto.randomUUID(),
         label: `${preset.name} (local)`,
@@ -437,6 +631,8 @@ function InferenceEndpointsSection({
     return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
   }, []);
 
+  const all = [...persisted, ...visibleDrafts];
+
   return (
     <div
       className="rounded-xl border border-border/60 bg-card p-4 space-y-3"
@@ -447,22 +643,32 @@ function InferenceEndpointsSection({
           +
         </div>
         <div className="space-y-0.5">
-          <h3 className="text-[13px] font-semibold">{sectionTitle}</h3>
-          <p className="text-[11px] text-muted-foreground/60 leading-snug">
+          <h3 className="text-[13px] font-semibold tracking-[-0.005em]">
+            {sectionTitle}
+          </h3>
+          <p
+            className="text-[11px] leading-snug"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color:
+                "color-mix(in srgb, var(--muted-foreground) 70%, transparent)",
+            }}
+          >
             {description}
           </p>
         </div>
       </div>
 
-      {profiles.length > 0 && (
+      {all.length > 0 && (
         <div className="space-y-2">
-          {profiles.map((p) => (
+          {all.map((p) => (
             <InferenceProfileCard
               key={p.id}
               profile={p}
-              onUpdate={(patch) => updateProfile(p.id, patch)}
-              onRemove={() => removeProfile(p.id)}
+              onUpdate={(patch) => handleUpdate(p.id, patch)}
+              onRemove={() => handleRemove(p.id)}
               basePlaceholder={basePlaceholder}
+              isDraft={!persistedIds.has(p.id)}
             />
           ))}
         </div>
@@ -474,7 +680,7 @@ function InferenceEndpointsSection({
           variant="outline"
           size="sm"
           className="h-8 gap-1.5 text-xs sm:flex-1"
-          onClick={addProfile}
+          onClick={addDraft}
         >
           <Plus size={12} />
           Add provider
@@ -499,7 +705,7 @@ function InferenceEndpointsSection({
         </DropdownMenu>
       </div>
 
-      {profiles.some((p) => isLocalhostUrl(p.baseUrl)) && (
+      {persisted.some((p) => isLocalhostUrl(p.baseUrl)) && (
         <LocalLlmDeployedSiteHelp />
       )}
     </div>
@@ -628,53 +834,81 @@ export default function SettingsDialog({
     };
   }, [open, focusProvider]);
 
-  type SettingsEntry =
-    | {
-        kind: "builtin";
-        provider: BuiltinSettingsProvider;
-        placeholder: string;
-        docsUrl: string;
-        hasKey: boolean;
-      }
-    | { kind: "inference"; hasKey: boolean };
+  type BuiltinEntry = {
+    kind: "builtin";
+    provider: BuiltinSettingsProvider;
+    placeholder: string;
+    docsUrl: string;
+  };
+  type InferenceEntry = { kind: "inference" };
+  type SettingsEntry = BuiltinEntry | InferenceEntry;
 
-  const inferenceProfiles = getInferenceProfiles();
-  const inferenceHasKey = inferenceProfiles.some(
-    (p) => p.apiKey.trim() && p.baseUrl.trim() && p.label.trim(),
+  const baseEntries: SettingsEntry[] = useMemo(
+    () => [
+      {
+        kind: "builtin",
+        provider: "anthropic",
+        placeholder: "sk-ant-api03-...",
+        docsUrl: "https://console.anthropic.com/settings/keys",
+      },
+      {
+        kind: "builtin",
+        provider: "openai",
+        placeholder: "sk-proj-...",
+        docsUrl: "https://platform.openai.com/api-keys",
+      },
+      {
+        kind: "builtin",
+        provider: "xai",
+        placeholder: "xai-...",
+        docsUrl: "https://console.x.ai/",
+      },
+      { kind: "inference" },
+    ],
+    [],
   );
 
-  const entries: SettingsEntry[] = [
-    {
-      kind: "builtin",
-      provider: "anthropic",
-      placeholder: "sk-ant-api03-...",
-      docsUrl: "https://console.anthropic.com/settings/keys",
-      hasKey: !!getApiKey("anthropic"),
-    },
-    {
-      kind: "builtin",
-      provider: "openai",
-      placeholder: "sk-proj-...",
-      docsUrl: "https://platform.openai.com/api-keys",
-      hasKey: !!getApiKey("openai"),
-    },
-    {
-      kind: "builtin",
-      provider: "xai",
-      placeholder: "xai-...",
-      docsUrl: "https://console.x.ai/",
-      hasKey: !!getApiKey("xai"),
-    },
-    { kind: "inference", hasKey: inferenceHasKey },
-  ];
+  // Sort order is snapshotted when the dialog opens so saving a new key
+  // mid-session doesn't reflow rows under the user's cursor.
+  const computeOrderedEntries = useCallback((): SettingsEntry[] => {
+    const hasKeyFor = (entry: SettingsEntry) => {
+      if (entry.kind === "builtin") return !!getApiKey(entry.provider);
+      return getInferenceProfiles().some(
+        (p) => p.apiKey.trim() && p.baseUrl.trim() && p.label.trim(),
+      );
+    };
+    return [...baseEntries].sort((a, b) => {
+      const aHas = hasKeyFor(a) ? 0 : 1;
+      const bHas = hasKeyFor(b) ? 0 : 1;
+      return aHas - bHas;
+    });
+  }, [baseEntries]);
 
-  const sortedEntries = [...entries].sort((a, b) => {
-    const aHas = a.hasKey ? 0 : 1;
-    const bHas = b.hasKey ? 0 : 1;
-    return aHas - bHas;
-  });
+  // Re-snapshot whenever the dialog opens (or closes — invisible recomputes
+  // are harmless since the body isn't rendered). Within a single open
+  // session, order is stable so saving a key doesn't reflow rows.
+  // `open` is in deps intentionally — it's the trigger, not data.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const orderedEntries = useMemo(() => computeOrderedEntries(), [open]);
 
-  const configuredCount = entries.filter((e) => e.hasKey).length;
+  // Live count for the header description — recomputes on key changes.
+  const [configuredCount, setConfiguredCount] = useState(0);
+  useEffect(() => {
+    const recount = () => {
+      const builtinCount = (
+        ["anthropic", "openai", "xai"] as BuiltinSettingsProvider[]
+      ).filter((p) => !!getApiKey(p)).length;
+      const inferenceCount = getInferenceProfiles().some(
+        (p) => p.apiKey.trim() && p.baseUrl.trim() && p.label.trim(),
+      )
+        ? 1
+        : 0;
+      setConfiguredCount(builtinCount + inferenceCount);
+    };
+    recount();
+    window.addEventListener(KEYS_UPDATED_EVENT, recount);
+    return () => window.removeEventListener(KEYS_UPDATED_EVENT, recount);
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -695,14 +929,17 @@ export default function SettingsDialog({
             }}
           >
             {configuredCount > 0
-              ? `${configuredCount} provider${configuredCount === 1 ? "" : "s"} configured. Add more to expand your model catalog.`
-              : "Add a key for at least one provider to start chatting. You can connect Anthropic, OpenAI, xAI, or any OpenAI-compatible endpoint, or run inference locally with Ollama, LM Studio, or llama.cpp."}
+              ? `${configuredCount} configured. Keys live only in your browser.`
+              : "Add a key for any provider to start chatting. Keys live only in your browser."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="space-y-2.5 px-4 py-4">
-            {sortedEntries.map((entry) =>
+            <h3 className="px-1 pb-0.5">
+              <MonoLabel>Model providers</MonoLabel>
+            </h3>
+            {orderedEntries.map((entry) =>
               entry.kind === "builtin" ? (
                 <ProviderRow
                   key={entry.provider}
@@ -715,7 +952,7 @@ export default function SettingsDialog({
                   key="openai_compatible"
                   kind="openai_compatible"
                   sectionTitle="Custom providers"
-                  description="OpenAI-compatible endpoints (Fireworks, OpenRouter, etc.)"
+                  description="OpenAI-compatible APIs, including OpenRouter, Fireworks, vLLM, etc."
                   basePlaceholder="https://api.example.com/v1"
                 />
               ),
