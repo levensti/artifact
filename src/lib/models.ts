@@ -31,6 +31,13 @@ export interface Model {
   modelId: string;
   /** Set when `provider` is `openai_compatible`. */
   profileId?: string;
+  /**
+   * Unix epoch seconds when the provider published this model. Used to
+   * sort the picker (newest first) and to pick the "head" of a family
+   * when no alias is present. Optional because some providers don't
+   * return it.
+   */
+  created?: number;
 }
 
 export function isInferenceProviderType(p: Provider): p is "openai_compatible" {

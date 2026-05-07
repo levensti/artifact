@@ -17,6 +17,67 @@ interface ModelsRequest {
 interface ModelOption {
   id: string;
   label: string;
+  /** Unix epoch seconds when the provider published this model. */
+  created?: number;
+}
+
+/**
+ * OpenAI's `/v1/models` lists every artifact the key has access to —
+ * embeddings, audio, image generation, moderation, realtime, etc. We
+ * surface only chat-completions-capable models in the picker.
+ *
+ * The filter is token-based: split the model ID on `-` and `/`, then
+ * reject if any segment matches a non-chat modality keyword. This
+ * catches both prefixed (`whisper-1`) and infixed (`gpt-4o-mini-tts`)
+ * variant indicators, which OpenAI mixes freely. Substring matching
+ * would over-trigger (`instruct` clashes legitimate community models
+ * via openai-compatible endpoints), and prefix-only matching misses
+ * suffix variants — segment matching is the sweet spot.
+ */
+const OPENAI_NON_CHAT_TOKENS = new Set<string>([
+  "embedding",
+  "embed",
+  "whisper",
+  "tts",
+  "transcribe",
+  "audio",
+  "image",
+  "moderation",
+  "search",
+  "realtime",
+  "codex",
+  "davinci",
+  "babbage",
+  "curie",
+  "ada",
+]);
+
+function modelIdSegments(id: string): string[] {
+  return id.toLowerCase().split(/[-/]/);
+}
+
+function looksLikeChatModel(id: string): boolean {
+  // Restrict to OpenAI's chat families. New ones (gpt-5, o5, etc.)
+  // will continue to fit these prefixes; truly novel families would
+  // need an explicit add here, which is fine — they're rare events.
+  if (
+    !id.startsWith("gpt") &&
+    !/^o\d/.test(id) &&
+    !id.startsWith("chatgpt")
+  ) {
+    return false;
+  }
+  for (const seg of modelIdSegments(id)) {
+    if (OPENAI_NON_CHAT_TOKENS.has(seg)) return false;
+  }
+  // dall-e splits into ["dall", "e"] which neither alone is a token,
+  // so handle it as a substring.
+  if (/dall-?e/.test(id)) return false;
+  // Legacy completions endpoint, not chat — only OpenAI ships this id.
+  if (id === "gpt-3.5-turbo-instruct" || id.startsWith("gpt-3.5-turbo-instruct-")) {
+    return false;
+  }
+  return true;
 }
 
 function jsonError(message: string, status: number) {
@@ -114,11 +175,17 @@ async function fetchOpenAIModels(apiKey: string): Promise<ModelOption[]> {
   const data = await response.json();
   const models = Array.isArray(data?.data) ? data.data : [];
   return models
-    .map((m: { id?: string }) => m.id)
-    .filter((id: unknown): id is string => typeof id === "string")
-    .filter((id: string) => id.includes("gpt") || id.startsWith("o"))
-    .sort((a: string, b: string) => a.localeCompare(b))
-    .map((id: string) => ({ id, label: id }));
+    .filter(
+      (m: { id?: unknown }): m is { id: string; created?: number } =>
+        typeof m.id === "string" && looksLikeChatModel(m.id),
+    )
+    .map(
+      (m: { id: string; created?: number }): ModelOption => ({
+        id: m.id,
+        label: m.id,
+        created: typeof m.created === "number" ? m.created : undefined,
+      }),
+    );
 }
 
 async function fetchOpenAICompatibleModels(
@@ -152,10 +219,17 @@ async function fetchOpenAICompatibleModels(
       : [];
   const models = rawList;
   return models
-    .map((m: { id?: string }) => m.id)
-    .filter((id: unknown): id is string => typeof id === "string")
-    .sort((a: string, b: string) => a.localeCompare(b))
-    .map((id: string) => ({ id, label: id }));
+    .filter(
+      (m: { id?: unknown }): m is { id: string; created?: number } =>
+        typeof m.id === "string",
+    )
+    .map(
+      (m: { id: string; created?: number }): ModelOption => ({
+        id: m.id,
+        label: m.id,
+        created: typeof m.created === "number" ? m.created : undefined,
+      }),
+    );
 }
 
 async function fetchAnthropicModels(apiKey: string): Promise<ModelOption[]> {
@@ -169,12 +243,33 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelOption[]> {
   const data = await response.json();
   const models = Array.isArray(data?.data) ? data.data : [];
   return models
-    .map((m: { id?: string; display_name?: string }) => ({
-      id: m.id ?? "",
-      label: m.display_name || m.id || "",
-    }))
-    .filter((m: ModelOption) => !!m.id)
-    .sort((a: ModelOption, b: ModelOption) => a.label.localeCompare(b.label));
+    .filter(
+      (m: { id?: unknown }): m is {
+        id: string;
+        display_name?: string;
+        created_at?: string;
+      } => typeof m.id === "string" && m.id.length > 0,
+    )
+    .map(
+      (m: {
+        id: string;
+        display_name?: string;
+        created_at?: string;
+      }): ModelOption => {
+        // Anthropic returns ISO 8601 (e.g. "2024-10-22T00:00:00Z").
+        // Convert to Unix seconds for parity with the other providers.
+        let created: number | undefined;
+        if (typeof m.created_at === "string") {
+          const ts = Date.parse(m.created_at);
+          if (Number.isFinite(ts)) created = Math.floor(ts / 1000);
+        }
+        return {
+          id: m.id,
+          label: m.display_name || m.id,
+          created,
+        };
+      },
+    );
 }
 
 async function fetchXAIModels(apiKey: string): Promise<ModelOption[]> {
@@ -190,9 +285,16 @@ async function fetchXAIModels(apiKey: string): Promise<ModelOption[]> {
       if (!Array.isArray(mods)) return true;
       return mods.some((x) => x === "text");
     })
-    .map((m: { id?: string }) => m.id)
-    .filter((id: unknown): id is string => typeof id === "string")
-    .sort((a: string, b: string) => a.localeCompare(b))
-    .map((id: string) => ({ id, label: id }));
+    .filter(
+      (m: { id?: unknown }): m is { id: string; created?: number } =>
+        typeof m.id === "string",
+    )
+    .map(
+      (m: { id: string; created?: number }): ModelOption => ({
+        id: m.id,
+        label: m.id,
+        created: typeof m.created === "number" ? m.created : undefined,
+      }),
+    );
 }
 
