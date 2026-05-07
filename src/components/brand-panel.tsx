@@ -52,7 +52,7 @@ export function SignupPitch() {
   return (
     <div className="relative max-w-md">
       <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.03em]">
-        Discover the{" "}
+        Push the{" "}
         <span
           className="text-primary-foreground/85"
           style={{
@@ -66,31 +66,32 @@ export function SignupPitch() {
         </span>
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
-        Pair with AI to deeply understand research papers, technical blogs, or
-        anything you read.
+        Read papers, blogs, and arbitrary PDFs alongside a powerful AI
+        assistant. Build a personal journal that compounds with you, year
+        after year.
       </p>
 
       <ul className="mt-9 space-y-5">
         <Feature
           icon={<BookOpen strokeWidth={1.6} className="size-3.75" />}
-          title="Study anything"
+          title="Open anything you want to read"
         >
-          A powerful assistant at your fingertips as you review arXiv papers,
-          technical blogs, or your own custom content.
+          arXiv papers, technical blogs, your own PDFs, or any URL. Highlight a
+          passage to ask your assistant about it.
         </Feature>
         <Feature
           icon={<PenLine strokeWidth={1.6} className="size-3.75" />}
-          title="Automatically document your learnings"
+          title="A journal you can come back to"
         >
-          With one click, summarize your learnings during study sessions and
-          aggregate learnings across study sessions.
+          Snapshot a chat, draft an entry from your reading, or import a Claude
+          Code session. Look back on every concept and connection, weeks later.
         </Feature>
         <Feature
           icon={<KeyRound strokeWidth={1.6} className="size-3.75" />}
           title="Bring your own keys"
         >
-          BYOK for Anthropic, OpenAI, xAI, or any OpenAI-compatible API,
-          including local Ollama, LM Studio, or llama.cpp.
+          Anthropic, OpenAI, xAI, or any OpenAI-compatible API. Or run locally
+          with Ollama, LM Studio, or llama.cpp.
         </Feature>
       </ul>
     </div>

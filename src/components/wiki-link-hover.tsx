@@ -140,7 +140,7 @@ export default function WikiLinkHover({
               <div className="space-y-1">
                 <div className="font-semibold">Not yet in the wiki</div>
                 <div className="text-muted-foreground">
-                  <code className="text-[11px]">[[{slug}]]</code> — will be
+                  <code className="text-[11px]">[[{slug}]]</code> will be
                   created on a future ingest.
                 </div>
               </div>

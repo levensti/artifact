@@ -17,7 +17,7 @@ export function LandingInvitation({ signupHref }: LandingInvitationProps) {
               textWrap: "balance",
             }}
           >
-            Open a paper. Make a note. The rest happens quietly while you work.
+            Study anything. Capture what you learn. Push the frontier.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <a
@@ -40,7 +40,7 @@ export function LandingInvitation({ signupHref }: LandingInvitationProps) {
               </svg>
             </a>
             <span className="text-[13px] text-muted-foreground">
-              Free · Sign in with Google · Add your API keys
+              Free, no paid tier · MIT licensed · Bring your own keys
             </span>
           </div>
         </div>

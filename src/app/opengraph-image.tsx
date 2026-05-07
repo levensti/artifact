@@ -1,8 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
-export const alt =
-  "Artifact: a workspace for researchers to discover the frontier";
+export const alt = "Artifact: a workspace for researchers to push the frontier";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -72,7 +71,7 @@ export default async function OpengraphImage() {
               color: TEXT,
             }}
           >
-            Discover the frontier.
+            Push the frontier.
           </div>
           <div
             style={{
@@ -84,8 +83,8 @@ export default async function OpengraphImage() {
               maxWidth: 640,
             }}
           >
-            Read papers deeply, journal your learnings automatically, and never
-            lose a thread.
+            Read papers, blogs, and PDFs alongside a powerful AI assistant.
+            Build a journal that compounds with every insight.
           </div>
         </div>
 

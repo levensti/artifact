@@ -795,7 +795,7 @@ function ReadyView({
               ? "No Claude Code sessions found in this folder. Pick your ~/.claude/projects directory (press Cmd+Shift+. in the picker to reveal hidden folders on macOS)."
               : query.trim()
                 ? `No sessions match “${query.trim()}”.`
-                : "Nothing new to import — every session in this folder is already in your journal."}
+                : "Nothing new to import. Every session in this folder is already in your journal."}
           </div>
         ) : (
           <ul className="space-y-1">
@@ -907,7 +907,7 @@ function ImportingView({ phase }: ImportingViewProps) {
                     <AlertTriangle className="size-[13px] text-warning" />
                   )}
                   <span className="truncate text-muted-foreground">
-                    {label} —{" "}
+                    {label}:{" "}
                     {e.phase === "start"
                       ? "running agent"
                       : e.phase === "ok"

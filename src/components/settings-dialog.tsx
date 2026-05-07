@@ -55,11 +55,7 @@ interface ProviderRowProps {
   docsUrl: string;
 }
 
-export function ProviderRow({
-  provider,
-  placeholder,
-  docsUrl,
-}: ProviderRowProps) {
+export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
   const meta = PROVIDER_META[provider];
   const [stored, setStored] = useState(() => getApiKey(provider) ?? "");
   const [value, setValue] = useState(() => getApiKey(provider) ?? "");
@@ -751,7 +747,7 @@ function LocalLlmDeployedSiteHelp() {
               ollama serve
             </pre>
             <p className="text-muted-foreground/70">
-              Note: chat itself still won&apos;t work this way — the chat
+              Note: chat itself still won&apos;t work this way. The chat
               endpoint runs server-side.
             </p>
           </div>
@@ -782,7 +778,7 @@ function LocalLlmDeployedSiteHelp() {
               .
             </p>
             <p className="text-muted-foreground/70">
-              Cloudflare quick tunnels rotate the URL on every restart — re-run
+              Cloudflare quick tunnels rotate the URL on every restart. Re-run
               the command and update the Base URL when that happens.
             </p>
           </div>

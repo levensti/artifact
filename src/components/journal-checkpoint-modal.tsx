@@ -310,7 +310,7 @@ export default function JournalCheckpointModal({
 
           <p className="text-[11px] text-muted-foreground/60">
             The entry appears in your journal immediately and fills in as
-            tokens stream — you can keep working in the meantime.
+            tokens stream. You can keep working in the meantime.
           </p>
         </div>
 
