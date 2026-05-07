@@ -159,27 +159,35 @@ export async function runAnthropicAgentLoop(
 
     apiMessages.push({ role: "assistant", content: contentBlocks });
 
-    const toolResults: AnthropicToolResultBlock[] = [];
+    // Emit all tool_call events upfront so the UI shows the whole batch
+    // in-flight. Then execute in parallel — when the model emits multiple
+    // tool_use blocks in one turn (e.g. discover-mode sub-query searches),
+    // serial execution wastes seconds for no reason.
     for (const tc of toolCalls) {
       emit({ type: "tool_call", id: tc.id, name: tc.name, input: tc.input });
+    }
 
-      let output: string;
-      try {
-        const tool = getToolByName(tc.name);
-        output = tool
-          ? await tool.execute(tc.input, toolContext)
-          : `Unknown tool "${tc.name}". Available tools: ${tools.map((t) => t.name).join(", ")}`;
-      } catch (err) {
-        output = `Tool error: ${err instanceof Error ? err.message : "unknown error"}`;
-      }
+    const outputs = await Promise.all(
+      toolCalls.map(async (tc) => {
+        try {
+          const tool = getToolByName(tc.name);
+          return tool
+            ? await tool.execute(tc.input, toolContext)
+            : `Unknown tool "${tc.name}". Available tools: ${tools.map((t) => t.name).join(", ")}`;
+        } catch (err) {
+          return `Tool error: ${err instanceof Error ? err.message : "unknown error"}`;
+        }
+      }),
+    );
 
-      emit({ type: "tool_result", id: tc.id, name: tc.name, output });
-      toolResults.push({
+    const toolResults: AnthropicToolResultBlock[] = toolCalls.map((tc, i) => {
+      emit({ type: "tool_result", id: tc.id, name: tc.name, output: outputs[i] });
+      return {
         type: "tool_result",
         tool_use_id: tc.id,
-        content: output,
-      });
-    }
+        content: outputs[i],
+      };
+    });
 
     // If web_search returned the "no Brave key" sentinel, stop the loop
     // immediately. The chat UI will surface a configure card and pause until

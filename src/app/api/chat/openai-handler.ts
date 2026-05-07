@@ -189,27 +189,41 @@ export async function runOpenAIAgentLoop(
       })),
     });
 
-    let braveKeyRequired = false;
-    for (const tc of toolCalls) {
-      let parsedInput: Record<string, unknown> = {};
+    // Parse inputs and emit tool_call events upfront so the UI shows the
+    // batch in-flight, then execute all calls in parallel. Multiple tool
+    // calls in one turn (discover-mode sub-query searches, in particular)
+    // shouldn't serialize.
+    const parsedInputs = toolCalls.map((tc) => {
       try {
-        parsedInput = JSON.parse(tc.function.arguments);
-      } catch { /* empty */ }
-
-      emit({ type: "tool_call", id: tc.id, name: tc.function.name, input: parsedInput });
-
-      let output: string;
-      try {
-        const tool = getToolByName(tc.function.name);
-        output = tool
-          ? await tool.execute(parsedInput, toolContext)
-          : `Unknown tool "${tc.function.name}".`;
-      } catch (err) {
-        output = `Tool error: ${err instanceof Error ? err.message : "unknown error"}`;
+        return JSON.parse(tc.function.arguments) as Record<string, unknown>;
+      } catch {
+        return {} as Record<string, unknown>;
       }
+    });
 
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc = toolCalls[i];
+      emit({ type: "tool_call", id: tc.id, name: tc.function.name, input: parsedInputs[i] });
+    }
+
+    const outputs = await Promise.all(
+      toolCalls.map(async (tc, i) => {
+        try {
+          const tool = getToolByName(tc.function.name);
+          return tool
+            ? await tool.execute(parsedInputs[i], toolContext)
+            : `Unknown tool "${tc.function.name}".`;
+        } catch (err) {
+          return `Tool error: ${err instanceof Error ? err.message : "unknown error"}`;
+        }
+      }),
+    );
+
+    let braveKeyRequired = false;
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc = toolCalls[i];
+      const output = outputs[i];
       if (output === BRAVE_KEY_REQUIRED_SENTINEL) braveKeyRequired = true;
-
       emit({ type: "tool_result", id: tc.id, name: tc.function.name, output });
       apiMessages.push({
         role: "tool",

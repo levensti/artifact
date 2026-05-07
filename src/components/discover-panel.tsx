@@ -16,12 +16,7 @@ import {
   saveSelectedModel,
 } from "@/lib/client-data";
 import ModelSelector from "./model-selector";
-import MarkdownMessage from "./markdown-message";
-import {
-  ToolCallStep,
-  ThinkingIndicator,
-} from "./chat-step-renderers";
-import DiscoverArxivCards from "./discover-arxiv-cards";
+import DiscoverSteps from "./discover-picks";
 import { useDiscoverChat, type DiscoverMessage } from "@/hooks/use-discover-chat";
 import type { AgentStep } from "@/hooks/use-chat";
 import { useSettingsOpener } from "./settings-opener-context";
@@ -34,39 +29,6 @@ const EXAMPLE_QUERIES = [
   "Diffusion model alignment, post-DPO",
   "Test-time compute scaling laws",
 ];
-
-/* ------------------------------------------------------------------ */
-/*  Step renderer                                                      */
-/* ------------------------------------------------------------------ */
-
-function renderSteps(steps: AgentStep[], live: boolean) {
-  return steps.map((step, i) => {
-    switch (step.kind) {
-      case "thinking":
-        return <ThinkingIndicator key={`think-${i}`} />;
-      case "text":
-        return step.text ? (
-          <MarkdownMessage key={`text-${i}`} content={step.text} />
-        ) : null;
-      case "tool_call": {
-        const isArxiv = step.name === "arxiv_search";
-        return (
-          <div key={step.id}>
-            <ToolCallStep
-              name={step.name}
-              input={step.input}
-              output={step.output}
-              isLive={live}
-            />
-            {isArxiv && step.output ? (
-              <DiscoverArxivCards output={step.output} />
-            ) : null}
-          </div>
-        );
-      }
-    }
-  });
-}
 
 /* ------------------------------------------------------------------ */
 /*  Message bubbles                                                    */
@@ -85,19 +47,13 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantBubble({
-  steps,
-  live,
-}: {
-  steps: AgentStep[];
-  live: boolean;
-}) {
+function AssistantBubble({ steps }: { steps: AgentStep[] }) {
   return (
     <div
       className="max-w-full text-[13px] leading-relaxed text-foreground"
       style={{ fontFamily: "var(--font-reading)" }}
     >
-      {renderSteps(steps, live)}
+      <DiscoverSteps steps={steps} />
     </div>
   );
 }
@@ -294,7 +250,6 @@ export default function DiscoverPanel() {
                         ? chat.liveSteps
                         : (m.steps ?? [])
                     }
-                    live={m.id === chat.streamingMsgId}
                   />
                 ),
               )}
