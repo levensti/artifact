@@ -209,7 +209,7 @@ export default function Sidebar({
                       "color-mix(in srgb, var(--primary) 75%, transparent)",
                   }}
                 >
-                  Discover the frontier
+                  Push the frontier
                 </span>
               </div>
             </div>
@@ -285,7 +285,7 @@ export default function Sidebar({
             >
               <AlertCircle className="mt-px size-3 shrink-0" strokeWidth={2} />
               <span className="min-w-0 flex-1 truncate" title={ingestError}>
-                Ingest failed — {ingestError}
+                Ingest failed: {ingestError}
               </span>
               <button
                 type="button"
@@ -383,8 +383,8 @@ export default function Sidebar({
                       title={
                         isImported
                           ? sharerFirstName
-                            ? `${review.title} — imported from ${sharerFirstName}'s share`
-                            : `${review.title} — imported from a share`
+                            ? `${review.title} (imported from ${sharerFirstName}'s share)`
+                            : `${review.title} (imported from a share)`
                           : review.title
                       }
                       onClick={() => router.push(`/review/${review.id}`)}

@@ -17,7 +17,7 @@ const apexHost = getApexHost() ?? "withartifact.com";
 const SITE_URL = `https://${apexHost}`;
 const SITE_TITLE = "Artifact";
 const SITE_DESCRIPTION =
-  "A workspace for researchers to discover the frontier.";
+  "A workspace for researchers to push the frontier.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

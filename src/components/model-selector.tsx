@@ -622,7 +622,7 @@ export default function ModelSelector({
               onClick={() => setRefetchTick((t) => t + 1)}
             >
               <RefreshCw className="size-3.5 opacity-80" />
-              No models found — retry
+              No models found. Retry
             </DropdownMenuItem>
           )}
 
