@@ -59,7 +59,7 @@ export function LandingNav({ signupHref }: LandingNavProps) {
           href={signupHref}
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
         >
-          Open Artifact
+          Get started
           <svg
             viewBox="0 0 16 16"
             fill="none"

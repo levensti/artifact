@@ -305,7 +305,7 @@ export default function PdfViewer({
             <ChevronUp size={14} />
           </Button>
           <span className="min-w-[52px] sm:min-w-[56px] text-center text-[11px] sm:text-xs font-semibold tabular-nums leading-none text-foreground/70">
-            {currentPage} / {numPages || "—"}
+            {currentPage} / {numPages || "·"}
           </span>
           <Button
             variant="ghost"

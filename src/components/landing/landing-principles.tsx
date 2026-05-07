@@ -12,11 +12,11 @@ const PRINCIPLES: Principle[] = [
   },
   {
     title: "Bring your own keys",
-    body: "Use Anthropic, OpenAI, xAI, or any OpenAI-compatible provider: OpenRouter, Fireworks, Together. Or run inference locally with Ollama, LM Studio, or llama.cpp. Pick from one model selector that lists everything you&rsquo;ve configured.",
+    body: "Use Anthropic, OpenAI, xAI, or any OpenAI-compatible provider: OpenRouter, Fireworks, Together. Or run inference locally with Ollama, LM Studio, or llama.cpp.",
   },
   {
     title: "Trust every answer",
-    body: "Click any citation chip to jump straight to the passage. Every answer the assistant gives traces back to where it came from in the PDF or page.",
+    body: "Click any citation chip to jump straight to the passage. Every answer your assistant gives traces back to where it came from in the PDF or page.",
   },
   {
     title: "Read for hours",
@@ -33,7 +33,9 @@ export function LandingPrinciples() {
         </aside>
         <div>
           <h2 className="landing-section-title">
-            Open by default. Yours to extend.
+            Free, open source,
+            <br />
+            and yours to fork.
           </h2>
           <p
             className="mt-[18px] max-w-[620px] text-[17px] leading-[1.65]"
@@ -44,8 +46,8 @@ export function LandingPrinciples() {
             }}
           >
             Read the code. Self-host it, or use the free hosted version. Bring
-            your own AI keys, or point it at a local model. Trust every
-            answer, because every answer cites the source.
+            your own AI keys, or point it at a local model. Trust every answer,
+            because every answer cites the source.
           </p>
 
           <div className="mt-9 grid max-w-[760px] grid-cols-1 gap-x-14 gap-y-9 sm:grid-cols-2">
@@ -61,7 +63,8 @@ export function LandingPrinciples() {
                   className="mt-2 text-[14.5px] leading-[1.6]"
                   style={{
                     fontFamily: "var(--font-reading)",
-                    color: "color-mix(in srgb, var(--foreground) 75%, transparent)",
+                    color:
+                      "color-mix(in srgb, var(--foreground) 75%, transparent)",
                   }}
                 >
                   {p.body}

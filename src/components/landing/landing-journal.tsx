@@ -19,20 +19,22 @@ export function LandingJournal() {
         </aside>
         <div>
           <h2 className="landing-section-title">
-            Never lose what you read again.
+            A journal that compounds
+            <br />
+            with you as you explore the frontier.
           </h2>
           <p
-            className="mt-[18px] max-w-[620px] text-[17px] leading-[1.65]"
+            className="mt-4.5 max-w-155 text-[17px] leading-[1.65]"
             style={{
               fontFamily: "var(--font-reading)",
               color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
               textWrap: "pretty",
             }}
           >
-            Just read. In the background, an agent drafts a recap of your
-            session, a weekly digest, a wiki page that grows around the topics
-            you keep returning to. Edit it, ignore it, or export it as a
-            bundle.
+            Snapshot a chat with one click. Draft an entry from your reading.
+            Import a Claude Code session. Every entry compounds: concepts,
+            definitions, connections you can come back to weeks, months, years
+            later.
           </p>
 
           <div className="landing-journal-entry">
@@ -40,7 +42,8 @@ export function LandingJournal() {
               className="font-mono text-[10.5px] uppercase"
               style={{
                 letterSpacing: "0.16em",
-                color: "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
+                color:
+                  "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
               }}
             >
               Today · Jan 14, 2026 · Daily recap
@@ -72,7 +75,7 @@ export function LandingJournal() {
                 <a href="#" className="wiki">
                   Toolformer
                 </a>{" "}
-                and asked the assistant whether self-supervised tool calls were
+                and asked your assistant whether self-supervised tool calls were
                 really retrieval in disguise.
               </p>
               <p>
@@ -130,7 +133,9 @@ function Stat({ children }: { children: React.ReactNode }) {
   return (
     <b
       className="font-semibold"
-      style={{ color: "color-mix(in srgb, var(--foreground) 80%, transparent)" }}
+      style={{
+        color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
+      }}
     >
       {children}
     </b>

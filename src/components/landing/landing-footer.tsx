@@ -33,13 +33,13 @@ export function LandingFooter({ signupHref, githubUrl }: LandingFooterProps) {
                 "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
             }}
           >
-            · A research workspace · MIT licensed
+            · Read deeply, push the frontier. · MIT licensed
           </span>
         </div>
 
         <nav className="flex flex-wrap items-center gap-x-6 gap-y-2">
           <a href={signupHref} className="hover:text-foreground">
-            Open Artifact
+            Get started
           </a>
           <a
             href={githubUrl}

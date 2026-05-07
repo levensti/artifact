@@ -16,15 +16,16 @@ export function LandingSurfaces() {
             One workspace. Three surfaces.
           </h2>
           <p
-            className="mt-[18px] max-w-[620px] text-[17px] leading-[1.65]"
+            className="mt-4.5 max-w-155 text-[17px] leading-[1.65]"
             style={{
               fontFamily: "var(--font-reading)",
               color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
               textWrap: "pretty",
             }}
           >
-            Open a paper from one place. Read it alongside an AI. Find what
-            you&apos;ve learned weeks later in a journal that wrote itself.
+            Open a paper from one place. Read it alongside your assistant.
+            Build a journal that compounds with every concept, every
+            connection, every insight you find.
           </p>
 
           <div className="mt-10">
@@ -38,15 +39,15 @@ export function LandingSurfaces() {
             <Surface
               num="02"
               kicker="Review"
-              title="Ask the assistant about anything you highlight"
-              body="Read in the middle. Take notes on the right. Ask the assistant on the left. Highlight any sentence to ask a question or pin a note. The conversation stays tied to the passage and lives inside the paper."
+              title="Ask your assistant about anything you highlight"
+              body="Read in the middle. Take notes on the right. Ask your assistant on the left. Highlight any sentence to ask a question or pin a note. The conversation stays tied to the passage and lives inside the paper."
               specimen={<ReviewSpecimen />}
             />
             <Surface
               num="03"
               kicker="Journal"
-              title="Let the journal write itself"
-              body="Snapshot a chat. Compose an entry from a prompt. Import a Claude Code session. Reading sessions roll up into daily recaps and weekly digests, cross-linked across the topics you keep returning to."
+              title="Build a journal you can come back to"
+              body="Snapshot a chat into an entry with one click. Draft an entry from your recent reading and notes. Import a Claude Code session and Artifact synthesizes it into wiki entries. Look back on every concept, definition, and connection you've made, weeks or months later."
               specimen={<JournalSpecimen />}
               last
             />
@@ -93,9 +94,7 @@ function Surface({
         >
           {num}
         </span>
-        <span
-          className="font-sans text-[15px] font-semibold tracking-[-0.012em] text-foreground md:text-[16px]"
-        >
+        <span className="font-sans text-[15px] font-semibold tracking-[-0.012em] text-foreground md:text-[16px]">
           {kicker}
         </span>
       </div>
@@ -144,10 +143,8 @@ function SpecimenCard({
         className="flex items-center gap-2 border-b px-3.5 py-2.5 font-mono text-[11px] text-muted-foreground"
         style={{
           letterSpacing: "0.04em",
-          borderColor:
-            "color-mix(in srgb, var(--border) 70%, transparent)",
-          background:
-            "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
+          borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
+          background: "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
         }}
       >
         <span
@@ -165,9 +162,7 @@ function SpecimenCard({
 function HomeSpecimen() {
   return (
     <SpecimenCard label={<span>artifact · start a review</span>}>
-      <div
-        className="flex items-center gap-2.5 rounded-md border border-border bg-background px-3 py-2.5 text-[13px] text-foreground"
-      >
+      <div className="flex items-center gap-2.5 rounded-md border border-border bg-background px-3 py-2.5 text-[13px] text-foreground">
         <svg
           viewBox="0 0 16 16"
           fill="none"
@@ -183,7 +178,9 @@ function HomeSpecimen() {
         </svg>
         <span
           className="font-mono text-[12.5px]"
-          style={{ color: "color-mix(in srgb, var(--foreground) 75%, transparent)" }}
+          style={{
+            color: "color-mix(in srgb, var(--foreground) 75%, transparent)",
+          }}
         >
           arxiv.org/abs/2310.06770
         </span>
@@ -201,7 +198,9 @@ function HomeSpecimen() {
       </div>
       <div
         className="mt-2.5 text-[11.5px]"
-        style={{ color: "color-mix(in srgb, var(--muted-foreground) 80%, transparent)" }}
+        style={{
+          color: "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
+        }}
       >
         or drop a PDF · or paste any URL · runs entirely in your browser
       </div>
@@ -241,8 +240,8 @@ function ReviewSpecimen() {
         <span className="landing-hl">
           generating a patch that resolves the described problem
         </span>
-        . The benchmark is meant to be persistent: drawn from new issues as
-        they arise, to resist contamination.
+        . The benchmark is meant to be persistent: drawn from new issues as they
+        arise, to resist contamination.
       </p>
     </SpecimenCard>
   );
@@ -376,7 +375,8 @@ function JCard({
         <span
           className="text-[10px]"
           style={{
-            color: "color-mix(in srgb, var(--muted-foreground) 70%, transparent)",
+            color:
+              "color-mix(in srgb, var(--muted-foreground) 70%, transparent)",
             fontFeatureSettings: '"tnum"',
           }}
         >
@@ -388,7 +388,9 @@ function JCard({
       </h4>
       <p
         className="my-1.5 mb-2.5 text-[11px] leading-[1.5]"
-        style={{ color: "color-mix(in srgb, var(--muted-foreground) 90%, transparent)" }}
+        style={{
+          color: "color-mix(in srgb, var(--muted-foreground) 90%, transparent)",
+        }}
       >
         {body}
       </p>

@@ -55,7 +55,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
             </MonoLabel>
             <h1 className="mt-3.5 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[32px]">
               {isSignup
-                ? "Supercharge your research journey."
+                ? "Set up your reading workspace."
                 : "Welcome back."}
             </h1>
             <p
@@ -66,7 +66,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
               }}
             >
               {isSignup
-                ? "Sign up to start setting up your workspace."
+                ? "Sign in with Google. Add your API keys. Start reading."
                 : "Sign in to pick up where you left off."}
             </p>
           </header>
