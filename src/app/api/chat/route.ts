@@ -63,6 +63,14 @@ interface ChatRequest {
   /** Set when the review is for an arbitrary web page rather than a paper/PDF. */
   sourceUrl?: string;
   /**
+   * Selects which system prompt and tool subset to use. Default is the
+   * paper/web reading agent. `"discover"` swaps in a discovery-focused
+   * prompt and (since there's no paper context) only registers
+   * `arxiv_search` and `web_search` — paper-internal tools are already
+   * gated by `parsedPaper` so they self-disable in this mode.
+   */
+  mode?: "discover";
+  /**
    * User-provided Brave Search API key. When absent the `web_search` tool
    * returns a sentinel that the chat UI surfaces as a configure card.
    */
@@ -117,6 +125,21 @@ Format:
 - For arXiv papers found via search, include the link https://arxiv.org/abs/ID.
 - Default to prose. Use lists or headers only when the answer is genuinely list-shaped (comparing N items, an M-step walkthrough).`;
 
+const DISCOVERY_SYSTEM_PROMPT = `You are a research discovery agent. The user gives you a research interest; your job is to surface candidate papers from arXiv and the open web — not to teach the topic, not to summarize abstracts at length. They will read the papers themselves once they pick.
+
+Workflow per turn:
+- If the query is genuinely ambiguous (one or two bare words, no method/task/time-window), ask exactly one clarifying question and stop. Don't ask for clarification on a query that's already specific enough to search.
+- Otherwise, call \`arxiv_search\` immediately. If the first call returns weak results, try one or two reformulations (broader keywords, alternate terminology) — at most three search calls in a single turn.
+- Use \`web_search\` only for very recent work (last few weeks), surveys/blog posts that summarize a subfield, or when arXiv returns nothing useful. If \`web_search\` returns "BRAVE_KEY_REQUIRED", the UI is already prompting the user — don't verbalize the failure, just continue with arXiv results.
+
+Reply format:
+- A compact ranked list of 5–10 papers. For each: **Title** (year, venue) — one short sentence on why it matches the query. Always include https://arxiv.org/abs/ID when available.
+- Don't paste full abstracts. Don't pad with caveats. Don't restate the query.
+- If the user asks for more on a specific result, expand inline with relevance/method details, not the full abstract.
+- Never invent papers. If a search returns nothing useful, say so plainly and suggest alternative phrasings.
+
+Tone: dense, librarian-level. The user is technical.`;
+
 const WEB_SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a reading and analysis tool. You have deep expertise across all domains — technology, science, business, humanities, and beyond.
 
 Your mission: help the user deeply understand the web page they are reading, explore related topics, and connect ideas.
@@ -135,7 +158,11 @@ Guidelines:
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
 - Use tools when they add value, but don't force tool use for simple questions you can answer directly from the page context`;
 
-function getSystemPrompt(sourceUrl: string | undefined): string {
+function getSystemPrompt(
+  sourceUrl: string | undefined,
+  mode: ChatRequest["mode"],
+): string {
+  if (mode === "discover") return DISCOVERY_SYSTEM_PROMPT;
   return sourceUrl ? WEB_SYSTEM_PROMPT : PAPER_SYSTEM_PROMPT;
 }
 
@@ -166,6 +193,7 @@ export async function POST(req: NextRequest) {
     sourceUrl,
     braveSearchApiKey,
     skipWebSearch,
+    mode,
   } = body;
 
   if (!isProvider(provider)) {
@@ -224,7 +252,7 @@ export async function POST(req: NextRequest) {
     reviewId,
     braveSearchApiKey: trimmedBraveKey || undefined,
   };
-  const systemPrompt = getSystemPrompt(sourceUrl);
+  const systemPrompt = getSystemPrompt(sourceUrl, mode);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
