@@ -227,7 +227,14 @@ function bucketByFamily(models: Model[]): FamilyBucket[] {
     buckets.push({ family, head, tail, freshness });
   }
 
-  buckets.sort((a, b) => b.freshness - a.freshness);
+  // Primary order: newest family first. Fallback: alphabetical, so
+  // providers without `created` data (some openai-compatible
+  // aggregators) still get a deterministic order instead of whatever
+  // order they happened to serve.
+  buckets.sort((a, b) => {
+    if (a.freshness !== b.freshness) return b.freshness - a.freshness;
+    return a.family.localeCompare(b.family);
+  });
   return buckets;
 }
 

@@ -31,10 +31,16 @@ interface ModelOption {
  * Anthropic and xAI's own endpoints already pre-filter by modality so
  * this list isn't reapplied there.
  *
- * Matching is *segment-based*: we split the model ID on `-` and `/` and
- * reject if any segment equals a token in this set. That catches both
- * `whisper-1` (prefix) and `gpt-4o-mini-tts` (suffix) without the
- * false-positives a substring match would cause (`instruct`, `mini`).
+ * Matching is *segment-prefix*: we split the model ID on `-` and `/`
+ * and reject if any segment STARTS WITH a token in this set. That
+ * catches `whisper-1` (prefix), `gpt-4o-mini-tts` (suffix), and
+ * `imagen-3.0-generate` (variant family — segment "imagen" starts with
+ * "image"). It deliberately avoids substring matches across segments,
+ * so `research` doesn't trigger `search` and `adapter` doesn't trigger
+ * `ada`. The cost is a small risk that a token-prefixed segment
+ * (e.g., "imageless-chat", if anyone ever ships such a thing) would be
+ * dropped — accept that and add a more specific compound regex below
+ * if it bites.
  *
  * When you add a new keyword here:
  *   - keep it lowercase
@@ -43,8 +49,8 @@ interface ModelOption {
  *   - put it under the right modality heading
  */
 const NON_CHAT_TOKENS = new Set<string>([
-  // — Embeddings
-  "embedding",
+  // — Embeddings (matches "embed", "embedding", "embeddings" under
+  //   prefix matching)
   "embed",
 
   // — Audio: speech-to-text
@@ -57,10 +63,16 @@ const NON_CHAT_TOKENS = new Set<string>([
   // — Audio: combined / unspecified
   "audio",
 
+  // — Audio: music generation (Gemini Lyria, etc.)
+  "lyria",
+
   // — Image generation
   "image",
-  // (also: `dall-e` — handled as a substring below because the
-  //  internal dash splits into ["dall", "e"], neither a useful token)
+  // (also: `dall-e` — handled in NON_CHAT_COMPOUND_PATTERNS below)
+
+  // — Video generation
+  "video",
+  "veo",
 
   // — Moderation
   "moderation",
@@ -75,6 +87,14 @@ const NON_CHAT_TOKENS = new Set<string>([
   // — Code-specific completion (Codex)
   "codex",
 
+  // — Embodied / robotics (Gemini Robotics)
+  "robotics",
+
+  // — QA endpoints (Gemini AQA — Attributed Question Answering, a
+  //   distinct API surface from chat. The user-facing keyword is
+  //   "qa" but it appears in model ids only as "aqa".)
+  "aqa",
+
   // — Legacy pre-chat completion families
   "davinci",
   "babbage",
@@ -82,19 +102,38 @@ const NON_CHAT_TOKENS = new Set<string>([
   "ada",
 ]);
 
+/**
+ * Tokens that contain internal dashes — segment-splitting on `-`
+ * destroys them, so we substring-match instead. Keep this list short:
+ * substring matches are riskier than segment matches because they can
+ * fire on partial overlaps. Each entry should be specific enough that
+ * no legitimate chat model would contain it as a substring.
+ */
+const NON_CHAT_COMPOUND_PATTERNS: RegExp[] = [
+  // OpenAI DALL-E (image generation)
+  /dall-?e/i,
+  // Gemini Computer Use API (agent-loop transport, not chat completions)
+  /computer-use/i,
+];
+
 function modelIdSegments(id: string): string[] {
   return id.toLowerCase().split(/[-/]/);
 }
 
 /**
  * Provider-agnostic modality filter. True if the model ID looks like
- * a non-chat-completions model (embeddings, audio, image, etc.).
+ * a non-chat-completions model (embeddings, audio, image, video,
+ * robotics, etc.).
  */
 function isNonChatModalityId(id: string): boolean {
   for (const seg of modelIdSegments(id)) {
-    if (NON_CHAT_TOKENS.has(seg)) return true;
+    for (const token of NON_CHAT_TOKENS) {
+      if (seg.startsWith(token)) return true;
+    }
   }
-  if (/dall-?e/i.test(id)) return true;
+  for (const pattern of NON_CHAT_COMPOUND_PATTERNS) {
+    if (pattern.test(id)) return true;
+  }
   return false;
 }
 
