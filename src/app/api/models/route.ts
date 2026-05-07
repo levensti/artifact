@@ -22,30 +22,60 @@ interface ModelOption {
 }
 
 /**
- * OpenAI's `/v1/models` lists every artifact the key has access to —
- * embeddings, audio, image generation, moderation, realtime, etc. We
- * surface only chat-completions-capable models in the picker.
+ * Modality keywords that mark a model as NOT chat-completions-capable.
  *
- * The filter is token-based: split the model ID on `-` and `/`, then
- * reject if any segment matches a non-chat modality keyword. This
- * catches both prefixed (`whisper-1`) and infixed (`gpt-4o-mini-tts`)
- * variant indicators, which OpenAI mixes freely. Substring matching
- * would over-trigger (`instruct` clashes legitimate community models
- * via openai-compatible endpoints), and prefix-only matching misses
- * suffix variants — segment matching is the sweet spot.
+ * Applied uniformly to every provider that returns mixed catalogs —
+ * OpenAI, OpenAI-compatible aggregators (OpenRouter, Together,
+ * Fireworks, etc.) — so a single pass blocks `whisper-1`, `gpt-image-1`,
+ * `text-embedding-3-large`, `claude-3-5-haiku-tts` (hypothetical), etc.
+ * Anthropic and xAI's own endpoints already pre-filter by modality so
+ * this list isn't reapplied there.
+ *
+ * Matching is *segment-based*: we split the model ID on `-` and `/` and
+ * reject if any segment equals a token in this set. That catches both
+ * `whisper-1` (prefix) and `gpt-4o-mini-tts` (suffix) without the
+ * false-positives a substring match would cause (`instruct`, `mini`).
+ *
+ * When you add a new keyword here:
+ *   - keep it lowercase
+ *   - ensure it's specific enough that no legitimate chat model would
+ *     legitimately use it as a `-`-delimited segment
+ *   - put it under the right modality heading
  */
-const OPENAI_NON_CHAT_TOKENS = new Set<string>([
+const NON_CHAT_TOKENS = new Set<string>([
+  // — Embeddings
   "embedding",
   "embed",
+
+  // — Audio: speech-to-text
   "whisper",
-  "tts",
   "transcribe",
+
+  // — Audio: text-to-speech
+  "tts",
+
+  // — Audio: combined / unspecified
   "audio",
+
+  // — Image generation
   "image",
+  // (also: `dall-e` — handled as a substring below because the
+  //  internal dash splits into ["dall", "e"], neither a useful token)
+
+  // — Moderation
   "moderation",
+
+  // — Search-augmented endpoints (OpenAI-specific surface, not chat
+  //   completions — distinct from chat models that *call* a search tool)
   "search",
+
+  // — Realtime API (separate streaming transport, not chat completions)
   "realtime",
+
+  // — Code-specific completion (Codex)
   "codex",
+
+  // — Legacy pre-chat completion families
   "davinci",
   "babbage",
   "curie",
@@ -56,10 +86,24 @@ function modelIdSegments(id: string): string[] {
   return id.toLowerCase().split(/[-/]/);
 }
 
-function looksLikeChatModel(id: string): boolean {
-  // Restrict to OpenAI's chat families. New ones (gpt-5, o5, etc.)
-  // will continue to fit these prefixes; truly novel families would
-  // need an explicit add here, which is fine — they're rare events.
+/**
+ * Provider-agnostic modality filter. True if the model ID looks like
+ * a non-chat-completions model (embeddings, audio, image, etc.).
+ */
+function isNonChatModalityId(id: string): boolean {
+  for (const seg of modelIdSegments(id)) {
+    if (NON_CHAT_TOKENS.has(seg)) return true;
+  }
+  if (/dall-?e/i.test(id)) return true;
+  return false;
+}
+
+/**
+ * OpenAI-specific filter: gate by the chat-family prefixes (gpt*, o\d,
+ * chatgpt*) since OpenAI's `/v1/models` lists arbitrary artifacts, then
+ * apply the shared modality exclusion.
+ */
+function looksLikeOpenAIChatModel(id: string): boolean {
   if (
     !id.startsWith("gpt") &&
     !/^o\d/.test(id) &&
@@ -67,14 +111,14 @@ function looksLikeChatModel(id: string): boolean {
   ) {
     return false;
   }
-  for (const seg of modelIdSegments(id)) {
-    if (OPENAI_NON_CHAT_TOKENS.has(seg)) return false;
-  }
-  // dall-e splits into ["dall", "e"] which neither alone is a token,
-  // so handle it as a substring.
-  if (/dall-?e/.test(id)) return false;
-  // Legacy completions endpoint, not chat — only OpenAI ships this id.
-  if (id === "gpt-3.5-turbo-instruct" || id.startsWith("gpt-3.5-turbo-instruct-")) {
+  if (isNonChatModalityId(id)) return false;
+  // Legacy `/v1/completions`-only model; "instruct" alone is too common
+  // a token (community chat-instruct-tuned models use it) to blanket
+  // exclude, so handle this OpenAI-specific id explicitly.
+  if (
+    id === "gpt-3.5-turbo-instruct" ||
+    id.startsWith("gpt-3.5-turbo-instruct-")
+  ) {
     return false;
   }
   return true;
@@ -177,7 +221,7 @@ async function fetchOpenAIModels(apiKey: string): Promise<ModelOption[]> {
   return models
     .filter(
       (m: { id?: unknown }): m is { id: string; created?: number } =>
-        typeof m.id === "string" && looksLikeChatModel(m.id),
+        typeof m.id === "string" && looksLikeOpenAIChatModel(m.id),
     )
     .map(
       (m: { id: string; created?: number }): ModelOption => ({
@@ -221,7 +265,7 @@ async function fetchOpenAICompatibleModels(
   return models
     .filter(
       (m: { id?: unknown }): m is { id: string; created?: number } =>
-        typeof m.id === "string",
+        typeof m.id === "string" && !isNonChatModalityId(m.id),
     )
     .map(
       (m: { id: string; created?: number }): ModelOption => ({
