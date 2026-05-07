@@ -6,7 +6,6 @@ import {
   ChevronDown,
   Circle,
   CircleCheck,
-  ExternalLink,
   Eye,
   EyeOff,
   Globe,

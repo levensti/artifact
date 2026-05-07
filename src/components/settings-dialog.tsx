@@ -7,7 +7,6 @@ import {
   Check,
   ChevronDown,
   Cpu,
-  ExternalLink,
   Key,
   Plus,
   Trash2,
