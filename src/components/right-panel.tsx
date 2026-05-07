@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { PanelRightClose, PanelRightOpen, Sparkles } from "lucide-react";
 import type { Model } from "@/lib/models";
 import type { Annotation } from "@/lib/annotations";
 import ChatPanel from "./chat-panel";
@@ -18,6 +18,8 @@ interface RightPanelProps {
   selectedModel: Model | null;
   onModelChange: (model: Model | null) => void;
   sourceUrl?: string | null;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
 /**
@@ -36,7 +38,34 @@ export default function RightPanel({
   selectedModel,
   onModelChange,
   sourceUrl,
+  collapsed = false,
+  onToggleCollapsed,
 }: RightPanelProps) {
+  if (collapsed && onToggleCollapsed) {
+    return (
+      <aside className="flex h-full min-h-0 w-9 shrink-0 flex-col items-center border-l border-border bg-background">
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          title="Expand assistant"
+          aria-label="Expand assistant"
+          className="flex h-14 w-full shrink-0 items-center justify-center border-b border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+        >
+          <PanelRightOpen className="size-[15px]" strokeWidth={2} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          title="Expand assistant"
+          aria-label="Expand assistant"
+          className="flex flex-1 w-full items-start justify-center pt-3 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+        >
+          <Sparkles className="size-[15px]" strokeWidth={2} aria-hidden />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-5">
@@ -52,6 +81,17 @@ export default function RightPanel({
         </div>
         <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           <ModelSelector selected={selectedModel} onSelect={onModelChange} />
+          {onToggleCollapsed ? (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              title="Collapse assistant"
+              aria-label="Collapse assistant"
+              className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <PanelRightClose className="size-[15px]" strokeWidth={2} aria-hidden />
+            </button>
+          ) : null}
         </div>
       </header>
 
