@@ -88,6 +88,31 @@ export default function PdfViewer({
     Math.floor(fitWidth * Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, committedZoom))),
   );
 
+  // Trackpad pinch on macOS arrives as a `wheel` event with `ctrlKey`
+  // synthesized by the OS; the same path covers actual Ctrl+wheel on a
+  // mouse. We intercept it on the scroll container so the browser's
+  // native page zoom doesn't fire, and feed `liveZoom` — the same
+  // state the +/- buttons drive — so the percent readout stays in sync.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setLiveZoom((z) => {
+        // Exponential mapping feels uniform across zoom levels: a given
+        // pinch motion produces the same *percent* change whether you're
+        // at 60% or 200%. 0.002 tuned so a wheel notch (~100 deltaY) is
+        // ~20% — close to the buttons' ZOOM_STEP of 0.2.
+        const next = z * Math.exp(-e.deltaY * 0.002);
+        const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+        return Math.round(clamped * 100) / 100;
+      });
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, []);
+
   // Coalesce rapid zoom clicks into one rasterization.
   useEffect(() => {
     if (liveZoom === committedZoom) return;
