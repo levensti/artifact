@@ -713,7 +713,8 @@
   margin-bottom: 10px;
 }
 
-/* The comet — a margin manicule that "streaks" across separators. */
+/* A clean hairline rule between sections. Draws in left-to-right when it
+   enters the viewport (see landing-comet-divider.tsx). */
 .landing-comet-rule {
   grid-column: 1 / -1;
   height: 1px;
@@ -725,21 +726,26 @@
     transparent 100%
   );
   position: relative;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  transition: transform 1100ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.landing-comet-rule::after {
-  content: "";
-  position: absolute;
-  left: 22%;
-  top: -3px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow:
-    -10px 1px 0 -2px color-mix(in srgb, var(--primary) 60%, transparent),
-    -22px 1.5px 0 -3px color-mix(in srgb, var(--primary) 35%, transparent),
-    -38px 2px 0 -3px color-mix(in srgb, var(--primary) 18%, transparent),
-    -56px 2px 0 -3px color-mix(in srgb, var(--primary) 9%, transparent);
+.landing-comet-rule[data-shown="true"] {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-comet-rule {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Anchor jumps land below the sticky nav with breathing room. */
+#landing-scroll {
+  scroll-padding-top: 96px;
+}
+.landing-folio section[id] {
+  scroll-margin-top: 96px;
 }
 
 /* Live "in progress" pulsing dot — used in cover meta + journal margin. */
