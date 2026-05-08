@@ -11,6 +11,7 @@ import { LandingCoda } from "@/components/landing/landing-coda";
 import { LandingInvitation } from "@/components/landing/landing-invitation";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { Reveal } from "@/components/landing/landing-reveal";
+import { CometDivider } from "@/components/landing/landing-comet-divider";
 
 const GITHUB_URL =
   process.env.NEXT_PUBLIC_GITHUB_URL ?? "https://github.com/levensti/artifact";
@@ -21,8 +22,8 @@ const GITHUB_URL =
  *
  * Layout: a "folio" — a sheet of paper laid on the warm reader mat.
  * Sections share a two-column grid (`landing-spread`): a 200px marginalia
- * column (folio numbers, italic margin notes) and a body column. Comet
- * manicules separate sections.
+ * column (folio numbers, italic margin notes) and a body column. Hairline
+ * rules separate sections.
  *
  * The wrapping div is the page's own scroll container: the root <body>
  * is `overflow-hidden` so the PDF reader stays pinned to the viewport.
@@ -98,27 +99,6 @@ export async function LandingPage() {
           <LandingFooter signupHref={signupHref} githubUrl={GITHUB_URL} />
         </article>
       </main>
-    </div>
-  );
-}
-
-/**
- * The comet — a margin manicule that streaks subtly across separators.
- * Wrapped in a `landing-spread` so it spans both columns of the folio.
- */
-function CometDivider({
-  topPx,
-  bottomPx,
-}: {
-  topPx: number;
-  bottomPx: number;
-}) {
-  return (
-    <div className="landing-spread">
-      <div
-        className="landing-comet-rule"
-        style={{ margin: `${topPx}px 0 ${bottomPx}px` }}
-      />
     </div>
   );
 }

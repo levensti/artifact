@@ -8,9 +8,7 @@ export interface LandingNavProps {
 }
 
 const SECTION_LINKS: Array<{ href: string; label: string }> = [
-  { href: "#what", label: "What it is" },
-  { href: "#journal", label: "Journal" },
-  { href: "#share", label: "Share" },
+  { href: "#what", label: "Features" },
   { href: "#principles", label: "Principles" },
   { href: "#open-source", label: "Open source" },
 ];
