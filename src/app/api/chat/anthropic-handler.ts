@@ -1,21 +1,26 @@
 /**
  * Anthropic agentic loop — streams tool-augmented responses from Claude.
+ * The round/watchdog/tool-execution logic lives in `agent-loop.ts`; this
+ * file is the Anthropic-specific adapter (HTTP call, SSE parser, native
+ * message format).
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
 import type { ParsedPaper } from "@/lib/review-types";
-import {
-  getAllTools,
-  getToolByName,
-  toAnthropicTools,
-} from "@/tools/registry";
-import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import { toAnthropicTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
+import type { ToolDefinition } from "@/tools/types";
 import { buildPaperBlock } from "./paper-block";
-
-const MAX_TOOL_ROUNDS = 8;
+import {
+  runAgentLoop,
+  TOOL_RESULT_GUARDRAIL,
+  type NormalizedToolCall,
+  type ProviderAdapter,
+  type ToolOutput,
+  type TurnResult,
+} from "./agent-loop";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 
@@ -83,7 +88,7 @@ export async function runAnthropicAgentLoop(
   systemPrompt: string,
   paperContext: string | undefined,
   parsedPaper: ParsedPaper | undefined,
-  tools: ReturnType<typeof getAllTools>,
+  tools: ToolDefinition[],
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
 ) {
@@ -92,7 +97,7 @@ export async function runAnthropicAgentLoop(
   // across turns within a 5-minute window. Caching the paper is the win;
   // marking the base prompt as cacheable too is harmless and slightly cheaper.
   const systemBlocks: AnthropicSystemBlock[] = [
-    { type: "text", text: systemPrompt },
+    { type: "text", text: systemPrompt + TOOL_RESULT_GUARDRAIL },
   ];
   const paperBlock = buildPaperBlock(paperContext, parsedPaper);
   if (paperBlock) {
@@ -116,91 +121,93 @@ export async function runAnthropicAgentLoop(
       ]
     : [];
 
-  const apiMessages: Array<{ role: string; content: string | AnthropicMessageContent[] }> = chatMessages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  const apiMessages: Array<{ role: string; content: string | AnthropicMessageContent[] }> =
+    chatMessages.map((m) => ({ role: m.role, content: m.content }));
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    emit({ type: "turn_start" });
+  // Hold the latest turn's content blocks so appendAssistantTurn can persist
+  // them in Anthropic's native shape rather than re-deriving from TurnResult.
+  let lastBlocks: AnthropicContentBlock[] = [];
 
-    const response = await fetch(ANTHROPIC_MESSAGES_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 16384,
-        system: systemBlocks,
-        messages: apiMessages,
-        tools: cachedTools,
-        stream: true,
-      }),
-    });
+  const adapter: ProviderAdapter = {
+    async request(): Promise<TurnResult> {
+      const response = await fetch(ANTHROPIC_MESSAGES_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 16384,
+          system: systemBlocks,
+          messages: apiMessages,
+          tools: cachedTools,
+          stream: true,
+        }),
+      });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(parseApiErrorMessage(errText, `Anthropic API error: ${response.status}`));
-    }
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(parseApiErrorMessage(errText, `Anthropic API error: ${response.status}`));
+      }
+      if (!response.body) throw new Error("No response body from Anthropic");
 
-    if (!response.body) throw new Error("No response body from Anthropic");
+      const { contentBlocks, stopReason } = await parseAnthropicSSE(response.body, emit);
+      lastBlocks = contentBlocks;
 
-    const { contentBlocks, stopReason } = await parseAnthropicSSE(response.body, emit);
-
-    if (stopReason !== "tool_use") break;
-
-    const toolCalls = contentBlocks.filter(
-      (b): b is AnthropicToolUseBlock => b.type === "tool_use",
-    );
-    if (toolCalls.length === 0) break;
-
-    apiMessages.push({ role: "assistant", content: contentBlocks });
-
-    // Emit all tool_call events upfront so the UI shows the whole batch
-    // in-flight. Then execute in parallel — when the model emits multiple
-    // tool_use blocks in one turn (e.g. discover-mode sub-query searches),
-    // serial execution wastes seconds for no reason.
-    for (const tc of toolCalls) {
-      emit({ type: "tool_call", id: tc.id, name: tc.name, input: tc.input });
-    }
-
-    const outputs = await Promise.all(
-      toolCalls.map(async (tc) => {
-        try {
-          const tool = getToolByName(tc.name);
-          return tool
-            ? await tool.execute(tc.input, toolContext)
-            : `Unknown tool "${tc.name}". Available tools: ${tools.map((t) => t.name).join(", ")}`;
-        } catch (err) {
-          return `Tool error: ${err instanceof Error ? err.message : "unknown error"}`;
-        }
-      }),
-    );
-
-    const toolResults: AnthropicToolResultBlock[] = toolCalls.map((tc, i) => {
-      emit({ type: "tool_result", id: tc.id, name: tc.name, output: outputs[i] });
+      const toolCalls: NormalizedToolCall[] = contentBlocks
+        .filter((b): b is AnthropicToolUseBlock => b.type === "tool_use")
+        .map((b) => ({ id: b.id, name: b.name, input: b.input }));
+      const textContent = contentBlocks
+        .filter((b): b is AnthropicTextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+      const isEmpty = contentBlocks.every(
+        (b) => b.type === "text" && !b.text.trim(),
+      );
       return {
-        type: "tool_result",
-        tool_use_id: tc.id,
-        content: outputs[i],
+        toolCalls,
+        textContent,
+        isEmpty,
+        isToolStop: stopReason === "tool_use",
       };
-    });
+    },
 
-    // If web_search returned the "no Brave key" sentinel, stop the loop
-    // immediately. The chat UI will surface a configure card and pause until
-    // the user adds a key or dismisses; otherwise the agent would charge
-    // ahead with an answer it knows is unsupported by web grounding.
-    if (
-      toolResults.some((r) => r.content === BRAVE_KEY_REQUIRED_SENTINEL)
-    ) {
-      break;
-    }
+    appendAssistantTurn() {
+      if (lastBlocks.length > 0) {
+        apiMessages.push({ role: "assistant", content: lastBlocks });
+      }
+    },
 
-    apiMessages.push({ role: "user", content: toolResults });
-  }
+    appendToolResults(outputs: ToolOutput[]) {
+      const blocks: AnthropicToolResultBlock[] = outputs.map((o) => ({
+        type: "tool_result",
+        tool_use_id: o.id,
+        content: o.wrapped,
+      }));
+      apiMessages.push({ role: "user", content: blocks });
+    },
+
+    appendUserNudge(content: string) {
+      apiMessages.push({ role: "user", content });
+    },
+
+    hasPriorToolResults() {
+      return apiMessages.some(
+        (m) =>
+          Array.isArray(m.content) &&
+          m.content.some(
+            (c) =>
+              typeof c === "object" &&
+              c !== null &&
+              (c as { type?: string }).type === "tool_result",
+          ),
+      );
+    },
+  };
+
+  await runAgentLoop(adapter, tools, toolContext, emit);
 }
 
 /* ------------------------------------------------------------------ */

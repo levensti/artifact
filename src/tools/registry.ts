@@ -11,6 +11,8 @@ import { webSearchTool } from "./web-search";
 import { readSectionTool } from "./read-section";
 import { searchPaperTool } from "./search-paper";
 import { lookupCitationTool } from "./lookup-citation";
+import { paperDetailsTool } from "./paper-details";
+import { submitPicksTool } from "./submit-picks";
 
 /* ------------------------------------------------------------------ */
 /*  Register tools here                                                */
@@ -26,6 +28,12 @@ const ALL_TOOLS: ToolDefinition[] = [
   // Search tools — find related papers and ground answers in web sources.
   arxivSearchTool,
   webSearchTool,
+  // Verification tool — fetch full abstract + TLDR for a candidate paper
+  // before recommending it. Used by the discover Verify stage.
+  paperDetailsTool,
+  // Discovery structured-output tool — gated to discover mode in the
+  // chat route so it isn't visible to the paper-reading agent.
+  submitPicksTool,
 ];
 
 /* ------------------------------------------------------------------ */

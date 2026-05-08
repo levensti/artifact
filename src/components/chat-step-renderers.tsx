@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BookOpen,
   Check,
@@ -13,9 +13,9 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import MarkdownMessage from "./markdown-message";
 import BraveKeyPromptCard from "./brave-key-prompt-card";
 import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
 /* ------------------------------------------------------------------ */
@@ -166,28 +166,38 @@ export function ToolCallStep({
 }
 
 /* ------------------------------------------------------------------ */
-/*  renderAgentSteps                                                   */
+/*  AgentSteps                                                         */
+/*                                                                     */
+/*  Component (not function) so we can build the picks metadata pool   */
+/*  once via useMemo and reuse it across every text segment in the     */
+/*  message. When the agent emits a `**Picks**` list of arxiv links,   */
+/*  TextWithPicks splits the text and renders rich cards in place.     */
 /* ------------------------------------------------------------------ */
 
-export function renderAgentSteps(steps: AgentStep[]) {
-  return steps.map((step, i) => {
-    switch (step.kind) {
-      case "thinking":
-        return <ThinkingIndicator key={`think-${i}`} />;
-      case "text":
-        return step.text ? (
-          <MarkdownMessage key={`text-${i}`} content={step.text} />
-        ) : null;
-      case "tool_call":
-        return (
-          <ToolCallStep
-            key={step.id}
-            name={step.name}
-            input={step.input}
-            output={step.output}
-            isLive
-          />
-        );
-    }
-  });
+export function AgentSteps({ steps }: { steps: AgentStep[] }) {
+  const pool = useMemo(() => buildPoolFromSteps(steps), [steps]);
+  return (
+    <>
+      {steps.map((step, i) => {
+        switch (step.kind) {
+          case "thinking":
+            return <ThinkingIndicator key={`think-${i}`} />;
+          case "text":
+            return (
+              <TextWithPicks key={`text-${i}`} text={step.text} pool={pool} />
+            );
+          case "tool_call":
+            return (
+              <ToolCallStep
+                key={step.id}
+                name={step.name}
+                input={step.input}
+                output={step.output}
+                isLive
+              />
+            );
+        }
+      })}
+    </>
+  );
 }

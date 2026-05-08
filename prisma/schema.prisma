@@ -9,7 +9,7 @@ datasource db {
   provider = "postgresql"
 }
 
-/* ── Auth.js (NextAuth) ────────────────────────────────────────── */
+// ── Auth.js (NextAuth) ──────────────────────────────────────────
 
 model User {
   id            String    @id @default(uuid())
@@ -33,6 +33,7 @@ model User {
   pdfBlobs          PdfBlob[]
   parsedPapers      ParsedPaper[]
   shares            Share[]
+  discoverQueries   DiscoverQuery[]
 }
 
 model Account {
@@ -69,18 +70,18 @@ model VerificationToken {
   @@id([identifier, token])
 }
 
-/* ── Domain ────────────────────────────────────────────────────── */
+// ── Domain ──────────────────────────────────────────────────────
 
 model Review {
-  id         String   @id @default(uuid())
-  userId     String
-  title      String
-  arxivId    String?
-  pdfPath    String? // PdfBlob id (no FK — PdfBlob may be deleted independently)
-  sourceUrl  String?
-  createdAt  DateTime
-  updatedAt  DateTime
-  importedAt DateTime?
+  id                     String    @id @default(uuid())
+  userId                 String
+  title                  String
+  arxivId                String?
+  pdfPath                String? // PdfBlob id (no FK — PdfBlob may be deleted independently)
+  sourceUrl              String?
+  createdAt              DateTime
+  updatedAt              DateTime
+  importedAt             DateTime?
   /// Token of the share this review was imported from. Stored, not
   /// enforced via FK — the share row may be revoked or the owner may have
   /// deleted their copy. Drives the "Imported from {Owner}" badge.
@@ -89,13 +90,20 @@ model Review {
   /// badge survives the original sharer renaming, deleting their account,
   /// or revoking the share.
   importedFromName       String?
+  /// Set when this review was started from a Discover recommendation.
+  /// Unique because a recommendation produces at most one review (upstream
+  /// dedup via createOrGetReview enforces "one review per arxivId" so the
+  /// rec→review action only fires once). SetNull preserves the review when
+  /// the underlying recommendation is purged.
+  fromRecommendationId   String?   @unique
 
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages    ReviewMessages?
-  annotations ReviewAnnotations?
-  deepDives   DeepDive[]
-  wikiSources WikiPageSource[]
-  shares      Share[]
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages           ReviewMessages?
+  annotations        ReviewAnnotations?
+  deepDives          DeepDive[]
+  wikiSources        WikiPageSource[]
+  shares             Share[]
+  fromRecommendation Recommendation?    @relation(fields: [fromRecommendationId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([userId, arxivId])
@@ -183,14 +191,14 @@ model WikiBacklink {
 }
 
 model WikiRevision {
-  id        String   @id @default(uuid())
-  userId    String
-  pageId    String
-  slug      String
-  title     String
-  content   String
-  pageType  String
-  savedAt   DateTime
+  id       String   @id @default(uuid())
+  userId   String
+  pageId   String
+  slug     String
+  title    String
+  content  String
+  pageType String
+  savedAt  DateTime
 
   user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   page WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
@@ -236,7 +244,7 @@ model InferenceProfile {
 /// model as JSON because the Model shape is denormalized (id, label,
 /// provider, modelId, optional profileId) and is never queried by field.
 model UserPreferences {
-  userId        String  @id
+  userId        String @id
   selectedModel Json?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -291,4 +299,54 @@ model Share {
   @@index([userId, createdAt])
   @@index([reviewId])
   @@index([wikiPageId])
+}
+
+/// One Discover turn: the user types a query, the agent searches and
+/// emits curated picks. The query row groups the recommendations the
+/// agent produced and stores the agent's auxiliary notes (Plan/Filter
+/// preamble) — short, optional, separate from the chat transcript which
+/// is not persisted.
+model DiscoverQuery {
+  id        String   @id @default(uuid())
+  userId    String
+  query     String
+  /// Auxiliary text the agent emitted alongside the picks (Plan bullets,
+  /// Filter line). Optional; trimmed transcript that gives context for
+  /// the picks without storing the full chat.
+  notes     String?
+  /// "running" while the agent stream is in flight, "complete" once the
+  /// client finalizes with the parsed picks, "errored" if the stream
+  /// failed before producing recommendations.
+  status    String   @default("running")
+  createdAt DateTime
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendations Recommendation[]
+
+  @@index([userId, createdAt])
+}
+
+/// One paper pick from a DiscoverQuery's curated list. The first-class
+/// triage entity: the queue UI reads these rows directly. State is
+/// encoded as nullable timestamps — `dismissedAt` for dismissed, the
+/// existence of a Review with `fromRecommendationId = this.id` for
+/// in-library, neither for queued.
+model Recommendation {
+  id          String    @id @default(uuid())
+  queryId     String
+  /// 1-indexed position in the agent's submit_picks list — its own
+  /// best-to-acceptable ordering. Surfaced in the queue UI so the user
+  /// sees what the agent considered the strongest match.
+  rank        Int       @default(0)
+  url         String
+  title       String
+  rationale   String
+  arxivId     String?
+  dismissedAt DateTime?
+  createdAt   DateTime
+
+  query  DiscoverQuery @relation(fields: [queryId], references: [id], onDelete: Cascade)
+  review Review?
+
+  @@index([queryId, rank])
 }

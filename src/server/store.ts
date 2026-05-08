@@ -5,8 +5,14 @@ import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type { ChatMessage, PaperReview } from "@/lib/review-types";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
+import type {
+  DiscoverQuery,
+  DiscoverQueryStatus,
+  Recommendation,
+} from "@/lib/discover-types";
 import { extractWikiLinkSlugs } from "@/lib/wiki-link-transform";
 import { normalizeArxivId } from "@/lib/arxiv";
+import { arxivIdFromUrl, type ParsedPick } from "@/lib/picks-parser";
 import { HttpError } from "./api";
 
 /* ── Reviews ──────────────────────────────────────────────────── */
@@ -55,6 +61,12 @@ export async function getReviewBySourceUrl(
 export async function insertReview(
   userId: string,
   review: PaperReview,
+  /**
+   * When the review is being created from a Discover recommendation, pass
+   * the rec id so the FK is set atomically. Stays null for paste-link, PDF
+   * upload, web review, and import flows.
+   */
+  fromRecommendationId?: string | null,
 ): Promise<PaperReview> {
   const row = await prisma.review.create({
     data: {
@@ -67,6 +79,7 @@ export async function insertReview(
       createdAt: new Date(review.createdAt),
       updatedAt: new Date(review.updatedAt),
       importedAt: review.importedAt ? new Date(review.importedAt) : null,
+      fromRecommendationId: fromRecommendationId ?? null,
     },
   });
   return rowToReview(row);
@@ -787,3 +800,245 @@ export async function cacheParsedPaper(
     update: { parsed: parsed as unknown as Prisma.InputJsonValue },
   });
 }
+
+/* ── Discover queries + recommendations ───────────────────────── */
+
+interface DiscoverQueryRow {
+  id: string;
+  query: string;
+  notes: string | null;
+  status: string;
+  createdAt: Date;
+}
+
+interface RecommendationRow {
+  id: string;
+  queryId: string;
+  rank: number;
+  url: string;
+  title: string;
+  rationale: string;
+  arxivId: string | null;
+  dismissedAt: Date | null;
+  createdAt: Date;
+}
+
+function rowToDiscoverQuery(r: DiscoverQueryRow): DiscoverQuery {
+  return {
+    id: r.id,
+    query: r.query,
+    notes: r.notes,
+    status: r.status as DiscoverQueryStatus,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+function rowToRecommendation(r: RecommendationRow): Recommendation {
+  return {
+    id: r.id,
+    queryId: r.queryId,
+    rank: r.rank,
+    url: r.url,
+    title: r.title,
+    rationale: r.rationale,
+    arxivId: r.arxivId,
+    dismissedAt: r.dismissedAt ? r.dismissedAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+async function assertDiscoverQueryOwned(
+  userId: string,
+  queryId: string,
+): Promise<void> {
+  const exists = await prisma.discoverQuery.findFirst({
+    where: { id: queryId, userId },
+    select: { id: true },
+  });
+  if (!exists)
+    throw new HttpError(404, `Discover query not found: ${queryId}`);
+}
+
+async function assertRecommendationOwned(
+  userId: string,
+  recId: string,
+): Promise<void> {
+  const exists = await prisma.recommendation.findFirst({
+    where: { id: recId, query: { userId } },
+    select: { id: true },
+  });
+  if (!exists)
+    throw new HttpError(404, `Recommendation not found: ${recId}`);
+}
+
+export async function createDiscoverQuery(
+  userId: string,
+  query: string,
+): Promise<DiscoverQuery> {
+  const row = await prisma.discoverQuery.create({
+    data: {
+      id: crypto.randomUUID(),
+      userId,
+      query,
+      status: "running",
+      createdAt: new Date(),
+    },
+  });
+  return rowToDiscoverQuery(row);
+}
+
+/**
+ * Finalize a discover query: persist the agent's auxiliary notes, mark
+ * status, and write Recommendation rows for the parsed picks. Idempotent
+ * on re-call only in the sense that it overwrites notes/status; existing
+ * recommendation rows are NOT cleared (callers should only finalize once
+ * per query).
+ */
+export async function finalizeDiscoverQuery(
+  userId: string,
+  queryId: string,
+  payload: {
+    notes: string | null;
+    picks: ParsedPick[];
+    status: Exclude<DiscoverQueryStatus, "running">;
+  },
+): Promise<{ query: DiscoverQuery; recommendations: Recommendation[] }> {
+  await assertDiscoverQueryOwned(userId, queryId);
+  const now = new Date();
+
+  const result = await prisma.$transaction(async (tx) => {
+    const updated = await tx.discoverQuery.update({
+      where: { id: queryId },
+      data: { notes: payload.notes, status: payload.status },
+    });
+    const created: RecommendationRow[] = [];
+    for (let i = 0; i < payload.picks.length; i++) {
+      const pick = payload.picks[i];
+      const row = await tx.recommendation.create({
+        data: {
+          id: crypto.randomUUID(),
+          queryId,
+          // 1-indexed: the agent's preference order, surfaced in the queue.
+          rank: i + 1,
+          url: pick.url,
+          title: pick.title,
+          rationale: pick.rationale,
+          // Prefer the agent-provided arxiv id (from submit_picks); fall
+          // back to URL extraction for the markdown-parser path.
+          arxivId: pick.arxivId ?? arxivIdFromUrl(pick.url),
+          createdAt: now,
+        },
+      });
+      created.push(row);
+    }
+    return { query: updated, recs: created };
+  });
+
+  return {
+    query: rowToDiscoverQuery(result.query),
+    recommendations: result.recs.map(rowToRecommendation),
+  };
+}
+
+export async function listDiscoverQueries(
+  userId: string,
+): Promise<DiscoverQuery[]> {
+  const rows = await prisma.discoverQuery.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(rowToDiscoverQuery);
+}
+
+export async function listRecommendations(
+  userId: string,
+): Promise<Recommendation[]> {
+  const rows = await prisma.recommendation.findMany({
+    where: { query: { userId } },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(rowToRecommendation);
+}
+
+export async function getRecommendation(
+  userId: string,
+  recId: string,
+): Promise<Recommendation | null> {
+  const row = await prisma.recommendation.findFirst({
+    where: { id: recId, query: { userId } },
+  });
+  return row ? rowToRecommendation(row) : null;
+}
+
+export async function dismissRecommendation(
+  userId: string,
+  recId: string,
+): Promise<Recommendation> {
+  await assertRecommendationOwned(userId, recId);
+  const row = await prisma.recommendation.update({
+    where: { id: recId },
+    data: { dismissedAt: new Date() },
+  });
+  return rowToRecommendation(row);
+}
+
+export async function undismissRecommendation(
+  userId: string,
+  recId: string,
+): Promise<Recommendation> {
+  await assertRecommendationOwned(userId, recId);
+  const row = await prisma.recommendation.update({
+    where: { id: recId },
+    data: { dismissedAt: null },
+  });
+  return rowToRecommendation(row);
+}
+
+export async function deleteDiscoverQuery(
+  userId: string,
+  queryId: string,
+): Promise<void> {
+  await assertDiscoverQueryOwned(userId, queryId);
+  // Cascade on Recommendation handles its rows. fromRecommendationId on
+  // any Reviews already pointing at recs in this query becomes null
+  // automatically (SetNull), preserving the reviews.
+  await prisma.discoverQuery.delete({ where: { id: queryId } });
+}
+
+/**
+ * Open a recommendation: get-or-create the matching Review and link the
+ * rec to it via fromRecommendationId on newly created reviews. Re-surfaces
+ * (rec for a paper the user already has) just return the existing review
+ * without overwriting the original origin.
+ */
+export async function openRecommendation(
+  userId: string,
+  recId: string,
+): Promise<{ review: PaperReview; alreadyInLibrary: boolean }> {
+  const rec = await getRecommendation(userId, recId);
+  if (!rec) throw new HttpError(404, `Recommendation not found: ${recId}`);
+
+  const canonicalArxivId = rec.arxivId ? normalizeArxivId(rec.arxivId) : null;
+  const existing = canonicalArxivId
+    ? await getReviewByArxivId(userId, canonicalArxivId)
+    : await getReviewBySourceUrl(userId, rec.url);
+  if (existing) return { review: existing, alreadyInLibrary: true };
+
+  const now = new Date().toISOString();
+  const fallbackTitle = canonicalArxivId ? `arXiv:${canonicalArxivId}` : rec.url;
+  const review = await insertReview(
+    userId,
+    {
+      id: crypto.randomUUID(),
+      title: rec.title || fallbackTitle,
+      arxivId: canonicalArxivId,
+      createdAt: now,
+      updatedAt: now,
+      pdfPath: null,
+      sourceUrl: canonicalArxivId ? null : rec.url,
+    },
+    recId,
+  );
+  return { review, alreadyInLibrary: false };
+}
+
