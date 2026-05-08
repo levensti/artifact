@@ -20,28 +20,80 @@ Once a source is open, you get the content next to Assistant and Notes. Ask sele
 
 ## Run locally
 
-Self-hosting requires a Postgres database, an object storage bucket, and a Google OAuth client. The fastest path uses Supabase (Postgres + Storage in one project) and a free Google Cloud OAuth app.
+Self-hosting requires a Postgres database, an object storage bucket, and a Google OAuth client. Two paths:
 
-### 1. Provision external services
+- **[Local Supabase (fastest for dev)](#option-a-local-supabase-via-cli-recommended-for-dev)** — Postgres + Storage in Docker on your machine, one command to boot.
+- **[Hosted Supabase project](#option-b-hosted-supabase-project)** — production-like setup with a real cloud project.
 
-- **Supabase project** ([supabase.com](https://supabase.com)) — gives you Postgres + Storage. Note the project URL, the `service_role` key (Settings → API), and create a private Storage bucket named `learning-material`.
-- **Google OAuth client** ([Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → OAuth client ID, type "Web application") — add `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI. Copy the client ID and secret.
+Both paths share the same Google OAuth setup and end with `npm run db:migrate && npm run dev`.
 
-### 2. Configure environment
+### Common: Google OAuth client
 
-Copy [`.env.example`](./.env.example) to `.env` and fill in the required values. The example file documents every variable inline — what it does, where to get the value, and which are local vs. production-only.
+[Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → OAuth client ID, type "Web application". Add `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI. Copy the client ID and secret — they go in `.env` as `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
 
-For local dev you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`. The multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`) are production-only — leave them unset locally.
+### Option A: Local Supabase via CLI (recommended for dev)
 
-### 3. Install + migrate + run
+Spins up Postgres + Storage + Studio in Docker. Requires [Docker](https://www.docker.com/) running.
+
+```bash
+npx supabase start       # boots the stack with default ports; prints credentials when ready
+```
+
+That's it for the stack. (Optional: `npx supabase init` first if you want to commit a `supabase/config.toml` to share custom ports/Postgres version with collaborators, or to `supabase link` against a hosted project. Solo dev with defaults doesn't need it.)
+
+When `start` finishes it prints a block like:
+
+```
+API URL: http://127.0.0.1:54321
+DB URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+Studio URL: http://127.0.0.1:54323
+service_role key: eyJhbGciOi...
+```
+
+Map those into your `.env` (copy from [`.env.example`](./.env.example)):
+
+| `.env` variable | Value |
+| --- | --- |
+| `DATABASE_URL` | `DB URL` from above |
+| `DIRECT_URL` | same as `DATABASE_URL` (no pooler locally) |
+| `SUPABASE_URL` | `API URL` from above |
+| `SUPABASE_SERVICE_ROLE_KEY` | `service_role key` from above |
+| `SUPABASE_BUCKET` | `learning-material` |
+
+Open Studio (the printed URL, default `http://127.0.0.1:54323`) → Storage → create a private bucket named `learning-material`.
+
+Then fill in the remaining vars (`AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ENCRYPTION_KEY` — see `.env.example` for how to generate the secrets) and:
 
 ```bash
 npm install
-npm run db:migrate    # creates the schema in Postgres
+npm run db:migrate    # applies prisma/migrations/* to the local Postgres
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000), sign in with Google, then add your AI provider keys under Settings.
+Open [localhost:3000](http://localhost:3000), sign in with Google, add your AI provider keys under Settings.
+
+**Day-to-day commands:**
+
+```bash
+npx supabase stop              # shut the stack down (data persists in Docker volumes)
+npx supabase start             # bring it back up
+npx supabase db reset          # nuke the DB and re-run all prisma migrations from scratch
+npx supabase status            # print URLs and keys again
+```
+
+### Option B: Hosted Supabase project
+
+Use this when you want a production-like environment or are deploying.
+
+1. Create a project at [supabase.com](https://supabase.com). Note the project URL, the `service_role` key (Settings → API), and create a private Storage bucket named `learning-material`.
+2. Copy [`.env.example`](./.env.example) to `.env` and fill in the required values. The example file documents every variable inline. For local dev against a hosted project you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`. The multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`) are production-only — leave them unset locally.
+3. Install, migrate, run:
+
+   ```bash
+   npm install
+   npm run db:migrate
+   npm run dev
+   ```
 
 ## Contributing
 
