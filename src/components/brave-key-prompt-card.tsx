@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Globe, X } from "lucide-react";
+import { Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSettingsOpenerOptional } from "./settings-opener-context";
 import { useBraveKeyResumeOptional } from "./brave-key-resume-context";
@@ -17,8 +17,16 @@ import { hasBraveSearchApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
  * pause point. The "Add API key" button opens Settings; once the user
  * saves a key, the card detects it via KEYS_UPDATED_EVENT and triggers
  * the resume automatically.
+ *
+ * `queryText` overrides the resume target. The discover queue uses it on
+ * post-finalize cards so the retry runs the originally-failed query, not
+ * whatever the user typed since.
  */
-export default function BraveKeyPromptCard() {
+export default function BraveKeyPromptCard({
+  queryText,
+}: {
+  queryText?: string;
+} = {}) {
   const [acted, setActed] = useState(false);
   const opener = useSettingsOpenerOptional();
   const resume = useBraveKeyResumeOptional();
@@ -37,13 +45,13 @@ export default function BraveKeyPromptCard() {
       if (hasBraveSearchApiKey() && !triggeredRef.current) {
         triggeredRef.current = true;
         setActed(true);
-        resume?.resumeAfterBraveDecision({ skipWebSearch: false });
+        resume?.resumeAfterBraveDecision({ skipWebSearch: false, text: queryText });
       }
     };
     check();
     window.addEventListener(KEYS_UPDATED_EVENT, check);
     return () => window.removeEventListener(KEYS_UPDATED_EVENT, check);
-  }, [waitingForKey, resume]);
+  }, [waitingForKey, resume, queryText]);
 
   if (acted) return null;
 
@@ -57,7 +65,7 @@ export default function BraveKeyPromptCard() {
     if (triggeredRef.current) return;
     triggeredRef.current = true;
     setActed(true);
-    resume?.resumeAfterBraveDecision({ skipWebSearch: true });
+    resume?.resumeAfterBraveDecision({ skipWebSearch: true, text: queryText });
   };
 
   return (
@@ -71,32 +79,33 @@ export default function BraveKeyPromptCard() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[12.5px] font-semibold text-foreground/90">
-            Enable web search
+            Also search the web?
           </p>
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground/85">
-            Add a Brave Search API key so the assistant can ground answers in
-            current sources. Free tier available.
+            Add a Brave Search API key to include lab blogs and other web
+            sources alongside arXiv. Free tier available — or skip and the
+            agent will search arXiv only.
           </p>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               className="h-7 px-2.5 text-[11.5px]"
               onClick={handleAddKey}
               disabled={!opener || waitingForKey}
             >
-              {waitingForKey ? "Waiting…" : "Add API key"}
+              {waitingForKey ? "Waiting for key…" : "Add API key"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-[11.5px]"
+              onClick={handleDismiss}
+              disabled={waitingForKey}
+            >
+              Search arXiv only
             </Button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleDismiss}
-          className="-mr-1 -mt-1 flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/40 transition-colors"
-          aria-label="Dismiss and continue without web search"
-          title="Dismiss and continue without web search"
-        >
-          <X size={13} />
-        </button>
       </div>
     </div>
   );

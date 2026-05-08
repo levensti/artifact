@@ -193,10 +193,13 @@ async function searchArxivFallback(query: string, maxResults: number): Promise<P
 export const arxivSearchTool: ToolDefinition = {
   name: "arxiv_search",
   description:
-    "Search for academic papers by topic, method, author, or any keywords. " +
-    "Returns titles, abstracts, authors, citation counts, and links. " +
-    "Use this to find related work, prerequisite papers, seminal references, " +
-    "or papers on specific topics.",
+    "Search the broader academic literature for papers by topic, method, author, or keywords. " +
+    "Backed primarily by Semantic Scholar (which indexes arXiv plus most major venues — " +
+    "NeurIPS, ICML, ICLR, conference proceedings, journals) and falls back to the arXiv API. " +
+    "Returns titles, abstracts, authors, citation counts, and links (arXiv URL when available, " +
+    "Semantic Scholar URL otherwise). Use for related work, prerequisites, seminal references, " +
+    "or papers on a topic. Issue multiple distinct sub-queries in parallel when one query won't cover " +
+    "the angles you care about.",
   parameters: {
     type: "object",
     properties: {

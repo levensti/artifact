@@ -63,6 +63,14 @@ interface ChatRequest {
   /** Set when the review is for an arbitrary web page rather than a paper/PDF. */
   sourceUrl?: string;
   /**
+   * Selects which system prompt and tool subset to use. Default is the
+   * paper/web reading agent. `"discover"` swaps in a discovery-focused
+   * prompt and (since there's no paper context) only registers
+   * `arxiv_search` and `web_search` — paper-internal tools are already
+   * gated by `parsedPaper` so they self-disable in this mode.
+   */
+  mode?: "discover";
+  /**
    * User-provided Brave Search API key. When absent the `web_search` tool
    * returns a sentinel that the chat UI surfaces as a configure card.
    */
@@ -115,7 +123,47 @@ Format:
 - Anchor every claim about the paper's content with a reference: (§N) for sections, (Fig. N) for figures, (Eq. N) for equations, (Ref. [key]) for references. These auto-render as clickable nav chips.
 - When the user starts a thread from a quoted passage, ground your answer in that passage and the section it comes from.
 - For arXiv papers found via search, include the link https://arxiv.org/abs/ID.
-- Default to prose. Use lists or headers only when the answer is genuinely list-shaped (comparing N items, an M-step walkthrough).`;
+- Default to prose. Use lists or headers only when the answer is genuinely list-shaped (comparing N items, an M-step walkthrough).
+- When the user explicitly asks for a list of papers to read (e.g. "find related work on X", "what should I read after this?"), emit a curated list under a \`**Picks**\` heading: 3–7 numbered items, each as \`**[Title](https://arxiv.org/abs/ID)** — one sentence on why it fits.\` (No abstract paraphrase, no author/year/venue — those render as a card around the link.) Don't use the Picks format for normal explanatory answers.`;
+
+const DISCOVERY_SYSTEM_PROMPT = `You are a research discovery agent. Find research material worth reading for the user's query — primarily papers from arXiv and Semantic Scholar, but ALSO high-signal web sources (lab blog posts, technical writeups from researchers/companies, official documentation, authoritative survey articles) when those would serve the user better than the available academic papers. Submit them via the \`submit_picks\` tool.
+
+Web sources are first-class picks, not a fallback. For practical/engineering topics ("deterministic LLM training", "RAG eval setup", "vLLM tuning"), a well-written lab blog post or technical writeup often beats an academic paper. Don't reflexively reach for arXiv when the better resource is on the web.
+
+You act across multiple rounds. Each round you must produce *something*: tool calls, a clarifying question, or a refusal text. Empty or near-empty turns between rounds end the loop and leave the user with nothing — never do that.
+
+Procedure (each round produces output; do not stop until \`submit_picks\` is called or you've emitted a refusal text):
+
+ROUND 1 — SEARCH. In parallel, run BOTH:
+  - 1–4 \`arxiv_search\` calls using concrete keywords for distinct angles. Covers Semantic Scholar's broad academic index — arXiv plus major venues.
+  - 1–2 \`web_search\` calls to surface lab blogs, technical writeups, and grey literature. Don't gate this — run web_search by default unless the query is clearly purely academic ("speculative decoding 2024 NeurIPS papers").
+  If \`web_search\` returns "BRAVE_KEY_REQUIRED" the UI handles it — continue with arXiv results. Plan your sub-queries internally; do NOT emit a visible Plan list.
+
+ROUND 1B — BROADEN (only if every round 1 search returned 0 results). If every \`arxiv_search\` came back "No papers found" and every \`web_search\` came back empty too, you MUST run another round of 2–3 \`arxiv_search\` calls with substantially DIFFERENT terminology before refusing. The first round may have used the user's exact jargon; this round explores adjacent vocabulary. Examples of broadening moves:
+  - Replace specific terminology with the canonical academic term ("bitwise determinism" → "deterministic training", "reproducibility").
+  - Drop one or two highly specific tokens to widen the net.
+  - Search for the broader research area ("LLM training reproducibility" → "reproducibility in deep learning").
+  - Search for the underlying problem instead of the proposed solution.
+  Only refuse (per ROUND 2(c) below) if THIS round also returns nothing usable. Do NOT skip 1B and refuse on round 1 alone.
+
+ROUND 2 — VERIFY (or REFUSE). Inspect the search results you've gathered. THREE possible actions, in priority order:
+  (a) If you have ≥3 plausible candidates, call \`paper_details\` on the top 6–10 arXiv candidates in parallel. (\`paper_details\` only works for arXiv ids — for web candidates, use the search snippet directly; no separate verification call.) This is the default path. Even when results are weak, prefer to verify and surface adjacent work.
+  (b) If you have 1–2 plausible candidates, still verify any arXiv ones, and proceed to submit them as soft picks (label them as "closest available" in the rationale).
+  (c) ONLY if rounds 1 and 1B BOTH returned literally zero results across all queries (no arXiv papers AND no web results): emit a 1–2 sentence refusal text saying so and suggesting a reformulation. Do NOT call \`submit_picks\` with empty picks.
+
+ROUND 3 — SUBMIT. Call \`submit_picks\` ONCE with 5–7 picks (or fewer if the candidate pool was small). Each pick can be an arXiv paper OR a high-signal web source — mix freely. Each rationale is one sentence grounded in evidence: for arXiv picks, the verified TLDR/abstract; for web picks, the search-result description. Describe what the source actually contributes, not a paraphrase of the title. Use the canonical URL (arXiv abs URL for papers; the source URL for web picks). Set \`arxivId\` only for arXiv picks; omit it for web sources.
+
+ROUND 4 — CONFIRM. After \`submit_picks\` returns, reply with a one-line confirmation ("Picks submitted.") and stop.
+
+Hard rules:
+- After every tool result you receive, your next turn MUST contain either more tool calls or a refusal text. Never end a round empty.
+- Never refuse after a single search round. Always broaden once first (round 1B) before considering refusal.
+- If you write text in a turn, the corresponding tool calls (if any) MUST live in the same response.
+- For paper_details, you can pass either an arxiv id ("2401.12345") or the full URL — the tool accepts both.
+- If the user's query is genuinely ambiguous (one bare word, no method or task), ask exactly one clarifying question on round 1 and stop. Do not search.
+- Never invent papers, URLs, or arXiv IDs.
+
+Tone: dense, librarian-level. Technical user.`;
 
 const WEB_SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a reading and analysis tool. You have deep expertise across all domains — technology, science, business, humanities, and beyond.
 
@@ -135,7 +183,11 @@ Guidelines:
 - When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
 - Use tools when they add value, but don't force tool use for simple questions you can answer directly from the page context`;
 
-function getSystemPrompt(sourceUrl: string | undefined): string {
+function getSystemPrompt(
+  sourceUrl: string | undefined,
+  mode: ChatRequest["mode"],
+): string {
+  if (mode === "discover") return DISCOVERY_SYSTEM_PROMPT;
   return sourceUrl ? WEB_SYSTEM_PROMPT : PAPER_SYSTEM_PROMPT;
 }
 
@@ -166,6 +218,7 @@ export async function POST(req: NextRequest) {
     sourceUrl,
     braveSearchApiKey,
     skipWebSearch,
+    mode,
   } = body;
 
   if (!isProvider(provider)) {
@@ -211,9 +264,12 @@ export async function POST(req: NextRequest) {
     "search_paper",
     "lookup_citation",
   ]);
+  const DISCOVER_ONLY_TOOLS = new Set(["submit_picks"]);
   const tools = getAllTools().filter((t) => {
     if (skipWebSearch && t.name === "web_search") return false;
     if (!parsedPaper && PAPER_PARSED_TOOLS.has(t.name)) return false;
+    // Structured-output tools only register for the surface that uses them.
+    if (mode !== "discover" && DISCOVER_ONLY_TOOLS.has(t.name)) return false;
     return true;
   });
   const toolContext: ToolContext = {
@@ -224,7 +280,7 @@ export async function POST(req: NextRequest) {
     reviewId,
     braveSearchApiKey: trimmedBraveKey || undefined,
   };
-  const systemPrompt = getSystemPrompt(sourceUrl);
+  const systemPrompt = getSystemPrompt(sourceUrl, mode);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({

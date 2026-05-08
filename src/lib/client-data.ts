@@ -18,6 +18,7 @@ import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
+import type { DiscoverQuery, Recommendation } from "@/lib/discover-types";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
@@ -25,6 +26,7 @@ import {
   KEYS_UPDATED_EVENT,
   WIKI_UPDATED_EVENT,
   USER_UPDATED_EVENT,
+  DISCOVER_UPDATED_EVENT,
 } from "@/lib/storage-events";
 import { apiFetch } from "@/lib/client/api";
 
@@ -53,6 +55,8 @@ let hydratePromise: Promise<void> | null = null;
 let reviewsCache: PaperReview[] = [];
 let settingsCache: SettingsCache = EMPTY_SETTINGS;
 let deepDivesCache: DeepDiveSession[] = [];
+let discoverQueriesCache: DiscoverQuery[] = [];
+let recommendationsCache: Recommendation[] = [];
 let currentUser: CurrentUser | null = null;
 
 const messagesCache = new Map<string, ChatMessage[]>();
@@ -71,17 +75,22 @@ export async function hydrateClientStore(): Promise<void> {
       reviews: PaperReview[];
       settings: SettingsCache;
       deepDives: DeepDiveSession[];
+      discoverQueries: DiscoverQuery[];
+      recommendations: Recommendation[];
       user: CurrentUser | null;
     }>("/api/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
     deepDivesCache = boot.deepDives;
+    discoverQueriesCache = boot.discoverQueries ?? [];
+    recommendationsCache = boot.recommendations ?? [];
     currentUser = boot.user;
     messagesCache.clear();
     annotationsCache.clear();
     dispatch(REVIEWS_UPDATED_EVENT);
     dispatch(KEYS_UPDATED_EVENT);
     dispatch(DEEP_DIVES_UPDATED_EVENT);
+    dispatch(DISCOVER_UPDATED_EVENT);
     dispatch(USER_UPDATED_EVENT);
   })();
   return hydratePromise;
@@ -223,6 +232,110 @@ export async function saveDeepDive(
   deepDivesCache = [deepDive, ...deepDivesCache.filter((d) => d.id !== deepDive.id)];
   dispatch(DEEP_DIVES_UPDATED_EVENT);
   return deepDive;
+}
+
+/* ── Discover queries + recommendations ──────────────────────── */
+
+export function getDiscoverQueriesSnapshot(): DiscoverQuery[] {
+  return discoverQueriesCache;
+}
+
+export function getRecommendationsSnapshot(): Recommendation[] {
+  return recommendationsCache;
+}
+
+export async function refreshDiscover(): Promise<void> {
+  const data = await apiFetch<{
+    queries: DiscoverQuery[];
+    recommendations: Recommendation[];
+  }>("/api/discover-queries");
+  discoverQueriesCache = data.queries;
+  recommendationsCache = data.recommendations;
+  dispatch(DISCOVER_UPDATED_EVENT);
+}
+
+export async function createDiscoverQuery(query: string): Promise<DiscoverQuery> {
+  const { query: created } = await apiFetch<{ query: DiscoverQuery }>(
+    "/api/discover-queries",
+    { method: "POST", body: { query } },
+  );
+  discoverQueriesCache = [created, ...discoverQueriesCache];
+  dispatch(DISCOVER_UPDATED_EVENT);
+  return created;
+}
+
+export interface FinalizePayload {
+  status: "complete" | "errored";
+  /** Structured picks from the `submit_picks` tool call. */
+  picks?: Array<{
+    url: string;
+    title: string;
+    rationale: string;
+    arxivId?: string;
+  }>;
+  /** Optional auxiliary text (Plan + Verify line + agent's closing line). */
+  notes?: string | null;
+  /** Final assistant text for parser fallback when picks aren't structured. */
+  text?: string;
+}
+
+export async function finalizeDiscoverQuery(
+  queryId: string,
+  payload: FinalizePayload,
+): Promise<{ query: DiscoverQuery; recommendations: Recommendation[] }> {
+  const result = await apiFetch<{
+    query: DiscoverQuery;
+    recommendations: Recommendation[];
+  }>(`/api/discover-queries/${encodeURIComponent(queryId)}`, {
+    method: "POST",
+    body: payload,
+  });
+  discoverQueriesCache = discoverQueriesCache.map((q) =>
+    q.id === result.query.id ? result.query : q,
+  );
+  recommendationsCache = [...result.recommendations, ...recommendationsCache];
+  dispatch(DISCOVER_UPDATED_EVENT);
+  return result;
+}
+
+export async function setRecommendationDismissed(
+  recId: string,
+  dismissed: boolean,
+): Promise<Recommendation> {
+  const { recommendation } = await apiFetch<{ recommendation: Recommendation }>(
+    `/api/recommendations/${encodeURIComponent(recId)}`,
+    { method: "PATCH", body: { dismissed } },
+  );
+  recommendationsCache = recommendationsCache.map((r) =>
+    r.id === recommendation.id ? recommendation : r,
+  );
+  dispatch(DISCOVER_UPDATED_EVENT);
+  return recommendation;
+}
+
+export async function openRecommendation(
+  recId: string,
+): Promise<{ review: PaperReview; alreadyInLibrary: boolean }> {
+  const result = await apiFetch<{ review: PaperReview; alreadyInLibrary: boolean }>(
+    `/api/recommendations/${encodeURIComponent(recId)}/open`,
+    { method: "POST" },
+  );
+  // Refresh reviews snapshot so the new (or returned) review shows up in
+  // the rest of the app immediately. Discover cache doesn't change here —
+  // the rec itself is unchanged; the link is on Review.fromRecommendationId.
+  await refreshReviews();
+  return result;
+}
+
+export async function deleteDiscoverQuery(queryId: string): Promise<void> {
+  await apiFetch(`/api/discover-queries/${encodeURIComponent(queryId)}`, {
+    method: "DELETE",
+  });
+  discoverQueriesCache = discoverQueriesCache.filter((q) => q.id !== queryId);
+  recommendationsCache = recommendationsCache.filter(
+    (r) => r.queryId !== queryId,
+  );
+  dispatch(DISCOVER_UPDATED_EVENT);
 }
 
 /* ── Wiki (ambient knowledge base) ──────────────────────────────── */

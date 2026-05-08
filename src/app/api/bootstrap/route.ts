@@ -6,12 +6,15 @@ import * as store from "@/server/store";
 export const dynamic = "force-dynamic";
 
 export const GET = authedRoute(async (userId) => {
-  const [reviews, settings, deepDives, session] = await Promise.all([
-    store.listReviews(userId),
-    store.getSettings(userId),
-    store.listDeepDives(userId),
-    auth(),
-  ]);
+  const [reviews, settings, deepDives, discoverQueries, recommendations, session] =
+    await Promise.all([
+      store.listReviews(userId),
+      store.getSettings(userId),
+      store.listDeepDives(userId),
+      store.listDiscoverQueries(userId),
+      store.listRecommendations(userId),
+      auth(),
+    ]);
   const user = session?.user
     ? {
         id: session.user.id,
@@ -20,5 +23,12 @@ export const GET = authedRoute(async (userId) => {
         image: session.user.image ?? null,
       }
     : null;
-  return NextResponse.json({ reviews, settings, deepDives, user });
+  return NextResponse.json({
+    reviews,
+    settings,
+    deepDives,
+    discoverQueries,
+    recommendations,
+    user,
+  });
 });
