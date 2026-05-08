@@ -4,7 +4,34 @@ Artifact is an open source (MIT licensed) reading workspace for researchers. Rea
 
 Hosted version available at [withartifact.com](https://withartifact.com). Bring your own keys (Anthropic, OpenAI, xAI, OpenAI-compatible, or local via Ollama / LM Studio / llama.cpp). Completely free to use.
 
-![Paper review: PDF with AI assistant](docs/paper-review.png)
+## Features
+
+### Read with an AI assistant that knows the paper
+
+Open any arXiv paper, blog, or PDF. The assistant has the full text in context, so you can ask questions, request derivations, pull side-by-side definitions, or highlight a passage to dive deeper. Margin notes and AI threads live in a notes rail next to the page.
+
+![Paper review: PDF with AI assistant and notes rail](docs/screenshots/paper-review.png)
+
+### A journal that compounds across sessions
+
+Every reading session becomes a linked entry. Concepts, methods, and papers cross-reference each other automatically, so what you learned last week shows up when it's relevant this week.
+
+![Journal: cross-linked entries from past sessions](docs/screenshots/journal.png)
+
+### Discover what to read next
+
+A personalized feed of papers based on what you've been reading and what you've journaled. One click to start a review.
+
+![Discover feed of recommended papers](docs/screenshots/discovery.png)
+
+### Share a review with a colleague
+
+Generate a live link to any review. Recipients import a copy with chats, annotations, and deep dives intact, into their own workspace.
+
+<p align="center">
+  <img src="docs/screenshots/share-review-init.png" alt="Share dialog with copy link" width="49%" />
+  <img src="docs/screenshots/share-review-accept.png" alt="Recipient landing page for a shared review" width="49%" />
+</p>
 
 ## Contributing
 
