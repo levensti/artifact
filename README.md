@@ -86,10 +86,6 @@ npx supabase status            # print URLs and keys again
 - **AI**: Anthropic, OpenAI, xAI, OpenAI-compatible APIs (incl. local: Ollama, LM Studio, llama.cpp); streaming chat + structured generation
 - **Paper search**: Semantic Scholar (primary), arXiv API (fallback)
 
-## License
-
-MIT
-
 ## Deployment (self-hosting)
 
 Artifact can be self-hosted on any platform that runs a Next.js app. You'll need a Postgres database, an object storage bucket, and a Google OAuth client.
