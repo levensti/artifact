@@ -71,7 +71,7 @@ export default async function OpengraphImage() {
               color: TEXT,
             }}
           >
-            Push the frontier.
+            Study anything. Push the frontier.
           </div>
           <div
             style={{

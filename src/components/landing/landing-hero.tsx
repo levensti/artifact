@@ -15,7 +15,7 @@ export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
       <MonoLabel>Open source · Free to use</MonoLabel>
 
       <h1 id="cover-title" className="landing-cover-h1 mt-6">
-        Read deeply.
+        Study anything.
         <br />
         Push the
         <br />
@@ -31,9 +31,11 @@ export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
         }}
       >
         Read papers, blogs, and arbitrary PDFs alongside a powerful AI
-        assistant. Every concept, every connection, every insight you find,
-        kept in{" "}
-        <ItalicAccent>a personal journal that compounds with you over years</ItalicAccent>
+        assistant. Every concept, every connection, every insight you find, kept
+        in{" "}
+        <ItalicAccent>
+          a personal journal that compounds with you over years
+        </ItalicAccent>
         .
       </p>
 

@@ -33,7 +33,7 @@ export function LandingFooter({ signupHref, githubUrl }: LandingFooterProps) {
                 "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
             }}
           >
-            · Read deeply, push the frontier. · MIT licensed
+            · Study anything. Push the frontier. · MIT licensed
           </span>
         </div>
 

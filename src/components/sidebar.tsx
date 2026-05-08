@@ -216,7 +216,7 @@ export default function Sidebar({
                       "color-mix(in srgb, var(--primary) 75%, transparent)",
                   }}
                 >
-                  Push the frontier
+                  Study anything. Push the frontier.
                 </span>
               </div>
             </div>
