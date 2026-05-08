@@ -83,8 +83,8 @@ export default async function OpengraphImage() {
               maxWidth: 640,
             }}
           >
-            Read papers, blogs, and PDFs alongside a powerful AI assistant.
-            Build a journal that compounds with every insight.
+            Read papers, blogs, and PDFs alongside a powerful, personalized AI
+            assistant. Build a journal that compounds with every insight.
           </div>
         </div>
 
