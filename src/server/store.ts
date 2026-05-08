@@ -14,6 +14,7 @@ import { extractWikiLinkSlugs } from "@/lib/wiki-link-transform";
 import { normalizeArxivId } from "@/lib/arxiv";
 import { arxivIdFromUrl, type ParsedPick } from "@/lib/picks-parser";
 import { HttpError } from "./api";
+import { sendSlackEvent, SlackEventType } from "./notifications";
 
 /* ── Reviews ──────────────────────────────────────────────────── */
 
@@ -82,6 +83,13 @@ export async function insertReview(
       fromRecommendationId: fromRecommendationId ?? null,
     },
   });
+  if (!review.importedAt) {
+    await sendSlackEvent(
+      SlackEventType.ReviewInitiated,
+      `started review: ${review.title} (${review.id})`,
+      userId,
+    );
+  }
   return rowToReview(row);
 }
 
@@ -148,12 +156,37 @@ export async function setMessages(
   reviewId: string,
   messages: ChatMessage[],
 ): Promise<void> {
-  await assertReviewOwned(userId, reviewId);
+  const review = await prisma.review.findFirst({
+    where: { id: reviewId, userId },
+    select: { id: true, title: true },
+  });
+  if (!review) throw new HttpError(404, `Review not found: ${reviewId}`);
+  const prior = await prisma.reviewMessages.findUnique({
+    where: { reviewId },
+    select: { messages: true },
+  });
+  const priorMsgs =
+    (prior?.messages as unknown as ChatMessage[] | undefined) ?? [];
   await prisma.reviewMessages.upsert({
     where: { reviewId },
     create: { reviewId, messages: messages as unknown as Prisma.InputJsonValue },
     update: { messages: messages as unknown as Prisma.InputJsonValue },
   });
+  // Fire when a new user-authored message has appeared in this save.
+  // Persistence happens after streaming, so by the time we see it the
+  // assistant reply is usually the tail; we still want to count the user
+  // turn that triggered it.
+  const priorIds = new Set(priorMsgs.map((m) => m.id));
+  const addedUser = messages.find(
+    (m) => m.role === "user" && !priorIds.has(m.id),
+  );
+  if (addedUser) {
+    await sendSlackEvent(
+      SlackEventType.ReviewMessageSent,
+      `sent message in "${review.title}" (${reviewId})`,
+      userId,
+    );
+  }
 }
 
 export async function getAnnotations(
@@ -170,7 +203,17 @@ export async function setAnnotations(
   reviewId: string,
   annotations: Annotation[],
 ): Promise<void> {
-  await assertReviewOwned(userId, reviewId);
+  const review = await prisma.review.findFirst({
+    where: { id: reviewId, userId },
+    select: { id: true, title: true },
+  });
+  if (!review) throw new HttpError(404, `Review not found: ${reviewId}`);
+  const prior = await prisma.reviewAnnotations.findUnique({
+    where: { reviewId },
+    select: { annotations: true },
+  });
+  const priorAnns =
+    (prior?.annotations as unknown as Annotation[] | undefined) ?? [];
   await prisma.reviewAnnotations.upsert({
     where: { reviewId },
     create: {
@@ -181,6 +224,24 @@ export async function setAnnotations(
       annotations: annotations as unknown as Prisma.InputJsonValue,
     },
   });
+  const priorIds = new Set(priorAnns.map((a) => a.id));
+  const added = annotations.filter((a) => !priorIds.has(a.id));
+  for (const a of added) {
+    if (a.kind === "ask_ai") {
+      // "Dive deeper" / ask-AI from a selection is conversational, not a note.
+      await sendSlackEvent(
+        SlackEventType.ReviewMessageSent,
+        `dove deeper on "${review.title}" (p.${a.pageNumber})`,
+        userId,
+      );
+    } else {
+      await sendSlackEvent(
+        SlackEventType.NoteAdded,
+        `added note on "${review.title}" (p.${a.pageNumber})`,
+        userId,
+      );
+    }
+  }
 }
 
 /* ── Deep dives ───────────────────────────────────────────────── */
@@ -884,6 +945,11 @@ export async function createDiscoverQuery(
       createdAt: new Date(),
     },
   });
+  await sendSlackEvent(
+    SlackEventType.DiscoveryInitiated,
+    `started discovery: ${query}`,
+    userId,
+  );
   return rowToDiscoverQuery(row);
 }
 
