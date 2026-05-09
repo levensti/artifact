@@ -17,6 +17,7 @@
 
 export const CITATION_PREFIX_SECTION = "#cite-section-";
 export const CITATION_PREFIX_FIGURE = "#cite-figure-";
+export const CITATION_PREFIX_TABLE = "#cite-table-";
 export const CITATION_PREFIX_REF = "#cite-ref-";
 
 // §3, §3.2, § 3.2, Section 3, Sec. 3.2 — bare or parenthesized.
@@ -24,6 +25,8 @@ const SECTION_RE =
   /(?:§\s*|\bSection\s+|\bSec\.\s+)(\d+(?:\.\d+){0,2})\b/g;
 // Fig. 3, Figure 3, Fig 3 — bare or parenthesized.
 const FIGURE_RE = /\b(?:Fig\.?|Figure)\s+(\d+(?:\.\d+)?)\b/g;
+// Table 3, Table 3.1 — bare or parenthesized.
+const TABLE_RE = /\bTable\s+(\d+(?:\.\d+)?)\b/g;
 // Ref. [27], Ref [27], Ref. [Vaswani2017], Ref [Vaswani et al., 2017]
 const REF_RE = /\bRef\.?\s+\[([^\]]+)\]/g;
 
@@ -45,17 +48,22 @@ export function transformCitations(content: string): string {
         `[Fig. ${num}](${CITATION_PREFIX_FIGURE}${encodeURIComponent(num)})`,
     )
     .replace(
+      TABLE_RE,
+      (_m, num: string) =>
+        `[Table ${num}](${CITATION_PREFIX_TABLE}${encodeURIComponent(num)})`,
+    )
+    .replace(
       REF_RE,
       (_m, key: string) =>
         `[Ref. [${key}]](${CITATION_PREFIX_REF}${encodeURIComponent(key)})`,
     );
 }
 
-export type CitationKind = "section" | "figure" | "ref";
+export type CitationKind = "section" | "figure" | "table" | "ref";
 
 export interface CitationLinkInfo {
   kind: CitationKind;
-  /** The captured value: section number, figure number, or reference key. */
+  /** The captured value: section number, figure/table number, or reference key. */
   value: string;
 }
 
@@ -74,6 +82,12 @@ export function citationFromHref(
     return {
       kind: "figure",
       value: safeDecode(href.slice(CITATION_PREFIX_FIGURE.length)),
+    };
+  }
+  if (href.startsWith(CITATION_PREFIX_TABLE)) {
+    return {
+      kind: "table",
+      value: safeDecode(href.slice(CITATION_PREFIX_TABLE.length)),
     };
   }
   if (href.startsWith(CITATION_PREFIX_REF)) {

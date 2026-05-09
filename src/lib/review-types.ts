@@ -61,12 +61,15 @@ export interface ParsedReference {
   arxivId?: string;
 }
 
-/** A figure or table identified by caption. */
+/** A figure identified by caption. */
 export interface ParsedFigure {
   id: string;
   caption: string;
   page?: number;
 }
+
+/** A table identified by caption. Same shape as ParsedFigure. */
+export type ParsedTable = ParsedFigure;
 
 /**
  * Structured representation of a paper, produced by the parsing endpoint
@@ -80,6 +83,13 @@ export interface ParsedPaper {
   sections: ParsedSection[];
   references: ParsedReference[];
   figures: ParsedFigure[];
+  /**
+   * Tables. Optional for backward compatibility: papers parsed before the
+   * tables/figures split shared a single `figures` array, so older cached
+   * entries don't have this field. Resolvers fall back to scanning
+   * `figures` for `Table N`-prefixed ids when this is missing.
+   */
+  tables?: ParsedTable[];
   /**
    * 800-1500 word L1 paper card: central claim, methods, key results,
    * novelty, limitations. Always sent to the chat handler in long-paper

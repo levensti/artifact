@@ -44,7 +44,8 @@ Output rules — non-negotiable:
 - The JSON must be valid and parseable on the first try.
 - Preserve the paper's section hierarchy. Use level 1 for top-level (e.g. "1 Introduction"), 2 for subsections (e.g. "3.2 Architecture"), 3 for deeper.
 - Section bodies must be the verbatim text of that section. Do not summarize section bodies.
-- The input text contains "[Page N]" markers at every page boundary. ALWAYS populate startPage on each section and page on each figure using the most recent [Page N] marker that appears at or before that element. This is essential — downstream UI uses these to scroll the PDF viewer.
+- The input text contains "[Page N]" markers at every page boundary. ALWAYS populate startPage on each section and page on each figure or table using the most recent [Page N] marker that appears at or before that element. This is essential — downstream UI uses these to scroll the PDF viewer.
+- "figures" lists figures only; "tables" lists tables only. Use ids "Figure N" and "Table N" respectively (e.g. "Figure 1", "Table 2"). Do not put tables in "figures" or vice versa.
 - The "summary" field IS a summary: 800-1500 words, covering central claim, methods, key results, novelty, limitations. Write this as the L1 paper card a careful reader would want.
 
 JSON schema:
@@ -54,6 +55,7 @@ JSON schema:
   "sections": Array<{ "heading": string, "level": number, "body": string, "startPage": number }>,
   "references": Array<{ "key": string, "text": string, "doi"?: string, "arxivId"?: string }>,
   "figures": Array<{ "id": string, "caption": string, "page": number }>,
+  "tables": Array<{ "id": string, "caption": string, "page": number }>,
   "summary": string
 }`;
 
@@ -134,6 +136,7 @@ export async function POST(req: NextRequest) {
       sections: Array.isArray(parsed.sections) ? parsed.sections : [],
       references: Array.isArray(parsed.references) ? parsed.references : [],
       figures: Array.isArray(parsed.figures) ? parsed.figures : [],
+      tables: Array.isArray(parsed.tables) ? parsed.tables : [],
       summary: typeof parsed.summary === "string" ? parsed.summary : "",
       parsedAt: new Date().toISOString(),
       parsedWith: { provider, modelId: model },

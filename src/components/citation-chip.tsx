@@ -6,6 +6,7 @@ import {
   resolveFigure,
   resolveReference,
   resolveSection,
+  resolveTable,
   type CitationResolution,
 } from "@/lib/citation-resolver";
 import { useCitationContext } from "./citation-context";
@@ -36,6 +37,8 @@ export default function CitationChip({ href, children }: CitationChipProps) {
       resolution = resolveSection(info.value, parsedPaper, paperText);
     } else if (info.kind === "figure") {
       resolution = resolveFigure(info.value, parsedPaper, paperText);
+    } else if (info.kind === "table") {
+      resolution = resolveTable(info.value, parsedPaper, paperText);
     } else {
       resolution = resolveReference(info.value, parsedPaper, paperText);
     }
