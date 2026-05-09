@@ -81,7 +81,7 @@ export function resolveTable(
   paperText: string | null | undefined,
 ): CitationResolution {
   if (parsed) {
-    const match = findTableInParsed(parsed.figures, num);
+    const match = findTableInParsed(parsed, num);
     if (match) {
       const fromText = paperText ? findTableInText(paperText, num) : null;
       return {
@@ -149,11 +149,19 @@ function findFigureInParsed(
 }
 
 function findTableInParsed(
-  figures: ParsedFigure[],
+  parsed: ParsedPaper,
   num: string,
 ): ParsedFigure | null {
+  // Prefer the dedicated `tables` array (current schema). Fall back to
+  // scanning `figures` for table-prefixed ids — papers parsed before the
+  // tables/figures split lumped both into `figures`.
+  const direct = (parsed.tables ?? []).find((t) => {
+    const id = t.id.replace(/[^0-9.]/g, "");
+    return id === num || t.id.toLowerCase() === `table ${num}`;
+  });
+  if (direct) return direct;
   return (
-    figures.find((f) => {
+    parsed.figures.find((f) => {
       if (!/^\s*table\b/i.test(f.id)) return false;
       const id = f.id.replace(/[^0-9.]/g, "");
       return id === num || f.id.toLowerCase() === `table ${num}`;
