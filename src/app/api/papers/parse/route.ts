@@ -44,7 +44,8 @@ Output rules — non-negotiable:
 - The JSON must be valid and parseable on the first try.
 - Preserve the paper's section hierarchy. Use level 1 for top-level (e.g. "1 Introduction"), 2 for subsections (e.g. "3.2 Architecture"), 3 for deeper.
 - Section bodies must be the verbatim text of that section. Do not summarize section bodies.
-- The input text contains "[Page N]" markers at every page boundary. ALWAYS populate startPage on each section and page on each figure using the most recent [Page N] marker that appears at or before that element. This is essential — downstream UI uses these to scroll the PDF viewer.
+- The input text contains "[Page N]" markers at every page boundary. ALWAYS populate startPage on each section and page on each figure or table using the most recent [Page N] marker that appears at or before that element. This is essential — downstream UI uses these to scroll the PDF viewer.
+- The "figures" array contains BOTH figures and tables. Use id "Figure N" for figures and "Table N" for tables (e.g. "Figure 1", "Table 2") — downstream uses the prefix to disambiguate them.
 - The "summary" field IS a summary: 800-1500 words, covering central claim, methods, key results, novelty, limitations. Write this as the L1 paper card a careful reader would want.
 
 JSON schema:

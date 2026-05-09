@@ -75,6 +75,27 @@ export function resolveFigure(
   return {};
 }
 
+export function resolveTable(
+  num: string,
+  parsed: ParsedPaper | null,
+  paperText: string | null | undefined,
+): CitationResolution {
+  if (parsed) {
+    const match = findTableInParsed(parsed.figures, num);
+    if (match) {
+      const fromText = paperText ? findTableInText(paperText, num) : null;
+      return {
+        page: match.page ?? fromText?.page,
+        tooltip: shorten(match.caption, 200),
+      };
+    }
+  }
+  if (paperText) {
+    return findTableInText(paperText, num) ?? {};
+  }
+  return {};
+}
+
 export function resolveReference(
   key: string,
   parsed: ParsedPaper | null,
@@ -119,8 +140,23 @@ function findFigureInParsed(
 ): ParsedFigure | null {
   return (
     figures.find((f) => {
+      // Skip table entries — they share this array but only match `(Table N)`.
+      if (/^\s*table\b/i.test(f.id)) return false;
       const id = f.id.replace(/[^0-9.]/g, "");
       return id === num || f.id === num || f.id === `Figure ${num}`;
+    }) ?? null
+  );
+}
+
+function findTableInParsed(
+  figures: ParsedFigure[],
+  num: string,
+): ParsedFigure | null {
+  return (
+    figures.find((f) => {
+      if (!/^\s*table\b/i.test(f.id)) return false;
+      const id = f.id.replace(/[^0-9.]/g, "");
+      return id === num || f.id.toLowerCase() === `table ${num}`;
     }) ?? null
   );
 }
@@ -259,6 +295,33 @@ function findFigureInText(
   }
 
   const caption = `Figure ${num}: ${match[1].trim().split(/(?<=[.])\s/)[0]}`;
+  return { page: pageAt(paperText, match.index), tooltip: shorten(caption, 200) };
+}
+
+function findTableInText(
+  paperText: string,
+  num: string,
+): CitationResolution | null {
+  // Match "Table 3:" / "Table 3." typically used for captions, not in-text
+  // references. The colon/period after the number distinguishes a caption
+  // from "Table 3 shows…" mentions.
+  const escNum = escapeRegex(num);
+  const re = new RegExp(
+    `(?:^|\\n|\\s)Table\\s+${escNum}[\\s.:](.{10,400})`,
+    "i",
+  );
+  const match = re.exec(paperText);
+  if (!match) {
+    // Last resort: any "Table N" mention.
+    const fallbackRe = new RegExp(`\\bTable\\s+${escNum}\\b`, "i");
+    const fallback = fallbackRe.exec(paperText);
+    if (fallback) {
+      return { page: pageAt(paperText, fallback.index) };
+    }
+    return null;
+  }
+
+  const caption = `Table ${num}: ${match[1].trim().split(/(?<=[.])\s/)[0]}`;
   return { page: pageAt(paperText, match.index), tooltip: shorten(caption, 200) };
 }
 
