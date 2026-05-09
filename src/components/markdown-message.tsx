@@ -71,6 +71,26 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
                 </button>
               );
             }
+            // arXiv abstract pages — render as a compact mono chip so
+            // bare arxiv.org/abs/ID links stop dominating prose lists of
+            // related work. Strips trailing version (v1, v2…) from the
+            // displayed ID; the link itself still points at the original.
+            const arxivMatch = props.href?.match(
+              /^https?:\/\/arxiv\.org\/abs\/([^?#\s/]+)/i,
+            );
+            if (arxivMatch) {
+              const id = arxivMatch[1].replace(/v\d+$/, "");
+              return (
+                <a
+                  href={props.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="arxiv-chip"
+                >
+                  arXiv:{id}
+                </a>
+              );
+            }
             // Route relative/in-app paths through next/link so citations
             // like [Title](/review/abc) feel native instead of popping a
             // new tab. External URLs still open in a new tab.

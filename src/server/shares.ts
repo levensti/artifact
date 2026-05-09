@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { HttpError } from "./api";
 import { extractWikiLinkSlugs } from "@/lib/wiki-link-transform";
+import { sendSlackEvent, SlackEventType } from "./notifications";
 
 /* ── Types ────────────────────────────────────────────────────── */
 
@@ -95,7 +96,7 @@ export async function createOrReuseShare(
     if (!input.reviewId) throw new HttpError(400, "reviewId required");
     const review = await prisma.review.findFirst({
       where: { id: input.reviewId, userId },
-      select: { id: true, arxivId: true, sourceUrl: true },
+      select: { id: true, arxivId: true, sourceUrl: true, title: true },
     });
     if (!review) throw new HttpError(404, "Review not found");
     // Match the export gate: only sharable when the recipient can
@@ -125,6 +126,11 @@ export async function createOrReuseShare(
       },
       select: { token: true, createdAt: true },
     });
+    await sendSlackEvent(
+      SlackEventType.ShareLinkCreated,
+      `created share link for "${review.title}" (review ${review.id})`,
+      userId,
+    );
     return {
       token: created.token,
       createdAt: created.createdAt.toISOString(),
@@ -136,7 +142,7 @@ export async function createOrReuseShare(
   if (!input.wikiSlug) throw new HttpError(400, "wikiSlug required");
   const page = await prisma.wikiPage.findUnique({
     where: { userId_slug: { userId, slug: input.wikiSlug } },
-    select: { id: true },
+    select: { id: true, title: true },
   });
   if (!page) throw new HttpError(404, "Wiki page not found");
 
@@ -170,6 +176,11 @@ export async function createOrReuseShare(
     },
     select: { token: true, createdAt: true },
   });
+  await sendSlackEvent(
+    SlackEventType.ShareLinkCreated,
+    `created share link for "${page.title}" (wiki ${input.wikiSlug}, depth ${depth})`,
+    userId,
+  );
   return {
     token: created.token,
     createdAt: created.createdAt.toISOString(),

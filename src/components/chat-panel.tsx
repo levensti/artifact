@@ -609,52 +609,48 @@ export default function ChatPanel({
             <div className="space-y-5 px-4 pb-5 pt-5">
               {chatThreadAnnotationId && activeThreadAnn ? (
                 <>
-                  <div className="flex flex-col gap-2 border-b border-border/80 pb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                    <MonoLabel>Selection thread</MonoLabel>
+                  <div className="flex flex-col gap-2.5">
                     <Button
                       type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-9 w-full shrink-0 gap-2 px-3 text-xs font-medium shadow-sm sm:h-8 sm:w-auto"
+                      variant="ghost"
+                      size="xs"
+                      className="-ml-2 self-start gap-1.5 text-muted-foreground hover:text-foreground"
                       onClick={() => onChatThreadChange(null)}
                       aria-label="Back to whole-paper assistant chat"
                     >
-                      <ArrowLeft
-                        className="size-3.5 shrink-0"
-                        strokeWidth={2.5}
-                      />
-                      Return to main thread
+                      <ArrowLeft className="size-3" strokeWidth={2.5} />
+                      Main thread
                     </Button>
-                  </div>
 
-                  <div
-                    className="rounded-lg border px-3 py-2.5"
-                    style={{
-                      borderColor:
-                        "color-mix(in srgb, var(--primary) 22%, transparent)",
-                      background:
-                        "color-mix(in srgb, var(--primary) 5%, transparent)",
-                    }}
-                  >
-                    <div className="flex gap-2">
-                      <MessageSquareQuote
-                        className="mt-0.5 size-4 shrink-0"
-                        strokeWidth={2}
-                        style={{
-                          color:
-                            "color-mix(in srgb, var(--primary) 72%, transparent)",
-                        }}
-                      />
-                      <p
-                        className="text-xs leading-snug italic"
-                        style={{
-                          fontFamily: "var(--font-reading)",
-                          color:
-                            "color-mix(in srgb, var(--foreground) 72%, transparent)",
-                        }}
-                      >
-                        &ldquo;{activeThreadAnn.highlightText}&rdquo;
-                      </p>
+                    <div
+                      className="rounded-lg border px-3 py-2.5"
+                      style={{
+                        borderColor:
+                          "color-mix(in srgb, var(--primary) 22%, transparent)",
+                        background:
+                          "color-mix(in srgb, var(--primary) 5%, transparent)",
+                      }}
+                    >
+                      <div className="flex gap-2">
+                        <MessageSquareQuote
+                          className="mt-0.5 size-4 shrink-0"
+                          strokeWidth={2}
+                          style={{
+                            color:
+                              "color-mix(in srgb, var(--primary) 72%, transparent)",
+                          }}
+                        />
+                        <p
+                          className="text-xs leading-snug italic"
+                          style={{
+                            fontFamily: "var(--font-reading)",
+                            color:
+                              "color-mix(in srgb, var(--foreground) 72%, transparent)",
+                          }}
+                        >
+                          &ldquo;{activeThreadAnn.highlightText}&rdquo;
+                        </p>
+                      </div>
                     </div>
                   </div>
 

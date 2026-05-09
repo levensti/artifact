@@ -3,12 +3,23 @@
 import {
   Fragment,
   startTransition,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ReactElement,
 } from "react";
-import { Check, ChevronDown, KeyRound, Loader2, RefreshCw, Settings } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  KeyRound,
+  Loader2,
+  RefreshCw,
+  Search,
+  Settings,
+  X,
+} from "lucide-react";
 import {
   PROVIDER_ORDER,
   PROVIDER_META,
@@ -62,7 +73,9 @@ type FetchJob =
       key: string;
     };
 
-type ModelsListResponse = { models?: Array<{ id: string; label: string }> };
+type ModelsListResponse = {
+  models?: Array<{ id: string; label: string; created?: number }>;
+};
 type FetchModelsResult =
   | { ok: true; data: ModelsListResponse }
   | { ok: false; message?: string };
@@ -129,11 +142,109 @@ async function fetchLocalhostModelsList(
       ? data.models
       : [];
   const models = rawList
-    .map((m: { id?: string }) => m.id)
-    .filter((id: unknown): id is string => typeof id === "string")
-    .sort((a, b) => a.localeCompare(b))
-    .map((id) => ({ id, label: id }));
+    .filter(
+      (m: { id?: unknown }): m is { id: string; created?: number } =>
+        typeof m.id === "string",
+    )
+    .map((m: { id: string; created?: number }) => ({
+      id: m.id,
+      label: m.id,
+      created: typeof m.created === "number" ? m.created : undefined,
+    }));
   return { ok: true, data: { models } };
+}
+
+/**
+ * Bucket models from one provider into "families" by stripping the
+ * common variant suffixes from the model ID. Each bucket has one head
+ * (the canonical entry) and a tail of older / dated variants.
+ *
+ * The patterns intentionally cover only well-known shapes — date stamps
+ * (ISO and compact), 4-digit OpenAI-style snapshots, `-preview`, and
+ * `-latest`. We DON'T strip context-window or capability suffixes like
+ * `-16k` or `-vision` because those are real variants the user may want.
+ */
+function getFamily(modelId: string): string {
+  const stripPatterns = [
+    /-\d{4}-\d{2}-\d{2}$/,
+    /-\d{8}$/,
+    /-\d{4}$/,
+    /-preview$/,
+    /-latest$/,
+    /-stable$/,
+  ];
+  let id = modelId.toLowerCase();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const p of stripPatterns) {
+      if (p.test(id)) {
+        id = id.replace(p, "");
+        changed = true;
+      }
+    }
+  }
+  return id || modelId.toLowerCase();
+}
+
+interface FamilyBucket {
+  family: string;
+  head: Model;
+  tail: Model[];
+  /** Max `created` across the bucket. Used to sort families. */
+  freshness: number;
+}
+
+function bucketByFamily(models: Model[]): FamilyBucket[] {
+  const groups = new Map<string, Model[]>();
+  for (const m of models) {
+    const fam = getFamily(m.modelId);
+    const arr = groups.get(fam) ?? [];
+    arr.push(m);
+    groups.set(fam, arr);
+  }
+
+  const buckets: FamilyBucket[] = [];
+  for (const [family, entries] of groups) {
+    // Pick the head: alias entry (modelId === family) wins because
+    // providers like OpenAI use it as a pointer to the latest snapshot,
+    // and surfacing "gpt-4o" reads better than "gpt-4o-2024-08-06".
+    // Without an alias, fall back to newest by `created`, then lex desc.
+    entries.sort((a, b) => {
+      const aAlias = a.modelId.toLowerCase() === family ? 1 : 0;
+      const bAlias = b.modelId.toLowerCase() === family ? 1 : 0;
+      if (aAlias !== bAlias) return bAlias - aAlias;
+      const aC = a.created ?? -Infinity;
+      const bC = b.created ?? -Infinity;
+      if (aC !== bC) return bC - aC;
+      return b.modelId.localeCompare(a.modelId);
+    });
+    const [head, ...tail] = entries;
+    const freshness = entries.reduce(
+      (acc, m) => (m.created !== undefined && m.created > acc ? m.created : acc),
+      0,
+    );
+    buckets.push({ family, head, tail, freshness });
+  }
+
+  // Primary order: newest family first. Fallback: alphabetical, so
+  // providers without `created` data (some openai-compatible
+  // aggregators) still get a deterministic order instead of whatever
+  // order they happened to serve.
+  buckets.sort((a, b) => {
+    if (a.freshness !== b.freshness) return b.freshness - a.freshness;
+    return a.family.localeCompare(b.family);
+  });
+  return buckets;
+}
+
+function modelMatchesQuery(m: Model, q: string): boolean {
+  if (!q) return true;
+  const needle = q.toLowerCase();
+  return (
+    m.label.toLowerCase().includes(needle) ||
+    m.modelId.toLowerCase().includes(needle)
+  );
 }
 
 export default function ModelSelector({
@@ -152,6 +263,32 @@ export default function ModelSelector({
   const [modelsByFetchKey, setModelsByFetchKey] = useState<
     Partial<Record<string, ProviderModelsState>>
   >({});
+  const [searchQuery, setSearchQuery] = useState("");
+  // Keys are `${groupKey}::${family}` so two providers can both have a
+  // family called "gpt-4" without colliding.
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  // Reset transient UI state when the menu closes so the next open
+  // starts clean (most users won't continue a half-typed search across
+  // sessions, and stale "+older" expansions just clutter). Observed
+  // via onOpenChange below so we don't need controlled `open`.
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen) {
+      setSearchQuery("");
+      setExpandedFamilies(new Set());
+    }
+  }, []);
+
+  const toggleFamily = useCallback((key: string) => {
+    setExpandedFamilies((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const onKeys = () => setKeysVersion((v) => v + 1);
@@ -231,6 +368,7 @@ export default function ModelSelector({
                   label: m.label,
                   modelId: m.id,
                   provider: job.provider,
+                  created: m.created,
                 } satisfies Model;
               }
               return {
@@ -239,6 +377,7 @@ export default function ModelSelector({
                 modelId: m.id,
                 provider: job.profile.kind,
                 profileId: job.profile.id,
+                created: m.created,
               } satisfies Model;
             });
             return {
@@ -302,6 +441,18 @@ export default function ModelSelector({
     return n;
   }, [modelsByFetchKey]);
 
+  const totalMatchedSelectable = useMemo(() => {
+    if (!searchQuery.trim()) return totalSelectable;
+    let n = 0;
+    for (const s of Object.values(modelsByFetchKey)) {
+      if (s?.status !== "ok") continue;
+      for (const m of s.models) {
+        if (modelMatchesQuery(m, searchQuery)) n++;
+      }
+    }
+    return n;
+  }, [modelsByFetchKey, searchQuery, totalSelectable]);
+
   const triggerLabel =
     selected && isModelReady(selected)
       ? selected.label
@@ -329,6 +480,85 @@ export default function ModelSelector({
     [inferenceProfiles],
   );
 
+  function renderModelItem(model: Model, displayLabel: string) {
+    const isSelected = selected?.id === model.id;
+    return (
+      <DropdownMenuItem
+        key={model.id}
+        className={cn(
+          "flex items-center justify-between gap-2 cursor-pointer",
+          isSelected && "bg-[var(--badge-accent-bg)]",
+        )}
+        onClick={() => onSelect(model)}
+      >
+        <span
+          className={cn(
+            "truncate text-[12.5px]",
+            isSelected ? "font-medium text-foreground" : "text-foreground/85",
+          )}
+        >
+          {displayLabel}
+        </span>
+        {isSelected && <Check size={12} className="shrink-0 text-primary" />}
+      </DropdownMenuItem>
+    );
+  }
+
+  function renderModelList(
+    groupKey: string,
+    models: Model[],
+    displayFor: (m: Model) => string,
+  ) {
+    // Search bypasses family bucketing — the user is looking for
+    // something specific, surface every match in a flat list. Caller
+    // is responsible for skipping the group entirely when matches are
+    // zero; we don't render an empty-state row here.
+    if (searchQuery.trim()) {
+      const sorted = [...models].sort(
+        (a, b) => (b.created ?? 0) - (a.created ?? 0),
+      );
+      return sorted.map((m) => renderModelItem(m, displayFor(m)));
+    }
+
+    const buckets = bucketByFamily(models);
+    return buckets.map((bucket) => {
+      const expandKey = `${groupKey}::${bucket.family}`;
+      const expanded = expandedFamilies.has(expandKey);
+      return (
+        <Fragment key={bucket.family}>
+          {renderModelItem(bucket.head, displayFor(bucket.head))}
+          {bucket.tail.length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                // Don't let the menu treat this as an item activation
+                // (which would close the dropdown).
+                e.stopPropagation();
+                e.preventDefault();
+                toggleFamily(expandKey);
+              }}
+              className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-[10.5px] text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ChevronDown
+                size={10}
+                strokeWidth={2}
+                className={cn(
+                  "transition-transform duration-150",
+                  expanded && "rotate-180",
+                )}
+              />
+              {expanded
+                ? "Hide older"
+                : `${bucket.tail.length} older version${bucket.tail.length === 1 ? "" : "s"}`}
+            </button>
+          )}
+          {expanded &&
+            bucket.tail.map((m) => renderModelItem(m, displayFor(m)))}
+        </Fragment>
+      );
+    });
+  }
+
   function renderBuiltinGroup(
     provider: keyof typeof PROVIDER_META,
     groupIndex: number,
@@ -336,6 +566,23 @@ export default function ModelSelector({
     const meta = PROVIDER_META[provider];
     const raw = modelsByFetchKey[provider];
     const state: ProviderModelsState = raw ?? { status: "loading" };
+
+    // When searching, skip groups that have no matches entirely so we
+    // don't show a wall of provider labels with no items underneath.
+    const isSearching = !!searchQuery.trim();
+    const visibleModels =
+      state.status === "ok"
+        ? isSearching
+          ? state.models.filter((m) => modelMatchesQuery(m, searchQuery))
+          : state.models
+        : [];
+    if (
+      isSearching &&
+      state.status === "ok" &&
+      visibleModels.length === 0
+    ) {
+      return null;
+    }
 
     return (
       <Fragment key={provider}>
@@ -375,136 +622,101 @@ export default function ModelSelector({
               onClick={() => setRefetchTick((t) => t + 1)}
             >
               <RefreshCw className="size-3.5 opacity-80" />
-              No models found — retry
+              No models found. Retry
             </DropdownMenuItem>
           )}
 
           {state.status === "ok" &&
-            state.models.map((model) => {
-              const isSelected = selected?.id === model.id;
-              return (
-                <DropdownMenuItem
-                  key={model.id}
-                  className={cn(
-                    "flex items-center justify-between gap-2 cursor-pointer",
-                    isSelected && "bg-[var(--badge-accent-bg)]",
-                  )}
-                  onClick={() => onSelect(model)}
-                >
-                  <span
-                    className={cn(
-                      "truncate text-[12.5px]",
-                      isSelected
-                        ? "font-medium text-foreground"
-                        : "text-foreground/85",
-                    )}
-                  >
-                    {model.label}
-                  </span>
-                  {isSelected && (
-                    <Check size={12} className="shrink-0 text-primary" />
-                  )}
-                </DropdownMenuItem>
-              );
-            })}
+            visibleModels.length > 0 &&
+            renderModelList(provider, visibleModels, (m) => m.label)}
         </DropdownMenuGroup>
       </Fragment>
     );
   }
 
-  function renderProfileGroup(
-    profiles: InferenceProviderProfile[],
-  ) {
+  function renderProfileGroup(profiles: InferenceProviderProfile[]) {
     if (profiles.length === 0) return null;
+    const isSearching = !!searchQuery.trim();
+
+    const renderedProfiles = profiles
+      .map((prof) => {
+        const raw = modelsByFetchKey[prof.id];
+        const state: ProviderModelsState = raw ?? { status: "loading" };
+        const displayFor = (m: Model) =>
+          m.label.includes("·")
+            ? (m.label.split("·").pop()?.trim() ?? m.label)
+            : m.label;
+
+        const visibleModels =
+          state.status === "ok"
+            ? isSearching
+              ? state.models.filter((m) => modelMatchesQuery(m, searchQuery))
+              : state.models
+            : [];
+        if (
+          isSearching &&
+          state.status === "ok" &&
+          visibleModels.length === 0
+        ) {
+          return null;
+        }
+
+        return (
+          <Fragment key={prof.id}>
+            <DropdownMenuLabel className="px-2 pt-1.5 pb-1">
+              <MonoLabel>{prof.label}</MonoLabel>
+            </DropdownMenuLabel>
+
+            {state.status === "loading" && (
+              <DropdownMenuItem disabled className="text-xs gap-2 opacity-100">
+                <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                <span className="text-muted-foreground">Loading…</span>
+              </DropdownMenuItem>
+            )}
+
+            {state.status === "error" && (
+              <>
+                {state.message && (
+                  <p className="px-2 pt-1 pb-0.5 text-[10px] leading-snug text-muted-foreground">
+                    {state.message}
+                  </p>
+                )}
+                <DropdownMenuItem
+                  className="text-xs gap-2 cursor-pointer"
+                  onClick={() => setRefetchTick((t) => t + 1)}
+                >
+                  <RefreshCw className="size-3.5 opacity-80" />
+                  Retry
+                </DropdownMenuItem>
+              </>
+            )}
+
+            {state.status === "ok" && state.models.length === 0 && (
+              <p className="px-1.5 pb-1 text-[10px] text-muted-foreground">
+                No models listed.
+              </p>
+            )}
+
+            {state.status === "ok" &&
+              visibleModels.length > 0 &&
+              renderModelList(prof.id, visibleModels, displayFor)}
+          </Fragment>
+        );
+      })
+      .filter((node): node is ReactElement => node !== null);
+
+    if (renderedProfiles.length === 0) return null;
 
     return (
       <Fragment key="inference">
         <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          {profiles.map((prof) => {
-            const raw = modelsByFetchKey[prof.id];
-            const state: ProviderModelsState = raw ?? { status: "loading" };
-
-            return (
-              <Fragment key={prof.id}>
-                <DropdownMenuLabel className="px-2 pt-1.5 pb-1">
-                  <MonoLabel>{prof.label}</MonoLabel>
-                </DropdownMenuLabel>
-
-                {state.status === "loading" && (
-                  <DropdownMenuItem
-                    disabled
-                    className="text-xs gap-2 opacity-100"
-                  >
-                    <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                    <span className="text-muted-foreground">Loading…</span>
-                  </DropdownMenuItem>
-                )}
-
-                {state.status === "error" && (
-                  <>
-                    {state.message && (
-                      <p className="px-2 pt-1 pb-0.5 text-[10px] leading-snug text-muted-foreground">
-                        {state.message}
-                      </p>
-                    )}
-                    <DropdownMenuItem
-                      className="text-xs gap-2 cursor-pointer"
-                      onClick={() => setRefetchTick((t) => t + 1)}
-                    >
-                      <RefreshCw className="size-3.5 opacity-80" />
-                      Retry
-                    </DropdownMenuItem>
-                  </>
-                )}
-
-                {state.status === "ok" && state.models.length === 0 && (
-                  <p className="px-1.5 pb-1 text-[10px] text-muted-foreground">
-                    No models listed.
-                  </p>
-                )}
-
-                {state.status === "ok" &&
-                  state.models.map((model) => {
-                    const isSelected = selected?.id === model.id;
-                    const display = model.label.includes("·")
-                      ? model.label.split("·").pop()?.trim()
-                      : model.label;
-                    return (
-                      <DropdownMenuItem
-                        key={model.id}
-                        className={cn(
-                          "flex items-center justify-between gap-2 cursor-pointer",
-                          isSelected && "bg-[var(--badge-accent-bg)]",
-                        )}
-                        onClick={() => onSelect(model)}
-                      >
-                        <span
-                          className={cn(
-                            "truncate text-[12.5px]",
-                            isSelected
-                              ? "font-medium text-foreground"
-                              : "text-foreground/85",
-                          )}
-                        >
-                          {display}
-                        </span>
-                        {isSelected && (
-                          <Check size={12} className="shrink-0 text-primary" />
-                        )}
-                      </DropdownMenuItem>
-                    );
-                  })}
-              </Fragment>
-            );
-          })}
-        </DropdownMenuGroup>
+        <DropdownMenuGroup>{renderedProfiles}</DropdownMenuGroup>
       </Fragment>
     );
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger
         className={cn(
           "group inline-flex max-w-[min(220px,46vw)] items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12.5px] transition-colors duration-150",
@@ -568,10 +780,59 @@ export default function ModelSelector({
           </div>
         ) : (
           <>
+            {totalSelectable > 0 && (
+              <div className="sticky top-0 z-10 -mx-1 -mt-1 mb-1 border-b border-border/60 bg-popover/95 px-1.5 pt-1.5 pb-1.5 backdrop-blur-sm">
+                <div className="relative">
+                  <Search
+                    size={11}
+                    className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/60"
+                    strokeWidth={2}
+                  />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Stop the menu's built-in typeahead from
+                      // intercepting normal typing. Esc still bubbles
+                      // so the menu can close.
+                      if (
+                        e.key.length === 1 ||
+                        e.key === "Backspace" ||
+                        e.key === "Delete"
+                      ) {
+                        e.stopPropagation();
+                      }
+                    }}
+                    placeholder="Search models…"
+                    className="h-7 w-full rounded-md border border-border/60 bg-background/60 pl-6 pr-6 text-[11.5px] text-foreground placeholder:text-muted-foreground/60 outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/40"
+                    spellCheck={false}
+                    autoComplete="off"
+                    aria-label="Search models"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded text-muted-foreground/60 hover:text-foreground"
+                      aria-label="Clear search"
+                    >
+                      <X size={11} strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {readyBuiltinProviders.map((provider, idx) =>
               renderBuiltinGroup(provider, idx),
             )}
             {renderProfileGroup(readyInferenceProfiles)}
+
+            {searchQuery.trim() && totalMatchedSelectable === 0 && (
+              <p className="px-2 py-2 text-[11.5px] text-muted-foreground/80">
+                No models match &ldquo;{searchQuery.trim()}&rdquo;.
+              </p>
+            )}
 
             <DropdownMenuSeparator />
             <DropdownMenuItem

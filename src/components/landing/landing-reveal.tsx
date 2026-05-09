@@ -67,9 +67,10 @@ export function Reveal({
       data-shown={shown ? "true" : "false"}
       style={{
         opacity: shown ? 1 : 0,
-        transform: shown ? "translateY(0)" : "translateY(8px)",
-        transition: `opacity 600ms cubic-bezier(0.16, 1, 0.3, 1) ${delayMs}ms, transform 600ms cubic-bezier(0.16, 1, 0.3, 1) ${delayMs}ms`,
-        willChange: shown ? "auto" : "opacity, transform",
+        transform: shown ? "translateY(0)" : "translateY(14px)",
+        filter: shown ? "blur(0px)" : "blur(4px)",
+        transition: `opacity 750ms cubic-bezier(0.16, 1, 0.3, 1) ${delayMs}ms, transform 750ms cubic-bezier(0.16, 1, 0.3, 1) ${delayMs}ms, filter 750ms cubic-bezier(0.16, 1, 0.3, 1) ${delayMs}ms`,
+        willChange: shown ? "auto" : "opacity, transform, filter",
       }}
     >
       {children}

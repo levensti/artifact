@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { AlertCircle, RotateCw } from "lucide-react";
 import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
@@ -8,8 +9,9 @@ import MarkdownMessage from "./markdown-message";
 import {
   ThinkingIndicator,
   ToolCallStep,
-  renderAgentSteps,
+  AgentSteps,
 } from "./chat-step-renderers";
+import { TextWithPicks, buildPoolFromBlocks } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
 /* ------------------------------------------------------------------ */
@@ -63,34 +65,39 @@ export function hasInterleavedBlocks(blocks: ChatAssistantBlock[]): boolean {
   );
 }
 
-export function renderInterleavedBlocks(blocks: ChatAssistantBlock[]) {
-  return blocks.map((block, i) => {
-    if (block.type === "text_segment") {
-      return block.content ? (
-        <MarkdownMessage key={`ts-${i}`} content={block.content} />
-      ) : null;
-    }
-    if (block.type === "tool_call") {
-      return (
-        <ToolCallStep
-          key={block.id}
-          name={block.name}
-          input={block.input}
-          output={block.output}
-        />
-      );
-    }
-    if (block.type === "arxiv_hits") {
-      return (
-        <ArxivHitsBlock
-          key={`ah-${i}`}
-          query={block.query}
-          results={block.results}
-        />
-      );
-    }
-    return null;
-  });
+export function InterleavedBlocks({ blocks }: { blocks: ChatAssistantBlock[] }) {
+  const pool = useMemo(() => buildPoolFromBlocks(blocks), [blocks]);
+  return (
+    <>
+      {blocks.map((block, i) => {
+        if (block.type === "text_segment") {
+          return block.content ? (
+            <TextWithPicks key={`ts-${i}`} text={block.content} pool={pool} />
+          ) : null;
+        }
+        if (block.type === "tool_call") {
+          return (
+            <ToolCallStep
+              key={block.id}
+              name={block.name}
+              input={block.input}
+              output={block.output}
+            />
+          );
+        }
+        if (block.type === "arxiv_hits") {
+          return (
+            <ArxivHitsBlock
+              key={`ah-${i}`}
+              query={block.query}
+              results={block.results}
+            />
+          );
+        }
+        return null;
+      })}
+    </>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,7 +164,7 @@ export function ChatMessageBubble({
           {agentSteps.length === 0 ? (
             <ThinkingIndicator />
           ) : (
-            renderAgentSteps(agentSteps)
+            <AgentSteps steps={agentSteps} />
           )}
         </div>
       </div>
@@ -170,7 +177,7 @@ export function ChatMessageBubble({
     return (
       <div className="max-w-full">
         <div className="border-l-2 border-l-primary/15 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
-          {renderInterleavedBlocks(msg.blocks!)}
+          <InterleavedBlocks blocks={msg.blocks!} />
         </div>
       </div>
     );
@@ -178,9 +185,9 @@ export function ChatMessageBubble({
 
   return (
     <div className="max-w-full">
-      <div className="rounded-xl border-l-[3px] border-l-primary/30 px-4 py-3 text-sm leading-relaxed bg-card text-card-foreground shadow-sm max-w-full">
+      <div className="border-l-[3px] border-l-primary/30 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
         {msg.content ? <MarkdownMessage content={msg.content} /> : null}
-        {hasBlocks ? renderInterleavedBlocks(msg.blocks!) : null}
+        {hasBlocks ? <InterleavedBlocks blocks={msg.blocks!} /> : null}
       </div>
     </div>
   );

@@ -213,10 +213,10 @@ export default function WebViewer({
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
-      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border bg-background/40 px-3 sm:px-4 backdrop-blur-sm safe-area-x">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 pl-[max(env(safe-area-inset-left),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] sm:pl-[max(env(safe-area-inset-left),1rem)] sm:pr-[max(env(safe-area-inset-right),1rem)] backdrop-blur-md">
+        <div className="flex min-w-0 items-center gap-1.5">
           {siteName && (
-            <span className="text-xs font-medium text-muted-foreground truncate">
+            <span className="truncate text-xs font-medium text-foreground/70">
               {siteName}
             </span>
           )}
@@ -225,7 +225,7 @@ export default function WebViewer({
           href={sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"
         >
           Open original
           <ExternalLink size={12} />

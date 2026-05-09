@@ -15,31 +15,34 @@ export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
       <MonoLabel>Open source · Free to use</MonoLabel>
 
       <h1 id="cover-title" className="landing-cover-h1 mt-6">
-        Read deeply.
+        Study anything.
         <br />
-        Discover the
+        Push the
         <br />
         <span className="frontier">frontier.</span>
       </h1>
 
       <p
-        className="mt-9 max-w-[640px] text-[19px] leading-[1.6]"
+        className="mt-9 max-w-160 text-[19px] leading-[1.6]"
         style={{
           fontFamily: "var(--font-reading)",
           color: "color-mix(in srgb, var(--foreground) 88%, transparent)",
           textWrap: "pretty",
         }}
       >
-        Read papers, blogs, and PDFs alongside an AI.{" "}
-        <ItalicAccent>Highlight a passage and ask about it.</ItalicAccent> Take
-        a note. Save the chat. Your journal builds itself in the background, so
-        nothing you read goes unrecorded.
+        Read papers, blogs, and arbitrary PDFs alongside a powerful AI
+        assistant. Every concept, every connection, every insight you find, kept
+        in{" "}
+        <ItalicAccent>
+          a personal journal that compounds with you over years
+        </ItalicAccent>
+        .
       </p>
 
       <div className="mt-10 flex flex-wrap items-center gap-2.5">
         <a
           href={signupHref}
-          className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-[18px] text-[13.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
+          className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4.5 text-[13.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
         >
           Get started
           <svg

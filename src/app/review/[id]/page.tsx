@@ -29,6 +29,10 @@ import {
 } from "@/lib/annotations";
 import { arxivPdfUrl, BREAKPOINTS } from "@/lib/utils";
 
+const NOTES_COLLAPSED_KEY = "artifact-notes-rail-collapsed";
+const ASSISTANT_COLLAPSED_KEY = "artifact-assistant-panel-collapsed";
+const ASSISTANT_WIDTH_KEY = "artifact-assistant-panel-width";
+
 import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
@@ -131,15 +135,67 @@ export default function ReviewPage() {
   const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(
     null,
   );
-  const [panelWidth, setPanelWidth] = useState(() =>
-    typeof window !== "undefined" && window.innerWidth < 1280 ? 360 : 440,
-  );
+  const [panelWidth, setPanelWidth] = useState(() => {
+    if (typeof window === "undefined") return 440;
+    try {
+      const saved = window.localStorage.getItem(ASSISTANT_WIDTH_KEY);
+      if (saved) {
+        const parsed = Number.parseInt(saved, 10);
+        if (Number.isFinite(parsed) && parsed >= 320 && parsed <= 980) {
+          return parsed;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return window.innerWidth < 1280 ? 360 : 440;
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [narrowViewport, setNarrowViewport] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 1280,
   );
   const [notesOpen, setNotesOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [notesCollapsed, setNotesCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(NOTES_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [assistantCollapsed, setAssistantCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(ASSISTANT_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleNotesCollapsed = useCallback(() => {
+    setNotesCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(NOTES_COLLAPSED_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAssistantCollapsed = useCallback(() => {
+    setAssistantCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(ASSISTANT_COLLAPSED_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
   const notesOverlayRef = useRef<HTMLDivElement>(null);
   const assistantOverlayRef = useRef<HTMLDivElement>(null);
 
@@ -267,9 +323,26 @@ export default function ReviewPage() {
       setActiveAnnotationId(ann.id);
       setChatThreadAnnotationId(ann.id);
     });
+    // Reveal the assistant so the user lands on the thread they just
+    // started rather than a still-collapsed rail. On narrow viewports
+    // the rail lives behind an overlay (notesOpen/assistantOpen mutex);
+    // on wide viewports it has a collapsed strip mode.
+    if (narrowViewport) {
+      setAssistantOpen(true);
+      setNotesOpen(false);
+    } else if (assistantCollapsed) {
+      toggleAssistantCollapsed();
+    }
     setSelectionInfo(null);
     window.getSelection()?.removeAllRanges();
-  }, [selectionInfo, review, refreshAnnotations]);
+  }, [
+    selectionInfo,
+    review,
+    refreshAnnotations,
+    narrowViewport,
+    assistantCollapsed,
+    toggleAssistantCollapsed,
+  ]);
 
   const handleAnnotateSelection = useCallback(() => {
     if (selectionInfo && review) {
@@ -285,10 +358,23 @@ export default function ReviewPage() {
         setActiveAnnotationId(ann.id);
         setChatThreadAnnotationId(null);
       });
+      if (narrowViewport) {
+        setNotesOpen(true);
+        setAssistantOpen(false);
+      } else if (notesCollapsed) {
+        toggleNotesCollapsed();
+      }
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
     }
-  }, [selectionInfo, review, refreshAnnotations]);
+  }, [
+    selectionInfo,
+    review,
+    refreshAnnotations,
+    narrowViewport,
+    notesCollapsed,
+    toggleNotesCollapsed,
+  ]);
 
   const handleAnnotationSelect = useCallback(
     (id: string) => {
@@ -349,16 +435,26 @@ export default function ReviewPage() {
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
+    let latestWidth: number | null = null;
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = window.innerWidth - e.clientX;
       const minWidth = 320;
-      setPanelWidth(Math.max(minWidth, Math.min(980, newWidth)));
+      const clamped = Math.max(minWidth, Math.min(980, newWidth));
+      latestWidth = clamped;
+      setPanelWidth(clamped);
     };
 
     const handleMouseUp = () => {
       setIsDragging(false);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      if (latestWidth != null) {
+        try {
+          localStorage.setItem(ASSISTANT_WIDTH_KEY, String(latestWidth));
+        } catch {
+          /* ignore */
+        }
+      }
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
@@ -428,6 +524,8 @@ export default function ReviewPage() {
               onHighlightClick={handleHighlightClick}
               onAnnotationHover={setHoveredAnnotationId}
               onAnnotationSelect={handleAnnotationSelect}
+              collapsed={notesCollapsed}
+              onToggleCollapsed={toggleNotesCollapsed}
             />
           )}
         </div>
@@ -435,19 +533,21 @@ export default function ReviewPage() {
         {/* Inline drag handle + right panel — only when viewport is wide */}
         {!narrowViewport && (
           <>
-            <div
-              onMouseDown={handleMouseDown}
-              className={`group/drag relative w-[5px] cursor-col-resize flex items-center justify-center shrink-0 transition-colors duration-150 ${isDragging ? "bg-primary/25" : "bg-transparent hover:bg-muted-foreground/12"}`}
-            >
-              <div className="absolute inset-y-0 -left-1 -right-1" />
-              <div className={`flex items-center justify-center rounded-full bg-card border border-border shadow-sm transition-opacity duration-150 size-6 ${isDragging ? "opacity-100" : "opacity-0 group-hover/drag:opacity-100"}`}>
-                <GripVertical size={10} className="text-muted-foreground/70" />
+            {!assistantCollapsed && (
+              <div
+                onMouseDown={handleMouseDown}
+                className={`group/drag relative w-[5px] cursor-col-resize flex items-center justify-center shrink-0 transition-colors duration-150 ${isDragging ? "bg-primary/25" : "bg-transparent hover:bg-muted-foreground/12"}`}
+              >
+                <div className="absolute inset-y-0 -left-1 -right-1" />
+                <div className={`flex items-center justify-center rounded-full bg-card border border-border shadow-sm transition-opacity duration-150 size-6 ${isDragging ? "opacity-100" : "opacity-0 group-hover/drag:opacity-100"}`}>
+                  <GripVertical size={10} className="text-muted-foreground/70" />
+                </div>
               </div>
-            </div>
+            )}
 
             <div
-              className="flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background"
-              style={{ width: `${panelWidth}px` }}
+              className={`flex min-h-0 shrink-0 flex-col overflow-hidden bg-background ${assistantCollapsed ? "" : "border-l border-border/80"}`}
+              style={assistantCollapsed ? undefined : { width: `${panelWidth}px` }}
             >
               <CitationContextProvider paperText={paperText}>
                 <RightPanel
@@ -462,6 +562,8 @@ export default function ReviewPage() {
                   selectedModel={selectedModel}
                   onModelChange={handleModelChange}
                   sourceUrl={review.sourceUrl}
+                  collapsed={assistantCollapsed}
+                  onToggleCollapsed={toggleAssistantCollapsed}
                 />
               </CitationContextProvider>
             </div>

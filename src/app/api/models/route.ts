@@ -17,6 +17,150 @@ interface ModelsRequest {
 interface ModelOption {
   id: string;
   label: string;
+  /** Unix epoch seconds when the provider published this model. */
+  created?: number;
+}
+
+/**
+ * Modality keywords that mark a model as NOT chat-completions-capable.
+ *
+ * Applied uniformly to every provider that returns mixed catalogs —
+ * OpenAI, OpenAI-compatible aggregators (OpenRouter, Together,
+ * Fireworks, etc.) — so a single pass blocks `whisper-1`, `gpt-image-1`,
+ * `text-embedding-3-large`, `claude-3-5-haiku-tts` (hypothetical), etc.
+ * Anthropic and xAI's own endpoints already pre-filter by modality so
+ * this list isn't reapplied there.
+ *
+ * Matching is *segment-prefix*: we split the model ID on `-` and `/`
+ * and reject if any segment STARTS WITH a token in this set. That
+ * catches `whisper-1` (prefix), `gpt-4o-mini-tts` (suffix), and
+ * `imagen-3.0-generate` (variant family — segment "imagen" starts with
+ * "image"). It deliberately avoids substring matches across segments,
+ * so `research` doesn't trigger `search` and `adapter` doesn't trigger
+ * `ada`. The cost is a small risk that a token-prefixed segment
+ * (e.g., "imageless-chat", if anyone ever ships such a thing) would be
+ * dropped — accept that and add a more specific compound regex below
+ * if it bites.
+ *
+ * When you add a new keyword here:
+ *   - keep it lowercase
+ *   - ensure it's specific enough that no legitimate chat model would
+ *     legitimately use it as a `-`-delimited segment
+ *   - put it under the right modality heading
+ */
+const NON_CHAT_TOKENS = new Set<string>([
+  // — Embeddings (matches "embed", "embedding", "embeddings" under
+  //   prefix matching)
+  "embed",
+
+  // — Audio: speech-to-text
+  "whisper",
+  "transcribe",
+
+  // — Audio: text-to-speech
+  "tts",
+
+  // — Audio: combined / unspecified
+  "audio",
+
+  // — Audio: music generation (Gemini Lyria, etc.)
+  "lyria",
+
+  // — Image generation
+  "image",
+  // (also: `dall-e` — handled in NON_CHAT_COMPOUND_PATTERNS below)
+
+  // — Video generation
+  "video",
+  "veo",
+
+  // — Moderation
+  "moderation",
+
+  // — Search-augmented endpoints (OpenAI-specific surface, not chat
+  //   completions — distinct from chat models that *call* a search tool)
+  "search",
+
+  // — Realtime API (separate streaming transport, not chat completions)
+  "realtime",
+
+  // — Code-specific completion (Codex)
+  "codex",
+
+  // — Embodied / robotics (Gemini Robotics)
+  "robotics",
+
+  // — QA endpoints (Gemini AQA — Attributed Question Answering, a
+  //   distinct API surface from chat. The user-facing keyword is
+  //   "qa" but it appears in model ids only as "aqa".)
+  "aqa",
+
+  // — Legacy pre-chat completion families
+  "davinci",
+  "babbage",
+  "curie",
+  "ada",
+]);
+
+/**
+ * Tokens that contain internal dashes — segment-splitting on `-`
+ * destroys them, so we substring-match instead. Keep this list short:
+ * substring matches are riskier than segment matches because they can
+ * fire on partial overlaps. Each entry should be specific enough that
+ * no legitimate chat model would contain it as a substring.
+ */
+const NON_CHAT_COMPOUND_PATTERNS: RegExp[] = [
+  // OpenAI DALL-E (image generation)
+  /dall-?e/i,
+  // Gemini Computer Use API (agent-loop transport, not chat completions)
+  /computer-use/i,
+];
+
+function modelIdSegments(id: string): string[] {
+  return id.toLowerCase().split(/[-/]/);
+}
+
+/**
+ * Provider-agnostic modality filter. True if the model ID looks like
+ * a non-chat-completions model (embeddings, audio, image, video,
+ * robotics, etc.).
+ */
+function isNonChatModalityId(id: string): boolean {
+  for (const seg of modelIdSegments(id)) {
+    for (const token of NON_CHAT_TOKENS) {
+      if (seg.startsWith(token)) return true;
+    }
+  }
+  for (const pattern of NON_CHAT_COMPOUND_PATTERNS) {
+    if (pattern.test(id)) return true;
+  }
+  return false;
+}
+
+/**
+ * OpenAI-specific filter: gate by the chat-family prefixes (gpt*, o\d,
+ * chatgpt*) since OpenAI's `/v1/models` lists arbitrary artifacts, then
+ * apply the shared modality exclusion.
+ */
+function looksLikeOpenAIChatModel(id: string): boolean {
+  if (
+    !id.startsWith("gpt") &&
+    !/^o\d/.test(id) &&
+    !id.startsWith("chatgpt")
+  ) {
+    return false;
+  }
+  if (isNonChatModalityId(id)) return false;
+  // Legacy `/v1/completions`-only model; "instruct" alone is too common
+  // a token (community chat-instruct-tuned models use it) to blanket
+  // exclude, so handle this OpenAI-specific id explicitly.
+  if (
+    id === "gpt-3.5-turbo-instruct" ||
+    id.startsWith("gpt-3.5-turbo-instruct-")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function jsonError(message: string, status: number) {
@@ -114,11 +258,17 @@ async function fetchOpenAIModels(apiKey: string): Promise<ModelOption[]> {
   const data = await response.json();
   const models = Array.isArray(data?.data) ? data.data : [];
   return models
-    .map((m: { id?: string }) => m.id)
-    .filter((id: unknown): id is string => typeof id === "string")
-    .filter((id: string) => id.includes("gpt") || id.startsWith("o"))
-    .sort((a: string, b: string) => a.localeCompare(b))
-    .map((id: string) => ({ id, label: id }));
+    .filter(
+      (m: { id?: unknown }): m is { id: string; created?: number } =>
+        typeof m.id === "string" && looksLikeOpenAIChatModel(m.id),
+    )
+    .map(
+      (m: { id: string; created?: number }): ModelOption => ({
+        id: m.id,
+        label: m.id,
+        created: typeof m.created === "number" ? m.created : undefined,
+      }),
+    );
 }
 
 async function fetchOpenAICompatibleModels(
@@ -152,10 +302,17 @@ async function fetchOpenAICompatibleModels(
       : [];
   const models = rawList;
   return models
-    .map((m: { id?: string }) => m.id)
-    .filter((id: unknown): id is string => typeof id === "string")
-    .sort((a: string, b: string) => a.localeCompare(b))
-    .map((id: string) => ({ id, label: id }));
+    .filter(
+      (m: { id?: unknown }): m is { id: string; created?: number } =>
+        typeof m.id === "string" && !isNonChatModalityId(m.id),
+    )
+    .map(
+      (m: { id: string; created?: number }): ModelOption => ({
+        id: m.id,
+        label: m.id,
+        created: typeof m.created === "number" ? m.created : undefined,
+      }),
+    );
 }
 
 async function fetchAnthropicModels(apiKey: string): Promise<ModelOption[]> {
@@ -169,12 +326,33 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelOption[]> {
   const data = await response.json();
   const models = Array.isArray(data?.data) ? data.data : [];
   return models
-    .map((m: { id?: string; display_name?: string }) => ({
-      id: m.id ?? "",
-      label: m.display_name || m.id || "",
-    }))
-    .filter((m: ModelOption) => !!m.id)
-    .sort((a: ModelOption, b: ModelOption) => a.label.localeCompare(b.label));
+    .filter(
+      (m: { id?: unknown }): m is {
+        id: string;
+        display_name?: string;
+        created_at?: string;
+      } => typeof m.id === "string" && m.id.length > 0,
+    )
+    .map(
+      (m: {
+        id: string;
+        display_name?: string;
+        created_at?: string;
+      }): ModelOption => {
+        // Anthropic returns ISO 8601 (e.g. "2024-10-22T00:00:00Z").
+        // Convert to Unix seconds for parity with the other providers.
+        let created: number | undefined;
+        if (typeof m.created_at === "string") {
+          const ts = Date.parse(m.created_at);
+          if (Number.isFinite(ts)) created = Math.floor(ts / 1000);
+        }
+        return {
+          id: m.id,
+          label: m.display_name || m.id,
+          created,
+        };
+      },
+    );
 }
 
 async function fetchXAIModels(apiKey: string): Promise<ModelOption[]> {
@@ -190,9 +368,16 @@ async function fetchXAIModels(apiKey: string): Promise<ModelOption[]> {
       if (!Array.isArray(mods)) return true;
       return mods.some((x) => x === "text");
     })
-    .map((m: { id?: string }) => m.id)
-    .filter((id: unknown): id is string => typeof id === "string")
-    .sort((a: string, b: string) => a.localeCompare(b))
-    .map((id: string) => ({ id, label: id }));
+    .filter(
+      (m: { id?: unknown }): m is { id: string; created?: number } =>
+        typeof m.id === "string",
+    )
+    .map(
+      (m: { id: string; created?: number }): ModelOption => ({
+        id: m.id,
+        label: m.id,
+        created: typeof m.created === "number" ? m.created : undefined,
+      }),
+    );
 }
 

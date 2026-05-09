@@ -336,7 +336,7 @@ function JournalPageInner() {
                 }}
               >
                 A running log of what you read and build. Entries appear here as
-                you save chats from a review or import a coding session — or you
+                you save chats from a review or import a coding session, or you
                 can write one yourself.
               </p>
             </div>

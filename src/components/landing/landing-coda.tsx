@@ -15,8 +15,7 @@ export function LandingCoda({ githubUrl }: LandingCodaProps) {
           <div
             className="grid max-w-[760px] grid-cols-1 items-center gap-x-8 gap-y-4 rounded-xl border bg-card px-9 py-8 sm:grid-cols-[1fr_auto]"
             style={{
-              borderColor:
-                "color-mix(in srgb, var(--border) 80%, transparent)",
+              borderColor: "color-mix(in srgb, var(--border) 80%, transparent)",
             }}
           >
             <div>
@@ -27,15 +26,16 @@ export function LandingCoda({ githubUrl }: LandingCodaProps) {
                 MIT-licensed. Yours to fork.
               </h4>
               <p
-                className="mt-2 max-w-[460px] text-[15px] leading-[1.6]"
+                className="mt-2 max-w-115 text-[15px] leading-[1.6]"
                 style={{
                   fontFamily: "var(--font-reading)",
-                  color: "color-mix(in srgb, var(--foreground) 75%, transparent)",
+                  color:
+                    "color-mix(in srgb, var(--foreground) 75%, transparent)",
                 }}
               >
                 Read the code, run it locally, file an issue, send a patch.
-                Artifact is built in the open at{" "}
-                <span className="ds-mono">levensti/artifact</span>.
+                Artifact is built in the open and contributions are very much
+                welcome.
               </p>
             </div>
             <a
@@ -44,7 +44,7 @@ export function LandingCoda({ githubUrl }: LandingCodaProps) {
               rel="noreferrer noopener"
               className="inline-flex h-10 items-center gap-2 self-start rounded-md border border-border bg-transparent px-[18px] text-[13.5px] font-medium text-foreground transition-colors duration-150 hover:bg-muted sm:self-auto"
             >
-              <GithubMark className="size-[13px]" />
+              <GithubMark className="size-3.25" />
               View on GitHub
             </a>
           </div>

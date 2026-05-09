@@ -8,9 +8,7 @@ export interface LandingNavProps {
 }
 
 const SECTION_LINKS: Array<{ href: string; label: string }> = [
-  { href: "#what", label: "What it is" },
-  { href: "#journal", label: "Journal" },
-  { href: "#share", label: "Share" },
+  { href: "#what", label: "Features" },
   { href: "#principles", label: "Principles" },
   { href: "#open-source", label: "Open source" },
 ];
@@ -59,7 +57,7 @@ export function LandingNav({ signupHref }: LandingNavProps) {
           href={signupHref}
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
         >
-          Open Artifact
+          Get started
           <svg
             viewBox="0 0 16 16"
             fill="none"

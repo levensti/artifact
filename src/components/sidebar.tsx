@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { FilePen, FilePlus, AlertCircle, KeyRound, Share2 } from "lucide-react";
+import {
+  FilePen,
+  FilePlus,
+  AlertCircle,
+  KeyRound,
+  Share2,
+  Compass,
+} from "lucide-react";
 import { canShareReview } from "@/lib/client/sharing/share-links";
 import {
   getReviews,
@@ -209,7 +216,7 @@ export default function Sidebar({
                       "color-mix(in srgb, var(--primary) 75%, transparent)",
                   }}
                 >
-                  Discover the frontier
+                  Push the frontier.
                 </span>
               </div>
             </div>
@@ -249,6 +256,24 @@ export default function Sidebar({
           </button>
           <button
             type="button"
+            onClick={() => router.push("/discover")}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150",
+              pathname === "/discover"
+                ? "bg-sidebar-accent text-foreground font-medium"
+                : "text-foreground/80 hover:bg-sidebar-accent/60 hover:text-foreground",
+            )}
+          >
+            <span className="flex w-6 shrink-0 items-center justify-center">
+              <Compass
+                className="size-3.75 text-primary/85"
+                strokeWidth={1.75}
+              />
+            </span>
+            <span className="truncate">Discover</span>
+          </button>
+          <button
+            type="button"
             onClick={() => router.push("/journal")}
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150",
@@ -285,7 +310,7 @@ export default function Sidebar({
             >
               <AlertCircle className="mt-px size-3 shrink-0" strokeWidth={2} />
               <span className="min-w-0 flex-1 truncate" title={ingestError}>
-                Ingest failed — {ingestError}
+                Ingest failed: {ingestError}
               </span>
               <button
                 type="button"
@@ -383,8 +408,8 @@ export default function Sidebar({
                       title={
                         isImported
                           ? sharerFirstName
-                            ? `${review.title} — imported from ${sharerFirstName}'s share`
-                            : `${review.title} — imported from a share`
+                            ? `${review.title} (imported from ${sharerFirstName}'s share)`
+                            : `${review.title} (imported from a share)`
                           : review.title
                       }
                       onClick={() => router.push(`/review/${review.id}`)}

@@ -18,9 +18,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const h = await headers();
   if (isApexHost(h.get("host"))) {
     return {
-      title: { absolute: "Artifact: Discover the frontier" },
+      title: { absolute: "Artifact: Push the frontier" },
       description:
-        "A workspace for researchers. Read papers deeply, journal your learnings automatically, and never lose a thread. Open source. Bring your own keys.",
+        "Read papers, blogs, and PDFs alongside a powerful, personalized AI assistant. Build a personal journal that compounds with every insight. Open source and free to use.",
     };
   }
   return { title: { absolute: "Artifact" } };

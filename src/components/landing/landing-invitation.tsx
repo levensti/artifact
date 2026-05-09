@@ -9,7 +9,7 @@ export function LandingInvitation({ signupHref }: LandingInvitationProps) {
         <aside className="landing-marg" />
         <div>
           <p
-            className="m-0 max-w-[540px] text-[22px] leading-[1.45]"
+            className="m-0 max-w-135 text-[22px] leading-[1.45]"
             style={{
               fontFamily: "var(--font-reading)",
               letterSpacing: "-0.012em",
@@ -17,12 +17,12 @@ export function LandingInvitation({ signupHref }: LandingInvitationProps) {
               textWrap: "balance",
             }}
           >
-            Open a paper. Make a note. The rest happens quietly while you work.
+            Study anything. Capture what you learn. Push the frontier.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <a
               href={signupHref}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-[18px] text-[13.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4.5 text-[13.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
             >
               Get started
               <svg
@@ -40,7 +40,7 @@ export function LandingInvitation({ signupHref }: LandingInvitationProps) {
               </svg>
             </a>
             <span className="text-[13px] text-muted-foreground">
-              Free · Sign in with Google · Add your API keys
+              Free, no paid tier · MIT licensed · Bring your own keys
             </span>
           </div>
         </div>

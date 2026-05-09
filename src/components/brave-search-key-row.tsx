@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  ChevronDown,
   Circle,
   CircleCheck,
   Eye,
@@ -31,39 +32,62 @@ import { cn } from "@/lib/utils";
  * and the system prompt instructs the agent to be honest about that.
  */
 export function BraveSearchKeyRow() {
+  const [stored, setStored] = useState(() => getBraveSearchApiKey() ?? "");
   const [value, setValue] = useState(() => getBraveSearchApiKey() ?? "");
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [hasKey, setHasKey] = useState(() => !!getBraveSearchApiKey());
   const [expanded, setExpanded] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const confirmTimeoutRef = useRef<number | null>(null);
+
+  const hasKey = !!stored;
+  const dirty = value.trim() !== stored.trim();
 
   useEffect(() => {
     const sync = () => {
-      setValue(getBraveSearchApiKey() ?? "");
-      setHasKey(!!getBraveSearchApiKey());
+      const next = getBraveSearchApiKey() ?? "";
+      setStored(next);
+      setValue(next);
     };
     sync();
     window.addEventListener(KEYS_UPDATED_EVENT, sync);
     return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
   }, []);
 
+  useEffect(
+    () => () => {
+      if (confirmTimeoutRef.current)
+        window.clearTimeout(confirmTimeoutRef.current);
+    },
+    [],
+  );
+
   const handleSave = () => {
     const trimmed = value.trim();
-    if (!trimmed) return;
+    if (!trimmed || !dirty) return;
     void setBraveSearchApiKey(trimmed).then(() => {
-      setHasKey(true);
+      setStored(trimmed);
       setSaved(true);
-      setExpanded(false);
       setTimeout(() => setSaved(false), 2000);
     });
   };
 
   const handleClear = () => {
-    void clearBraveSearchApiKey().then(() => {
-      setValue("");
-      setHasKey(false);
-      setVisible(false);
-    });
+    if (confirmingDelete) {
+      if (confirmTimeoutRef.current)
+        window.clearTimeout(confirmTimeoutRef.current);
+      setConfirmingDelete(false);
+      void clearBraveSearchApiKey().then(() => {
+        setStored("");
+        setValue("");
+        setVisible(false);
+      });
+      return;
+    }
+    setConfirmingDelete(true);
+    confirmTimeoutRef.current = window.setTimeout(() => {
+      setConfirmingDelete(false);
+    }, 2500);
   };
 
   return (
@@ -73,57 +97,70 @@ export function BraveSearchKeyRow() {
     >
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
       >
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <Globe size={14} />
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <Globe size={15} strokeWidth={1.8} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-foreground">
+          <p className="text-[13.5px] font-semibold tracking-[-0.005em] text-foreground">
             Brave Search
           </p>
-          <p className="text-[11px] text-muted-foreground/60 truncate">
-            {hasKey
-              ? "Web search enabled"
-              : "Web search off — add a key to let the agent ground answers"}
+          <p
+            className="truncate text-[12px] leading-snug"
+            style={{
+              fontFamily: "var(--font-reading)",
+              color: hasKey
+                ? "color-mix(in srgb, var(--success) 80%, transparent)"
+                : "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
+            }}
+          >
+            {hasKey ? "Web search enabled" : "Web search off"}
           </p>
         </div>
-        {hasKey ? (
-          <CircleCheck
-            size={16}
-            className="shrink-0 text-success"
+        <div className="flex items-center gap-2 shrink-0">
+          {hasKey ? (
+            <CircleCheck size={16} className="text-success" strokeWidth={2} />
+          ) : (
+            <Circle
+              size={16}
+              className="text-muted-foreground/30"
+              strokeWidth={1.5}
+            />
+          )}
+          <ChevronDown
+            size={14}
+            className={cn(
+              "text-muted-foreground/50 transition-transform duration-150",
+              expanded && "rotate-180",
+            )}
             strokeWidth={2}
           />
-        ) : (
-          <Circle
-            size={16}
-            className="shrink-0 text-muted-foreground/30"
-            strokeWidth={1.5}
-          />
-        )}
+        </div>
       </button>
 
       <div
         className={cn(
           "grid transition-all duration-200 ease-out",
-          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          expanded
+            ? "grid-rows-[1fr] opacity-100"
+            : "grid-rows-[0fr] opacity-0",
         )}
       >
         <div className="overflow-hidden">
-          <div className="px-4 pb-3.5 pt-0.5 space-y-2.5">
-            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-              Enables the chat agent&apos;s web search tool. Free tier (~2k
-              queries/month) at{" "}
-              <a
-                href="https://brave.com/search/api/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline-offset-2 hover:underline"
-              >
-                brave.com/search/api
-              </a>
-              . Stored locally in your browser.
+          <div className="px-4 pb-3.5 pt-0.5 space-y-2">
+            <p
+              className="text-[11.5px] leading-relaxed"
+              style={{
+                fontFamily: "var(--font-reading)",
+                color:
+                  "color-mix(in srgb, var(--muted-foreground) 85%, transparent)",
+              }}
+            >
+              Enables the chat agent&apos;s web search tool. Free tier covers
+              ~2k queries/month.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative min-w-0">
@@ -153,7 +190,7 @@ export function BraveSearchKeyRow() {
               <div className="flex gap-2 shrink-0">
                 <Button
                   onClick={handleSave}
-                  disabled={!value.trim()}
+                  disabled={!value.trim() || !dirty}
                   variant={saved ? "outline" : "default"}
                   size="sm"
                   className={
@@ -163,16 +200,35 @@ export function BraveSearchKeyRow() {
                   }
                 >
                   {saved && <Check size={13} />}
-                  {saved ? "Saved" : "Save"}
+                  {saved ? "Saved" : hasKey ? "Replace" : "Save"}
                 </Button>
                 {hasKey && (
                   <button
                     type="button"
                     onClick={handleClear}
-                    className="flex items-center justify-center size-9 shrink-0 rounded-md border border-destructive/25 bg-destructive/5 text-destructive/70 hover:text-destructive hover:bg-destructive/15 transition-colors"
-                    title="Remove key"
+                    onBlur={() => {
+                      if (confirmTimeoutRef.current)
+                        window.clearTimeout(confirmTimeoutRef.current);
+                      setConfirmingDelete(false);
+                    }}
+                    className={cn(
+                      "flex items-center justify-center size-9 shrink-0 rounded-md transition-colors",
+                      confirmingDelete
+                        ? "border border-destructive bg-destructive text-destructive-foreground"
+                        : "border border-destructive/25 bg-destructive/5 text-destructive/70 hover:text-destructive hover:bg-destructive/15",
+                    )}
+                    title={
+                      confirmingDelete ? "Click again to confirm" : "Remove key"
+                    }
+                    aria-label={
+                      confirmingDelete ? "Click again to confirm" : "Remove key"
+                    }
                   >
-                    <Trash2 size={14} />
+                    {confirmingDelete ? (
+                      <Check size={14} />
+                    ) : (
+                      <Trash2 size={14} />
+                    )}
                   </button>
                 )}
               </div>

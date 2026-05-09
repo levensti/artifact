@@ -13,9 +13,9 @@ export function LandingShare() {
         </aside>
         <div>
           <h2 className="landing-section-title">
-            Share your reviews
+            Send a colleague your
             <br />
-            with a colleague.
+            read on a paper.
           </h2>
           <p
             className="mt-[18px] max-w-[620px] text-[17px] leading-[1.65]"
@@ -25,9 +25,9 @@ export function LandingShare() {
               textWrap: "pretty",
             }}
           >
-            Send a single link. The recipient opens the paper with every
+            One link delivers the whole download of your insights: every
             highlight, every margin note, every chat thread you started. They
-            can read it as-is, or import the bundle into their own workspace and
+            read it as-is, or import the bundle into their own workspace and
             keep going.
           </p>
 
@@ -46,14 +46,6 @@ export function LandingShare() {
             <ShareBullet
               title="Journal entries"
               body="Share a session recap or a wiki page so others can see what you learned."
-            />
-            <ShareBullet
-              title="One link, no install"
-              body="Recipients open it in a browser. No account needed to read."
-            />
-            <ShareBullet
-              title="Or export as a bundle"
-              body="Download a single file and send it however you want."
             />
           </ul>
         </div>

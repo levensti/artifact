@@ -19,7 +19,13 @@ export interface ToolParameterProperty {
   type: "string" | "number" | "boolean" | "array" | "object";
   description: string;
   enum?: string[];
-  items?: { type: string };
+  /** Item schema for `array`-typed properties. Recursive so arrays of
+   *  objects (with their own nested `properties` + `required`) work. */
+  items?: ToolParameterProperty;
+  /** Nested properties for `object`-typed items. */
+  properties?: Record<string, ToolParameterProperty>;
+  /** Required keys for `object`-typed items. */
+  required?: string[];
   default?: unknown;
 }
 

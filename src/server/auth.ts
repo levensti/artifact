@@ -3,6 +3,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./db";
+import { sendSlackEvent, SlackEventType } from "./notifications";
 
 const COOKIE_DOMAIN = process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined;
 const useSecureCookies =
@@ -25,6 +26,15 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     session({ session, user }) {
       session.user.id = user.id;
       return session;
+    },
+  },
+  events: {
+    async createUser({ user }) {
+      await sendSlackEvent(SlackEventType.Signup, "signed up", user.id);
+    },
+    async signIn({ user, isNewUser }) {
+      if (isNewUser || !user.id) return;
+      await sendSlackEvent(SlackEventType.Signin, "signed in", user.id);
     },
   },
   pages: {
