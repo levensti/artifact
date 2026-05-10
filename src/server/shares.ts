@@ -16,6 +16,7 @@ export interface ShareSummary {
   revokedAt: string | null;
   lastAccessAt: string | null;
   accessCount: number;
+  importCount: number;
   // Lightweight target identification — full payload comes from the
   // separate getSharePreview call.
   target: { reviewId?: string; wikiSlug?: string; title: string | null };
@@ -91,7 +92,7 @@ const MAX_WIKI_DEPTH = 3;
 export async function createOrReuseShare(
   userId: string,
   input: CreateShareInput,
-): Promise<{ token: string; createdAt: string; reused: boolean }> {
+): Promise<{ token: string; createdAt: string; reused: boolean; importCount: number }> {
   if (input.kind === "review") {
     if (!input.reviewId) throw new HttpError(400, "reviewId required");
     const review = await prisma.review.findFirst({
@@ -114,6 +115,7 @@ export async function createOrReuseShare(
         token: existing.token,
         createdAt: existing.createdAt.toISOString(),
         reused: true,
+        importCount: existing.importCount,
       };
     }
 
@@ -135,6 +137,7 @@ export async function createOrReuseShare(
       token: created.token,
       createdAt: created.createdAt.toISOString(),
       reused: false,
+      importCount: 0,
     };
   }
 
@@ -163,6 +166,7 @@ export async function createOrReuseShare(
       token: existing.token,
       createdAt: existing.createdAt.toISOString(),
       reused: true,
+      importCount: existing.importCount,
     };
   }
 
@@ -185,6 +189,7 @@ export async function createOrReuseShare(
     token: created.token,
     createdAt: created.createdAt.toISOString(),
     reused: false,
+    importCount: 0,
   };
 }
 
@@ -219,6 +224,7 @@ export async function listSharesForUser(userId: string): Promise<ShareSummary[]>
     revokedAt: row.revokedAt?.toISOString() ?? null,
     lastAccessAt: row.lastAccessAt?.toISOString() ?? null,
     accessCount: row.accessCount,
+    importCount: row.importCount,
     target:
       row.kind === "review"
         ? {
@@ -436,10 +442,21 @@ export async function importShare(
   });
   const ownerDisplayName = owner?.name ?? null;
 
-  if (share.kind === "review") {
-    return importReviewShare(share, recipientUserId, ownerDisplayName);
-  }
-  return importWikiShare(share, recipientUserId);
+  const result =
+    share.kind === "review"
+      ? await importReviewShare(share, recipientUserId, ownerDisplayName)
+      : await importWikiShare(share, recipientUserId);
+
+  // Best-effort: a failed counter bump must not roll back a successful
+  // clone. The counter is owner-facing telemetry, not a billing primitive.
+  void prisma.share
+    .update({
+      where: { token },
+      data: { importCount: { increment: 1 } },
+    })
+    .catch(() => {});
+
+  return result;
 }
 
 async function importReviewShare(

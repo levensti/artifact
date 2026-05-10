@@ -26,7 +26,13 @@ interface ShareReviewDialogProps {
 type LinkState =
   | { kind: "idle" }
   | { kind: "creating" }
-  | { kind: "ready"; token: string; url: string; reused: boolean }
+  | {
+      kind: "ready";
+      token: string;
+      url: string;
+      reused: boolean;
+      importCount: number;
+    }
   | { kind: "error"; message: string };
 
 export default function ShareReviewDialog({
@@ -60,6 +66,7 @@ export default function ShareReviewDialog({
         token: result.token,
         url: buildShareUrl(result.token),
         reused: result.reused,
+        importCount: result.importCount,
       });
     } catch (err) {
       setLinkState({
@@ -358,6 +365,16 @@ function LinkBlock({
           >
             Live link
           </span>
+          {state.importCount > 0 ? (
+            <span
+              className="text-[11.5px] text-muted-foreground"
+              title="Distinct successful imports"
+            >
+              {state.importCount === 1
+                ? "1 person imported this"
+                : `${state.importCount} people imported this`}
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={onRevoke}
