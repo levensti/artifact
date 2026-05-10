@@ -100,6 +100,19 @@ export interface ParsedPaper {
   parsedWith: { provider: Provider; modelId: string };
 }
 
+/**
+ * Lightweight citation-to-page mapping for a single paper. Produced by a
+ * small LLM call that runs on every paper open (independent of the full
+ * `ParsedPaper`). Keys are the citation token as it appears in chat
+ * (e.g. "3.2" for a section, "1" for "Figure 1"); values are PDF page
+ * numbers.
+ */
+export interface PageMap {
+  sections: Record<string, number>;
+  figures: Record<string, number>;
+  tables: Record<string, number>;
+}
+
 /** A saved paper review session: PDF / web page + replayable Q&A. */
 export interface PaperReview {
   id: string;
