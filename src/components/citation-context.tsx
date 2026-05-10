@@ -128,6 +128,9 @@ export function CitationContextProvider({
     };
 
     void load();
+    return () => {
+      cancelled = true;
+    };
   }, [paperText, selectedModel]);
 
   const scrollToPage = useCallback((page: number) => {
