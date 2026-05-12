@@ -162,7 +162,13 @@ export default function ShareLandingClient({
 
 /* ── Resource cards ────────────────────────────────────────────── */
 
-function KindGlyph({ kind, isDigest }: { kind: "review" | "wiki"; isDigest?: boolean }) {
+function KindGlyph({
+  kind,
+  isDigest,
+}: {
+  kind: "review" | "wiki";
+  isDigest?: boolean;
+}) {
   // Inline SVG matches the journal/landing chip-glyph rhythm.
   if (kind === "review") {
     return (
@@ -214,10 +220,8 @@ function CardChrome({
       <header
         className="flex items-center gap-2 border-b px-3.5 py-2.5"
         style={{
-          background:
-            "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
-          borderColor:
-            "color-mix(in srgb, var(--border) 70%, transparent)",
+          background: "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
+          borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
         }}
       >
         <span
@@ -321,8 +325,7 @@ function CountPills({
           <span
             className="font-semibold"
             style={{
-              color:
-                "color-mix(in srgb, var(--foreground) 80%, transparent)",
+              color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
             }}
           >
             {value}
@@ -499,7 +502,7 @@ function CtaArea({
           </>
         ) : (
           <>
-            <span>Import to my Artifact</span>
+            <span>Import to Artifact workspace</span>
             <ChevronRight
               className="size-4 transition-transform group-hover:translate-x-0.5"
               strokeWidth={2}
