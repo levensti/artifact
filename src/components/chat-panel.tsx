@@ -859,7 +859,7 @@ export default function ChatPanel({
             <DialogHeader>
               <DialogTitle>Start a new chat?</DialogTitle>
               <DialogDescription>
-                This clears the current conversation. Highlight threads on the
+                This clears the current conversation. Highlighted threads on the
                 paper are kept.
               </DialogDescription>
             </DialogHeader>
