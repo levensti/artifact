@@ -15,9 +15,18 @@ import {
   BookmarkPlus,
   Loader2,
   MessageSquareQuote,
+  PenLine,
   Send,
   X,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   PROVIDER_META,
   isInferenceProviderType,
@@ -336,6 +345,14 @@ export default function ChatPanel({
     pinnedRef.current = pinnedToBottom;
   }, [pinnedToBottom]);
   const [checkpointOpen, setCheckpointOpen] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+
+  const handleConfirmClear = useCallback(() => {
+    setPendingQuote(null);
+    onChatThreadChange(null);
+    void chat.clearMessages();
+    setConfirmClearOpen(false);
+  }, [chat, onChatThreadChange]);
 
   const activeThreadAnn = useMemo(() => {
     if (!chatThreadAnnotationId) return undefined;
@@ -780,7 +797,19 @@ export default function ChatPanel({
             annotations.some(
               (a) => a.kind === "ask_ai" && a.thread.length > 0,
             )) && (
-            <div className="px-3 pt-1 flex justify-end">
+            <div className="px-3 pt-1 flex justify-end gap-1">
+              {chat.messages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearOpen(true)}
+                  disabled={chat.isStreaming}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] text-muted-foreground/60 transition-colors hover:bg-muted/70 hover:text-foreground/80 disabled:opacity-50"
+                  title="Start a new chat"
+                >
+                  <PenLine className="size-2.5" strokeWidth={1.75} />
+                  New chat
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setCheckpointOpen(true)}
@@ -820,6 +849,31 @@ export default function ChatPanel({
             onClose={() => setCheckpointOpen(false)}
           />
         ) : null}
+        <Dialog
+          open={confirmClearOpen}
+          onOpenChange={(next) => {
+            if (!next) setConfirmClearOpen(false);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Start a new chat?</DialogTitle>
+              <DialogDescription>
+                This clears the current conversation. Highlighted threads on the
+                paper are kept.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmClearOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmClear}>Clear chat</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </BraveKeyResumeProvider>
   );

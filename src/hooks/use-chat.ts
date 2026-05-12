@@ -221,6 +221,9 @@ export interface UseChatReturn {
   submitChat: (text: string) => Promise<void>;
   submitThreadChat: (text: string) => Promise<void>;
   displayThread: AnnotationMessage[];
+  /** Wipe the main-thread conversation and persist the empty state. Selection
+   *  threads on annotations are left untouched. No-op while streaming. */
+  clearMessages: () => Promise<void>;
   /** Resume an assistant turn that paused waiting for the user to decide
    *  about the Brave-key card. Wired into the inline card via context. */
   resumeAfterBraveDecision: (opts: { skipWebSearch: boolean }) => void;
@@ -661,6 +664,18 @@ export function useChat({
     ],
   );
 
+  const clearMessages = useCallback(async () => {
+    if (isStreaming) return;
+    setMessages([]);
+    setInput("");
+    setError(null);
+    setFailedUserMsgId(null);
+    setLastFailedRequest(null);
+    setAgentSteps([]);
+    setStreamingMsgId(null);
+    await saveMessages(reviewId, []);
+  }, [isStreaming, reviewId]);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
@@ -714,6 +729,7 @@ export function useChat({
     submitChat,
     submitThreadChat,
     displayThread: threadStream ?? [],
+    clearMessages,
     resumeAfterBraveDecision,
   };
 }
