@@ -549,7 +549,10 @@ export default function ReviewPage() {
               className={`flex min-h-0 shrink-0 flex-col overflow-hidden bg-background ${assistantCollapsed ? "" : "border-l border-border/80"}`}
               style={assistantCollapsed ? undefined : { width: `${panelWidth}px` }}
             >
-              <CitationContextProvider paperText={paperText}>
+              <CitationContextProvider
+                paperText={paperText}
+                selectedModel={selectedModel}
+              >
                 <RightPanel
                   reviewId={review.id}
                   arxivId={review.arxivId ?? ""}
@@ -642,7 +645,10 @@ export default function ReviewPage() {
             >
               <X size={16} />
             </button>
-            <CitationContextProvider paperText={paperText}>
+            <CitationContextProvider
+              paperText={paperText}
+              selectedModel={selectedModel}
+            >
               <RightPanel
                 reviewId={review.id}
                 arxivId={review.arxivId ?? ""}
