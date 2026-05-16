@@ -47,10 +47,14 @@ import {
 import type { CcSessionMeta } from "@/lib/cc-import/types";
 import {
   getSavedSelectedModel,
-  hasAnySavedApiKey,
+  hasUsableProvider,
   saveSelectedModel,
 } from "@/lib/client-data";
-import { isModelReady, resolveModelCredentials, KEYS_UPDATED_EVENT } from "@/lib/keys";
+import {
+  isModelReady,
+  resolveModelCredentials,
+  KEYS_UPDATED_EVENT,
+} from "@/lib/keys";
 import { FALLBACK_MODELS } from "@/lib/models";
 import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
@@ -91,7 +95,9 @@ export default function JournalImportModal({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"all" | "new">("new");
   const [query, setQuery] = useState("");
-  const [mergeMode, setMergeMode] = useState<"separate" | "combined">("separate");
+  const [mergeMode, setMergeMode] = useState<"separate" | "combined">(
+    "separate",
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedModel, setSelectedModelState] = useState<Model | null>(() =>
     getSavedSelectedModel(),
@@ -112,9 +118,9 @@ export default function JournalImportModal({
 
   // Tracks whether the user has at least one API key saved so the
   // Import button can flip from disabled to enabled without a reload.
-  const [hasKey, setHasKey] = useState<boolean>(() => hasAnySavedApiKey());
+  const [hasKey, setHasKey] = useState<boolean>(() => hasUsableProvider());
   useEffect(() => {
-    const sync = () => setHasKey(hasAnySavedApiKey());
+    const sync = () => setHasKey(hasUsableProvider());
     window.addEventListener(KEYS_UPDATED_EVENT, sync);
     return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
   }, []);
@@ -176,7 +182,8 @@ export default function JournalImportModal({
         if (!cancelled) {
           setPhase({
             kind: "error",
-            message: err instanceof Error ? err.message : "Failed to load sessions",
+            message:
+              err instanceof Error ? err.message : "Failed to load sessions",
           });
         }
       }
@@ -212,7 +219,8 @@ export default function JournalImportModal({
     } catch (err) {
       setPhase({
         kind: "error",
-        message: err instanceof Error ? err.message : "Could not open directory",
+        message:
+          err instanceof Error ? err.message : "Could not open directory",
       });
     }
   }, []);
@@ -223,7 +231,9 @@ export default function JournalImportModal({
       return;
     }
     try {
-      const state = await ensurePermission(handleRef.current, { request: true });
+      const state = await ensurePermission(handleRef.current, {
+        request: true,
+      });
       if (state !== "granted") {
         return;
       }
@@ -233,7 +243,8 @@ export default function JournalImportModal({
     } catch (err) {
       setPhase({
         kind: "error",
-        message: err instanceof Error ? err.message : "Could not access directory",
+        message:
+          err instanceof Error ? err.message : "Could not access directory",
       });
     }
   }, []);
@@ -254,7 +265,8 @@ export default function JournalImportModal({
     } catch (err) {
       setPhase({
         kind: "error",
-        message: err instanceof Error ? err.message : "Could not reload sessions",
+        message:
+          err instanceof Error ? err.message : "Could not reload sessions",
       });
     }
   }, []);
@@ -266,10 +278,10 @@ export default function JournalImportModal({
 
     let model = selectedModel ?? getSavedSelectedModel();
     if (!model || !isModelReady(model)) {
-      // Auto-fallback: user has a key but never picked a model. This
-      // shouldn't happen anymore since the Import button is disabled
-      // until a key is saved, but keep the safety net.
-      if (hasAnySavedApiKey()) {
+      // Auto-fallback: a provider is usable (own key or platform fallback)
+      // but the user never picked a model. The Import button is disabled
+      // until something is usable, but keep the safety net.
+      if (hasUsableProvider()) {
         const fallback = FALLBACK_MODELS.find((m) => {
           try {
             return isModelReady(m);
@@ -338,7 +350,14 @@ export default function JournalImportModal({
       errorCount: result.errors.length,
     });
     refreshImportedMap();
-  }, [phase, selected, mergeMode, selectedModel, onImported, refreshImportedMap]);
+  }, [
+    phase,
+    selected,
+    mergeMode,
+    selectedModel,
+    onImported,
+    refreshImportedMap,
+  ]);
 
   /* ---- derived ---- */
 
@@ -422,7 +441,7 @@ export default function JournalImportModal({
       }}
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-[760px] flex-col overflow-hidden rounded-xl border border-border/60 bg-background shadow-2xl"
+        className="flex max-h-[85vh] w-full max-w-190 flex-col overflow-hidden rounded-xl border border-border/60 bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -430,7 +449,10 @@ export default function JournalImportModal({
         <header className="shrink-0 border-b border-border/60 px-6 py-4">
           <div className="flex items-center gap-2">
             <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/8">
-              <Terminal className="size-[14px] text-primary/60" strokeWidth={1.8} />
+              <Terminal
+                className="size-3.5 text-primary/60"
+                strokeWidth={1.8}
+              />
             </div>
             <div className="flex flex-col">
               <h2 className="text-[13px] font-semibold text-foreground">
@@ -456,20 +478,29 @@ export default function JournalImportModal({
           {phase.kind === "loading" ? (
             <CenteredState>
               <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
-              <p className="mt-3 text-[12px] text-muted-foreground/70">Loading…</p>
+              <p className="mt-3 text-[12px] text-muted-foreground/70">
+                Loading…
+              </p>
             </CenteredState>
           ) : phase.kind === "unsupported" ? (
             <CenteredState>
               <AlertTriangle className="size-6 text-warning/80" />
               <p className="mt-3 max-w-sm text-center text-[12.5px] text-muted-foreground">
-                Your browser doesn&apos;t support the File System Access API. Use a Chromium-based browser (Chrome, Edge, Brave, Arc) to import sessions directly.
+                Your browser doesn&apos;t support the File System Access API.
+                Use a Chromium-based browser (Chrome, Edge, Brave, Arc) to
+                import sessions directly.
               </p>
             </CenteredState>
           ) : phase.kind === "needs-permission" ? (
             <CenteredState>
               <FolderOpen className="size-6 text-primary/70" />
               <p className="mt-3 max-w-sm text-center text-[12.5px] text-muted-foreground">
-                Pick your <code className="rounded bg-muted px-1 py-0.5 text-[11px]">~/.claude/projects</code> directory. Artifact only reads JSONL session files; nothing leaves your machine until you choose what to import.
+                Pick your{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                  ~/.claude/projects
+                </code>{" "}
+                directory. Artifact only reads JSONL session files; nothing
+                leaves your machine until you choose what to import.
               </p>
               <button
                 type="button"
@@ -553,19 +584,31 @@ export default function JournalImportModal({
             {keyMenuVisible ? (
               <div
                 ref={keyMenuRef}
-                className="absolute bottom-full left-6 z-20 mb-2 w-[calc(100%-3rem)] max-w-[440px] rounded-lg border border-border/80 bg-popover p-3 shadow-xl ring-1 ring-foreground/5"
+                className="absolute bottom-full left-6 z-20 mb-2 w-[calc(100%-3rem)] max-w-110 rounded-lg border border-border/80 bg-popover p-3 shadow-xl ring-1 ring-foreground/5"
               >
                 <div className="mb-2 flex items-start gap-2">
-                  <Key className="mt-0.5 size-[12px] shrink-0 text-muted-foreground/70" />
+                  <Key className="mt-0.5 size-3 shrink-0 text-muted-foreground/70" />
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Your key stays on-device and is sent only to the
-                    provider you pick.
+                    Your key stays on-device and is sent only to the provider
+                    you pick.
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <ProviderRow provider="anthropic" placeholder="sk-ant-..." docsUrl="" />
-                  <ProviderRow provider="openai" placeholder="sk-..." docsUrl="" />
-                  <ProviderRow provider="xai" placeholder="xai-..." docsUrl="" />
+                  <ProviderRow
+                    provider="anthropic"
+                    placeholder="sk-ant-..."
+                    docsUrl=""
+                  />
+                  <ProviderRow
+                    provider="openai"
+                    placeholder="sk-..."
+                    docsUrl=""
+                  />
+                  <ProviderRow
+                    provider="xai"
+                    placeholder="xai-..."
+                    docsUrl=""
+                  />
                 </div>
               </div>
             ) : null}
@@ -581,7 +624,7 @@ export default function JournalImportModal({
                   onClick={() => setKeyMenuOpen((v) => !v)}
                   className="ml-2 inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/5 px-2 py-0.5 text-[11px] font-medium text-warning hover:bg-warning/10 dark:bg-warning/10 dark:text-warning"
                 >
-                  <Key className="size-[11px]" />
+                  <Key className="size-2.75" />
                   Add API key
                 </button>
               ) : null}
@@ -748,8 +791,8 @@ function ReadyView({
         ) : null}
 
         <div className="ml-auto flex min-w-0 flex-1 items-center justify-end">
-          <div className="relative w-full max-w-[240px]">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-[12px] -translate-y-1/2 text-muted-foreground/60" />
+          <div className="relative w-full max-w-60">
+            <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground/60" />
             <input
               type="text"
               value={query}
@@ -764,7 +807,7 @@ function ReadyView({
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
                 aria-label="Clear search"
               >
-                <X className="size-[11px]" />
+                <X className="size-2.75" />
               </button>
             ) : null}
           </div>
@@ -776,7 +819,7 @@ function ReadyView({
           className="rounded-md p-1.5 text-muted-foreground/70 hover:bg-muted hover:text-foreground"
           aria-label="Refresh"
         >
-          <RefreshCw className="size-[13px]" />
+          <RefreshCw className="size-3.25" />
         </button>
         <button
           type="button"
@@ -816,18 +859,22 @@ function ReadyView({
                   >
                     <span
                       className={cn(
-                        "mt-[2px] flex size-[14px] shrink-0 items-center justify-center rounded border",
+                        "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded border",
                         checked
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border/80 bg-background",
                       )}
                     >
-                      {checked ? <Check className="size-[10px]" strokeWidth={3} /> : null}
+                      {checked ? (
+                        <Check className="size-2.5" strokeWidth={3} />
+                      ) : null}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-[12.5px] font-medium text-foreground">
-                          {s.summary || s.firstUserMessage || s.sessionId.slice(0, 8)}
+                          {s.summary ||
+                            s.firstUserMessage ||
+                            s.sessionId.slice(0, 8)}
                         </span>
                         {alreadyImported ? (
                           <span className="shrink-0 rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success">
@@ -848,7 +895,8 @@ function ReadyView({
                           </>
                         ) : null}
                       </div>
-                      {s.firstUserMessage && s.firstUserMessage !== s.summary ? (
+                      {s.firstUserMessage &&
+                      s.firstUserMessage !== s.summary ? (
                         <p className="mt-1 line-clamp-2 text-[11.5px] text-muted-foreground/80">
                           {s.firstUserMessage}
                         </p>
@@ -870,7 +918,9 @@ interface ImportingViewProps {
 }
 
 function ImportingView({ phase }: ImportingViewProps) {
-  const entries = [...phase.progress.values()].sort((a, b) => a.index - b.index);
+  const entries = [...phase.progress.values()].sort(
+    (a, b) => a.index - b.index,
+  );
   const completed = entries.filter((e) => e.phase !== "start").length;
   const isCombined =
     entries.length === 1 && entries[0].sessionId === COMBINED_PROGRESS_ID;
@@ -896,15 +946,18 @@ function ImportingView({ phase }: ImportingViewProps) {
                   ? "combined batch"
                   : e.sessionId.slice(0, 8);
               return (
-                <li key={e.sessionId} className="flex items-center gap-2 text-[11.5px]">
+                <li
+                  key={e.sessionId}
+                  className="flex items-center gap-2 text-[11.5px]"
+                >
                   {e.phase === "start" ? (
-                    <CircleDashed className="size-[13px] animate-spin text-muted-foreground/70" />
+                    <CircleDashed className="size-3.25 animate-spin text-muted-foreground/70" />
                   ) : e.phase === "ok" ? (
-                    <CheckCircle2 className="size-[13px] text-success" />
+                    <CheckCircle2 className="size-3.25 text-success" />
                   ) : e.phase === "skip" ? (
-                    <CheckCircle2 className="size-[13px] text-muted-foreground/50" />
+                    <CheckCircle2 className="size-3.25 text-muted-foreground/50" />
                   ) : (
-                    <AlertTriangle className="size-[13px] text-warning" />
+                    <AlertTriangle className="size-3.25 text-warning" />
                   )}
                   <span className="truncate text-muted-foreground">
                     {label}:{" "}
@@ -913,7 +966,7 @@ function ImportingView({ phase }: ImportingViewProps) {
                       : e.phase === "ok"
                         ? "added to journal"
                         : e.phase === "skip"
-                          ? e.message ?? "skipped"
+                          ? (e.message ?? "skipped")
                           : (e.message ?? "failed")}
                   </span>
                 </li>
@@ -935,7 +988,9 @@ function DoneView({ phase, onClose }: DoneViewProps) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-10">
       <CheckCircle2 className="size-7 text-success" />
-      <p className="mt-3 text-[13px] font-semibold text-foreground">Import complete</p>
+      <p className="mt-3 text-[13px] font-semibold text-foreground">
+        Import complete
+      </p>
       <p className="mt-1 text-center text-[12px] text-muted-foreground">
         {phase.successCount > 0
           ? `Added ${phase.successCount} ${phase.successCount === 1 ? "entry" : "entries"} to your journal.`

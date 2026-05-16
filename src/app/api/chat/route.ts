@@ -24,6 +24,7 @@ import {
 } from "@/lib/ai-providers";
 import type { StreamEvent } from "@/lib/stream-types";
 import { jsonError } from "@/lib/api-utils";
+import { resolveServerApiKey } from "@/server/provider-env";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import { runAnthropicAgentLoop } from "./anthropic-handler";
@@ -242,10 +243,16 @@ export async function POST(req: NextRequest) {
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
   const profileSupportsStreaming = supportsStreaming !== false;
 
+  // For built-in providers, fall back to the platform key when the user
+  // didn't bring their own. Never echoed back — used only upstream below.
+  const resolvedApiKey = isInferenceProviderType(provider)
+    ? effectiveApiKey
+    : resolveServerApiKey(provider, effectiveApiKey) ?? "";
+
   // OpenAI-compatible providers may be unauthenticated (localhost Ollama, or
   // a tunnel fronting one). If the upstream actually requires a key, it will
   // 401 and we surface that error — better than blocking valid setups here.
-  if (!effectiveApiKey && !isInferenceProviderType(provider)) {
+  if (!resolvedApiKey && !isInferenceProviderType(provider)) {
     return jsonError("API key is required.", 401);
   }
   if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
@@ -304,7 +311,7 @@ export async function POST(req: NextRequest) {
           await runAnthropicAgentLoop(
             messages,
             model,
-            effectiveApiKey,
+            resolvedApiKey,
             systemPrompt,
             paperContext,
             parsedPaper,
@@ -316,7 +323,7 @@ export async function POST(req: NextRequest) {
           await runOpenAIAgentLoop(
             messages,
             model,
-            effectiveApiKey,
+            resolvedApiKey,
             systemPrompt,
             paperContext,
             parsedPaper,

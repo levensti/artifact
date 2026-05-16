@@ -21,6 +21,7 @@ import {
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
+import { resolveServerApiKey } from "@/server/provider-env";
 import { isInferenceProviderType, type Provider } from "@/lib/models";
 import type { ParsedPaper } from "@/lib/review-types";
 
@@ -95,11 +96,17 @@ export async function POST(req: NextRequest) {
   const effectiveBaseUrl =
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
 
+  // Built-in providers fall back to the platform key; inference providers
+  // keep their existing (key or localhost) behavior unchanged.
+  const resolvedApiKey = isInferenceProviderType(provider)
+    ? effectiveApiKey
+    : resolveServerApiKey(provider, effectiveApiKey) ?? "";
+
   const isLocalInferenceCall =
     isInferenceProviderType(provider) &&
     !!effectiveBaseUrl &&
     isLocalhostUrl(effectiveBaseUrl);
-  if (!effectiveApiKey && !isLocalInferenceCall) {
+  if (!resolvedApiKey && !isLocalInferenceCall) {
     return jsonError("API key is required.", 401);
   }
   if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
@@ -113,10 +120,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const raw = isAnthropicMessagesProvider(provider)
-      ? await callAnthropic(model, effectiveApiKey, userPrompt)
+      ? await callAnthropic(model, resolvedApiKey, userPrompt)
       : await callOpenAICompatible(
           model,
-          effectiveApiKey,
+          resolvedApiKey,
           userPrompt,
           provider as OpenAiCompatibleProvider,
           provider === "openai_compatible" ? effectiveBaseUrl : undefined,

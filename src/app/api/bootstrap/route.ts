@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authedRoute } from "@/server/api";
 import { auth } from "@/server/auth";
 import * as store from "@/server/store";
+import { platformProviderAvailability } from "@/server/provider-env";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,9 @@ export const GET = authedRoute(async (userId) => {
   return NextResponse.json({
     reviews,
     settings,
+    // Booleans only — which built-in providers have a platform-key
+    // fallback configured. NEVER the key itself.
+    platformProviders: platformProviderAvailability(),
     deepDives,
     discoverQueries,
     recommendations,

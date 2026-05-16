@@ -11,6 +11,7 @@ import type { InferenceProviderProfile, Provider } from "@/lib/models";
 import type { Model } from "@/lib/models";
 import {
   BUILTIN_PROVIDER_ORDER,
+  FALLBACK_MODELS,
   isInferenceProviderType,
 } from "@/lib/models";
 import { hasInferenceCredentials } from "@/lib/ai-providers";
@@ -51,6 +52,14 @@ export interface CurrentUser {
   image: string | null;
 }
 
+/**
+ * Which built-in providers have a server-side platform-key fallback. This
+ * holds booleans only — the env key never reaches the browser. Lets the UI
+ * treat a provider as usable (model picker, chat, etc.) even when the user
+ * hasn't brought their own key.
+ */
+let platformProvidersCache: Partial<Record<Provider, boolean>> = {};
+
 let hydratePromise: Promise<void> | null = null;
 let reviewsCache: PaperReview[] = [];
 let settingsCache: SettingsCache = EMPTY_SETTINGS;
@@ -74,6 +83,7 @@ export async function hydrateClientStore(): Promise<void> {
     const boot = await apiFetch<{
       reviews: PaperReview[];
       settings: SettingsCache;
+      platformProviders?: Partial<Record<Provider, boolean>>;
       deepDives: DeepDiveSession[];
       discoverQueries: DiscoverQuery[];
       recommendations: Recommendation[];
@@ -81,6 +91,7 @@ export async function hydrateClientStore(): Promise<void> {
     }>("/api/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
+    platformProvidersCache = boot.platformProviders ?? {};
     deepDivesCache = boot.deepDives;
     discoverQueriesCache = boot.discoverQueries ?? [];
     recommendationsCache = boot.recommendations ?? [];
@@ -565,9 +576,19 @@ export function getInferenceProfile(
   return settingsCache.inferenceProfiles.find((p) => p.id === id);
 }
 
+/**
+ * True when the server has a platform-key fallback for this built-in
+ * provider. Booleans only — sourced from /api/bootstrap; the env key is
+ * never sent to the browser.
+ */
+export function hasPlatformFallback(provider: Provider): boolean {
+  if (isInferenceProviderType(provider)) return false;
+  return platformProvidersCache[provider] === true;
+}
+
 export function isBuiltinProviderReady(provider: Provider): boolean {
   if (isInferenceProviderType(provider)) return false;
-  return !!getApiKey(provider);
+  return !!getApiKey(provider) || hasPlatformFallback(provider);
 }
 
 export function isModelReady(model: Model): boolean {
@@ -586,11 +607,31 @@ export function isProviderReady(provider: Provider): boolean {
   return isBuiltinProviderReady(provider);
 }
 
+/**
+ * Literal: the user has saved at least one of their own credentials
+ * (built-in key or inference profile). Does NOT consider platform
+ * fallbacks — used by Settings copy that must reflect what the user
+ * actually configured.
+ */
 export function hasAnySavedApiKey(): boolean {
   for (const p of BUILTIN_PROVIDER_ORDER) {
     if (getApiKey(p)) return true;
   }
   return settingsCache.inferenceProfiles.some(hasInferenceCredentials);
+}
+
+/**
+ * True when the user can actually run a model — their own key, an
+ * inference profile, OR a platform fallback. This is the gate the chat /
+ * discover / model-picker UI should use, so a fresh user with no key can
+ * still work out of the box when a fallback is configured.
+ */
+export function hasUsableProvider(): boolean {
+  if (hasAnySavedApiKey()) return true;
+  for (const p of BUILTIN_PROVIDER_ORDER) {
+    if (hasPlatformFallback(p)) return true;
+  }
+  return false;
 }
 
 interface SettingsPatchBody {
@@ -601,11 +642,12 @@ interface SettingsPatchBody {
 }
 
 async function patchSettings(patch: SettingsPatchBody): Promise<void> {
-  const { settings } = await apiFetch<{ settings: SettingsCache }>(
-    "/api/settings",
-    { method: "PATCH", body: patch },
-  );
+  const { settings, platformProviders } = await apiFetch<{
+    settings: SettingsCache;
+    platformProviders?: Partial<Record<Provider, boolean>>;
+  }>("/api/settings", { method: "PATCH", body: patch });
   settingsCache = settings;
+  if (platformProviders) platformProvidersCache = platformProviders;
   dispatch(KEYS_UPDATED_EVENT);
 }
 
@@ -647,14 +689,20 @@ export async function saveSelectedModel(model: Model | null): Promise<void> {
 
 export function getSavedSelectedModel(): Model | null {
   const m = settingsCache.selectedModel;
-  if (!m) return null;
-  return isModelReady(m) ? m : null;
+  if (m && isModelReady(m)) return m;
+  // Nothing usable saved (fresh user, or their provider's key was
+  // removed). When a provider is ready — own key OR platform fallback —
+  // default to the first built-in model so a new user can start chatting
+  // without first opening the model picker.
+  return FALLBACK_MODELS.find((fm) => isModelReady(fm)) ?? null;
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {
-  const { settings } = await apiFetch<{ settings: SettingsCache }>(
-    "/api/settings",
-  );
+  const { settings, platformProviders } = await apiFetch<{
+    settings: SettingsCache;
+    platformProviders?: Partial<Record<Provider, boolean>>;
+  }>("/api/settings");
   settingsCache = settings;
+  if (platformProviders) platformProvidersCache = platformProviders;
   dispatch(KEYS_UPDATED_EVENT);
 }

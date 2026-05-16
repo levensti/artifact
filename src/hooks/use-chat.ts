@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Model } from "@/lib/models";
 import {
   getBraveSearchApiKey,
-  hasAnySavedApiKey,
+  hasUsableProvider,
   isModelReady,
   KEYS_UPDATED_EVENT,
   resolveModelCredentials,
@@ -291,7 +291,10 @@ export function useChat({
   // Consume keysVersion to avoid lint warning
   void keysVersion;
 
-  const hasSavedKeys = hasAnySavedApiKey();
+  // "Has a usable provider" — own key, inference profile, or platform
+  // fallback. Drives the chat input lock; a fresh user with a fallback
+  // is not locked out.
+  const hasSavedKeys = hasUsableProvider();
   const hasKeyForModel = selectedModel != null && isModelReady(selectedModel);
 
   /**

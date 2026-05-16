@@ -36,6 +36,7 @@ import {
   setApiKey,
   clearApiKey,
   getInferenceProfiles,
+  hasPlatformFallback,
   saveInferenceProfiles,
   KEYS_UPDATED_EVENT,
 } from "@/lib/keys";
@@ -64,6 +65,9 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   const hasKey = !!stored;
+  // No own key, but the platform has a shared fallback for this provider:
+  // the provider already works; a personal key is optional.
+  const usingFallback = !hasKey && hasPlatformFallback(provider);
   const dirty = value.trim() !== stored.trim();
 
   useEffect(() => {
@@ -125,15 +129,27 @@ export function ProviderRow({ provider, placeholder }: ProviderRowProps) {
               fontFamily: "var(--font-reading)",
               color: hasKey
                 ? "color-mix(in srgb, var(--success) 80%, transparent)"
-                : "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
+                : usingFallback
+                  ? "color-mix(in srgb, var(--primary) 80%, transparent)"
+                  : "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
             }}
           >
-            {hasKey ? "Configured" : "Not set up yet"}
+            {hasKey
+              ? "Configured"
+              : usingFallback
+                ? "Covered by Artifact during early access"
+                : "Not set up yet"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {hasKey ? (
             <CircleCheck size={16} className="text-success" strokeWidth={2} />
+          ) : usingFallback ? (
+            <CircleCheck
+              size={16}
+              className="text-primary/70"
+              strokeWidth={2}
+            />
           ) : (
             <Circle
               size={16}
@@ -924,8 +940,12 @@ export default function SettingsDialog({
             }}
           >
             {configuredCount > 0
-              ? `${configuredCount} configured. Keys live only in your browser.`
-              : "Add a key for any provider to start chatting. Keys live only in your browser."}
+              ? `${configuredCount} configured.`
+              : (
+                    ["anthropic", "openai", "xai"] as BuiltinSettingsProvider[]
+                  ).some((p) => hasPlatformFallback(p))
+                ? "Artifact is covering AI costs while in early access."
+                : "Add a key for any provider to start chatting."}
           </DialogDescription>
         </DialogHeader>
 
