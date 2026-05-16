@@ -8,6 +8,7 @@ import {
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
+import { resolveServerApiKey } from "@/server/provider-env";
 import type { GenerateRequest } from "@/lib/explore";
 import { isInferenceProviderType } from "@/lib/models";
 
@@ -55,7 +56,12 @@ export async function POST(req: NextRequest) {
   const effectiveBaseUrl =
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
 
-  if (!effectiveApiKey) {
+  // Built-in providers fall back to the platform key when the user has none.
+  // `resolveServerApiKey` returns null for openai_compatible without an
+  // inline key, preserving the existing "key required" behavior there.
+  const resolvedApiKey = resolveServerApiKey(provider, effectiveApiKey) ?? "";
+
+  if (!resolvedApiKey) {
     return jsonError(
       "API key is required. Manage API keys in the app to add one.",
       401,
@@ -71,10 +77,10 @@ export async function POST(req: NextRequest) {
   if (stream) {
     try {
       const upstream = isAnthropicMessagesProvider(provider)
-        ? await openAnthropicStream(model, effectiveApiKey, prompt, paperContext)
+        ? await openAnthropicStream(model, resolvedApiKey, prompt, paperContext)
         : await openOpenAICompatibleStream(
             model,
-            effectiveApiKey,
+            resolvedApiKey,
             prompt,
             paperContext,
             provider as OpenAiCompatibleProvider,
@@ -97,10 +103,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const content = isAnthropicMessagesProvider(provider)
-      ? await generateAnthropic(model, effectiveApiKey, prompt, paperContext)
+      ? await generateAnthropic(model, resolvedApiKey, prompt, paperContext)
       : await generateOpenAICompatible(
           model,
-          effectiveApiKey,
+          resolvedApiKey,
           prompt,
           paperContext,
           provider as OpenAiCompatibleProvider,

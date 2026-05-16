@@ -66,7 +66,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
               }}
             >
               {isSignup
-                ? "Sign in with Google. Add your API keys. Start reading."
+                ? "Sign in with Google and start reading. Bring your own API keys later if you want."
                 : "Sign in to pick up where you left off."}
             </p>
           </header>

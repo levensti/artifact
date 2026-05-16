@@ -17,7 +17,7 @@ import {
   type PaperReview,
 } from "@/lib/reviews";
 import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
-import { hasAnySavedApiKey } from "@/lib/keys";
+import { hasUsableProvider } from "@/lib/keys";
 import { KEYS_UPDATED_EVENT, WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import { useSettingsOpener } from "@/components/settings-opener-context";
 import {
@@ -51,7 +51,9 @@ function subscribeKeys(onStoreChange: () => void) {
 }
 
 function keysSnapshot(): string {
-  return hasAnySavedApiKey() ? "1" : "0";
+  // A platform fallback counts as usable — a fresh user shouldn't see a
+  // "Set up" nag when chat already works out of the box.
+  return hasUsableProvider() ? "1" : "0";
 }
 
 function keysServerSnapshot(): string {

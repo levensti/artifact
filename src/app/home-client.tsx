@@ -6,7 +6,7 @@ import { useState, useSyncExternalStore } from "react";
 import NewReviewDialog from "@/components/new-review-dialog";
 import { ItalicAccent, MonoLabel } from "@/components/folio";
 import { useSettingsOpener } from "@/components/settings-opener-context";
-import { hasAnySavedApiKey } from "@/lib/keys";
+import { hasAnySavedApiKey, hasUsableProvider } from "@/lib/keys";
 import { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
 import { useRouter } from "next/navigation";
 
@@ -22,11 +22,19 @@ function subscribeKeys(onChange: () => void) {
   window.addEventListener(KEYS_UPDATED_EVENT, onChange);
   return () => window.removeEventListener(KEYS_UPDATED_EVENT, onChange);
 }
-function keysSnapshot() {
-  return hasAnySavedApiKey() ? "1" : "0";
+/**
+ * Three states drive the setup callout:
+ *   "own"      — user brought their own key: no callout.
+ *   "fallback" — no own key but a platform fallback works: soft optional note.
+ *   "none"     — nothing usable: blocking setup callout.
+ */
+function keysSnapshot(): "own" | "fallback" | "none" {
+  if (hasAnySavedApiKey()) return "own";
+  if (hasUsableProvider()) return "fallback";
+  return "none";
 }
 function keysServerSnapshot() {
-  return "0";
+  return "none" as const;
 }
 
 export default function HomeClient() {
@@ -45,12 +53,11 @@ function HomeBody() {
   const [showNewReview, setShowNewReview] = useState(false);
   const router = useRouter();
   const { openSettings } = useSettingsOpener();
-  const keysFlag = useSyncExternalStore(
+  const keyState = useSyncExternalStore(
     subscribeKeys,
     keysSnapshot,
     keysServerSnapshot,
   );
-  const hasKeys = keysFlag === "1";
 
   const lanes: Lane[] = [
     {
@@ -77,7 +84,7 @@ function HomeBody() {
         <svg
           viewBox="4 4 24 24"
           aria-hidden
-          className="pointer-events-none absolute right-[8%] top-[12%] size-[320px] opacity-[0.025]"
+          className="pointer-events-none absolute right-[8%] top-[12%] size-80 opacity-[0.025]"
         >
           <path
             d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z"
@@ -92,12 +99,14 @@ function HomeBody() {
             className="mt-4 text-[40px] font-bold leading-[1.02] tracking-[-0.035em] text-foreground"
             style={{ textWrap: "balance" }}
           >
-            What would you like to work on{" "}
-            <ItalicAccent>today?</ItalicAccent>
+            What would you like to work on <ItalicAccent>today?</ItalicAccent>
           </h1>
 
-          {!hasKeys ? (
-            <SetupCallout onOpenSettings={openSettings} />
+          {keyState !== "own" ? (
+            <SetupCallout
+              variant={keyState === "fallback" ? "optional" : "required"}
+              onOpenSettings={openSettings}
+            />
           ) : null}
 
           <div className="mt-10 flex flex-col gap-2.5">
@@ -121,18 +130,22 @@ function HomeBody() {
 }
 
 function SetupCallout({
+  variant,
   onOpenSettings,
 }: {
+  /** "required" — nothing usable yet. "optional" — a platform fallback
+   *  already works; the key is a nice-to-have, not a blocker. */
+  variant: "required" | "optional";
   onOpenSettings: () => void;
 }) {
+  const optional = variant === "optional";
   return (
     <div
       role="status"
       className="mt-9 flex flex-col gap-3 rounded-lg border bg-card px-5 py-4 sm:flex-row sm:items-center sm:gap-5"
       style={{
         borderColor: "color-mix(in srgb, var(--primary) 25%, transparent)",
-        background:
-          "color-mix(in srgb, var(--primary) 4%, var(--card))",
+        background: "color-mix(in srgb, var(--primary) 4%, var(--card))",
       }}
     >
       <div
@@ -140,7 +153,7 @@ function SetupCallout({
         style={{ background: "var(--badge-accent-bg)" }}
       >
         <KeyRound
-          className="size-[18px]"
+          className="size-4.5"
           strokeWidth={1.6}
           style={{
             color: "color-mix(in srgb, var(--primary) 75%, transparent)",
@@ -149,12 +162,14 @@ function SetupCallout({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <MonoLabel tone="accent">One-time setup</MonoLabel>
+          <MonoLabel tone="accent">
+            {optional ? "Early access" : "One-time setup"}
+          </MonoLabel>
         </div>
-        <p
-          className="mt-1.5 text-[14px] font-semibold tracking-[-0.005em] text-foreground"
-        >
-          Connect an AI provider to start chatting.
+        <p className="mt-1.5 text-[14px] font-semibold tracking-[-0.005em] text-foreground">
+          {optional
+            ? "Inference is on us, for now."
+            : "Connect an AI provider to start chatting."}
         </p>
         <p
           className="mt-1 text-[12.5px] leading-[1.55]"
@@ -163,9 +178,9 @@ function SetupCallout({
             color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
           }}
         >
-          Bring your own keys for Anthropic, OpenAI, xAI, or any
-          OpenAI-compatible endpoint. Or run inference locally with Ollama,
-          LM Studio, or llama.cpp.
+          {optional
+            ? "While Artifact is in early access we're covering inference costs, so you can start reading right away. Add your own key anytime for higher limits and billing on your account: Anthropic, OpenAI, xAI, any OpenAI-compatible endpoint, or local (Ollama, LM Studio, llama.cpp)."
+            : "Bring your own keys for Anthropic, OpenAI, xAI, or any OpenAI-compatible endpoint. Or run inference locally with Ollama, LM Studio, or llama.cpp."}
         </p>
       </div>
       <button
@@ -173,7 +188,7 @@ function SetupCallout({
         onClick={() => onOpenSettings()}
         className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px sm:self-auto"
       >
-        Add a key
+        {optional ? "Add your key" : "Add a key"}
         <ArrowRight className="size-3.5" strokeWidth={2} />
       </button>
     </div>
@@ -186,7 +201,7 @@ function Lane({ lane }: { lane: Lane }) {
     <button
       type="button"
       onClick={lane.onClick}
-      className="group flex w-full items-start gap-4 rounded-lg border bg-card px-5 py-4 text-left transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:shadow-[var(--shadow-sm)]"
+      className="group flex w-full items-start gap-4 rounded-lg border bg-card px-5 py-4 text-left transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:shadow-(--shadow-sm)"
       style={{
         borderColor: "color-mix(in srgb, var(--border) 75%, transparent)",
       }}
@@ -196,7 +211,7 @@ function Lane({ lane }: { lane: Lane }) {
         style={{ background: "var(--badge-accent-bg)" }}
       >
         <Icon
-          className="size-[16px]"
+          className="size-4"
           style={{
             color: "color-mix(in srgb, var(--primary) 75%, transparent)",
           }}
@@ -211,7 +226,7 @@ function Lane({ lane }: { lane: Lane }) {
           <ArrowRight className="size-3.5 text-muted-foreground/40 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary/70" />
         </div>
         <p
-          className="mt-1 max-w-[460px] text-[13px] leading-[1.6]"
+          className="mt-1 max-w-115 text-[13px] leading-[1.6]"
           style={{
             fontFamily: "var(--font-reading)",
             color: "color-mix(in srgb, var(--foreground) 68%, transparent)",

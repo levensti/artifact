@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import {
   getApiKey,
   getInferenceProfiles,
-  hasAnySavedApiKey,
+  hasUsableProvider,
   isBuiltinProviderReady,
   isModelReady,
   KEYS_UPDATED_EVENT,
@@ -418,7 +418,7 @@ export default function ModelSelector({
     };
   }, [keysVersion, refetchTick]);
 
-  const anyKey = hasAnySavedApiKey();
+  const anyKey = hasUsableProvider();
 
   const loadingKeyed = useMemo(() => {
     const jobs: string[] = [

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isInferenceProviderType } from "@/lib/models";
 import { parseApiErrorMessage } from "@/lib/api-utils";
+import { resolveServerApiKey } from "@/server/provider-env";
 import {
   isLocalhostUrl,
   isProvider,
@@ -186,10 +187,17 @@ export async function POST(req: NextRequest) {
   const effectiveBase =
     typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : undefined;
 
+  // Built-in providers fall back to the platform key so the model picker
+  // can populate for users who haven't brought their own. Never returned
+  // to the client — used only for the upstream list fetch below.
+  const resolvedKey = isInferenceProviderType(provider)
+    ? effectiveKey
+    : resolveServerApiKey(provider, effectiveKey) ?? "";
+
   // OpenAI-compatible providers may be unauthenticated (localhost Ollama, or
   // a tunnel fronting one). If the upstream actually requires a key, it will
   // 401 and we surface that error — better than blocking valid setups here.
-  if (!effectiveKey && !isInferenceProviderType(provider)) {
+  if (!resolvedKey && !isInferenceProviderType(provider)) {
     return jsonError("API key is required.", 401);
   }
   if (isInferenceProviderType(provider) && !effectiveBase) {
@@ -201,22 +209,22 @@ export async function POST(req: NextRequest) {
 
   try {
     if (provider === "openai") {
-      return NextResponse.json({ models: await fetchOpenAIModels(effectiveKey) });
+      return NextResponse.json({ models: await fetchOpenAIModels(resolvedKey) });
     }
     if (provider === "anthropic") {
       return NextResponse.json({
-        models: await fetchAnthropicModels(effectiveKey),
+        models: await fetchAnthropicModels(resolvedKey),
       });
     }
     if (provider === "openai_compatible") {
       return NextResponse.json({
         models: await fetchOpenAICompatibleModels(
-          effectiveKey,
+          resolvedKey,
           effectiveBase ?? "",
         ),
       });
     }
-    return NextResponse.json({ models: await fetchXAIModels(effectiveKey) });
+    return NextResponse.json({ models: await fetchXAIModels(resolvedKey) });
   } catch (err) {
     const rawMessage =
       err instanceof Error ? err.message : "Failed to load model list";

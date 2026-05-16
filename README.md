@@ -82,7 +82,11 @@ npm run db:migrate    # applies prisma/migrations/* to the local Postgres
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000), sign in with Google, then add your AI provider keys under Settings.
+Open [localhost:3000](http://localhost:3000) and sign in with Google. Add your own AI provider keys under Settings, or set the optional platform fallback keys (`PROVIDED_*` in `.env`) so users can start without bringing a key.
+
+#### Built-in models vs. bring-your-own-key
+
+By default each user supplies their own provider key under Settings. If you set the optional `PROVIDED_ANTHROPIC_API_KEY` / `PROVIDED_OPENAI_API_KEY` / `PROVIDED_XAI_API_KEY` env vars, signed-in users with no key of their own automatically fall back to those platform keys — no setup step required. Users who do bring their own key always use it. The platform key is server-only and never sent to the browser. The fallback is opt-in: leave the vars unset to require keys as before. (See the cost note in `.env.example`.)
 
 ### Day-to-day commands
 
@@ -126,7 +130,7 @@ Artifact can be self-hosted on any platform that runs a Next.js app. You'll need
 
 Copy [`.env.example`](./.env.example) to `.env` and fill in the required values. Every variable is documented inline: what it does, where to get the value, and which are local vs. production-only.
 
-For a deployed instance you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`, plus the multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`).
+For a deployed instance you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`, plus the multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`). Optionally set `PROVIDED_ANTHROPIC_API_KEY` / `PROVIDED_OPENAI_API_KEY` / `PROVIDED_XAI_API_KEY` to give keyless users built-in models (see the bring-your-own-key note above).
 
 ### 3. Build and run
 
