@@ -207,7 +207,7 @@ function CardChrome({
 }) {
   return (
     <section
-      className="overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-sm)]"
+      className="overflow-hidden rounded-lg border bg-card shadow-(--shadow-sm)"
       style={{
         borderColor: accent
           ? "color-mix(in srgb, var(--primary) 22%, transparent)"
@@ -225,7 +225,7 @@ function CardChrome({
         }}
       >
         <span
-          className="inline-flex size-[20px] items-center justify-center rounded-md"
+          className="inline-flex size-5 items-center justify-center rounded-md"
           style={{
             background: "var(--badge-accent-bg)",
             color: "color-mix(in srgb, var(--primary) 70%, transparent)",
@@ -555,7 +555,7 @@ function RevokedView() {
     >
       <div className="max-w-md">
         <span
-          className="mx-auto mb-7 flex size-12 items-center justify-center rounded-md bg-card shadow-[var(--shadow-sm)]"
+          className="mx-auto mb-7 flex size-12 items-center justify-center rounded-md bg-card shadow-(--shadow-sm)"
           style={{
             border:
               "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
