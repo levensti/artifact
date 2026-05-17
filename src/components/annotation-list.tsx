@@ -21,6 +21,7 @@ interface AnnotationListProps {
   /** Narrow notes rail (beside PDF) uses tighter empty state */
   density?: "default" | "rail";
   onAnnotationSelect?: (id: string) => void;
+  onAnnotationDeactivate?: () => void;
 }
 
 export default function AnnotationList({
@@ -33,6 +34,7 @@ export default function AnnotationList({
   onAnnotationHover,
   density = "default",
   onAnnotationSelect,
+  onAnnotationDeactivate,
 }: AnnotationListProps) {
   const activeRef = useRef<HTMLDivElement>(null);
 
@@ -105,6 +107,7 @@ export default function AnnotationList({
             onActivate={
               onAnnotationSelect ? () => onAnnotationSelect(ann.id) : undefined
             }
+            onDeactivate={onAnnotationDeactivate}
           />
         ))}
       </div>
@@ -124,6 +127,8 @@ interface AnnotationCardProps {
   onUpdate: () => void;
   /** Focus this card in the notes rail */
   onActivate?: () => void;
+  /** Clear focus from this card */
+  onDeactivate?: () => void;
   ref?: React.Ref<HTMLDivElement>;
 }
 
@@ -139,6 +144,7 @@ function AnnotationCard({
   onDelete,
   onUpdate,
   onActivate,
+  onDeactivate,
 }: AnnotationCardProps) {
   const isAskAi = annotation.kind === "ask_ai";
   const [note, setNote] = useState(annotation.note);
@@ -156,9 +162,30 @@ function AnnotationCard({
     [reviewId, annotation.id, onUpdate],
   );
 
+  const flushSave = useCallback(
+    (value: string) => {
+      if (noteTimerRef.current) {
+        clearTimeout(noteTimerRef.current);
+        noteTimerRef.current = null;
+      }
+      void updateAnnotation(reviewId, annotation.id, { note: value }).then(
+        () => onUpdate(),
+      );
+    },
+    [reviewId, annotation.id, onUpdate],
+  );
+
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setNote(e.target.value);
     saveNote(e.target.value);
+  };
+
+  const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      flushSave(note);
+      onDeactivate?.();
+    }
   };
 
   return (
@@ -296,7 +323,8 @@ function AnnotationCard({
             <textarea
               value={note}
               onChange={handleNoteChange}
-              placeholder="Write a note…"
+              onKeyDown={handleNoteKeyDown}
+              placeholder="Write a note… (Shift+Enter for newline)"
               rows={2}
               autoFocus
               className="w-full resize-none bg-transparent text-sm leading-snug text-foreground placeholder:text-muted-foreground/50 focus:outline-none"

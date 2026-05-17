@@ -524,6 +524,7 @@ export default function ReviewPage() {
               onHighlightClick={handleHighlightClick}
               onAnnotationHover={setHoveredAnnotationId}
               onAnnotationSelect={handleAnnotationSelect}
+              onAnnotationDeactivate={() => setActiveAnnotationId(null)}
               collapsed={notesCollapsed}
               onToggleCollapsed={toggleNotesCollapsed}
             />
@@ -629,6 +630,7 @@ export default function ReviewPage() {
               onHighlightClick={handleHighlightClick}
               onAnnotationHover={setHoveredAnnotationId}
               onAnnotationSelect={handleAnnotationSelect}
+              onAnnotationDeactivate={() => setActiveAnnotationId(null)}
             />
           </div>
         )}
