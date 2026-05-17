@@ -214,6 +214,23 @@
   opacity: 1 !important;
 }
 
+/* The text-layer span is normally dimmed (0.12) so the canvas underneath
+   shows through. When it contains a search match, bump opacity to 1 so the
+   highlight is visible. Text stays transparent (TextLayer.css default). */
+.react-pdf__Page__textContent span:has(mark.paper-search-match) {
+  opacity: 1 !important;
+}
+.react-pdf__Page__textContent mark.paper-search-match {
+  background: color-mix(in srgb, #facc15 80%, transparent);
+  color: transparent;
+  border-radius: 2px;
+  padding: 0;
+}
+.react-pdf__Page__textContent mark.paper-search-match.paper-search-match-active {
+  background: color-mix(in srgb, #fb923c 90%, transparent);
+  box-shadow: 0 0 0 1.5px rgba(249, 115, 22, 0.7);
+}
+
 .chat-markdown {
   font-family: var(--font-reading);
   font-size: 0.9375rem;

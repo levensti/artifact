@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, Loader2, FileWarning } from "lucide-react";
+import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, Loader2, FileWarning, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Annotation } from "@/lib/annotations";
@@ -68,7 +68,12 @@ export default function PdfViewer({
   const [containerWidth, setContainerWidth] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [matchCount, setMatchCount] = useState(0);
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -122,6 +127,70 @@ export default function PdfViewer({
     );
     return () => window.clearTimeout(id);
   }, [liveZoom, committedZoom]);
+
+  // Intercept Cmd/Ctrl+F so it toggles the in-paper search bar instead of the
+  // browser's native Find (which would also match toolbar/chrome text).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        setSearchOpen((open) => {
+          if (open) {
+            setSearchQuery("");
+            setActiveMatchIndex(0);
+            return false;
+          }
+          requestAnimationFrame(() => {
+            const input = searchInputRef.current;
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          });
+          return true;
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // react-pdf renders page text layers asynchronously as each page loads, so
+  // we can't compute match count synchronously after a query change. Watch the
+  // container for mutations and recount whenever <mark> nodes appear/disappear.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const q = searchQuery.trim();
+    if (!q) {
+      setMatchCount(0);
+      setActiveMatchIndex(0);
+      return;
+    }
+    const update = () => {
+      const matches = container.querySelectorAll(".paper-search-match");
+      setMatchCount(matches.length);
+      setActiveMatchIndex((idx) =>
+        matches.length === 0 ? 0 : Math.min(idx, matches.length - 1),
+      );
+    };
+    update();
+    const mo = new MutationObserver(update);
+    mo.observe(container, { childList: true, subtree: true, characterData: true });
+    return () => mo.disconnect();
+  }, [searchQuery]);
+
+  // Apply the active class to the current match and scroll it into view.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const matches = container.querySelectorAll<HTMLElement>(".paper-search-match");
+    matches.forEach((m, i) => {
+      m.classList.toggle("paper-search-match-active", i === activeMatchIndex);
+    });
+    const active = matches[activeMatchIndex];
+    if (active) active.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeMatchIndex, matchCount]);
 
   const extractText = useCallback(
     async (pdf: PDFDocumentProxy) => {
@@ -281,6 +350,43 @@ export default function PdfViewer({
     target?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const customTextRenderer = useCallback(
+    (item: { str: string }) => {
+      const escapeHtml = (s: string) =>
+        s.replace(/[&<>"']/g, (c) =>
+          c === "&" ? "&amp;"
+          : c === "<" ? "&lt;"
+          : c === ">" ? "&gt;"
+          : c === '"' ? "&quot;"
+          : "&#39;",
+        );
+      const safe = escapeHtml(item.str);
+      const q = searchQuery.trim();
+      if (!q) return safe;
+      const safeQuery = escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(safeQuery, "gi");
+      return safe.replace(re, (m) => `<mark class="paper-search-match">${m}</mark>`);
+    },
+    [searchQuery],
+  );
+
+  const nextMatch = useCallback(
+    () => setActiveMatchIndex((i) => (matchCount === 0 ? 0 : (i + 1) % matchCount)),
+    [matchCount],
+  );
+  const prevMatch = useCallback(
+    () =>
+      setActiveMatchIndex((i) =>
+        matchCount === 0 ? 0 : (i - 1 + matchCount) % matchCount,
+      ),
+    [matchCount],
+  );
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setActiveMatchIndex(0);
+  }, []);
+
   const zoomOut = () =>
     setLiveZoom((z) =>
       Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100),
@@ -343,6 +449,68 @@ export default function PdfViewer({
         </div>
       </div>
 
+      {searchOpen && (
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-background/60 px-2 backdrop-blur-md">
+          <Search size={14} className="ml-1 text-foreground/50" />
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setActiveMatchIndex(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (e.shiftKey) prevMatch();
+                else nextMatch();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                closeSearch();
+              }
+            }}
+            placeholder="Search in paper"
+            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-foreground/40"
+          />
+          <span className="min-w-[44px] text-right text-[11px] tabular-nums text-foreground/60">
+            {searchQuery.trim() === ""
+              ? ""
+              : matchCount === 0
+                ? "0/0"
+                : `${activeMatchIndex + 1}/${matchCount}`}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={prevMatch}
+            disabled={matchCount === 0}
+            title="Previous match (Shift+Enter)"
+          >
+            <ChevronUp size={14} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={nextMatch}
+            disabled={matchCount === 0}
+            title="Next match (Enter)"
+          >
+            <ChevronDown size={14} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={closeSearch}
+            title="Close (Esc)"
+          >
+            <X size={14} />
+          </Button>
+        </div>
+      )}
+
       <div ref={containerRef} data-pdf-container className="flex-1 overflow-auto min-h-0">
         {loading && !loadError && (
           <div className="flex items-center justify-center h-full min-h-[200px]">
@@ -394,6 +562,7 @@ export default function PdfViewer({
                   width={containerWidth > 0 ? pageWidth : 400}
                   className="shadow-md"
                   loading={null}
+                  customTextRenderer={customTextRenderer}
                 />
                 {pageAnnotations.map((ann) => {
                   const isActive = ann.id === activeAnnotationId;
