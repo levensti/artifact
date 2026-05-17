@@ -138,6 +138,7 @@ export default function PdfViewer({
           if (open) {
             setSearchQuery("");
             setActiveMatchIndex(0);
+            setMatchCount(0);
             return false;
           }
           requestAnimationFrame(() => {
@@ -158,15 +159,12 @@ export default function PdfViewer({
   // react-pdf renders page text layers asynchronously as each page loads, so
   // we can't compute match count synchronously after a query change. Watch the
   // container for mutations and recount whenever <mark> nodes appear/disappear.
+  // When the query is empty, customTextRenderer emits no marks, so the observer
+  // naturally drives matchCount to 0 — no synchronous reset needed here.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const q = searchQuery.trim();
-    if (!q) {
-      setMatchCount(0);
-      setActiveMatchIndex(0);
-      return;
-    }
+    if (!searchQuery.trim()) return;
     const update = () => {
       const matches = container.querySelectorAll(".paper-search-match");
       setMatchCount(matches.length);
@@ -385,6 +383,7 @@ export default function PdfViewer({
     setSearchOpen(false);
     setSearchQuery("");
     setActiveMatchIndex(0);
+    setMatchCount(0);
   }, []);
 
   const zoomOut = () =>
@@ -456,8 +455,10 @@ export default function PdfViewer({
             ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => {
-              setSearchQuery(e.target.value);
+              const v = e.target.value;
+              setSearchQuery(v);
               setActiveMatchIndex(0);
+              if (v.trim() === "") setMatchCount(0);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
