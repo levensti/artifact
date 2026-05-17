@@ -29,16 +29,16 @@ interface CitationChipProps {
  */
 export default function CitationChip({ href, children }: CitationChipProps) {
   const info = citationFromHref(href);
-  const { parsedPaper, paperText, scrollToPage } = useCitationContext();
+  const { parsedPaper, pageMap, paperText, scrollToPage } = useCitationContext();
 
   let resolution: CitationResolution = {};
   if (info) {
     if (info.kind === "section") {
-      resolution = resolveSection(info.value, parsedPaper, paperText);
+      resolution = resolveSection(info.value, parsedPaper, paperText, pageMap);
     } else if (info.kind === "figure") {
-      resolution = resolveFigure(info.value, parsedPaper, paperText);
+      resolution = resolveFigure(info.value, parsedPaper, paperText, pageMap);
     } else if (info.kind === "table") {
-      resolution = resolveTable(info.value, parsedPaper, paperText);
+      resolution = resolveTable(info.value, parsedPaper, paperText, pageMap);
     } else {
       resolution = resolveReference(info.value, parsedPaper, paperText);
     }

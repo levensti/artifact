@@ -10,6 +10,8 @@ import {
   getInferenceProfiles as getInferenceProfilesCached,
   getSavedSelectedModel as getSavedSelectedModelCached,
   hasAnySavedApiKey as hasAnySavedApiKeyCached,
+  hasPlatformFallback as hasPlatformFallbackCached,
+  hasUsableProvider as hasUsableProviderCached,
   hasBraveSearchApiKey as hasBraveSearchApiKeyCached,
   isBuiltinProviderReady as isBuiltinProviderReadyCached,
   isModelReady as isModelReadyCached,
@@ -75,8 +77,13 @@ export function resolveModelCredentials(
     };
   }
   const key = getApiKeyCached(model.provider);
-  if (!key) return null;
-  return { apiKey: key };
+  if (key) return { apiKey: key };
+  // No user key, but the server has a platform fallback for this provider:
+  // send an empty key and let the route inject the env key. Returning
+  // creds (rather than null) is what unblocks the no-key user across the
+  // chat / parse / journal call sites that bail on a null result.
+  if (hasPlatformFallbackCached(model.provider)) return { apiKey: "" };
+  return null;
 }
 
 export function isBuiltinProviderReady(provider: import("./models").Provider): boolean {
@@ -94,6 +101,18 @@ export function isProviderReady(provider: import("./models").Provider): boolean 
 
 export function hasAnySavedApiKey(): boolean {
   return hasAnySavedApiKeyCached();
+}
+
+/** Server has a platform-key fallback for this built-in provider. */
+export function hasPlatformFallback(
+  provider: import("./models").Provider,
+): boolean {
+  return hasPlatformFallbackCached(provider);
+}
+
+/** User can run a model: own key, inference profile, or platform fallback. */
+export function hasUsableProvider(): boolean {
+  return hasUsableProviderCached();
 }
 
 export async function setApiKey(

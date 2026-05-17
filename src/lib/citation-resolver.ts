@@ -12,6 +12,7 @@
  */
 
 import type {
+  PageMap,
   ParsedFigure,
   ParsedPaper,
   ParsedReference,
@@ -33,7 +34,9 @@ export function resolveSection(
   sectionNum: string,
   parsed: ParsedPaper | null,
   paperText: string | null | undefined,
+  pageMap: PageMap | null = null,
 ): CitationResolution {
+  const mapped = pageMap?.sections?.[sectionNum];
   if (parsed) {
     const match = findSectionInParsed(parsed.sections, sectionNum);
     if (match) {
@@ -41,22 +44,28 @@ export function resolveSection(
         ? findSectionInText(paperText, sectionNum, match.heading)
         : null;
       return {
-        page: match.startPage ?? fromText?.page,
+        page: mapped ?? match.startPage ?? fromText?.page,
         tooltip: match.heading,
       };
     }
   }
   if (paperText) {
-    return findSectionInText(paperText, sectionNum) ?? {};
+    const fromText = findSectionInText(paperText, sectionNum) ?? {};
+    return {
+      page: mapped ?? fromText.page,
+      tooltip: fromText.tooltip,
+    };
   }
-  return {};
+  return mapped ? { page: mapped } : {};
 }
 
 export function resolveFigure(
   figureNum: string,
   parsed: ParsedPaper | null,
   paperText: string | null | undefined,
+  pageMap: PageMap | null = null,
 ): CitationResolution {
+  const mapped = pageMap?.figures?.[figureNum];
   if (parsed) {
     const match = findFigureInParsed(parsed.figures, figureNum);
     if (match) {
@@ -64,36 +73,46 @@ export function resolveFigure(
         ? findFigureInText(paperText, figureNum)
         : null;
       return {
-        page: match.page ?? fromText?.page,
+        page: mapped ?? match.page ?? fromText?.page,
         tooltip: shorten(match.caption, 200),
       };
     }
   }
   if (paperText) {
-    return findFigureInText(paperText, figureNum) ?? {};
+    const fromText = findFigureInText(paperText, figureNum) ?? {};
+    return {
+      page: mapped ?? fromText.page,
+      tooltip: fromText.tooltip,
+    };
   }
-  return {};
+  return mapped ? { page: mapped } : {};
 }
 
 export function resolveTable(
   num: string,
   parsed: ParsedPaper | null,
   paperText: string | null | undefined,
+  pageMap: PageMap | null = null,
 ): CitationResolution {
+  const mapped = pageMap?.tables?.[num];
   if (parsed) {
     const match = findTableInParsed(parsed, num);
     if (match) {
       const fromText = paperText ? findTableInText(paperText, num) : null;
       return {
-        page: match.page ?? fromText?.page,
+        page: mapped ?? match.page ?? fromText?.page,
         tooltip: shorten(match.caption, 200),
       };
     }
   }
   if (paperText) {
-    return findTableInText(paperText, num) ?? {};
+    const fromText = findTableInText(paperText, num) ?? {};
+    return {
+      page: mapped ?? fromText.page,
+      tooltip: fromText.tooltip,
+    };
   }
-  return {};
+  return mapped ? { page: mapped } : {};
 }
 
 export function resolveReference(

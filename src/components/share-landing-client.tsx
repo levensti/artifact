@@ -162,7 +162,13 @@ export default function ShareLandingClient({
 
 /* ── Resource cards ────────────────────────────────────────────── */
 
-function KindGlyph({ kind, isDigest }: { kind: "review" | "wiki"; isDigest?: boolean }) {
+function KindGlyph({
+  kind,
+  isDigest,
+}: {
+  kind: "review" | "wiki";
+  isDigest?: boolean;
+}) {
   // Inline SVG matches the journal/landing chip-glyph rhythm.
   if (kind === "review") {
     return (
@@ -201,7 +207,7 @@ function CardChrome({
 }) {
   return (
     <section
-      className="overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-sm)]"
+      className="overflow-hidden rounded-lg border bg-card shadow-(--shadow-sm)"
       style={{
         borderColor: accent
           ? "color-mix(in srgb, var(--primary) 22%, transparent)"
@@ -214,14 +220,12 @@ function CardChrome({
       <header
         className="flex items-center gap-2 border-b px-3.5 py-2.5"
         style={{
-          background:
-            "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
-          borderColor:
-            "color-mix(in srgb, var(--border) 70%, transparent)",
+          background: "color-mix(in srgb, var(--reader-mat) 50%, var(--card))",
+          borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
         }}
       >
         <span
-          className="inline-flex size-[20px] items-center justify-center rounded-md"
+          className="inline-flex size-5 items-center justify-center rounded-md"
           style={{
             background: "var(--badge-accent-bg)",
             color: "color-mix(in srgb, var(--primary) 70%, transparent)",
@@ -321,8 +325,7 @@ function CountPills({
           <span
             className="font-semibold"
             style={{
-              color:
-                "color-mix(in srgb, var(--foreground) 80%, transparent)",
+              color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
             }}
           >
             {value}
@@ -499,7 +502,7 @@ function CtaArea({
           </>
         ) : (
           <>
-            <span>Import to my Artifact</span>
+            <span>Import to Artifact workspace</span>
             <ChevronRight
               className="size-4 transition-transform group-hover:translate-x-0.5"
               strokeWidth={2}
@@ -552,7 +555,7 @@ function RevokedView() {
     >
       <div className="max-w-md">
         <span
-          className="mx-auto mb-7 flex size-12 items-center justify-center rounded-md bg-card shadow-[var(--shadow-sm)]"
+          className="mx-auto mb-7 flex size-12 items-center justify-center rounded-md bg-card shadow-(--shadow-sm)"
           style={{
             border:
               "1px solid color-mix(in srgb, var(--border) 70%, transparent)",

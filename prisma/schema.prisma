@@ -32,6 +32,7 @@ model User {
   preferences       UserPreferences?
   pdfBlobs          PdfBlob[]
   parsedPapers      ParsedPaper[]
+  pageMaps          PageMap[]
   shares            Share[]
   discoverQueries   DiscoverQuery[]
 }
@@ -265,6 +266,22 @@ model ParsedPaper {
   userId String
   hash   String
   parsed Json
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, hash])
+}
+
+/// Lightweight per-paper map from citation tokens (section/figure/table
+/// numbers) to PDF page numbers. Produced by a small LLM call that runs on
+/// every paper open (not gated on length), independent of the full
+/// `ParsedPaper`. Powers chip click-to-scroll without requiring the
+/// expensive full parse to have run.
+model PageMap {
+  id     String @id @default(uuid())
+  userId String
+  hash   String
+  map    Json
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

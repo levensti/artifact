@@ -838,7 +838,7 @@ export async function deletePdfBlobRecord(
 
 /* ── Parsed papers (per-user content cache) ───────────────────── */
 
-import type { ParsedPaper } from "@/lib/review-types";
+import type { ParsedPaper, PageMap } from "@/lib/review-types";
 
 export async function getCachedParsedPaper(
   userId: string,
@@ -859,6 +859,28 @@ export async function cacheParsedPaper(
     where: { userId_hash: { userId, hash } },
     create: { userId, hash, parsed: parsed as unknown as Prisma.InputJsonValue },
     update: { parsed: parsed as unknown as Prisma.InputJsonValue },
+  });
+}
+
+export async function getCachedPageMap(
+  userId: string,
+  hash: string,
+): Promise<PageMap | null> {
+  const row = await prisma.pageMap.findUnique({
+    where: { userId_hash: { userId, hash } },
+  });
+  return row ? (row.map as unknown as PageMap) : null;
+}
+
+export async function cachePageMap(
+  userId: string,
+  hash: string,
+  map: PageMap,
+): Promise<void> {
+  await prisma.pageMap.upsert({
+    where: { userId_hash: { userId, hash } },
+    create: { userId, hash, map: map as unknown as Prisma.InputJsonValue },
+    update: { map: map as unknown as Prisma.InputJsonValue },
   });
 }
 
