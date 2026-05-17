@@ -12,6 +12,8 @@ import {
 import {
   getCachedParsedPaper,
   hashPaperText,
+  isLongPaper,
+  parseAndCachePaper,
 } from "@/lib/client/parsed-papers";
 import {
   fetchAndCachePageMap,
@@ -28,6 +30,12 @@ interface CitationContextValue {
   pageMap: PageMap | null;
   /** Raw extracted paper text — used as a fallback resolver when parsedPaper isn't available. */
   paperText: string | null;
+  /**
+   * True once the parse the chat depends on is loaded — full parse for long
+   * papers, page map for short ones. Also true when there's no paper or no
+   * model selected (nothing to wait for); the chat handles those states.
+   */
+  parseReady: boolean;
   /** Scroll the PDF viewer to the given (1-based) page. Falls back to no-op. */
   scrollToPage: (page: number) => void;
 }
@@ -38,6 +46,7 @@ const Ctx = createContext<CitationContextValue>({
   parsedPaper: null,
   pageMap: null,
   paperText: null,
+  parseReady: true,
   scrollToPage: noop,
 });
 
@@ -133,6 +142,41 @@ export function CitationContextProvider({
     };
   }, [paperText, selectedModel]);
 
+  // Eagerly kick off the full parse for long papers when the paper text and
+  // credentials are available. Without this the parse only fires lazily on
+  // first chat submit, which would deadlock a chat-loading gate.
+  useEffect(() => {
+    if (!paperText || !isLongPaper(paperText)) return;
+    if (parsedPaper) return;
+    if (!selectedModel) return;
+    const creds = resolveModelCredentials(selectedModel);
+    if (!creds) return;
+
+    let cancelled = false;
+    void parseAndCachePaper(paperText, {
+      model: selectedModel.modelId,
+      provider: selectedModel.provider,
+      apiKey: creds.apiKey,
+      apiBaseUrl: creds.apiBaseUrl,
+    })
+      .then((parsed) => {
+        if (!cancelled) setParsedPaper(parsed);
+      })
+      .catch(() => {
+        /* polling above will re-check the cache; chat falls back if it never arrives */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paperText, selectedModel, parsedPaper]);
+
+  const parseReady = useMemo(() => {
+    if (!paperText) return true;
+    if (!selectedModel) return true;
+    if (isLongPaper(paperText)) return parsedPaper !== null;
+    return pageMap !== null;
+  }, [paperText, selectedModel, parsedPaper, pageMap]);
+
   const scrollToPage = useCallback((page: number) => {
     const container = document.querySelector("[data-pdf-container]");
     if (!container) return;
@@ -150,9 +194,10 @@ export function CitationContextProvider({
       parsedPaper,
       pageMap,
       paperText: paperText ?? null,
+      parseReady,
       scrollToPage,
     }),
-    [parsedPaper, pageMap, paperText, scrollToPage],
+    [parsedPaper, pageMap, paperText, parseReady, scrollToPage],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
