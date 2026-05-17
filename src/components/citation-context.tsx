@@ -42,6 +42,16 @@ interface CitationContextValue {
 
 const noop = () => {};
 
+/**
+ * Lowercase and strip everything except letters/digits. Aggressive on
+ * purpose: PDF text extraction often inserts stray spaces inside ligatures
+ * ("Effi cient" instead of "Efficient") and breaks words across lines, so
+ * a forgiving comparator avoids spurious mismatches.
+ */
+function normalizeForTitleMatch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 const Ctx = createContext<CitationContextValue>({
   parsedPaper: null,
   pageMap: null,
@@ -58,16 +68,38 @@ interface ProviderProps {
    * trigger a fresh fetch (chip clicks just degrade to the regex fallback).
    */
   selectedModel?: Model | null;
+  /**
+   * Fires once the parsed paper resolves with a non-empty title — used by
+   * the review page to replace a placeholder title (e.g. `arXiv:<id>` when
+   * the metadata fetch failed) with the LLM-derived title.
+   */
+  onResolvedTitle?: (title: string) => void;
   children: ReactNode;
 }
 
 export function CitationContextProvider({
   paperText,
   selectedModel,
+  onResolvedTitle,
   children,
 }: ProviderProps) {
   const [parsedPaper, setParsedPaper] = useState<ParsedPaper | null>(null);
   const [pageMap, setPageMap] = useState<PageMap | null>(null);
+
+  // Notify the host when a non-empty parsed title becomes available — but
+  // only if that title actually appears near the top of the paper text.
+  // This is a cheap hallucination guard: an LLM that invented a title
+  // (paper missing, very short text, etc.) won't pass the substring check
+  // and we keep the placeholder instead of writing nonsense to the DB.
+  useEffect(() => {
+    const title = parsedPaper?.title?.trim();
+    if (!title || !paperText) return;
+    const needle = normalizeForTitleMatch(title);
+    if (needle.length < 4) return;
+    const haystack = normalizeForTitleMatch(paperText.slice(0, 1000));
+    if (!haystack.includes(needle)) return;
+    onResolvedTitle?.(title);
+  }, [parsedPaper, paperText, onResolvedTitle]);
 
   // Load cached parsed paper whenever the paper text changes. Re-checks
   // the cache periodically so a parse triggered mid-chat picks up here too.

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { authedRoute } from "@/server/api";
 import * as store from "@/server/store";
 import { deletePdf } from "@/server/storage";
@@ -11,6 +12,20 @@ export const GET = authedRoute(async (userId, _req: Request, { params }: Ctx) =>
   if (!review) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ review });
 });
+
+const patchSchema = z.object({
+  title: z.string().min(1).max(500),
+});
+
+export const PATCH = authedRoute(
+  async (userId, request: Request, { params }: Ctx) => {
+    const { id } = await params;
+    const body = patchSchema.parse(await request.json());
+    const review = await store.updateReviewTitle(userId, id, body.title.trim());
+    if (!review) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ review });
+  },
+);
 
 export const DELETE = authedRoute(async (userId, _req: Request, { params }: Ctx) => {
   const { id } = await params;

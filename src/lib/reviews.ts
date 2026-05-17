@@ -6,6 +6,7 @@ import {
   getReviewsSnapshot,
   loadMessages,
   saveMessages,
+  updateReviewTitle as updateReviewTitleRemote,
 } from "@/lib/client-data";
 import { normalizeArxivId } from "@/lib/arxiv";
 import type {
@@ -63,6 +64,13 @@ export async function createOrGetReview(
   const existing = getReviewByArxivId(arxivId);
   if (existing) return existing;
   return createReview(arxivId, title);
+}
+
+export async function updateReviewTitle(
+  id: string,
+  title: string,
+): Promise<PaperReview | null> {
+  return updateReviewTitleRemote(id, title);
 }
 
 export { loadMessages, saveMessages };

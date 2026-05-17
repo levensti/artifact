@@ -93,6 +93,27 @@ export async function insertReview(
   return rowToReview(row);
 }
 
+/**
+ * Rename a review. Bumps updatedAt. Returns the updated review or null when
+ * the row isn't owned by this user or doesn't exist.
+ */
+export async function updateReviewTitle(
+  userId: string,
+  reviewId: string,
+  title: string,
+): Promise<PaperReview | null> {
+  const existing = await prisma.review.findFirst({
+    where: { id: reviewId, userId },
+    select: { id: true },
+  });
+  if (!existing) return null;
+  const row = await prisma.review.update({
+    where: { id: reviewId },
+    data: { title, updatedAt: new Date() },
+  });
+  return rowToReview(row);
+}
+
 /** Delete a review and the PDF blob it owns. Cascades take care of the rest. */
 export async function deleteReview(
   userId: string,
