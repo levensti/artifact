@@ -433,27 +433,66 @@ export default function ChatPanel({
   useEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
-    const BOTTOM_EPS = 16;
+    // Tight epsilon: re-pinning only when the user *really* reaches the
+    // bottom. A larger value caused thrash during smooth-scroll wheel
+    // events — the typewriter would snap the view to the bottom each
+    // frame, the scroll handler would see "near bottom" and re-pin, then
+    // the next wheel event would unpin again, and so on.
+    const BOTTOM_EPS = 2;
 
     const isAtBottom = () =>
       el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_EPS;
 
-    const onUserIntent = () => {
-      if (pinnedRef.current && !isAtBottom()) setPinnedToBottom(false);
-    };
-    const onScroll = () => {
-      // Re-pin when the user scrolls all the way to the bottom themselves.
-      if (!pinnedRef.current && isAtBottom()) setPinnedToBottom(true);
+    const unpin = () => {
+      if (!pinnedRef.current) return;
+      // Flip the ref synchronously so the very next typewriter tick
+      // (which can fire before React commits the state update) sees the
+      // unpinned state and skips the auto-scroll.
+      pinnedRef.current = false;
+      setPinnedToBottom(false);
     };
 
-    el.addEventListener("wheel", onUserIntent, { passive: true });
-    el.addEventListener("touchmove", onUserIntent, { passive: true });
-    el.addEventListener("keydown", onUserIntent);
+    // Wheel-up and scroll keys mean "I want to read" — react to the intent
+    // directly. We can't use a position-based check here because the
+    // typewriter keeps yanking scrollTop back to the bottom every frame,
+    // so smooth-scroll wheel events (e.g., trackpads) never accumulate
+    // enough scroll distance to leave the bottom-epsilon window.
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY < 0) unpin();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "Home") {
+        unpin();
+      }
+    };
+    // Touchmove has no reliable direction without tracking touchstart, so
+    // treat any touch gesture on the scroll area as intent to look around.
+    const onTouchMove = () => unpin();
+    const onScroll = () => {
+      if (!pinnedRef.current && isAtBottom()) {
+        pinnedRef.current = true;
+        setPinnedToBottom(true);
+      }
+    };
+
+    // Keydown listener on the scroll div would only fire when the div has
+    // focus, which it never does (no tabIndex). Listen on the document and
+    // gate on whether the event targets the chat scroll area or its
+    // descendants — that way the chat composer's own ArrowUp doesn't unpin.
+    const onDocumentKeyDown = (e: KeyboardEvent) => {
+      if (!(e.target instanceof Node)) return;
+      if (!el.contains(e.target)) return;
+      onKeyDown(e);
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    document.addEventListener("keydown", onDocumentKeyDown);
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      el.removeEventListener("wheel", onUserIntent);
-      el.removeEventListener("touchmove", onUserIntent);
-      el.removeEventListener("keydown", onUserIntent);
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("keydown", onDocumentKeyDown);
       el.removeEventListener("scroll", onScroll);
     };
   }, []);
@@ -462,6 +501,7 @@ export default function ChatPanel({
     const el = scrollAreaRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
+    pinnedRef.current = true;
     setPinnedToBottom(true);
   }, []);
 
