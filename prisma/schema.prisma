@@ -308,6 +308,9 @@ model Share {
   /// Owner-facing telemetry. Cheap to maintain.
   lastAccessAt DateTime?
   accessCount  Int       @default(0)
+  /// Distinct successful imports. "Ever imported" — does not decrement
+  /// when the recipient deletes their cloned copy.
+  importCount  Int       @default(0)
 
   user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   review Review?   @relation(fields: [reviewId], references: [id], onDelete: Cascade)

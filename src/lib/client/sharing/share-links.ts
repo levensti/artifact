@@ -22,6 +22,7 @@ export interface CreateShareResult {
   token: string;
   createdAt: string;
   reused: boolean;
+  importCount: number;
 }
 
 export interface ImportShareResult {
@@ -38,6 +39,7 @@ export interface ShareSummary {
   revokedAt: string | null;
   lastAccessAt: string | null;
   accessCount: number;
+  importCount: number;
   target: { reviewId?: string; wikiSlug?: string; title: string | null };
 }
 
