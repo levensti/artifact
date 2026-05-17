@@ -68,7 +68,7 @@ export function CitationContextProvider({
 }: ProviderProps) {
   const [parsedPaper, setParsedPaper] = useState<ParsedPaper | null>(null);
   const [pageMap, setPageMap] = useState<PageMap | null>(null);
-  // Failsafe: unlock chat after 15s even if parsing hasn't finished. Parse
+  // Failsafe: unlock chat after 40s even if parsing hasn't finished. Parse
   // keeps running in the background and the cache picks it up once ready;
   // chat falls back to sending full paper text in the meantime.
   const [parseTimedOut, setParseTimedOut] = useState(false);
@@ -76,7 +76,7 @@ export function CitationContextProvider({
   useEffect(() => {
     setParseTimedOut(false);
     if (!paperText) return;
-    const id = window.setTimeout(() => setParseTimedOut(true), 15000);
+    const id = window.setTimeout(() => setParseTimedOut(true), 40000);
     return () => window.clearTimeout(id);
   }, [paperText]);
 
