@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  createContext,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -45,6 +46,12 @@ import { ChatMessageBubble } from "./chat-message-bubble";
 import JournalCheckpointModal from "./journal-checkpoint-modal";
 import { MonoLabel } from "@/components/folio";
 import { useChat } from "@/hooks/use-chat";
+
+// Streaming bubbles call this from a useLayoutEffect on each typewriter
+// advance so the scroll runs *after* the new content has been committed
+// to the DOM — reading scrollHeight in a store subscriber would catch a
+// stale layout and fall behind the cursor.
+export const ChatScrollContext = createContext<() => void>(() => {});
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                              */
@@ -408,7 +415,16 @@ export default function ChatPanel({
     const el = scrollAreaRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [chat.messages, chat.agentSteps, displayThread, chat.isStreaming]);
+  }, [chat.messages, displayThread, chat.isStreaming]);
+
+  // Called by the streaming bubble after each typewriter advance commits.
+  // Stable identity so the consumer's useLayoutEffect dep list stays clean.
+  const scrollIfPinned = useCallback(() => {
+    if (!pinnedRef.current) return;
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, []);
 
   // Detect user-initiated upward scrolling and unpin. Re-pin once they reach
   // the bottom again. We treat wheel/touch/keyboard as user intent; pure
@@ -646,6 +662,7 @@ export default function ChatPanel({
             ref={scrollAreaRef}
             className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain"
           >
+            <ChatScrollContext.Provider value={scrollIfPinned}>
             <div className="space-y-5 px-4 pb-5 pt-5">
               {chatThreadAnnotationId && activeThreadAnn ? (
                 <>
@@ -709,7 +726,6 @@ export default function ChatPanel({
                       isCurrentlyStreaming={
                         msg.id === chat.streamingMsgId && chat.isStreaming
                       }
-                      agentSteps={chat.agentSteps}
                       failure={buildFailure(msg.id)}
                     />
                   ))}
@@ -735,13 +751,13 @@ export default function ChatPanel({
                       isCurrentlyStreaming={
                         msg.id === chat.streamingMsgId && chat.isStreaming
                       }
-                      agentSteps={chat.agentSteps}
                       failure={buildFailure(msg.id)}
                     />
                   ))}
                 </>
               )}
             </div>
+            </ChatScrollContext.Provider>
           </div>
           {chat.isStreaming && !pinnedToBottom && (
             <button
