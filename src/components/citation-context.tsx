@@ -86,20 +86,21 @@ export function CitationContextProvider({
   const [parsedPaper, setParsedPaper] = useState<ParsedPaper | null>(null);
   const [pageMap, setPageMap] = useState<PageMap | null>(null);
 
-  // Notify the host when a non-empty parsed title becomes available — but
-  // only if that title actually appears near the top of the paper text.
-  // This is a cheap hallucination guard: an LLM that invented a title
-  // (paper missing, very short text, etc.) won't pass the substring check
-  // and we keep the placeholder instead of writing nonsense to the DB.
+  // Notify the host when a non-empty title becomes available — long papers
+  // get it from the full parse, short papers from the page-map call. The
+  // substring check against the first 1000 chars of paper text is a cheap
+  // hallucination guard: an LLM that invented a title (paper missing, very
+  // short text, etc.) won't pass it and we keep the placeholder.
   useEffect(() => {
-    const title = parsedPaper?.title?.trim();
-    if (!title || !paperText) return;
-    const needle = normalizeForTitleMatch(title);
+    const candidate =
+      parsedPaper?.title?.trim() || pageMap?.title?.trim() || "";
+    if (!candidate || !paperText) return;
+    const needle = normalizeForTitleMatch(candidate);
     if (needle.length < 4) return;
     const haystack = normalizeForTitleMatch(paperText.slice(0, 1000));
     if (!haystack.includes(needle)) return;
-    onResolvedTitle?.(title);
-  }, [parsedPaper, paperText, onResolvedTitle]);
+    onResolvedTitle?.(candidate);
+  }, [parsedPaper, pageMap, paperText, onResolvedTitle]);
 
   // Load cached parsed paper whenever the paper text changes. Re-checks
   // the cache periodically so a parse triggered mid-chat picks up here too.

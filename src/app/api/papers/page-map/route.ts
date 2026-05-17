@@ -71,9 +71,11 @@ Output rules — non-negotiable:
 - For tables: keys are the table number as a string. Use the page where the caption is written.
 - For every entry, "page" is an integer and "marker" is the literal "[Page N]" string from the input, with N equal to "page".
 - Skip any item you can't locate confidently. It is better to omit an entry than to guess.
+- Also return the paper's title in the top-level "title" field, copied verbatim from the first page (or as close to verbatim as the PDF text allows). Strip stray line breaks the PDF extractor may have inserted mid-title, but do not paraphrase or shorten. If you cannot identify a clear title, omit the field rather than guess.
 
 JSON schema:
 {
+  "title": <string>,
   "sections": { "<num>": { "page": <integer>, "marker": "[Page <integer>]" } },
   "figures":  { "<num>": { "page": <integer>, "marker": "[Page <integer>]" } },
   "tables":   { "<num>": { "page": <integer>, "marker": "[Page <integer>]" } }
@@ -156,10 +158,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const titleRaw = typeof parsed.title === "string" ? parsed.title.trim() : "";
     const result: PageMap = {
       sections: coerceNumberMap(parsed.sections),
       figures: coerceNumberMap(parsed.figures),
       tables: coerceNumberMap(parsed.tables),
+      ...(titleRaw ? { title: titleRaw } : {}),
     };
 
     return new Response(JSON.stringify(result), {
