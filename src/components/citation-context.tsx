@@ -68,6 +68,18 @@ export function CitationContextProvider({
 }: ProviderProps) {
   const [parsedPaper, setParsedPaper] = useState<ParsedPaper | null>(null);
   const [pageMap, setPageMap] = useState<PageMap | null>(null);
+  // Failsafe: unlock chat after 40s even if parsing hasn't finished. Parse
+  // keeps running in the background and the cache picks it up once ready;
+  // chat falls back to sending full paper text in the meantime. Track the
+  // paper text that timed out (rather than a boolean) so it auto-resets on
+  // paper change — avoids a synchronous setState in the effect body.
+  const [timedOutFor, setTimedOutFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!paperText) return;
+    const id = window.setTimeout(() => setTimedOutFor(paperText), 40000);
+    return () => window.clearTimeout(id);
+  }, [paperText]);
 
   // Load cached parsed paper whenever the paper text changes. Re-checks
   // the cache periodically so a parse triggered mid-chat picks up here too.
@@ -173,9 +185,10 @@ export function CitationContextProvider({
   const parseReady = useMemo(() => {
     if (!paperText) return true;
     if (!selectedModel) return true;
+    if (timedOutFor === paperText) return true;
     if (isLongPaper(paperText)) return parsedPaper !== null;
     return pageMap !== null;
-  }, [paperText, selectedModel, parsedPaper, pageMap]);
+  }, [paperText, selectedModel, parsedPaper, pageMap, timedOutFor]);
 
   const scrollToPage = useCallback((page: number) => {
     const container = document.querySelector("[data-pdf-container]");
