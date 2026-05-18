@@ -23,6 +23,7 @@ import {
   parseAndCachePaper,
 } from "@/lib/client/parsed-papers";
 import type { ParsedPaper } from "@/lib/review-types";
+import { streamingStore } from "@/lib/streaming-store";
 
 /* ------------------------------------------------------------------ */
 /*  Agent step types (used during streaming for progressive rendering) */
@@ -210,7 +211,6 @@ export interface UseChatReturn {
   /** ID of the latest user message whose send failed. Renderers attach an
    *  inline retry/error indicator to this message. */
   failedUserMsgId: string | null;
-  agentSteps: AgentStep[];
   streamingMsgId: string | null;
   hasSavedKeys: boolean;
   hasKeyForModel: boolean;
@@ -244,7 +244,6 @@ export function useChat({
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keysVersion, setKeysVersion] = useState(0);
-  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(
     null,
@@ -386,7 +385,7 @@ export function useChat({
       }
       setIsStreaming(true);
       setStreamingMsgId(assistantMsg.id);
-      setAgentSteps([]);
+      streamingStore.set([]);
 
       const historyForApi = opts?.historyOverride
         ? opts.historyOverride
@@ -394,6 +393,7 @@ export function useChat({
           ? messages // already includes the user message
           : [...messages, userMsg];
       let steps: AgentStep[] = [];
+      let rafId: number | null = null;
 
       try {
         const paperPayload = await buildPaperPayload();
@@ -434,7 +434,15 @@ export function useChat({
             throw new Error(event.message);
           }
           steps = processStreamEvent(steps, event);
-          setAgentSteps([...steps]);
+          // Batch state flushes to one per animation frame. Without this,
+          // every token re-renders the message and re-parses the full
+          // accumulated markdown, which is what makes streaming feel chunky.
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              streamingStore.set([...steps]);
+            });
+          }
         });
 
         const blocks = stepsToBlocks(steps);
@@ -462,9 +470,10 @@ export function useChat({
         setFailedUserMsgId(userMsg.id);
         setLastFailedRequest({ text: trimmed, threadAnnotationId: null });
       } finally {
+        if (rafId !== null) cancelAnimationFrame(rafId);
         setIsStreaming(false);
         setStreamingMsgId(null);
-        setAgentSteps([]);
+        streamingStore.set([]);
       }
     },
     [
@@ -568,7 +577,7 @@ export function useChat({
 
       setIsStreaming(true);
       setStreamingMsgId(assistantMsg.id);
-      setAgentSteps([]);
+      streamingStore.set([]);
 
       // Prepend the highlighted passage so the LLM knows what the thread is about.
       const highlightPreamble = ann.highlightText
@@ -583,6 +592,7 @@ export function useChat({
       }));
 
       let steps: AgentStep[] = [];
+      let rafId: number | null = null;
 
       try {
         const paperPayload = await buildPaperPayload();
@@ -618,7 +628,12 @@ export function useChat({
             throw new Error(event.message);
           }
           steps = processStreamEvent(steps, event);
-          setAgentSteps([...steps]);
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              streamingStore.set([...steps]);
+            });
+          }
         });
 
         const blocks = stepsToBlocks(steps);
@@ -648,9 +663,10 @@ export function useChat({
           threadAnnotationId: chatThreadAnnotationId,
         });
       } finally {
+        if (rafId !== null) cancelAnimationFrame(rafId);
         setIsStreaming(false);
         setStreamingMsgId(null);
-        setAgentSteps([]);
+        streamingStore.set([]);
         setThreadStream(null);
       }
     },
@@ -674,7 +690,7 @@ export function useChat({
     setError(null);
     setFailedUserMsgId(null);
     setLastFailedRequest(null);
-    setAgentSteps([]);
+    streamingStore.set([]);
     setStreamingMsgId(null);
     await saveMessages(reviewId, []);
   }, [isStreaming, reviewId]);
@@ -717,7 +733,6 @@ export function useChat({
     isStreaming,
     error,
     failedUserMsgId,
-    agentSteps,
     streamingMsgId,
     hasSavedKeys,
     hasKeyForModel,

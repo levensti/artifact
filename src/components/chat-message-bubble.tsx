@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useContext, useLayoutEffect, useMemo } from "react";
 import { AlertCircle, RotateCw } from "lucide-react";
 import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
@@ -12,7 +12,8 @@ import {
   AgentSteps,
 } from "./chat-step-renderers";
 import { TextWithPicks, buildPoolFromBlocks } from "./picks-shared";
-import type { AgentStep } from "@/hooks/use-chat";
+import { useStreamingSteps } from "@/lib/streaming-store";
+import { ChatScrollContext } from "./chat-panel";
 
 /* ------------------------------------------------------------------ */
 /*  ArXiv hits block                                                   */
@@ -104,15 +105,37 @@ export function InterleavedBlocks({ blocks }: { blocks: ChatAssistantBlock[] }) 
 /*  Single message renderer                                            */
 /* ------------------------------------------------------------------ */
 
+// Subscribes to the per-delta streaming buffer. Kept as a separate component
+// so that only the bubble that is *currently* streaming subscribes — sibling
+// bubbles and the rest of the panel never re-render per token.
+function StreamingMessageBody() {
+  const agentSteps = useStreamingSteps();
+  const scrollIfPinned = useContext(ChatScrollContext);
+  // Runs after React commits the new typewriter frame, so scrollHeight is
+  // up to date. Doing this in a store subscriber would read stale layout.
+  useLayoutEffect(() => {
+    scrollIfPinned();
+  }, [agentSteps, scrollIfPinned]);
+  return (
+    <div className="max-w-full">
+      <div className="border-l-2 border-l-primary/15 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
+        {agentSteps.length === 0 ? (
+          <ThinkingIndicator />
+        ) : (
+          <AgentSteps steps={agentSteps} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ChatMessageBubble({
   msg,
   isCurrentlyStreaming,
-  agentSteps,
   failure,
 }: {
   msg: ChatMessage | AnnotationMessage;
   isCurrentlyStreaming: boolean;
-  agentSteps: AgentStep[];
   /** When set, render an inline failure indicator beneath this user message. */
   failure?: {
     error: string;
@@ -158,17 +181,7 @@ export function ChatMessageBubble({
   }
 
   if (isCurrentlyStreaming) {
-    return (
-      <div className="max-w-full">
-        <div className="border-l-2 border-l-primary/15 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
-          {agentSteps.length === 0 ? (
-            <ThinkingIndicator />
-          ) : (
-            <AgentSteps steps={agentSteps} />
-          )}
-        </div>
-      </div>
-    );
+    return <StreamingMessageBody />;
   }
 
   const hasBlocks = msg.blocks && msg.blocks.length > 0;
