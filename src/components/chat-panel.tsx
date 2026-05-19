@@ -233,7 +233,7 @@ function ChatInput({
           disabled={inputLocked}
           placeholder={
             isPreparingPaper
-              ? "Preparing paper…"
+              ? "Indexing paper for chat…"
               : !hasSavedKeys
                 ? "Add an API key to start chatting…"
                 : chatThreadAnnotationId
@@ -294,7 +294,7 @@ function ChatInput({
           <div className="px-1">
             <p className="text-center text-[11px] leading-snug text-muted-foreground inline-flex w-full items-center justify-center gap-1.5">
               <Loader2 className="size-3 animate-spin" aria-hidden />
-              Preparing paper for chat…
+              Indexing paper for chat…
             </p>
             {(() => {
               const total = pageMapProgress?.total ?? 0;
