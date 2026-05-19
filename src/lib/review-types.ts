@@ -111,6 +111,13 @@ export interface PageMap {
   sections: Record<string, number>;
   figures: Record<string, number>;
   tables: Record<string, number>;
+  /**
+   * The paper's title, as the model read it off the first page. Optional —
+   * older cached page maps predate this field. Used to write the real
+   * title back to the review row when creation only had a placeholder
+   * (e.g. arXiv metadata fetch failed, local PDF filename, web hostname).
+   */
+  title?: string;
 }
 
 /** A saved paper review session: PDF / web page + replayable Q&A. */

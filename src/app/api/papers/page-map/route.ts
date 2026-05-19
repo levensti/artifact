@@ -69,6 +69,21 @@ const PAGE_MAP_USER_INSTRUCTION = `Page text:
 {{PAGE}}
 </page>`;
 
+const TITLE_SYSTEM_PROMPT = `You are extracting the title of an academic paper from its first page.
+
+Return the paper's title copied verbatim from the page text. Strip stray line breaks the PDF extractor may have inserted mid-title, but do not paraphrase, shorten, or invent. If you cannot identify a clear title on this page, return an empty string — never guess.
+
+Return ONLY a JSON object with this exact shape:
+{ "title": "<string>" }
+
+No prose, no markdown fences — just the JSON.`;
+
+const TITLE_USER_INSTRUCTION = `First page text:
+
+<page>
+{{PAGE}}
+</page>`;
+
 export async function POST(req: NextRequest) {
   let body: PageMapRequest;
   try {
@@ -121,18 +136,38 @@ export async function POST(req: NextRequest) {
 
   const pages = splitByPage(paperText);
 
-  const callOne = async (pageText: string): Promise<string> => {
-    const userPrompt = PAGE_MAP_USER_INSTRUCTION.replace("{{PAGE}}", pageText);
+  const dispatch = async (
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<string> => {
     return isAnthropicMessagesProvider(provider)
-      ? callAnthropic(model, resolvedApiKey, userPrompt)
+      ? callAnthropic(model, resolvedApiKey, systemPrompt, userPrompt)
       : callOpenAICompatible(
           model,
           resolvedApiKey,
+          systemPrompt,
           userPrompt,
           provider as OpenAiCompatibleProvider,
           provider === "openai_compatible" ? effectiveBaseUrl : undefined,
         );
   };
+
+  const callOne = (pageText: string): Promise<string> =>
+    dispatch(
+      PAGE_MAP_SYSTEM_PROMPT,
+      PAGE_MAP_USER_INSTRUCTION.replace("{{PAGE}}", pageText),
+    );
+
+  // Title runs as a separate one-off call against page 1. Kept independent
+  // from the per-page mapping so a title failure can't poison the page map
+  // and vice versa — they're merged at the end.
+  const firstPage = pages[0];
+  const titleCall: Promise<string | null> = firstPage
+    ? dispatch(
+        TITLE_SYSTEM_PROMPT,
+        TITLE_USER_INSTRUCTION.replace("{{PAGE}}", firstPage.text),
+      ).catch(() => null)
+    : Promise.resolve(null);
 
   // Stream NDJSON progress events. The client uses these to drive a
   // determinate loading bar; total + per-page completions arrive as
@@ -169,6 +204,16 @@ export async function POST(req: NextRequest) {
           write({ type: "progress", done, total });
         }),
       );
+
+      const titleRaw = await titleCall;
+      if (titleRaw) {
+        const titleParsed = extractAndValidateJson(titleRaw);
+        const t =
+          titleParsed && typeof titleParsed.title === "string"
+            ? titleParsed.title.trim()
+            : "";
+        if (t) result.title = t;
+      }
 
       const anyResults =
         Object.keys(result.sections).length +
@@ -233,6 +278,7 @@ function splitByPage(paperText: string): Array<{ page: number; text: string }> {
 async function callAnthropic(
   model: string,
   apiKey: string,
+  systemPrompt: string,
   userPrompt: string,
 ): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -247,7 +293,7 @@ async function callAnthropic(
       // Output is just three small dictionaries — a few hundred tokens is
       // plenty for even a 50-section paper.
       max_tokens: 8000,
-      system: PAGE_MAP_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
       stream: false,
     }),
@@ -262,6 +308,7 @@ async function callAnthropic(
 async function callOpenAICompatible(
   model: string,
   apiKey: string,
+  systemPrompt: string,
   userPrompt: string,
   provider: OpenAiCompatibleProvider,
   customOpenAiBaseUrl?: string,
@@ -280,7 +327,7 @@ async function callOpenAICompatible(
     body: JSON.stringify({
       model,
       messages: [
-        { role: "system", content: PAGE_MAP_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },

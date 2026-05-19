@@ -170,6 +170,34 @@ export async function deleteReview(id: string): Promise<void> {
   await refreshReviews();
 }
 
+/**
+ * Patch a review's title. Optimistically updates the in-memory cache so the
+ * library list and the open review header pick it up immediately; the
+ * server returns the canonical row and we replace once more on resolve.
+ */
+export async function updateReviewTitle(
+  id: string,
+  title: string,
+): Promise<PaperReview | null> {
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+  const existing = reviewsCache.find((r) => r.id === id);
+  if (existing && existing.title === trimmed) return existing;
+  if (existing) {
+    reviewsCache = reviewsCache.map((r) =>
+      r.id === id ? { ...r, title: trimmed } : r,
+    );
+    dispatch(REVIEWS_UPDATED_EVENT);
+  }
+  const { review } = await apiFetch<{ review: PaperReview }>(
+    `/api/reviews/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: { title: trimmed } },
+  );
+  reviewsCache = reviewsCache.map((r) => (r.id === id ? review : r));
+  dispatch(REVIEWS_UPDATED_EVENT);
+  return review;
+}
+
 /* ── Messages ── */
 
 export async function loadMessages(reviewId: string): Promise<ChatMessage[]> {

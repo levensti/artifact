@@ -19,7 +19,7 @@ import SelectionPopover from "@/components/selection-popover";
 import NoteTooltip from "@/components/note-tooltip";
 import { hydrateClientStore } from "@/lib/client-data";
 import { loadPdfBlob } from "@/lib/client/pdf-blobs";
-import { getReview } from "@/lib/reviews";
+import { getReview, updateReviewTitle } from "@/lib/reviews";
 import { REVIEWS_UPDATED_EVENT } from "@/lib/storage-events";
 import type { Annotation } from "@/lib/annotations";
 import {
@@ -51,6 +51,36 @@ function remotePdfUrlForReview(
     return `/api/pdf?url=${encodeURIComponent(arxivPdfUrl(review.arxivId))}`;
   }
   return null;
+}
+
+/**
+ * True when the review's title is one of the create-time fallbacks (used when
+ * we couldn't get a real title at creation): `arXiv:<id>`, the local PDF
+ * filename, "Local PDF", the web URL, or the web hostname. We use this to
+ * decide whether to overwrite with the LLM-derived title once the parse
+ * completes — never clobbering a user-meaningful title.
+ */
+function isPlaceholderReviewTitle(
+  review: import("@/lib/reviews").PaperReview,
+): boolean {
+  const t = review.title.trim();
+  if (!t) return true;
+  if (review.arxivId && t === `arXiv:${review.arxivId}`) return true;
+  if (review.pdfPath) {
+    if (t === "Local PDF") return true;
+    const filename =
+      review.pdfPath.split("/").pop()?.replace(/\.pdf$/i, "") ?? "";
+    if (filename && t === filename) return true;
+  }
+  if (review.sourceUrl) {
+    if (t === review.sourceUrl) return true;
+    try {
+      if (t === new URL(review.sourceUrl).hostname) return true;
+    } catch {
+      /* ignore — non-URL source falls through */
+    }
+  }
+  return false;
 }
 
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
@@ -299,6 +329,19 @@ export default function ReviewPage() {
       ? chatThreadAnnotationId
       : null;
   }, [annotations, chatThreadAnnotationId]);
+
+  // When the parse pipeline resolves an authoritative title from the paper
+  // contents, replace the create-time placeholder (e.g. `arXiv:<id>` when
+  // the metadata fetch failed). Skip if the user already has a real title.
+  const handleResolvedTitle = useCallback(
+    (resolved: string) => {
+      if (!review) return;
+      if (resolved === review.title) return;
+      if (!isPlaceholderReviewTitle(review)) return;
+      void updateReviewTitle(review.id, resolved);
+    },
+    [review],
+  );
 
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
     setSelectionInfo(info);
@@ -553,6 +596,7 @@ export default function ReviewPage() {
               <CitationContextProvider
                 paperText={paperText}
                 selectedModel={selectedModel}
+                onResolvedTitle={handleResolvedTitle}
                 paperLoading={!paperText}
               >
                 <RightPanel
@@ -651,6 +695,7 @@ export default function ReviewPage() {
             <CitationContextProvider
               paperText={paperText}
               selectedModel={selectedModel}
+              onResolvedTitle={handleResolvedTitle}
               paperLoading={!paperText}
             >
               <RightPanel

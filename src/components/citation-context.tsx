@@ -54,6 +54,16 @@ interface CitationContextValue {
 
 const noop = () => {};
 
+/**
+ * Lowercase and strip everything except letters/digits. Aggressive on
+ * purpose: PDF text extraction often inserts stray spaces inside ligatures
+ * ("Effi cient" instead of "Efficient") and breaks words across lines, so
+ * a forgiving comparator avoids spurious mismatches.
+ */
+function normalizeForTitleMatch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 const Ctx = createContext<CitationContextValue>({
   parsedPaper: null,
   pageMap: null,
@@ -73,6 +83,12 @@ interface ProviderProps {
    */
   selectedModel?: Model | null;
   /**
+   * Fires once the parsed paper resolves with a non-empty title — used by
+   * the review page to replace a placeholder title (e.g. `arXiv:<id>` when
+   * the metadata fetch failed) with the LLM-derived title.
+   */
+  onResolvedTitle?: (title: string) => void;
+  /**
    * True while the viewer is still fetching/parsing the PDF and extracting
    * text. Surfaces the "Preparing paper for chat" banner during that phase
    * too, not only during the LLM-side parse that follows.
@@ -84,6 +100,7 @@ interface ProviderProps {
 export function CitationContextProvider({
   paperText,
   selectedModel,
+  onResolvedTitle,
   paperLoading,
   children,
 }: ProviderProps) {
@@ -105,6 +122,22 @@ export function CitationContextProvider({
     const id = window.setTimeout(() => setTimedOutFor(paperText), 40000);
     return () => window.clearTimeout(id);
   }, [paperText]);
+
+  // Notify the host when a non-empty title becomes available — long papers
+  // get it from the full parse, short papers from the page-map call. The
+  // substring check against the first 1000 chars of paper text is a cheap
+  // hallucination guard: an LLM that invented a title (paper missing, very
+  // short text, etc.) won't pass it and we keep the placeholder.
+  useEffect(() => {
+    const candidate =
+      parsedPaper?.title?.trim() || pageMap?.title?.trim() || "";
+    if (!candidate || !paperText) return;
+    const needle = normalizeForTitleMatch(candidate);
+    if (needle.length < 4) return;
+    const haystack = normalizeForTitleMatch(paperText.slice(0, 1000));
+    if (!haystack.includes(needle)) return;
+    onResolvedTitle?.(candidate);
+  }, [parsedPaper, pageMap, paperText, onResolvedTitle]);
 
   // Load cached parsed paper whenever the paper text changes. Re-checks
   // the cache periodically so a parse triggered mid-chat picks up here too.
