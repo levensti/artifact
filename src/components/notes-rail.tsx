@@ -13,6 +13,7 @@ interface NotesRailProps {
   onHighlightClick: (annotationId: string, pageNumber: number) => void;
   onAnnotationHover: (annotationId: string | null) => void;
   onAnnotationSelect: (id: string) => void;
+  onAnnotationDeactivate?: () => void;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }
@@ -26,6 +27,7 @@ export default function NotesRail({
   onHighlightClick,
   onAnnotationHover,
   onAnnotationSelect,
+  onAnnotationDeactivate,
   collapsed = false,
   onToggleCollapsed,
 }: NotesRailProps) {
@@ -101,6 +103,7 @@ export default function NotesRail({
           onHighlightClick={onHighlightClick}
           onAnnotationHover={onAnnotationHover}
           onAnnotationSelect={onAnnotationSelect}
+          onAnnotationDeactivate={onAnnotationDeactivate}
           density="rail"
         />
       </div>

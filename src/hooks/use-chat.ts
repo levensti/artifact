@@ -23,6 +23,7 @@ import {
   parseAndCachePaper,
 } from "@/lib/client/parsed-papers";
 import type { ParsedPaper } from "@/lib/review-types";
+import { streamingStore } from "@/lib/streaming-store";
 
 /* ------------------------------------------------------------------ */
 /*  Agent step types (used during streaming for progressive rendering) */
@@ -38,6 +39,35 @@ export type AgentStep =
       input: Record<string, unknown>;
       output?: string;
     };
+
+/* ------------------------------------------------------------------ */
+/*  Stream inactivity watchdog                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Aborts a chat fetch if no NDJSON event arrives for `STREAM_INACTIVITY_MS`.
+ * Inactivity, not wall-clock — a healthy long generation that keeps emitting
+ * tokens/tool events resets the timer indefinitely. Picked above the worst
+ * reasoning-pause we expect from any single LLM round.
+ */
+const STREAM_INACTIVITY_MS = 60_000;
+
+function createInactivityController(message: string) {
+  const controller = new AbortController();
+  let timer: number | null = null;
+  const noteActivity = () => {
+    if (timer !== null) window.clearTimeout(timer);
+    timer = window.setTimeout(
+      () => controller.abort(new Error(message)),
+      STREAM_INACTIVITY_MS,
+    );
+  };
+  const dispose = () => {
+    if (timer !== null) window.clearTimeout(timer);
+    timer = null;
+  };
+  return { signal: controller.signal, noteActivity, dispose };
+}
 
 /* ------------------------------------------------------------------ */
 /*  NDJSON stream parser                                               */
@@ -210,7 +240,6 @@ export interface UseChatReturn {
   /** ID of the latest user message whose send failed. Renderers attach an
    *  inline retry/error indicator to this message. */
   failedUserMsgId: string | null;
-  agentSteps: AgentStep[];
   streamingMsgId: string | null;
   hasSavedKeys: boolean;
   hasKeyForModel: boolean;
@@ -244,7 +273,6 @@ export function useChat({
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keysVersion, setKeysVersion] = useState(0);
-  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(
     null,
@@ -386,7 +414,7 @@ export function useChat({
       }
       setIsStreaming(true);
       setStreamingMsgId(assistantMsg.id);
-      setAgentSteps([]);
+      streamingStore.set([]);
 
       const historyForApi = opts?.historyOverride
         ? opts.historyOverride
@@ -394,10 +422,15 @@ export function useChat({
           ? messages // already includes the user message
           : [...messages, userMsg];
       let steps: AgentStep[] = [];
+      let rafId: number | null = null;
+      const inactivity = createInactivityController(
+        "Chat stalled — no response from the model for 60 seconds.",
+      );
 
       try {
         const paperPayload = await buildPaperPayload();
         const braveKey = getBraveSearchApiKey();
+        inactivity.noteActivity();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -419,6 +452,7 @@ export function useChat({
             ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
           }),
+          signal: inactivity.signal,
         });
 
         if (!response.ok) {
@@ -429,12 +463,21 @@ export function useChat({
         if (!response.body) throw new Error("No response body received");
 
         await parseNDJSONStream(response.body, (event) => {
+          inactivity.noteActivity();
           if (event.type === "error") {
             // Throw so the catch block handles cleanup uniformly with HTTP errors.
             throw new Error(event.message);
           }
           steps = processStreamEvent(steps, event);
-          setAgentSteps([...steps]);
+          // Batch state flushes to one per animation frame. Without this,
+          // every token re-renders the message and re-parses the full
+          // accumulated markdown, which is what makes streaming feel chunky.
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              streamingStore.set([...steps]);
+            });
+          }
         });
 
         const blocks = stepsToBlocks(steps);
@@ -462,9 +505,11 @@ export function useChat({
         setFailedUserMsgId(userMsg.id);
         setLastFailedRequest({ text: trimmed, threadAnnotationId: null });
       } finally {
+        inactivity.dispose();
+        if (rafId !== null) cancelAnimationFrame(rafId);
         setIsStreaming(false);
         setStreamingMsgId(null);
-        setAgentSteps([]);
+        streamingStore.set([]);
       }
     },
     [
@@ -568,7 +613,7 @@ export function useChat({
 
       setIsStreaming(true);
       setStreamingMsgId(assistantMsg.id);
-      setAgentSteps([]);
+      streamingStore.set([]);
 
       // Prepend the highlighted passage so the LLM knows what the thread is about.
       const highlightPreamble = ann.highlightText
@@ -583,10 +628,15 @@ export function useChat({
       }));
 
       let steps: AgentStep[] = [];
+      let rafId: number | null = null;
+      const inactivity = createInactivityController(
+        "Chat stalled — no response from the model for 60 seconds.",
+      );
 
       try {
         const paperPayload = await buildPaperPayload();
         const braveKey = getBraveSearchApiKey();
+        inactivity.noteActivity();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -604,6 +654,7 @@ export function useChat({
             ...(sourceUrl ? { sourceUrl } : {}),
             ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
           }),
+          signal: inactivity.signal,
         });
 
         if (!response.ok) {
@@ -614,11 +665,17 @@ export function useChat({
         if (!response.body) throw new Error("No response body received");
 
         await parseNDJSONStream(response.body, (event) => {
+          inactivity.noteActivity();
           if (event.type === "error") {
             throw new Error(event.message);
           }
           steps = processStreamEvent(steps, event);
-          setAgentSteps([...steps]);
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              streamingStore.set([...steps]);
+            });
+          }
         });
 
         const blocks = stepsToBlocks(steps);
@@ -648,9 +705,11 @@ export function useChat({
           threadAnnotationId: chatThreadAnnotationId,
         });
       } finally {
+        inactivity.dispose();
+        if (rafId !== null) cancelAnimationFrame(rafId);
         setIsStreaming(false);
         setStreamingMsgId(null);
-        setAgentSteps([]);
+        streamingStore.set([]);
         setThreadStream(null);
       }
     },
@@ -674,7 +733,7 @@ export function useChat({
     setError(null);
     setFailedUserMsgId(null);
     setLastFailedRequest(null);
-    setAgentSteps([]);
+    streamingStore.set([]);
     setStreamingMsgId(null);
     await saveMessages(reviewId, []);
   }, [isStreaming, reviewId]);
@@ -717,7 +776,6 @@ export function useChat({
     isStreaming,
     error,
     failedUserMsgId,
-    agentSteps,
     streamingMsgId,
     hasSavedKeys,
     hasKeyForModel,

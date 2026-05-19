@@ -567,6 +567,7 @@ export default function ReviewPage() {
               onHighlightClick={handleHighlightClick}
               onAnnotationHover={setHoveredAnnotationId}
               onAnnotationSelect={handleAnnotationSelect}
+              onAnnotationDeactivate={() => setActiveAnnotationId(null)}
               collapsed={notesCollapsed}
               onToggleCollapsed={toggleNotesCollapsed}
             />
@@ -596,6 +597,7 @@ export default function ReviewPage() {
                 paperText={paperText}
                 selectedModel={selectedModel}
                 onResolvedTitle={handleResolvedTitle}
+                paperLoading={!paperText}
               >
                 <RightPanel
                   reviewId={review.id}
@@ -673,6 +675,7 @@ export default function ReviewPage() {
               onHighlightClick={handleHighlightClick}
               onAnnotationHover={setHoveredAnnotationId}
               onAnnotationSelect={handleAnnotationSelect}
+              onAnnotationDeactivate={() => setActiveAnnotationId(null)}
             />
           </div>
         )}
@@ -693,6 +696,7 @@ export default function ReviewPage() {
               paperText={paperText}
               selectedModel={selectedModel}
               onResolvedTitle={handleResolvedTitle}
+              paperLoading={!paperText}
             >
               <RightPanel
                 reviewId={review.id}

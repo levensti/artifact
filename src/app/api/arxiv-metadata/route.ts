@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
         "User-Agent": "Artifact/1.0 (academic research tool)",
       },
       next: { revalidate: 86400 },
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
       return NextResponse.json({ title: null });

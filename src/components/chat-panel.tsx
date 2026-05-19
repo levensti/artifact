@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  createContext,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -45,6 +46,12 @@ import { ChatMessageBubble } from "./chat-message-bubble";
 import JournalCheckpointModal from "./journal-checkpoint-modal";
 import { MonoLabel } from "@/components/folio";
 import { useChat } from "@/hooks/use-chat";
+
+// Streaming bubbles call this from a useLayoutEffect on each typewriter
+// advance so the scroll runs *after* the new content has been committed
+// to the DOM — reading scrollHeight in a store subscriber would catch a
+// stale layout and fall behind the cursor.
+export const ChatScrollContext = createContext<() => void>(() => {});
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                              */
@@ -168,6 +175,7 @@ function ChatInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
+  const { pageMapProgress, pageMapError } = useCitationContext();
   const inputLocked = !hasSavedKeys || isPreparingPaper;
 
   useEffect(() => {
@@ -276,11 +284,40 @@ function ChatInput({
             Chat is locked until you add an API key.
           </p>
         )}
-        {isPreparingPaper && (
-          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground inline-flex w-full items-center justify-center gap-1.5">
-            <Loader2 className="size-3 animate-spin" aria-hidden />
-            Preparing paper for chat…
+        {pageMapError && !isPreparingPaper && (
+          <p className="px-1 text-center text-[11px] leading-snug text-warning">
+            Page index unavailable: {pageMapError} Chat still works; citation
+            chips fall back to text search.
           </p>
+        )}
+        {isPreparingPaper && (
+          <div className="px-1">
+            <p className="text-center text-[11px] leading-snug text-muted-foreground inline-flex w-full items-center justify-center gap-1.5">
+              <Loader2 className="size-3 animate-spin" aria-hidden />
+              Preparing paper for chat…
+            </p>
+            {(() => {
+              const total = pageMapProgress?.total ?? 0;
+              const done = pageMapProgress?.done ?? 0;
+              const pct = total > 0 ? (done / total) * 100 : 0;
+              return (
+                <div
+                  className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-border"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={total || 1}
+                  aria-valuenow={done}
+                >
+                  <div
+                    className="h-full bg-foreground/70 transition-[width] duration-200 ease-out"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, pct))}%`,
+                    }}
+                  />
+                </div>
+              );
+            })()}
+          </div>
         )}
         {!hasSavedKeys && (
           <div className="flex justify-center">
@@ -408,7 +445,16 @@ export default function ChatPanel({
     const el = scrollAreaRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [chat.messages, chat.agentSteps, displayThread, chat.isStreaming]);
+  }, [chat.messages, displayThread, chat.isStreaming]);
+
+  // Called by the streaming bubble after each typewriter advance commits.
+  // Stable identity so the consumer's useLayoutEffect dep list stays clean.
+  const scrollIfPinned = useCallback(() => {
+    if (!pinnedRef.current) return;
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, []);
 
   // Detect user-initiated upward scrolling and unpin. Re-pin once they reach
   // the bottom again. We treat wheel/touch/keyboard as user intent; pure
@@ -417,27 +463,66 @@ export default function ChatPanel({
   useEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
-    const BOTTOM_EPS = 16;
+    // Tight epsilon: re-pinning only when the user *really* reaches the
+    // bottom. A larger value caused thrash during smooth-scroll wheel
+    // events — the typewriter would snap the view to the bottom each
+    // frame, the scroll handler would see "near bottom" and re-pin, then
+    // the next wheel event would unpin again, and so on.
+    const BOTTOM_EPS = 2;
 
     const isAtBottom = () =>
       el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_EPS;
 
-    const onUserIntent = () => {
-      if (pinnedRef.current && !isAtBottom()) setPinnedToBottom(false);
-    };
-    const onScroll = () => {
-      // Re-pin when the user scrolls all the way to the bottom themselves.
-      if (!pinnedRef.current && isAtBottom()) setPinnedToBottom(true);
+    const unpin = () => {
+      if (!pinnedRef.current) return;
+      // Flip the ref synchronously so the very next typewriter tick
+      // (which can fire before React commits the state update) sees the
+      // unpinned state and skips the auto-scroll.
+      pinnedRef.current = false;
+      setPinnedToBottom(false);
     };
 
-    el.addEventListener("wheel", onUserIntent, { passive: true });
-    el.addEventListener("touchmove", onUserIntent, { passive: true });
-    el.addEventListener("keydown", onUserIntent);
+    // Wheel-up and scroll keys mean "I want to read" — react to the intent
+    // directly. We can't use a position-based check here because the
+    // typewriter keeps yanking scrollTop back to the bottom every frame,
+    // so smooth-scroll wheel events (e.g., trackpads) never accumulate
+    // enough scroll distance to leave the bottom-epsilon window.
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY < 0) unpin();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "Home") {
+        unpin();
+      }
+    };
+    // Touchmove has no reliable direction without tracking touchstart, so
+    // treat any touch gesture on the scroll area as intent to look around.
+    const onTouchMove = () => unpin();
+    const onScroll = () => {
+      if (!pinnedRef.current && isAtBottom()) {
+        pinnedRef.current = true;
+        setPinnedToBottom(true);
+      }
+    };
+
+    // Keydown listener on the scroll div would only fire when the div has
+    // focus, which it never does (no tabIndex). Listen on the document and
+    // gate on whether the event targets the chat scroll area or its
+    // descendants — that way the chat composer's own ArrowUp doesn't unpin.
+    const onDocumentKeyDown = (e: KeyboardEvent) => {
+      if (!(e.target instanceof Node)) return;
+      if (!el.contains(e.target)) return;
+      onKeyDown(e);
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    document.addEventListener("keydown", onDocumentKeyDown);
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      el.removeEventListener("wheel", onUserIntent);
-      el.removeEventListener("touchmove", onUserIntent);
-      el.removeEventListener("keydown", onUserIntent);
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("keydown", onDocumentKeyDown);
       el.removeEventListener("scroll", onScroll);
     };
   }, []);
@@ -446,6 +531,7 @@ export default function ChatPanel({
     const el = scrollAreaRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
+    pinnedRef.current = true;
     setPinnedToBottom(true);
   }, []);
 
@@ -646,6 +732,7 @@ export default function ChatPanel({
             ref={scrollAreaRef}
             className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain"
           >
+            <ChatScrollContext.Provider value={scrollIfPinned}>
             <div className="space-y-5 px-4 pb-5 pt-5">
               {chatThreadAnnotationId && activeThreadAnn ? (
                 <>
@@ -709,7 +796,6 @@ export default function ChatPanel({
                       isCurrentlyStreaming={
                         msg.id === chat.streamingMsgId && chat.isStreaming
                       }
-                      agentSteps={chat.agentSteps}
                       failure={buildFailure(msg.id)}
                     />
                   ))}
@@ -735,13 +821,13 @@ export default function ChatPanel({
                       isCurrentlyStreaming={
                         msg.id === chat.streamingMsgId && chat.isStreaming
                       }
-                      agentSteps={chat.agentSteps}
                       failure={buildFailure(msg.id)}
                     />
                   ))}
                 </>
               )}
             </div>
+            </ChatScrollContext.Provider>
           </div>
           {chat.isStreaming && !pinnedToBottom && (
             <button
