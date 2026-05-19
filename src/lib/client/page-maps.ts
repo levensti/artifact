@@ -50,13 +50,20 @@ interface PageMapRequestPayload {
   apiBaseUrl?: string;
 }
 
+export type PageMapProgress = (done: number, total: number) => void;
+
 /**
  * Return the cached page map for `paperText` if present; otherwise call
  * `/api/papers/page-map` to produce one, cache it, and return it.
+ *
+ * The endpoint streams NDJSON progress events as each page completes —
+ * `onProgress` (if provided) is invoked with `(done, total)` so callers
+ * can drive a determinate loading bar.
  */
 export async function fetchAndCachePageMap(
   paperText: string,
   payload: Omit<PageMapRequestPayload, "paperText">,
+  onProgress?: PageMapProgress,
 ): Promise<PageMap> {
   const hash = await hashPaperText(paperText);
   const cached = await getCachedPageMap(hash);
@@ -67,7 +74,7 @@ export async function fetchAndCachePageMap(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ paperText, ...payload }),
   });
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
     let message = `Page map fetch failed: ${response.status}`;
     try {
       const data = (await response.json()) as { error?: string };
@@ -77,7 +84,45 @@ export async function fetchAndCachePageMap(
     }
     throw new Error(message);
   }
-  const map = (await response.json()) as PageMap;
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let map: PageMap | null = null;
+  let serverError: string | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (value) buffer += decoder.decode(value, { stream: true });
+
+    let nl = buffer.indexOf("\n");
+    while (nl !== -1) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (line) {
+        try {
+          const evt = JSON.parse(line) as
+            | { type: "init"; total: number }
+            | { type: "progress"; done: number; total: number }
+            | { type: "result"; map: PageMap }
+            | { type: "error"; error: string };
+          if (evt.type === "init") onProgress?.(0, evt.total);
+          else if (evt.type === "progress") onProgress?.(evt.done, evt.total);
+          else if (evt.type === "result") map = evt.map;
+          else if (evt.type === "error") serverError = evt.error;
+        } catch {
+          /* skip malformed line */
+        }
+      }
+      nl = buffer.indexOf("\n");
+    }
+
+    if (done) break;
+  }
+
+  if (serverError) throw new Error(serverError);
+  if (!map) throw new Error("Page map stream ended without a result.");
+
   await cachePageMap(hash, map);
   return map;
 }

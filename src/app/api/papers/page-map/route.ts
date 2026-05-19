@@ -2,18 +2,25 @@
  * Lightweight citation-to-page mapping endpoint.
  *
  * Takes the raw extracted text of a paper (with `[Page N]` markers from
- * pdfjs) and asks the user's chosen model for a small JSON object: each
- * section / figure / table number → the PDF page it first appears on.
+ * pdfjs), splits it into per-page chunks, and fires one small LLM call
+ * per page in parallel. Each call returns the numbered sections, figures,
+ * and tables whose heading/caption text actually sits on that page. The
+ * server then merges results into a single { sections, figures, tables }
+ * map, keeping the lowest page number per element number.
  *
- * Runs unconditionally on paper open — short and long alike — so chip
- * click-to-scroll has reliable page numbers without depending on the
- * heavyweight `/api/papers/parse` endpoint or the regex fallback.
+ * Per-page fan-out keeps each prompt tiny and removes the "find the page"
+ * burden from the model (the page is an input, not something to discover),
+ * which both lowers wall-clock latency and removes the marker-drift
+ * failure mode the single-call version had to guard against.
  *
  * Uses the user's selected provider+model+key — never hardcodes a model
  * on the platform side. Mirrors the conventions in /api/papers/parse.
  */
 
 import { NextRequest } from "next/server";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 import {
   invalidApiProviderMessage,
   isAnthropicMessagesProvider,
@@ -38,52 +45,29 @@ interface PageMapRequest {
 
 const MAX_PAPER_CHARS = 3_000_000;
 
-const PAGE_MAP_SYSTEM_PROMPT = `You are a precise data extractor. You receive the full text of an academic paper, annotated with "[Page N]" markers at every page boundary. Your job is to return a small JSON object mapping each numbered section heading, figure caption, and table caption to the page number on which it actually appears.
+const PAGE_MAP_SYSTEM_PROMPT = `You are extracting structured metadata from a single page of an academic paper.
 
-Critical distinction — the element itself vs. references to it:
-- Record the page where the element is PRESENT in the document — i.e. where the section heading is written, where the figure caption "Figure N: …" sits below the figure, or where the table caption "Table N: …" sits with the table.
-- Ignore in-text references that merely MENTION the element. Phrases like "as shown in Section 3.2", "see Figure 1", "we describe this in §4", "(cf. Table 2)", "results from 3.1 demonstrate…" are pointers TO the element, not the element itself. Do not record their pages.
-- If an element is referenced many times across the paper but you cannot find its actual heading or caption, omit it. Do not fall back to a reference's page.
+List every numbered element whose heading or caption is written on this page:
+- Numbered section headings (e.g. "1 Introduction", "3.2 Methods", "A.1 Proof of Theorem 1").
+- Figure captions (e.g. "Figure 2: Per-class accuracy on the validation set.").
+- Table captions (e.g. "Table 1: Hyperparameters used across experiments.").
 
-Grounding requirement — for every entry you emit, also copy the literal "[Page N]" marker that immediately precedes the element in the source text. The marker number must equal the page number you report. This forces you to ground your answer in a specific span of the input rather than estimating page positions.
+Only record an element if its heading or caption text actually appears on this page. In-text references like "as shown in Figure 3", "see Section 4", "(cf. Table 2)" are pointers to elements that live elsewhere — ignore them. If a section continues from a prior page without a new heading appearing here, do not record it.
 
-Worked example — DIFFERENT shapes, same logic:
+Worked example. If the page contains "we report per-class accuracy in Table 2 below, which compares all baselines" but the caption "Table 2: …" itself is not on this page, do NOT record table 2 — that's an in-text reference, not the caption. Record table 2 only on the page where the caption text "Table 2: …" actually appears.
 
-Input excerpt:
-"… we report per-class accuracy in Table 2 below, which compares all baselines …
-[Page 5]
-Table 2: Per-class accuracy on the validation split. Our model attains 91.4% …"
+Skip unnumbered headings such as "Abstract", "References", "Acknowledgements". When in doubt, omit — it is better to leave an element out than to guess.
 
-The phrase "in Table 2 below" is on page 4 — but it is a reference, not the table caption. The actual caption "Table 2: Per-class accuracy …" sits after the [Page 5] marker.
+Return ONLY a JSON object with this exact shape:
+{ "sections": ["<num>", ...], "figures": ["<num>", ...], "tables": ["<num>", ...] }
 
-Correct output for this snippet:
-{ "tables": { "2": { "page": 5, "marker": "[Page 5]" } } }
+Each entry is the element's number as a string (e.g. "1", "3.2", "A.1"). Use an empty array for any category with nothing on this page. No prose, no markdown fences — just the JSON.`;
 
-Wrong outputs to avoid:
-- { "tables": { "2": { "page": 4, "marker": "[Page 4]" } } }   ← picked up the in-text reference
-- { "tables": { "2": { "page": 5, "marker": "[Page 4]" } } }   ← page and marker disagree
+const PAGE_MAP_USER_INSTRUCTION = `Page text:
 
-Output rules — non-negotiable:
-- Return ONLY the JSON object. No markdown fences, no commentary.
-- The JSON must be valid and parseable on the first try.
-- For sections: keys are the section number exactly as it appears at the start of the heading (e.g. "1", "3.2", "A.1"). Skip unnumbered headings like "Abstract" or "References".
-- For figures: keys are the figure number as a string (e.g. "1", "2"). Use the page where the caption is written.
-- For tables: keys are the table number as a string. Use the page where the caption is written.
-- For every entry, "page" is an integer and "marker" is the literal "[Page N]" string from the input, with N equal to "page".
-- Skip any item you can't locate confidently. It is better to omit an entry than to guess.
-
-JSON schema:
-{
-  "sections": { "<num>": { "page": <integer>, "marker": "[Page <integer>]" } },
-  "figures":  { "<num>": { "page": <integer>, "marker": "[Page <integer>]" } },
-  "tables":   { "<num>": { "page": <integer>, "marker": "[Page <integer>]" } }
-}`;
-
-const PAGE_MAP_USER_INSTRUCTION = `Extract the page-mapping JSON described in the system prompt for the paper below. Return ONLY the JSON object.
-
-<paper>
-{{PAPER}}
-</paper>`;
+<page>
+{{PAGE}}
+</page>`;
 
 export async function POST(req: NextRequest) {
   let body: PageMapRequest;
@@ -135,40 +119,111 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const userPrompt = PAGE_MAP_USER_INSTRUCTION.replace("{{PAPER}}", paperText);
+  const pages = splitByPage(paperText);
 
-  try {
-    const raw = isAnthropicMessagesProvider(provider)
-      ? await callAnthropic(model, resolvedApiKey, userPrompt)
-      : await callOpenAICompatible(
+  const callOne = async (pageText: string): Promise<string> => {
+    const userPrompt = PAGE_MAP_USER_INSTRUCTION.replace("{{PAGE}}", pageText);
+    return isAnthropicMessagesProvider(provider)
+      ? callAnthropic(model, resolvedApiKey, userPrompt)
+      : callOpenAICompatible(
           model,
           resolvedApiKey,
           userPrompt,
           provider as OpenAiCompatibleProvider,
           provider === "openai_compatible" ? effectiveBaseUrl : undefined,
         );
+  };
 
-    const parsed = extractAndValidateJson(raw);
-    if (!parsed) {
-      return jsonError(
-        "Model returned a response that wasn't valid JSON. Try again or pick a stronger model.",
-        502,
+  // Stream NDJSON progress events. The client uses these to drive a
+  // determinate loading bar; total + per-page completions arrive as
+  // separate lines, the final line carries the merged PageMap.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const total = pages.length;
+      const write = (obj: unknown) =>
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+
+      write({ type: "init", total });
+
+      const result: PageMap = { sections: {}, figures: {}, tables: {} };
+      let done = 0;
+      let firstError: string | null = null;
+
+      await Promise.all(
+        pages.map(async (p) => {
+          try {
+            const raw = await callOne(p.text);
+            const parsed = extractAndValidateJson(raw);
+            if (parsed) {
+              mergeList(result.sections, parsed.sections, p.page);
+              mergeList(result.figures, parsed.figures, p.page);
+              mergeList(result.tables, parsed.tables, p.page);
+            }
+          } catch (e) {
+            if (!firstError) {
+              firstError = e instanceof Error ? e.message : "Unknown error";
+            }
+          }
+          done++;
+          write({ type: "progress", done, total });
+        }),
       );
-    }
 
-    const result: PageMap = {
-      sections: coerceNumberMap(parsed.sections),
-      figures: coerceNumberMap(parsed.figures),
-      tables: coerceNumberMap(parsed.tables),
-    };
+      const anyResults =
+        Object.keys(result.sections).length +
+          Object.keys(result.figures).length +
+          Object.keys(result.tables).length >
+        0;
+      if (firstError && !anyResults) {
+        write({ type: "error", error: firstError });
+      } else {
+        write({ type: "result", map: result });
+      }
+      controller.close();
+    },
+  });
 
-    return new Response(JSON.stringify(result), {
-      headers: { "Content-Type": "application/json" },
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache, no-transform",
+      // Tell reverse proxies (nginx, etc.) not to buffer — ensures each
+      // per-page progress event reaches the client immediately rather than
+      // batching until the response closes.
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
+/**
+ * Split paper text by pdfjs `[Page N]` markers. Returns one entry per
+ * page containing only that page's text. If no markers are present
+ * (unusual), treats the whole text as page 1.
+ */
+function splitByPage(paperText: string): Array<{ page: number; text: string }> {
+  const re = /\[Page\s+(\d+)\]/g;
+  const markers: Array<{ page: number; start: number; end: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(paperText)) !== null) {
+    markers.push({
+      page: parseInt(m[1], 10),
+      start: m.index,
+      end: m.index + m[0].length,
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return jsonError(message, 500);
   }
+  if (markers.length === 0) {
+    const t = paperText.trim();
+    return t ? [{ page: 1, text: t }] : [];
+  }
+  const out: Array<{ page: number; text: string }> = [];
+  for (let i = 0; i < markers.length; i++) {
+    const start = markers[i].end;
+    const end = i + 1 < markers.length ? markers[i + 1].start : paperText.length;
+    const text = paperText.slice(start, end).trim();
+    if (text) out.push({ page: markers[i].page, text });
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -231,6 +286,10 @@ async function callOpenAICompatible(
       response_format: { type: "json_object" },
       stream: false,
       max_tokens: 8000,
+      // Page mapping is mechanical extraction — skip the reasoning pass on
+      // models that support it (OpenAI o-series/gpt-5, xAI Grok reasoning).
+      // Non-reasoning models and most openai-compatible servers ignore this.
+      reasoning_effort: "low",
     }),
   });
 
@@ -294,48 +353,36 @@ function extractAndValidateJson(raw: string): Record<string, unknown> | null {
 }
 
 /**
- * Accepts either the rich shape `{ <num>: { page, marker } }` (current
- * prompt) or the flat shape `{ <num>: <page> }` (older prompt / model
- * stragglers). Drops entries where the marker contradicts the page —
- * those are exactly the cases where the model "drifted".
+ * Merge the per-page model output into `target`. Accepts the expected
+ * `["1", "3.2", ...]` array shape; also tolerates an object shape (some
+ * models return `{ "1": ..., "3.2": ... }` despite the prompt). Keeps
+ * the lowest page seen per key — relevant when a caption straddles a
+ * page boundary and shows up in two per-page responses.
  */
-function coerceNumberMap(value: unknown): Record<string, number> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    const page = extractPage(v);
-    if (page != null) out[String(k)] = page;
+function mergeList(
+  target: Record<string, number>,
+  value: unknown,
+  page: number,
+): void {
+  const keys: string[] = [];
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const k = stringKey(v);
+      if (k) keys.push(k);
+    }
+  } else if (value && typeof value === "object") {
+    for (const k of Object.keys(value as Record<string, unknown>)) {
+      const trimmed = k.trim();
+      if (trimmed) keys.push(trimmed);
+    }
   }
-  return out;
+  for (const k of keys) {
+    if (target[k] == null || page < target[k]) target[k] = page;
+  }
 }
 
-function extractPage(v: unknown): number | null {
-  if (typeof v === "number") {
-    return Number.isFinite(v) && v > 0 ? Math.trunc(v) : null;
-  }
-  if (typeof v === "string") {
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
-  }
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    const obj = v as Record<string, unknown>;
-    const pageRaw = obj.page;
-    const page =
-      typeof pageRaw === "number"
-        ? pageRaw
-        : typeof pageRaw === "string"
-          ? Number(pageRaw)
-          : NaN;
-    if (!Number.isFinite(page) || page <= 0) return null;
-    const truncated = Math.trunc(page);
-    // If the model included a marker, validate it matches the page. A
-    // drift between page and marker is the failure mode this whole
-    // grounding requirement exists to catch — drop the entry.
-    if (typeof obj.marker === "string") {
-      const m = obj.marker.match(/\[Page\s+(\d+)\]/i);
-      if (!m || parseInt(m[1], 10) !== truncated) return null;
-    }
-    return truncated;
-  }
+function stringKey(v: unknown): string | null {
+  if (typeof v === "string") return v.trim() || null;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
   return null;
 }

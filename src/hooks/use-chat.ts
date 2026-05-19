@@ -41,6 +41,35 @@ export type AgentStep =
     };
 
 /* ------------------------------------------------------------------ */
+/*  Stream inactivity watchdog                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Aborts a chat fetch if no NDJSON event arrives for `STREAM_INACTIVITY_MS`.
+ * Inactivity, not wall-clock — a healthy long generation that keeps emitting
+ * tokens/tool events resets the timer indefinitely. Picked above the worst
+ * reasoning-pause we expect from any single LLM round.
+ */
+const STREAM_INACTIVITY_MS = 60_000;
+
+function createInactivityController(message: string) {
+  const controller = new AbortController();
+  let timer: number | null = null;
+  const noteActivity = () => {
+    if (timer !== null) window.clearTimeout(timer);
+    timer = window.setTimeout(
+      () => controller.abort(new Error(message)),
+      STREAM_INACTIVITY_MS,
+    );
+  };
+  const dispose = () => {
+    if (timer !== null) window.clearTimeout(timer);
+    timer = null;
+  };
+  return { signal: controller.signal, noteActivity, dispose };
+}
+
+/* ------------------------------------------------------------------ */
 /*  NDJSON stream parser                                               */
 /* ------------------------------------------------------------------ */
 
@@ -394,10 +423,14 @@ export function useChat({
           : [...messages, userMsg];
       let steps: AgentStep[] = [];
       let rafId: number | null = null;
+      const inactivity = createInactivityController(
+        "Chat stalled — no response from the model for 60 seconds.",
+      );
 
       try {
         const paperPayload = await buildPaperPayload();
         const braveKey = getBraveSearchApiKey();
+        inactivity.noteActivity();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -419,6 +452,7 @@ export function useChat({
             ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
           }),
+          signal: inactivity.signal,
         });
 
         if (!response.ok) {
@@ -429,6 +463,7 @@ export function useChat({
         if (!response.body) throw new Error("No response body received");
 
         await parseNDJSONStream(response.body, (event) => {
+          inactivity.noteActivity();
           if (event.type === "error") {
             // Throw so the catch block handles cleanup uniformly with HTTP errors.
             throw new Error(event.message);
@@ -470,6 +505,7 @@ export function useChat({
         setFailedUserMsgId(userMsg.id);
         setLastFailedRequest({ text: trimmed, threadAnnotationId: null });
       } finally {
+        inactivity.dispose();
         if (rafId !== null) cancelAnimationFrame(rafId);
         setIsStreaming(false);
         setStreamingMsgId(null);
@@ -593,10 +629,14 @@ export function useChat({
 
       let steps: AgentStep[] = [];
       let rafId: number | null = null;
+      const inactivity = createInactivityController(
+        "Chat stalled — no response from the model for 60 seconds.",
+      );
 
       try {
         const paperPayload = await buildPaperPayload();
         const braveKey = getBraveSearchApiKey();
+        inactivity.noteActivity();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -614,6 +654,7 @@ export function useChat({
             ...(sourceUrl ? { sourceUrl } : {}),
             ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
           }),
+          signal: inactivity.signal,
         });
 
         if (!response.ok) {
@@ -624,6 +665,7 @@ export function useChat({
         if (!response.body) throw new Error("No response body received");
 
         await parseNDJSONStream(response.body, (event) => {
+          inactivity.noteActivity();
           if (event.type === "error") {
             throw new Error(event.message);
           }
@@ -663,6 +705,7 @@ export function useChat({
           threadAnnotationId: chatThreadAnnotationId,
         });
       } finally {
+        inactivity.dispose();
         if (rafId !== null) cancelAnimationFrame(rafId);
         setIsStreaming(false);
         setStreamingMsgId(null);

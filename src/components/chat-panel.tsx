@@ -175,6 +175,7 @@ function ChatInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
+  const { pageMapProgress, pageMapError } = useCitationContext();
   const inputLocked = !hasSavedKeys || isPreparingPaper;
 
   useEffect(() => {
@@ -283,11 +284,40 @@ function ChatInput({
             Chat is locked until you add an API key.
           </p>
         )}
-        {isPreparingPaper && (
-          <p className="px-1 text-center text-[11px] leading-snug text-muted-foreground inline-flex w-full items-center justify-center gap-1.5">
-            <Loader2 className="size-3 animate-spin" aria-hidden />
-            Preparing paper for chat…
+        {pageMapError && !isPreparingPaper && (
+          <p className="px-1 text-center text-[11px] leading-snug text-warning">
+            Page index unavailable: {pageMapError} Chat still works; citation
+            chips fall back to text search.
           </p>
+        )}
+        {isPreparingPaper && (
+          <div className="px-1">
+            <p className="text-center text-[11px] leading-snug text-muted-foreground inline-flex w-full items-center justify-center gap-1.5">
+              <Loader2 className="size-3 animate-spin" aria-hidden />
+              Preparing paper for chat…
+            </p>
+            {(() => {
+              const total = pageMapProgress?.total ?? 0;
+              const done = pageMapProgress?.done ?? 0;
+              const pct = total > 0 ? (done / total) * 100 : 0;
+              return (
+                <div
+                  className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-border"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={total || 1}
+                  aria-valuenow={done}
+                >
+                  <div
+                    className="h-full bg-foreground/70 transition-[width] duration-200 ease-out"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, pct))}%`,
+                    }}
+                  />
+                </div>
+              );
+            })()}
+          </div>
         )}
         {!hasSavedKeys && (
           <div className="flex justify-center">

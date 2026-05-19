@@ -553,6 +553,7 @@ export default function ReviewPage() {
               <CitationContextProvider
                 paperText={paperText}
                 selectedModel={selectedModel}
+                paperLoading={!paperText}
               >
                 <RightPanel
                   reviewId={review.id}
@@ -650,6 +651,7 @@ export default function ReviewPage() {
             <CitationContextProvider
               paperText={paperText}
               selectedModel={selectedModel}
+              paperLoading={!paperText}
             >
               <RightPanel
                 reviewId={review.id}
