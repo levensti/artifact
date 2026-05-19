@@ -36,6 +36,18 @@ interface CitationContextValue {
    * model selected (nothing to wait for); the chat handles those states.
    */
   parseReady: boolean;
+  /**
+   * Progress of the in-flight page-map fetch as `{ done, total }` page calls.
+   * Null when no fetch is active (cache hit, long paper, or not started).
+   */
+  pageMapProgress: { done: number; total: number } | null;
+  /**
+   * Error message from the most recent page-map fetch attempt. Set when the
+   * LLM call (or any step before the result is cached) fails. Chat still
+   * works in this state — citation chips fall back to regex resolution —
+   * but the UI should surface it so the user knows why links degraded.
+   */
+  pageMapError: string | null;
   /** Scroll the PDF viewer to the given (1-based) page. Falls back to no-op. */
   scrollToPage: (page: number) => void;
 }
@@ -47,6 +59,8 @@ const Ctx = createContext<CitationContextValue>({
   pageMap: null,
   paperText: null,
   parseReady: true,
+  pageMapProgress: null,
+  pageMapError: null,
   scrollToPage: noop,
 });
 
@@ -58,16 +72,27 @@ interface ProviderProps {
    * trigger a fresh fetch (chip clicks just degrade to the regex fallback).
    */
   selectedModel?: Model | null;
+  /**
+   * True while the viewer is still fetching/parsing the PDF and extracting
+   * text. Surfaces the "Preparing paper for chat" banner during that phase
+   * too, not only during the LLM-side parse that follows.
+   */
+  paperLoading?: boolean;
   children: ReactNode;
 }
 
 export function CitationContextProvider({
   paperText,
   selectedModel,
+  paperLoading,
   children,
 }: ProviderProps) {
   const [parsedPaper, setParsedPaper] = useState<ParsedPaper | null>(null);
   const [pageMap, setPageMap] = useState<PageMap | null>(null);
+  const [pageMapProgress, setPageMapProgress] = useState<
+    { done: number; total: number } | null
+  >(null);
+  const [pageMapError, setPageMapError] = useState<string | null>(null);
   // Failsafe: unlock chat after 40s even if parsing hasn't finished. Parse
   // keeps running in the background and the cache picks it up once ready;
   // chat falls back to sending full paper text in the meantime. Track the
@@ -117,34 +142,63 @@ export function CitationContextProvider({
 
     const load = async () => {
       if (!paperText) {
-        if (!cancelled) setPageMap(null);
+        if (!cancelled) {
+          setPageMap(null);
+          setPageMapProgress(null);
+          setPageMapError(null);
+        }
         return;
       }
       // Long papers already get a full parse with `startPage` per section;
       // skip the dedicated page-map LLM call to avoid duplicating cost.
       if (paperText.length >= PAGE_MAP_MAX_CHARS) {
-        if (!cancelled) setPageMap(null);
+        if (!cancelled) {
+          setPageMap(null);
+          setPageMapProgress(null);
+          setPageMapError(null);
+        }
         return;
       }
+      if (!cancelled) setPageMapError(null);
       try {
         const hash = await hashPaperText(paperText);
         const cached = await getCachedPageMap(hash);
         if (cached) {
-          if (!cancelled) setPageMap(cached);
+          if (!cancelled) {
+            setPageMap(cached);
+            setPageMapProgress(null);
+          }
           return;
         }
         if (!selectedModel) return;
         const creds = resolveModelCredentials(selectedModel);
         if (!creds) return;
-        const fresh = await fetchAndCachePageMap(paperText, {
-          model: selectedModel.modelId,
-          provider: selectedModel.provider,
-          apiKey: creds.apiKey,
-          apiBaseUrl: creds.apiBaseUrl,
-        });
-        if (!cancelled) setPageMap(fresh);
-      } catch {
-        /* ignore — chip resolution falls back to regex / parsed paper */
+        const fresh = await fetchAndCachePageMap(
+          paperText,
+          {
+            model: selectedModel.modelId,
+            provider: selectedModel.provider,
+            apiKey: creds.apiKey,
+            apiBaseUrl: creds.apiBaseUrl,
+          },
+          (done, total) => {
+            if (!cancelled) setPageMapProgress({ done, total });
+          },
+        );
+        if (!cancelled) {
+          setPageMap(fresh);
+          setPageMapProgress(null);
+        }
+      } catch (err) {
+        // Chip resolution falls back to regex / parsed paper, but we surface
+        // the failure so the user knows why citations are degraded and isn't
+        // left staring at the "Preparing paper" banner until the 40s failsafe.
+        if (!cancelled) {
+          setPageMapProgress(null);
+          setPageMapError(
+            err instanceof Error ? err.message : "Page index unavailable.",
+          );
+        }
       }
     };
 
@@ -183,12 +237,25 @@ export function CitationContextProvider({
   }, [paperText, selectedModel, parsedPaper]);
 
   const parseReady = useMemo(() => {
+    if (paperLoading) return false;
     if (!paperText) return true;
     if (!selectedModel) return true;
     if (timedOutFor === paperText) return true;
     if (isLongPaper(paperText)) return parsedPaper !== null;
+    // Page-map failure is terminal: unlock chat in degraded mode rather than
+    // sitting on the banner until the 40s failsafe. The user sees the error
+    // and can still chat — citations just fall back to regex resolution.
+    if (pageMapError) return true;
     return pageMap !== null;
-  }, [paperText, selectedModel, parsedPaper, pageMap, timedOutFor]);
+  }, [
+    paperLoading,
+    paperText,
+    selectedModel,
+    parsedPaper,
+    pageMap,
+    pageMapError,
+    timedOutFor,
+  ]);
 
   const scrollToPage = useCallback((page: number) => {
     const container = document.querySelector("[data-pdf-container]");
@@ -208,9 +275,19 @@ export function CitationContextProvider({
       pageMap,
       paperText: paperText ?? null,
       parseReady,
+      pageMapProgress,
+      pageMapError,
       scrollToPage,
     }),
-    [parsedPaper, pageMap, paperText, parseReady, scrollToPage],
+    [
+      parsedPaper,
+      pageMap,
+      paperText,
+      parseReady,
+      pageMapProgress,
+      pageMapError,
+      scrollToPage,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
