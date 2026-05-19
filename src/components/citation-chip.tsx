@@ -44,6 +44,17 @@ export default function CitationChip({ href, children }: CitationChipProps) {
     }
   }
 
+  // Fire on pointerdown so a streaming chip navigates the instant the user
+  // presses on it — by the time `click` would fire, the typewriter may have
+  // re-rendered the markdown and moved the chip out from under the cursor,
+  // so mouseup lands on a different element and `click` never fires. Filter
+  // to primary button so right/middle clicks don't navigate.
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    if (resolution.page) scrollToPage(resolution.page);
+  };
+  // Keyboard fallback: Enter on a focused link should still navigate.
   const onClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (resolution.page) scrollToPage(resolution.page);
@@ -52,6 +63,7 @@ export default function CitationChip({ href, children }: CitationChipProps) {
   return (
     <a
       href={href}
+      onPointerDown={onPointerDown}
       onClick={onClick}
       className={`citation-chip${resolution.page ? "" : " citation-chip--unresolved"}`}
       title={resolution.tooltip ?? undefined}

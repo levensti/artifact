@@ -498,6 +498,10 @@ export default function ChatPanel({
     // Touchmove has no reliable direction without tracking touchstart, so
     // treat any touch gesture on the scroll area as intent to look around.
     const onTouchMove = () => unpin();
+    // Mousedown inside the scroll area = intent to interact (click a chip,
+    // start a selection). Without this, the typewriter auto-scroll slides
+    // chips upward between mousedown and mouseup so the click never lands.
+    const onMouseDown = () => unpin();
     const onScroll = () => {
       if (!pinnedRef.current && isAtBottom()) {
         pinnedRef.current = true;
@@ -517,11 +521,13 @@ export default function ChatPanel({
 
     el.addEventListener("wheel", onWheel, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("mousedown", onMouseDown, { passive: true });
     document.addEventListener("keydown", onDocumentKeyDown);
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("keydown", onDocumentKeyDown);
       el.removeEventListener("scroll", onScroll);
     };
