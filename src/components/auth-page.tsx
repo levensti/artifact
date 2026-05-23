@@ -8,6 +8,7 @@ import {
   SignupPitch,
 } from "@/components/brand-panel";
 import { MonoLabel } from "@/components/folio";
+import { CredentialsForm } from "@/components/credentials-form";
 
 export interface AuthPageProps {
   mode: "signin" | "signup";
@@ -32,14 +33,14 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
     <main className="grid min-h-screen bg-background md:grid-cols-2">
       <BrandPanel>{isSignup ? <SignupPitch /> : <SigninWelcome />}</BrandPanel>
       <section className="relative flex items-center justify-center overflow-hidden px-6 py-12 text-left sm:px-10">
-        {/* Soft primary-tinted radial — keeps the surface from feeling flat */}
+        {/* Soft primary-tinted radial, keeps the surface from feeling flat */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,color-mix(in_srgb,var(--primary)_7%,transparent),transparent_55%),radial-gradient(circle_at_15%_95%,color-mix(in_srgb,var(--primary)_4%,transparent),transparent_55%)]"
         />
 
         <div className="relative mx-auto w-full max-w-sm text-left animate-in fade-in slide-in-from-bottom-2 duration-500">
-          {/* Inline brand mark — only when the side panel is hidden */}
+          {/* Inline brand mark, only when the side panel is hidden */}
           <div className="mb-10 flex items-center gap-2 md:hidden">
             <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <BrandGlyph className="size-4" />
@@ -66,12 +67,24 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
               }}
             >
               {isSignup
-                ? "Sign in with Google and start reading. Bring your own API keys later if you want."
+                ? "Use your email, or continue with Google. Bring your own API keys later if you want."
                 : "Sign in to pick up where you left off."}
             </p>
           </header>
 
+          <CredentialsForm mode={mode} callbackUrl={target} />
+
+          {/* Hairline divider */}
+          <div className="mt-7 flex items-center gap-3 text-muted-foreground/60">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-medium tracking-[0.18em] uppercase">
+              or
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
           <form
+            className="mt-6"
             action={async () => {
               "use server";
               await signIn("google", { redirectTo: target });
@@ -88,28 +101,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
             </button>
           </form>
 
-          {/* Trust row — terms/privacy + open source signal */}
-          <p className="mt-5 text-[12px] leading-relaxed text-muted-foreground/85">
-            {isSignup ? (
-              <></>
-            ) : (
-              <>
-                Welcome back. Your annotations, journal, and chats are right
-                where you left them.
-              </>
-            )}
-          </p>
-
-          {/* Hairline divider */}
-          <div className="mt-8 flex items-center gap-3 text-muted-foreground/60">
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-[11px] font-medium tracking-[0.18em] uppercase">
-              or
-            </span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
-          <p className="mt-6 text-[14px] text-muted-foreground">
+          <p className="mt-7 text-[14px] text-muted-foreground">
             {isSignup ? "Already have an account?" : "New to Artifact?"}{" "}
             <Link
               href={`${isSignup ? "/signin" : "/signup"}${cb}`}

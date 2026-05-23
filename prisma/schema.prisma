@@ -17,6 +17,11 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
+  /// Scrypt-hashed password for the email + password sign-in flow. Null
+  /// for users who only authenticate through an OAuth provider (e.g.
+  /// Google). Format: "scrypt$<salt-hex>$<derived-hex>" — see
+  /// src/server/passwords.ts.
+  password      String?
 
   accounts Account[]
   sessions Session[]
