@@ -26,7 +26,5 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# supabase CLI local state — keep `supabase/config.toml` and migrations
-# tracked, but ignore per-developer scratch dirs the CLI writes.
-/supabase/.branches/
-/supabase/.temp/
+# supabase CLI local state (config.toml, migrations, scratch dirs)
+/supabase
