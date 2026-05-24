@@ -89,7 +89,7 @@ model Review {
   updatedAt              DateTime
   importedAt             DateTime?
   /// Token of the share this review was imported from. Stored, not
-  /// enforced via FK — the share row may be revoked or the owner may have
+  /// enforced via FK; the share row may be revoked or the owner may have
   /// deleted their copy. Drives the "Imported from {Owner}" badge.
   importedFromShareToken String?
   /// Snapshot of the sharer's display name at import time. Captured so the
