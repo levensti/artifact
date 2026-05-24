@@ -138,4 +138,12 @@ export interface PaperReview {
   importedFromShareToken?: string;
   /** Display name of the sharer at clone time. Snapshot — survives revocation/rename. */
   importedFromName?: string;
+  /** Project this review belongs to. Null = ungrouped. */
+  projectId?: string | null;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
 }

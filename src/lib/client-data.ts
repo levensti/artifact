@@ -15,7 +15,7 @@ import {
   isInferenceProviderType,
 } from "@/lib/models";
 import { hasInferenceCredentials } from "@/lib/ai-providers";
-import type { PaperReview, ChatMessage } from "@/lib/review-types";
+import type { PaperReview, ChatMessage, Project } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
@@ -28,6 +28,7 @@ import {
   WIKI_UPDATED_EVENT,
   USER_UPDATED_EVENT,
   DISCOVER_UPDATED_EVENT,
+  PROJECTS_UPDATED_EVENT,
 } from "@/lib/storage-events";
 import { apiFetch } from "@/lib/client/api";
 
@@ -72,6 +73,7 @@ let platformToolsCache: PlatformToolsCache = {};
 
 let hydratePromise: Promise<void> | null = null;
 let reviewsCache: PaperReview[] = [];
+let projectsCache: Project[] = [];
 let settingsCache: SettingsCache = EMPTY_SETTINGS;
 let deepDivesCache: DeepDiveSession[] = [];
 let discoverQueriesCache: DiscoverQuery[] = [];
@@ -98,6 +100,7 @@ export async function hydrateClientStore(): Promise<void> {
       deepDives: DeepDiveSession[];
       discoverQueries: DiscoverQuery[];
       recommendations: Recommendation[];
+      projects: Project[];
       user: CurrentUser | null;
     }>("/api/bootstrap");
     reviewsCache = boot.reviews;
@@ -107,6 +110,7 @@ export async function hydrateClientStore(): Promise<void> {
     deepDivesCache = boot.deepDives;
     discoverQueriesCache = boot.discoverQueries ?? [];
     recommendationsCache = boot.recommendations ?? [];
+    projectsCache = boot.projects ?? [];
     currentUser = boot.user;
     messagesCache.clear();
     annotationsCache.clear();
@@ -114,6 +118,7 @@ export async function hydrateClientStore(): Promise<void> {
     dispatch(KEYS_UPDATED_EVENT);
     dispatch(DEEP_DIVES_UPDATED_EVENT);
     dispatch(DISCOVER_UPDATED_EVENT);
+    dispatch(PROJECTS_UPDATED_EVENT);
     dispatch(USER_UPDATED_EVENT);
   })();
   return hydratePromise;
@@ -208,6 +213,63 @@ export async function updateReviewTitle(
   reviewsCache = reviewsCache.map((r) => (r.id === id ? review : r));
   dispatch(REVIEWS_UPDATED_EVENT);
   return review;
+}
+
+/* ── Projects ── */
+
+export function getProjectsSnapshot(): Project[] {
+  return projectsCache;
+}
+
+export async function refreshProjects(): Promise<void> {
+  const { projects } = await apiFetch<{ projects: Project[] }>("/api/projects");
+  projectsCache = projects;
+  dispatch(PROJECTS_UPDATED_EVENT);
+}
+
+export async function createProject(name: string): Promise<Project> {
+  const { project } = await apiFetch<{ project: Project }>("/api/projects", {
+    method: "POST",
+    body: { name },
+  });
+  projectsCache = [...projectsCache, project];
+  dispatch(PROJECTS_UPDATED_EVENT);
+  return project;
+}
+
+export async function updateProject(
+  id: string,
+  patch: { name: string },
+): Promise<Project> {
+  const { project } = await apiFetch<{ project: Project }>(
+    `/api/projects/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: patch },
+  );
+  projectsCache = projectsCache.map((p) => (p.id === id ? project : p));
+  dispatch(PROJECTS_UPDATED_EVENT);
+  return project;
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await apiFetch(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
+  projectsCache = projectsCache.filter((p) => p.id !== id);
+  dispatch(PROJECTS_UPDATED_EVENT);
+  // Reviews that belonged to this project now have projectId=null — refresh.
+  await refreshReviews();
+}
+
+export async function assignReviewToProject(
+  reviewId: string,
+  projectId: string | null,
+): Promise<void> {
+  await apiFetch(`/api/reviews/${encodeURIComponent(reviewId)}`, {
+    method: "PATCH",
+    body: { projectId },
+  });
+  reviewsCache = reviewsCache.map((r) =>
+    r.id === reviewId ? { ...r, projectId } : r,
+  );
+  dispatch(REVIEWS_UPDATED_EVENT);
 }
 
 /* ── Messages ── */

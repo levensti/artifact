@@ -10,13 +10,14 @@ import {
 export const dynamic = "force-dynamic";
 
 export const GET = authedRoute(async (userId) => {
-  const [reviews, settings, deepDives, discoverQueries, recommendations, session] =
+  const [reviews, settings, deepDives, discoverQueries, recommendations, projects, session] =
     await Promise.all([
       store.listReviews(userId),
       store.getSettings(userId),
       store.listDeepDives(userId),
       store.listDiscoverQueries(userId),
       store.listRecommendations(userId),
+      store.listProjects(userId),
       auth(),
     ]);
   const user = session?.user
@@ -39,6 +40,7 @@ export const GET = authedRoute(async (userId) => {
     deepDives,
     discoverQueries,
     recommendations,
+    projects,
     user,
   });
 });
