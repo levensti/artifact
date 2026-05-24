@@ -13,16 +13,28 @@ export const GET = authedRoute(async (userId, _req: Request, { params }: Ctx) =>
   return NextResponse.json({ review });
 });
 
-const patchSchema = z.object({
-  title: z.string().min(1).max(500),
-});
+const patchSchema = z
+  .object({
+    title: z.string().min(1).max(500).optional(),
+    projectId: z.string().uuid().nullable().optional(),
+  })
+  .refine((b) => b.title !== undefined || b.projectId !== undefined, {
+    message: "patch body must include title or projectId",
+  });
 
 export const PATCH = authedRoute(
   async (userId, request: Request, { params }: Ctx) => {
     const { id } = await params;
     const body = patchSchema.parse(await request.json());
-    const review = await store.updateReviewTitle(userId, id, body.title.trim());
-    if (!review) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    let review = null;
+    if (body.title !== undefined) {
+      review = await store.updateReviewTitle(userId, id, body.title.trim());
+      if (!review)
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (body.projectId !== undefined) {
+      review = await store.assignReviewToProject(userId, id, body.projectId);
+    }
     return NextResponse.json({ review });
   },
 );

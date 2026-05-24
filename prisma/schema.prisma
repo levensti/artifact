@@ -40,6 +40,7 @@ model User {
   pageMaps          PageMap[]
   shares            Share[]
   discoverQueries   DiscoverQuery[]
+  projects          Project[]
 }
 
 model Account {
@@ -96,6 +97,11 @@ model Review {
   /// badge survives the original sharer renaming, deleting their account,
   /// or revoking the share.
   importedFromName       String?
+  /// Project this review belongs to. Null = ungrouped. SetNull so deleting
+  /// a project ungroups its papers without deleting them.
+  projectId              String?
+
+  project            Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
   /// Set when this review was started from a Discover recommendation.
   /// Unique because a recommendation produces at most one review (upstream
   /// dedup via createOrGetReview enforces "one review per arxivId" so the
@@ -324,6 +330,21 @@ model Share {
   @@index([userId, createdAt])
   @@index([reviewId])
   @@index([wikiPageId])
+}
+
+/// A named group of reviews. One-to-many: each review belongs to at most
+/// one project. Deleting a project sets projectId = null on its reviews
+/// (ungroup), rather than cascading deletes.
+model Project {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews Review[]
+
+  @@index([userId])
 }
 
 /// One Discover turn: the user types a query, the agent searches and
