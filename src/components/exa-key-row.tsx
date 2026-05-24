@@ -115,22 +115,29 @@ export function ExaKeyRow() {
             className="truncate text-[12px] leading-snug"
             style={{
               fontFamily: "var(--font-reading)",
-              color:
-                hasKey || usingPlatformKey
-                  ? "color-mix(in srgb, var(--success) 80%, transparent)"
+              color: hasKey
+                ? "color-mix(in srgb, var(--success) 80%, transparent)"
+                : usingPlatformKey
+                  ? "color-mix(in srgb, var(--primary) 80%, transparent)"
                   : "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
             }}
           >
             {hasKey
               ? "Web search enabled"
               : usingPlatformKey
-                ? "Web search enabled (server key)"
+                ? "Covered by Artifact during early access"
                 : "Web search off"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {hasKey || usingPlatformKey ? (
+          {hasKey ? (
             <CircleCheck size={16} className="text-success" strokeWidth={2} />
+          ) : usingPlatformKey ? (
+            <CircleCheck
+              size={16}
+              className="text-primary/70"
+              strokeWidth={2}
+            />
           ) : (
             <Circle
               size={16}
@@ -166,21 +173,7 @@ export function ExaKeyRow() {
                 color:
                   "color-mix(in srgb, var(--muted-foreground) 85%, transparent)",
               }}
-            >
-              {usingPlatformKey
-                ? "Web search is using an environment key configured on the server. Save your own to override it."
-                : "Enables the chat agent's web search tool."}{" "}
-              Get a key at{" "}
-              <a
-                href="https://dashboard.exa.ai/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2 hover:text-foreground"
-              >
-                dashboard.exa.ai
-              </a>
-              .
-            </p>
+            ></p>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative min-w-0">
                 <Key
