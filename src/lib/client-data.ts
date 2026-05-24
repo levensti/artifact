@@ -35,14 +35,14 @@ interface SettingsCache {
   keys: Partial<Record<Provider, string>>;
   inferenceProfiles: InferenceProviderProfile[];
   selectedModel: Model | null;
-  braveSearchApiKey: string | null;
+  exaApiKey: string | null;
 }
 
 const EMPTY_SETTINGS: SettingsCache = {
   keys: {},
   inferenceProfiles: [],
   selectedModel: null,
-  braveSearchApiKey: null,
+  exaApiKey: null,
 };
 
 export interface CurrentUser {
@@ -59,6 +59,16 @@ export interface CurrentUser {
  * hasn't brought their own key.
  */
 let platformProvidersCache: Partial<Record<Provider, boolean>> = {};
+
+/**
+ * Tool-key counterpart to `platformProvidersCache`. Booleans only — the
+ * env key never reaches the browser. Lets the UI suppress the "add an
+ * Exa key" prompt when the server already has one in env.
+ */
+interface PlatformToolsCache {
+  exa?: boolean;
+}
+let platformToolsCache: PlatformToolsCache = {};
 
 let hydratePromise: Promise<void> | null = null;
 let reviewsCache: PaperReview[] = [];
@@ -84,6 +94,7 @@ export async function hydrateClientStore(): Promise<void> {
       reviews: PaperReview[];
       settings: SettingsCache;
       platformProviders?: Partial<Record<Provider, boolean>>;
+      platformTools?: PlatformToolsCache;
       deepDives: DeepDiveSession[];
       discoverQueries: DiscoverQuery[];
       recommendations: Recommendation[];
@@ -92,6 +103,7 @@ export async function hydrateClientStore(): Promise<void> {
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
     platformProvidersCache = boot.platformProviders ?? {};
+    platformToolsCache = boot.platformTools ?? {};
     deepDivesCache = boot.deepDives;
     discoverQueriesCache = boot.discoverQueries ?? [];
     recommendationsCache = boot.recommendations ?? [];
@@ -614,6 +626,11 @@ export function hasPlatformFallback(provider: Provider): boolean {
   return platformProvidersCache[provider] === true;
 }
 
+/** True when the server has EXA_API_KEY set in env. Booleans only. */
+export function hasPlatformExaKey(): boolean {
+  return platformToolsCache.exa === true;
+}
+
 export function isBuiltinProviderReady(provider: Provider): boolean {
   if (isInferenceProviderType(provider)) return false;
   return !!getApiKey(provider) || hasPlatformFallback(provider);
@@ -666,16 +683,18 @@ interface SettingsPatchBody {
   keys?: Partial<Record<Provider, string | null>>;
   inferenceProfiles?: InferenceProviderProfile[] | null;
   selectedModel?: Model | null;
-  braveSearchApiKey?: string | null;
+  exaApiKey?: string | null;
 }
 
 async function patchSettings(patch: SettingsPatchBody): Promise<void> {
-  const { settings, platformProviders } = await apiFetch<{
+  const { settings, platformProviders, platformTools } = await apiFetch<{
     settings: SettingsCache;
     platformProviders?: Partial<Record<Provider, boolean>>;
+    platformTools?: PlatformToolsCache;
   }>("/api/settings", { method: "PATCH", body: patch });
   settingsCache = settings;
   if (platformProviders) platformProvidersCache = platformProviders;
+  if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);
 }
 
@@ -693,22 +712,22 @@ export async function clearApiKey(provider: Provider): Promise<void> {
   await patchSettings({ keys: { [provider]: null } });
 }
 
-/* ── Tool keys (currently just Brave Search) ── */
+/* ── Tool keys (currently just Exa Search) ── */
 
-export function getBraveSearchApiKey(): string | null {
-  return settingsCache.braveSearchApiKey;
+export function getExaApiKey(): string | null {
+  return settingsCache.exaApiKey;
 }
 
-export function hasBraveSearchApiKey(): boolean {
-  return !!settingsCache.braveSearchApiKey;
+export function hasExaApiKey(): boolean {
+  return !!settingsCache.exaApiKey;
 }
 
-export async function setBraveSearchApiKey(key: string): Promise<void> {
-  await patchSettings({ braveSearchApiKey: key });
+export async function setExaApiKey(key: string): Promise<void> {
+  await patchSettings({ exaApiKey: key });
 }
 
-export async function clearBraveSearchApiKey(): Promise<void> {
-  await patchSettings({ braveSearchApiKey: null });
+export async function clearExaApiKey(): Promise<void> {
+  await patchSettings({ exaApiKey: null });
 }
 
 export async function saveSelectedModel(model: Model | null): Promise<void> {
@@ -726,11 +745,13 @@ export function getSavedSelectedModel(): Model | null {
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {
-  const { settings, platformProviders } = await apiFetch<{
+  const { settings, platformProviders, platformTools } = await apiFetch<{
     settings: SettingsCache;
     platformProviders?: Partial<Record<Provider, boolean>>;
+    platformTools?: PlatformToolsCache;
   }>("/api/settings");
   settingsCache = settings;
   if (platformProviders) platformProvidersCache = platformProviders;
+  if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);
 }

@@ -27,6 +27,7 @@ import {
   isLocalhostUrl,
   isProvider,
   openAiCompatibleChatCompletionsUrl,
+  openAiMaxTokensField,
   providerApiErrorLabel,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
@@ -332,7 +333,7 @@ async function callOpenAICompatible(
       ],
       response_format: { type: "json_object" },
       stream: false,
-      max_tokens: 8000,
+      ...openAiMaxTokensField(model, 8000),
       // Page mapping is mechanical extraction — skip the reasoning pass on
       // models that support it (OpenAI o-series/gpt-5, xAI Grok reasoning).
       // Non-reasoning models and most openai-compatible servers ignore this.

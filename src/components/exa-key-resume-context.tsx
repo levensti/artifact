@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-interface BraveKeyResumeContextValue {
+interface ExaKeyResumeContextValue {
   /**
    * Re-run the chat agent. Called by the inline "Enable web search" card
    * after the user added a key (`skipWebSearch: false`) or dismissed the
@@ -11,23 +11,23 @@ interface BraveKeyResumeContextValue {
    * card so resumes target the originally-failed query, not whatever the
    * user typed since.
    */
-  resumeAfterBraveDecision: (opts: {
+  resumeAfterExaDecision: (opts: {
     skipWebSearch: boolean;
     text?: string;
   }) => void;
 }
 
-const Ctx = createContext<BraveKeyResumeContextValue | null>(null);
+const Ctx = createContext<ExaKeyResumeContextValue | null>(null);
 
-export function BraveKeyResumeProvider({
-  resumeAfterBraveDecision,
+export function ExaKeyResumeProvider({
+  resumeAfterExaDecision,
   children,
-}: BraveKeyResumeContextValue & { children: ReactNode }) {
+}: ExaKeyResumeContextValue & { children: ReactNode }) {
   return (
-    <Ctx.Provider value={{ resumeAfterBraveDecision }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ resumeAfterExaDecision }}>{children}</Ctx.Provider>
   );
 }
 
-export function useBraveKeyResumeOptional(): BraveKeyResumeContextValue | null {
+export function useExaKeyResumeOptional(): ExaKeyResumeContextValue | null {
   return useContext(Ctx);
 }

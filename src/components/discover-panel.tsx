@@ -20,7 +20,7 @@ import {
 import { DISCOVER_UPDATED_EVENT } from "@/lib/storage-events";
 import ModelSelector from "./model-selector";
 import DiscoverQueue from "./discover-queue";
-import { BraveKeyResumeProvider } from "./brave-key-resume-context";
+import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import { useDiscoverChat } from "@/hooks/use-discover-chat";
 import { useSettingsOpener } from "./settings-opener-context";
 import { MonoLabel } from "./folio";
@@ -213,7 +213,7 @@ export default function DiscoverPanel() {
 
   const queries = hydrated ? getDiscoverQueriesSnapshot() : [];
   const showEmptyHint =
-    hydrated && !chat.isStreaming && !chat.pendingBraveDecision && queries.length === 0;
+    hydrated && !chat.isStreaming && !chat.pendingExaDecision && queries.length === 0;
 
   return (
     <div
@@ -248,8 +248,8 @@ export default function DiscoverPanel() {
 
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8">
-        <BraveKeyResumeProvider
-          resumeAfterBraveDecision={chat.resumeAfterBraveDecision}
+        <ExaKeyResumeProvider
+          resumeAfterExaDecision={chat.resumeAfterExaDecision}
         >
           <div className="mx-auto w-full max-w-3xl space-y-5">
             {/* Composer at top — primary input */}
@@ -298,20 +298,20 @@ export default function DiscoverPanel() {
 
             {/* Persistent queue, grouped by query. The in-flight query
                 streams its agent activity inline into its own section.
-                A pending Brave-key decision renders as a synthetic live
-                section at the top so the brave prompt feels like the
-                first step of an active discovery, not a pre-flight modal. */}
+                A pending Exa-key decision renders as a synthetic live
+                section at the top so the prompt feels like the first
+                step of an active discovery, not a pre-flight modal. */}
             <DiscoverQueue
               liveQueryId={chat.liveQueryId}
               liveSteps={chat.liveSteps}
-              pendingDecision={chat.pendingBraveDecision}
+              pendingDecision={chat.pendingExaDecision}
             />
 
             {showEmptyHint ? (
               <EmptyHint onPick={(q) => void chat.submit(q)} />
             ) : null}
           </div>
-        </BraveKeyResumeProvider>
+        </ExaKeyResumeProvider>
       </div>
     </div>
   );

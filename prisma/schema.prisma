@@ -215,7 +215,7 @@ model WikiRevision {
 /// API key for an external service (LLM provider or tool). The `value`
 /// column holds the encrypted secret; see src/server/crypto.ts. The
 /// `provider` discriminator currently spans LLM providers ("anthropic",
-/// "openai", "xai") and tool keys ("brave").
+/// "openai", "xai") and tool keys ("exa").
 model ApiKey {
   id        String   @id @default(uuid())
   userId    String

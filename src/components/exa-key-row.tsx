@@ -13,27 +13,28 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  clearBraveSearchApiKey,
-  getBraveSearchApiKey,
+  clearExaApiKey,
+  getExaApiKey,
+  hasPlatformExaKey,
   KEYS_UPDATED_EVENT,
-  setBraveSearchApiKey,
+  setExaApiKey,
 } from "@/lib/keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings row for the Brave Search API key. Mirrors the structure and
- * styling of `ProviderRow` so it slots into the Settings dialog cleanly.
+ * Settings row for the Exa API key. Mirrors the structure and styling of
+ * `ProviderRow` so it slots into the Settings dialog cleanly.
  *
- * Brave Search isn't a model provider — it backs the chat agent's
- * `web_search` tool. When this row has a key configured, the agent gets
- * `web_search` registered for the chat turn; without a key, it doesn't,
- * and the system prompt instructs the agent to be honest about that.
+ * Exa isn't a model provider — it backs the chat agent's `web_search`
+ * tool. When this row has a key configured, web_search executes against
+ * Exa; without a key, the tool returns a sentinel and the UI prompts.
  */
-export function BraveSearchKeyRow() {
-  const [stored, setStored] = useState(() => getBraveSearchApiKey() ?? "");
-  const [value, setValue] = useState(() => getBraveSearchApiKey() ?? "");
+export function ExaKeyRow() {
+  const [stored, setStored] = useState(() => getExaApiKey() ?? "");
+  const [value, setValue] = useState(() => getExaApiKey() ?? "");
+  const [platformKey, setPlatformKey] = useState(() => hasPlatformExaKey());
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -41,13 +42,15 @@ export function BraveSearchKeyRow() {
   const confirmTimeoutRef = useRef<number | null>(null);
 
   const hasKey = !!stored;
+  const usingPlatformKey = !hasKey && platformKey;
   const dirty = value.trim() !== stored.trim();
 
   useEffect(() => {
     const sync = () => {
-      const next = getBraveSearchApiKey() ?? "";
+      const next = getExaApiKey() ?? "";
       setStored(next);
       setValue(next);
+      setPlatformKey(hasPlatformExaKey());
     };
     sync();
     window.addEventListener(KEYS_UPDATED_EVENT, sync);
@@ -65,7 +68,7 @@ export function BraveSearchKeyRow() {
   const handleSave = () => {
     const trimmed = value.trim();
     if (!trimmed || !dirty) return;
-    void setBraveSearchApiKey(trimmed).then(() => {
+    void setExaApiKey(trimmed).then(() => {
       setStored(trimmed);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -77,7 +80,7 @@ export function BraveSearchKeyRow() {
       if (confirmTimeoutRef.current)
         window.clearTimeout(confirmTimeoutRef.current);
       setConfirmingDelete(false);
-      void clearBraveSearchApiKey().then(() => {
+      void clearExaApiKey().then(() => {
         setStored("");
         setValue("");
         setVisible(false);
@@ -92,7 +95,7 @@ export function BraveSearchKeyRow() {
 
   return (
     <div
-      data-settings-tool="brave_search"
+      data-settings-tool="exa_search"
       className="rounded-xl border border-border/60 bg-card transition-all duration-200"
     >
       <button
@@ -106,7 +109,7 @@ export function BraveSearchKeyRow() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[13.5px] font-semibold tracking-[-0.005em] text-foreground">
-            Brave Search
+            Exa
           </p>
           <p
             className="truncate text-[12px] leading-snug"
@@ -114,15 +117,27 @@ export function BraveSearchKeyRow() {
               fontFamily: "var(--font-reading)",
               color: hasKey
                 ? "color-mix(in srgb, var(--success) 80%, transparent)"
-                : "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
+                : usingPlatformKey
+                  ? "color-mix(in srgb, var(--primary) 80%, transparent)"
+                  : "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
             }}
           >
-            {hasKey ? "Web search enabled" : "Web search off"}
+            {hasKey
+              ? "Web search enabled"
+              : usingPlatformKey
+                ? "Covered by Artifact during early access"
+                : "Web search off"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {hasKey ? (
             <CircleCheck size={16} className="text-success" strokeWidth={2} />
+          ) : usingPlatformKey ? (
+            <CircleCheck
+              size={16}
+              className="text-primary/70"
+              strokeWidth={2}
+            />
           ) : (
             <Circle
               size={16}
@@ -158,10 +173,7 @@ export function BraveSearchKeyRow() {
                 color:
                   "color-mix(in srgb, var(--muted-foreground) 85%, transparent)",
               }}
-            >
-              Enables the chat agent&apos;s web search tool. Free tier covers
-              ~2k queries/month.
-            </p>
+            ></p>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative min-w-0">
                 <Key
@@ -172,7 +184,7 @@ export function BraveSearchKeyRow() {
                   type={visible ? "text" : "password"}
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
-                  placeholder="BSA..."
+                  placeholder="Your Exa API key"
                   className="pl-8 pr-9 text-xs h-9"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleSave();

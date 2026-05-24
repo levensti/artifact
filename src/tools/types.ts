@@ -56,10 +56,10 @@ export interface ToolContext {
    */
   parsedPaper?: import("@/lib/review-types").ParsedPaper;
   /**
-   * User-provided Brave Search API key. When present, `web_search` uses
-   * this; otherwise the tool isn't registered for the request at all.
+   * User-provided Exa API key. When present, `web_search` uses this;
+   * otherwise the tool returns a sentinel and the UI prompts for a key.
    */
-  braveSearchApiKey?: string;
+  exaApiKey?: string;
 }
 
 /* ------------------------------------------------------------------ */

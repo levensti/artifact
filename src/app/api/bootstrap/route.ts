@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { authedRoute } from "@/server/api";
 import { auth } from "@/server/auth";
 import * as store from "@/server/store";
-import { platformProviderAvailability } from "@/server/provider-env";
+import {
+  platformProviderAvailability,
+  platformToolAvailability,
+} from "@/server/provider-env";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +33,9 @@ export const GET = authedRoute(async (userId) => {
     // Booleans only — which built-in providers have a platform-key
     // fallback configured. NEVER the key itself.
     platformProviders: platformProviderAvailability(),
+    // Same shape, for tool keys (Exa). Lets the client suppress the
+    // "add a key" prompt when the server already has one in env.
+    platformTools: platformToolAvailability(),
     deepDives,
     discoverQueries,
     recommendations,

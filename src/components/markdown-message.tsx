@@ -56,7 +56,7 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
             }
             // app://settings — render as a button-styled link that opens
             // the Settings dialog when an opener is available in context.
-            // Used by the agent to deep-link users to "add a Brave key" etc.
+            // Used by the agent to deep-link users to "add an Exa key" etc.
             if (props.href === "app://settings" && settingsOpener) {
               return (
                 <button

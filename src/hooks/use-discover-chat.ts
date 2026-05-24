@@ -7,7 +7,8 @@ import {
   finalizeDiscoverQuery,
 } from "@/lib/client-data";
 import {
-  getBraveSearchApiKey,
+  getExaApiKey,
+  hasUsableExaKey,
   isModelReady,
   resolveModelCredentials,
 } from "@/lib/keys";
@@ -79,20 +80,20 @@ export interface UseDiscoverChatReturn {
   error: string | null;
   hasKeyForModel: boolean;
   submit: (text: string, opts?: { skipWebSearch?: boolean }) => Promise<void>;
-  /** Re-submits a query after the user resolves the Brave key prompt
+  /** Re-submits a query after the user resolves the Exa key prompt
    *  (added a key → skipWebSearch=false; dismissed → true). Defaults to
    *  the most recent query; pass `text` to retry a specific historical
    *  query (used by the queue's persistent card). If a stream is still
    *  in flight, the resume is queued and fires when it ends. */
-  resumeAfterBraveDecision: (opts: {
+  resumeAfterExaDecision: (opts: {
     skipWebSearch: boolean;
     text?: string;
   }) => void;
-  /** Set when `submit` was deferred because no Brave key is configured
+  /** Set when `submit` was deferred because no Exa key is configured
    *  and the user hasn't already opted to skip web search. The panel
    *  surfaces the prompt card so the user can add a key (resume) or
    *  dismiss (proceed without web_search) before the agent starts. */
-  pendingBraveDecision: { text: string } | null;
+  pendingExaDecision: { text: string } | null;
 }
 
 /**
@@ -137,7 +138,7 @@ function toolActivitySummary(steps: AgentStep[]): string {
 function describeOutput(name: string, output: string | undefined): string {
   if (!output) return "no result";
   const trimmed = output.trim();
-  if (trimmed === "BRAVE_KEY_REQUIRED") return "brave key required";
+  if (trimmed === "EXA_KEY_REQUIRED") return "exa key required";
   if (
     /^(?:error:|paper search failed:|web search failed:|request failed:|tool error:)/i.test(
       trimmed,
@@ -211,10 +212,10 @@ export function useDiscoverChat({
   const [liveQueryId, setLiveQueryId] = useState<string | null>(null);
   const [liveQueryText, setLiveQueryText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pendingBraveDecision, setPendingBraveDecision] = useState<
+  const [pendingExaDecision, setPendingExaDecision] = useState<
     { text: string } | null
   >(null);
-  // Last text the user submitted, kept across submissions so the Brave
+  // Last text the user submitted, kept across submissions so the Exa
   // key prompt can resume by re-submitting the same query.
   const lastQueryRef = useRef<string | null>(null);
   // Pending resume queued while a stream was still in flight. Fires from
@@ -236,19 +237,20 @@ export function useDiscoverChat({
 
       lastQueryRef.current = trimmed;
 
-      // Pre-flight: if no Brave key configured and the user hasn't already
-      // chosen to skip web_search for this submission, pause and surface
-      // the prompt card. Otherwise the agent dispatches `web_search`
-      // alongside the arxiv batch, the chip spins as "Searching web" until
-      // the slowest parallel call resolves (Promise.all batches results),
-      // and only then does it flip to the BraveKeyPromptCard. Asking
-      // upfront is honest and skips the misleading spinner.
-      if (!opts?.skipWebSearch && !getBraveSearchApiKey()) {
+      // Pre-flight: if neither the user nor the server has an Exa key,
+      // pause and surface the prompt card. Otherwise the agent dispatches
+      // `web_search` alongside the arxiv batch, the chip spins as
+      // "Searching web" until the slowest parallel call resolves
+      // (Promise.all batches results), and only then does it flip to the
+      // ExaKeyPromptCard. Asking upfront is honest and skips the
+      // misleading spinner. The server-env key path means we DON'T prompt
+      // when EXA_API_KEY is set globally — the user already has search.
+      if (!opts?.skipWebSearch && !hasUsableExaKey()) {
         setError(null);
-        setPendingBraveDecision({ text: trimmed });
+        setPendingExaDecision({ text: trimmed });
         return;
       }
-      setPendingBraveDecision(null);
+      setPendingExaDecision(null);
 
       setError(null);
       setLiveSteps([]);
@@ -265,7 +267,7 @@ export function useDiscoverChat({
         setLiveQueryId(created.id);
 
         const creds = resolveModelCredentials(selectedModel) ?? { apiKey: "" };
-        const braveKey = getBraveSearchApiKey();
+        const exaKey = getExaApiKey();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -275,7 +277,7 @@ export function useDiscoverChat({
             provider: selectedModel.provider,
             ...creds,
             mode: "discover",
-            ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
+            ...(exaKey ? { exaApiKey: exaKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
           }),
         });
@@ -338,7 +340,7 @@ export function useDiscoverChat({
     [isStreaming, selectedModel],
   );
 
-  const resumeAfterBraveDecision = useCallback(
+  const resumeAfterExaDecision = useCallback(
     ({ skipWebSearch, text }: { skipWebSearch: boolean; text?: string }) => {
       const target = text ?? lastQueryRef.current;
       if (!target) return;
@@ -371,7 +373,7 @@ export function useDiscoverChat({
     error,
     hasKeyForModel,
     submit,
-    resumeAfterBraveDecision,
-    pendingBraveDecision,
+    resumeAfterExaDecision,
+    pendingExaDecision,
   };
 }

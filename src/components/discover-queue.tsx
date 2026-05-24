@@ -19,8 +19,8 @@ import { normalizeArxivId } from "@/lib/arxiv";
 import MarkdownMessage from "./markdown-message";
 import RecommendationCard from "./recommendation-card";
 import DiscoverSteps from "./discover-picks";
-import BraveKeyPromptCard from "./brave-key-prompt-card";
-import { hasBraveSearchApiKey } from "@/lib/keys";
+import ExaKeyPromptCard from "./exa-key-prompt-card";
+import { hasUsableExaKey } from "@/lib/keys";
 import { MonoLabel } from "./folio";
 
 /* ------------------------------------------------------------------ */
@@ -104,10 +104,22 @@ function isAccepted(rec: Recommendation, reviews: PaperReview[]): boolean {
 /* ------------------------------------------------------------------ */
 
 /** Detects the agent-trajectory note we generate when the only failure
- *  was a missing Brave key. Used to surface a persistent "Add Brave key"
+ *  was a missing Exa key. Used to surface a persistent "Add Exa key"
  *  card on finalized queries that came back picks-empty for that reason. */
-function notesIndicateBraveKeyMissing(notes: string | null | undefined): boolean {
-  return !!notes && /brave key required/i.test(notes);
+function notesIndicateExaKeyMissing(notes: string | null | undefined): boolean {
+  return !!notes && /exa key required/i.test(notes);
+}
+
+/** True when the agent finalized without running any tools — e.g. it
+ *  asked a clarifying question or emitted a refusal. The tool-activity
+ *  summary heading is our marker; without it, the agent only narrated. */
+function agentNarratedOnly(
+  notes: string | null | undefined,
+  recommendationCount: number,
+): boolean {
+  if (recommendationCount > 0) return false;
+  if (!notes || !notes.trim()) return false;
+  return !/\*\*Tool activity:\*\*/i.test(notes);
 }
 
 function QuerySection({
@@ -117,7 +129,7 @@ function QuerySection({
   acceptedCount,
   defaultCollapsed,
   liveSteps,
-  hasBraveKey,
+  hasExaKey,
 }: {
   query: DiscoverQuery;
   recommendations: Recommendation[];
@@ -127,15 +139,15 @@ function QuerySection({
   /** When set, this section is the in-flight query — render the agent
    *  activity stream inline instead of the empty/loading state. */
   liveSteps?: AgentStep[];
-  /** Whether the user currently has a Brave key configured. Drives the
+  /** Whether the user currently has an Exa key configured. Drives the
    *  persistent "Enable web search" affordance on finalized empty queries. */
-  hasBraveKey: boolean;
+  hasExaKey: boolean;
 }) {
   const isLive = !!liveSteps;
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const noPicks = recommendations.length === 0 && query.status !== "running";
-  const showBraveCard =
-    !isLive && noPicks && !hasBraveKey && notesIndicateBraveKeyMissing(query.notes);
+  const showExaCard =
+    !isLive && noPicks && !hasExaKey && notesIndicateExaKeyMissing(query.notes);
   // Default-expand notes only when there are no picks (it's the only
   // diagnostic surface) AND the section itself is expanded.
   const [showNotes, setShowNotes] = useState(noPicks);
@@ -251,12 +263,14 @@ function QuerySection({
             >
               <DiscoverSteps steps={liveSteps!} />
             </div>
-          ) : showBraveCard ? (
+          ) : showExaCard ? (
             // Empty-picks because web_search was the only signal and it
             // demanded a key. Persistent retry surface — when the user
             // adds a key the card auto-resumes the same query text.
-            <BraveKeyPromptCard queryText={query.query} />
-          ) : (
+            <ExaKeyPromptCard queryText={query.query} />
+          ) : agentNarratedOnly(query.notes, recommendations.length) &&
+            query.status !== "errored" &&
+            dismissedCount === 0 ? null : (
             <p className="text-[12px] italic text-muted-foreground/70">
               {query.status === "errored"
                 ? "The agent errored before returning picks. Try resubmitting the query."
@@ -276,7 +290,7 @@ function QuerySection({
 /* ------------------------------------------------------------------ */
 
 /** Synthetic "live" section rendered above the queue when the discover
- *  hook deferred a submit on a missing Brave key. Shells like a real
+ *  hook deferred a submit on a missing Exa key. Shells like a real
  *  in-flight QuerySection so the prompt reads as the first step of an
  *  active discovery rather than a pre-flight modal floating above. */
 function PendingDecisionSection({ text }: { text: string }) {
@@ -300,7 +314,7 @@ function PendingDecisionSection({ text }: { text: string }) {
           </div>
         </div>
       </header>
-      <BraveKeyPromptCard queryText={text} />
+      <ExaKeyPromptCard queryText={text} />
     </section>
   );
 }
@@ -319,9 +333,9 @@ export default function DiscoverQueue({
   liveQueryId: string | null;
   /** Streaming agent steps for the live query. */
   liveSteps: AgentStep[];
-  /** When set, the discover hook deferred a submit because no Brave key
+  /** When set, the discover hook deferred a submit because no Exa key
    *  is configured. Render a synthetic live section at the top with the
-   *  brave card so the prompt feels like the first step of an active
+   *  Exa card so the prompt feels like the first step of an active
    *  discovery, not a pre-flight modal. */
   pendingDecision?: { text: string } | null;
 }) {
@@ -337,11 +351,11 @@ export default function DiscoverQueue({
     };
   }, []);
 
-  // Track Brave-key presence so the persistent "Enable web search" card
+  // Track Exa-key presence so the persistent "Enable web search" card
   // hides itself once the user actually adds a key.
-  const [hasBraveKey, setHasBraveKey] = useState(false);
+  const [hasExaKey, setHasExaKey] = useState(false);
   useEffect(() => {
-    const sync = () => setHasBraveKey(hasBraveSearchApiKey());
+    const sync = () => setHasExaKey(hasUsableExaKey());
     sync();
     window.addEventListener(KEYS_UPDATED_EVENT, sync);
     return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
@@ -427,7 +441,7 @@ export default function DiscoverQueue({
                   liveSteps={
                     q.id === liveQueryId ? liveSteps : undefined
                   }
-                  hasBraveKey={hasBraveKey}
+                  hasExaKey={hasExaKey}
                 />
               ))}
             </div>

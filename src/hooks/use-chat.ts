@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Model } from "@/lib/models";
 import {
-  getBraveSearchApiKey,
+  getExaApiKey,
   hasUsableProvider,
   isModelReady,
   KEYS_UPDATED_EVENT,
@@ -254,8 +254,8 @@ export interface UseChatReturn {
    *  threads on annotations are left untouched. No-op while streaming. */
   clearMessages: () => Promise<void>;
   /** Resume an assistant turn that paused waiting for the user to decide
-   *  about the Brave-key card. Wired into the inline card via context. */
-  resumeAfterBraveDecision: (opts: { skipWebSearch: boolean }) => void;
+   *  about the Exa-key card. Wired into the inline card via context. */
+  resumeAfterExaDecision: (opts: { skipWebSearch: boolean }) => void;
 }
 
 export function useChat({
@@ -379,7 +379,7 @@ export function useChat({
          * state-update timing. Should already include the user message.
          */
         historyOverride?: ChatMessage[];
-        /** Tell the server not to register web_search for this turn. Used after the user dismisses the Brave card. */
+        /** Tell the server not to register web_search for this turn. Used after the user dismisses the Exa card. */
         skipWebSearch?: boolean;
       },
     ) => {
@@ -429,7 +429,7 @@ export function useChat({
 
       try {
         const paperPayload = await buildPaperPayload();
-        const braveKey = getBraveSearchApiKey();
+        const exaKey = getExaApiKey();
         inactivity.noteActivity();
         const response = await fetch("/api/chat", {
           method: "POST",
@@ -449,7 +449,7 @@ export function useChat({
             arxivId,
             reviewId,
             ...(sourceUrl ? { sourceUrl } : {}),
-            ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
+            ...(exaKey ? { exaApiKey: exaKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
           }),
           signal: inactivity.signal,
@@ -525,20 +525,20 @@ export function useChat({
   );
 
   /* ---------------------------------------------------------------- */
-  /*  Resume after the Brave-key card was actioned                     */
+  /*  Resume after the Exa-key card was actioned                       */
   /* ---------------------------------------------------------------- */
 
   /**
-   * Re-runs the chat agent on the user's last message after the Brave-key
+   * Re-runs the chat agent on the user's last message after the Exa-key
    * configure card has been actioned. Removes the previous (incomplete)
    * assistant message that contained the card, keeps the original user
    * message, and re-submits — passing `skipWebSearch: true` when the user
    * dismissed (so the tool isn't even registered).
    *
-   * Called from `BraveKeyResumeProvider` (set up by ChatPanel). No-op when
+   * Called from `ExaKeyResumeProvider` (set up by ChatPanel). No-op when
    * we can't find a user message to retry.
    */
-  const resumeAfterBraveDecision = useCallback(
+  const resumeAfterExaDecision = useCallback(
     ({ skipWebSearch }: { skipWebSearch: boolean }) => {
       if (isStreaming) return;
 
@@ -635,7 +635,7 @@ export function useChat({
 
       try {
         const paperPayload = await buildPaperPayload();
-        const braveKey = getBraveSearchApiKey();
+        const exaKey = getExaApiKey();
         inactivity.noteActivity();
         const response = await fetch("/api/chat", {
           method: "POST",
@@ -652,7 +652,7 @@ export function useChat({
             arxivId,
             reviewId,
             ...(sourceUrl ? { sourceUrl } : {}),
-            ...(braveKey ? { braveSearchApiKey: braveKey } : {}),
+            ...(exaKey ? { exaApiKey: exaKey } : {}),
           }),
           signal: inactivity.signal,
         });
@@ -791,6 +791,6 @@ export function useChat({
     submitThreadChat,
     displayThread: threadStream ?? [],
     clearMessages,
-    resumeAfterBraveDecision,
+    resumeAfterExaDecision,
   };
 }

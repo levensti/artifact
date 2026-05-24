@@ -72,3 +72,18 @@ export function platformProviderAvailability(): Record<Provider, boolean> {
   out.openai_compatible = false;
   return out;
 }
+
+/**
+ * Tool-key counterpart to `platformProviderAvailability()`. Tool keys
+ * (currently just Exa) aren't `Provider` values, so they get their own
+ * surface. Booleans only — the env key never reaches the browser.
+ */
+export interface PlatformToolAvailability {
+  exa: boolean;
+}
+
+export function platformToolAvailability(): PlatformToolAvailability {
+  return {
+    exa: !!(process.env.EXA_API_KEY && process.env.EXA_API_KEY.trim()),
+  };
+}
