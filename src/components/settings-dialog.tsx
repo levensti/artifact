@@ -29,7 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isLocalhostUrl } from "@/lib/ai-providers";
-import { BraveSearchKeyRow } from "@/components/brave-search-key-row";
+import { ExaKeyRow } from "@/components/exa-key-row";
 import { MonoLabel } from "@/components/folio";
 import {
   getApiKey,
@@ -976,7 +976,7 @@ export default function SettingsDialog({
               <h3 className="px-1 pb-2.5">
                 <MonoLabel>Search &amp; external tools</MonoLabel>
               </h3>
-              <BraveSearchKeyRow />
+              <ExaKeyRow />
             </div>
           </div>
         </div>

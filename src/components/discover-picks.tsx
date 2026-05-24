@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThinkingIndicator } from "./chat-step-renderers";
-import BraveKeyPromptCard from "./brave-key-prompt-card";
-import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import ExaKeyPromptCard from "./exa-key-prompt-card";
+import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import { PaperCard, parseArxivSearchOutput } from "./discover-arxiv-cards";
 import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
@@ -60,8 +60,8 @@ function SearchChip({
 }) {
   const [open, setOpen] = useState(false);
 
-  if (name === "web_search" && output?.trim() === BRAVE_KEY_REQUIRED_SENTINEL) {
-    return <BraveKeyPromptCard />;
+  if (name === "web_search" && output?.trim() === EXA_KEY_REQUIRED_SENTINEL) {
+    return <ExaKeyPromptCard />;
   }
 
   const done = !!output;

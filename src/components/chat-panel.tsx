@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import ModelSelector from "./model-selector";
 import { useSettingsOpener } from "./settings-opener-context";
 import { useCitationContext } from "./citation-context";
-import { BraveKeyResumeProvider } from "./brave-key-resume-context";
+import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import ChatEmptyState from "./chat-empty-state";
 import { ChatMessageBubble } from "./chat-message-bubble";
 import JournalCheckpointModal from "./journal-checkpoint-modal";
@@ -704,8 +704,8 @@ export default function ChatPanel({
   /* ---------------------------------------------------------------- */
 
   return (
-    <BraveKeyResumeProvider
-      resumeAfterBraveDecision={chat.resumeAfterBraveDecision}
+    <ExaKeyResumeProvider
+      resumeAfterExaDecision={chat.resumeAfterExaDecision}
     >
       <div className="flex flex-col h-full min-h-0 bg-background">
         {!hideHeader && (
@@ -992,6 +992,6 @@ export default function ChatPanel({
           </DialogContent>
         </Dialog>
       </div>
-    </BraveKeyResumeProvider>
+    </ExaKeyResumeProvider>
   );
 }

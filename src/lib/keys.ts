@@ -3,23 +3,24 @@ import { isInferenceProviderType } from "@/lib/models";
 import { hasInferenceCredentials } from "@/lib/ai-providers";
 import {
   clearApiKey as clearApiKeyRemote,
-  clearBraveSearchApiKey as clearBraveSearchApiKeyRemote,
+  clearExaApiKey as clearExaApiKeyRemote,
   getApiKey as getApiKeyCached,
-  getBraveSearchApiKey as getBraveSearchApiKeyCached,
+  getExaApiKey as getExaApiKeyCached,
   getInferenceProfile as getInferenceProfileCached,
   getInferenceProfiles as getInferenceProfilesCached,
   getSavedSelectedModel as getSavedSelectedModelCached,
   hasAnySavedApiKey as hasAnySavedApiKeyCached,
   hasPlatformFallback as hasPlatformFallbackCached,
   hasUsableProvider as hasUsableProviderCached,
-  hasBraveSearchApiKey as hasBraveSearchApiKeyCached,
+  hasExaApiKey as hasExaApiKeyCached,
+  hasPlatformExaKey as hasPlatformExaKeyCached,
   isBuiltinProviderReady as isBuiltinProviderReadyCached,
   isModelReady as isModelReadyCached,
   isProviderReady as isProviderReadyCached,
   saveInferenceProfiles as saveInferenceProfilesRemote,
   saveSelectedModel as saveSelectedModelRemote,
   setApiKey as setApiKeyRemote,
-  setBraveSearchApiKey as setBraveSearchApiKeyRemote,
+  setExaApiKey as setExaApiKeyRemote,
 } from "@/lib/client-data";
 
 export { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
@@ -134,20 +135,30 @@ export async function clearApiKey(
   return clearApiKeyRemote(provider);
 }
 
-export function getBraveSearchApiKey(): string | null {
-  return getBraveSearchApiKeyCached();
+export function getExaApiKey(): string | null {
+  return getExaApiKeyCached();
 }
 
-export function hasBraveSearchApiKey(): boolean {
-  return hasBraveSearchApiKeyCached();
+export function hasExaApiKey(): boolean {
+  return hasExaApiKeyCached();
 }
 
-export async function setBraveSearchApiKey(key: string): Promise<void> {
-  return setBraveSearchApiKeyRemote(key);
+/** True when the server has EXA_API_KEY in env (booleans-only signal). */
+export function hasPlatformExaKey(): boolean {
+  return hasPlatformExaKeyCached();
 }
 
-export async function clearBraveSearchApiKey(): Promise<void> {
-  return clearBraveSearchApiKeyRemote();
+/** Web search is usable: either the user has a key or the platform has one. */
+export function hasUsableExaKey(): boolean {
+  return hasExaApiKeyCached() || hasPlatformExaKeyCached();
+}
+
+export async function setExaApiKey(key: string): Promise<void> {
+  return setExaApiKeyRemote(key);
+}
+
+export async function clearExaApiKey(): Promise<void> {
+  return clearExaApiKeyRemote();
 }
 
 export async function saveSelectedModel(

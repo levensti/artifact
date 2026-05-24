@@ -72,12 +72,12 @@ interface ChatRequest {
    */
   mode?: "discover";
   /**
-   * User-provided Brave Search API key. When absent the `web_search` tool
-   * returns a sentinel that the chat UI surfaces as a configure card.
+   * User-provided Exa API key. When absent the `web_search` tool returns
+   * a sentinel that the chat UI surfaces as a configure card.
    */
-  braveSearchApiKey?: string;
+  exaApiKey?: string;
   /**
-   * Set when the user has explicitly dismissed the "configure Brave key"
+   * Set when the user has explicitly dismissed the "configure Exa key"
    * card and wants the agent to proceed without web search. The chat
    * handler unregisters `web_search` for the turn so the agent doesn't
    * attempt it again.
@@ -98,7 +98,7 @@ How the paper appears in your context:
 Tools:
 - \`read_section\`, \`search_paper\`, \`lookup_citation\` — paper-internal content (long-paper mode)
 - \`arxiv_search\` — find related papers, prerequisites, or specific cited works
-- \`web_search\` — ground claims with real sources and current documentation. If it returns "BRAVE_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure; continue with what you have from the paper, training, and arXiv.
+- \`web_search\` — ground claims with real sources and current documentation. Backed by Exa's neural search: phrase the query as a natural-language description of the ideal page ("a clear explanation of X for someone who knows Y"), not as keywords. If it returns "EXA_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure; continue with what you have from the paper, training, and arXiv.
 
 Citations:
 - Cite the paper inline for every distinct statement you make about it. Each one gets its own locator. Don't bundle multiple statements behind a single trailing reference.
@@ -143,8 +143,8 @@ Procedure (each round produces output; do not stop until \`submit_picks\` is cal
 
 ROUND 1 — SEARCH. In parallel, run BOTH:
   - 1–4 \`arxiv_search\` calls using concrete keywords for distinct angles. Covers Semantic Scholar's broad academic index — arXiv plus major venues.
-  - 1–2 \`web_search\` calls to surface lab blogs, technical writeups, and grey literature. Don't gate this — run web_search by default unless the query is clearly purely academic ("speculative decoding 2024 NeurIPS papers").
-  If \`web_search\` returns "BRAVE_KEY_REQUIRED" the UI handles it — continue with arXiv results. Plan your sub-queries internally; do NOT emit a visible Plan list.
+  - 1–2 \`web_search\` calls to surface lab blogs, technical writeups, and grey literature. Don't gate this — run web_search by default unless the query is clearly purely academic ("speculative decoding 2024 NeurIPS papers"). Note the contrast in query style: \`arxiv_search\` takes concrete keywords, while \`web_search\` (Exa, neural) takes a natural-language description of what a good result would look like ("an engineering blog post on tuning vLLM throughput for long contexts").
+  If \`web_search\` returns "EXA_KEY_REQUIRED" the UI handles it — continue with arXiv results. Plan your sub-queries internally; do NOT emit a visible Plan list.
 
 ROUND 1B — BROADEN (only if every round 1 search returned 0 results). If every \`arxiv_search\` came back "No papers found" and every \`web_search\` came back empty too, you MUST run another round of 2–3 \`arxiv_search\` calls with substantially DIFFERENT terminology before refusing. The first round may have used the user's exact jargon; this round explores adjacent vocabulary. Examples of broadening moves:
   - Replace specific terminology with the canonical academic term ("bitwise determinism" → "deterministic training", "reproducibility").
@@ -167,7 +167,7 @@ Hard rules:
 - Never refuse after a single search round. Always broaden once first (round 1B) before considering refusal.
 - If you write text in a turn, the corresponding tool calls (if any) MUST live in the same response.
 - For paper_details, you can pass either an arxiv id ("2401.12345") or the full URL — the tool accepts both.
-- If the user's query is genuinely ambiguous (one bare word, no method or task), ask exactly one clarifying question on round 1 and stop. Do not search.
+- Only ask a clarifying question when the query is a single bare word with no named method, task, or approach attached (e.g. "AI", "transformers", "RAG"). In that case ask exactly one clarifying question on round 1 and stop. Multi-word technical topics like "diffusion transformers", "speculative decoding", or "test-time compute" are NOT ambiguous — search them. Ambiguity between sub-angles (foundational vs. engineering, image vs. video, theory vs. SOTA) is also not a reason to ask: cover the dominant angles across your picks instead.
 - Never invent papers, URLs, or arXiv IDs.
 
 Tone: dense, librarian-level. Technical user.`;
@@ -179,7 +179,7 @@ Your mission: help the user deeply understand the web page they are reading, exp
 Capabilities:
 - You have the full extracted text of the web page in context (when available)
 - You can search arXiv to find academic papers related to the content
-- You can search the web to find additional sources, context, and related material. If web_search returns "BRAVE_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure; just continue with what you have.
+- You can search the web to find additional sources, context, and related material. \`web_search\` is backed by Exa's neural search — phrase queries as natural-language descriptions of the ideal page, not keyword strings. If web_search returns "EXA_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure; just continue with what you have.
 
 Guidelines:
 - Reference specific passages, claims, or sections from the page when relevant
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
     arxivId,
     reviewId,
     sourceUrl,
-    braveSearchApiKey,
+    exaApiKey,
     skipWebSearch,
     mode,
   } = body;
@@ -262,12 +262,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const trimmedBraveKey =
-    typeof braveSearchApiKey === "string" ? braveSearchApiKey.trim() : "";
+  const trimmedExaKey =
+    typeof exaApiKey === "string" ? exaApiKey.trim() : "";
   // Always register all tools — web_search included. When the user has no
-  // Brave key, the tool returns a sentinel that the chat UI surfaces as an
-  // inline "Add Brave Search API key" card rather than the agent verbalizing
-  // the failure. The exception: if the user dismissed the card, we drop
+  // Exa key, the tool returns a sentinel that the chat UI surfaces as an
+  // inline "Add Exa API key" card rather than the agent verbalizing the
+  // failure. The exception: if the user dismissed the card, we drop
   // web_search so the agent can't even try. We also drop the paper-internal
   // tools (read_section / search_paper / lookup_citation) when the paper
   // hasn't been parsed into structured form — otherwise the agent sees them
@@ -291,7 +291,7 @@ export async function POST(req: NextRequest) {
     paperTitle,
     arxivId,
     reviewId,
-    braveSearchApiKey: trimmedBraveKey || undefined,
+    exaApiKey: trimmedExaKey || undefined,
   };
   const systemPrompt = getSystemPrompt(sourceUrl, mode);
   const encoder = new TextEncoder();

@@ -52,7 +52,7 @@ function addToPool(pool: MetadataPool, p: PaperMeta) {
 }
 
 /**
- * Parses the fixed plain-text format emitted by `web_search` (Brave) into
+ * Parses the fixed plain-text format emitted by `web_search` (Exa) into
  * minimal `PaperMeta` shells so web-recommended links get cards too.
  */
 function parseWebSearchOutput(output: string): PaperMeta[] {

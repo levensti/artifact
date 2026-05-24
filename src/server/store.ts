@@ -688,14 +688,14 @@ import {
 } from "@/lib/models";
 import { decrypt, encrypt } from "./crypto";
 
-/** Pseudo-provider identifying the Brave Search tool key in the ApiKey table. */
-const BRAVE_PROVIDER = "brave";
+/** Pseudo-provider identifying the Exa Search tool key in the ApiKey table. */
+const EXA_PROVIDER = "exa";
 
 export interface SettingsSnapshot {
   keys: Partial<Record<Provider, string>>;
   inferenceProfiles: InferenceProviderProfile[];
   selectedModel: Model | null;
-  braveSearchApiKey: string | null;
+  exaApiKey: string | null;
 }
 
 export async function getSettings(userId: string): Promise<SettingsSnapshot> {
@@ -706,11 +706,15 @@ export async function getSettings(userId: string): Promise<SettingsSnapshot> {
   ]);
 
   const keys: Partial<Record<Provider, string>> = {};
-  let braveSearchApiKey: string | null = null;
+  let exaApiKey: string | null = null;
   for (const row of apiKeys) {
     const value = decrypt(row.value);
-    if (row.provider === BRAVE_PROVIDER) {
-      braveSearchApiKey = value;
+    if (row.provider === EXA_PROVIDER) {
+      exaApiKey = value;
+    } else if (row.provider === "brave") {
+      // Legacy rows from the pre-Exa Brave Search integration. Ignored here;
+      // not migrated. New keys are stored under EXA_PROVIDER.
+      continue;
     } else {
       keys[row.provider as Provider] = value;
     }
@@ -735,14 +739,14 @@ export async function getSettings(userId: string): Promise<SettingsSnapshot> {
     selectedModel = null;
   }
 
-  return { keys, inferenceProfiles, selectedModel, braveSearchApiKey };
+  return { keys, inferenceProfiles, selectedModel, exaApiKey };
 }
 
 export interface SettingsPatch {
   keys?: Partial<Record<Provider, string | null>>;
   inferenceProfiles?: InferenceProviderProfile[] | null;
   selectedModel?: Model | null;
-  braveSearchApiKey?: string | null;
+  exaApiKey?: string | null;
 }
 
 export async function patchSettings(
@@ -807,12 +811,12 @@ export async function patchSettings(
       });
     }
 
-    if ("braveSearchApiKey" in patch) {
-      const v = patch.braveSearchApiKey;
+    if ("exaApiKey" in patch) {
+      const v = patch.exaApiKey;
       if (v === null || v === undefined || v === "") {
-        await deleteKey(BRAVE_PROVIDER);
+        await deleteKey(EXA_PROVIDER);
       } else {
-        await upsertKey(BRAVE_PROVIDER, v);
+        await upsertKey(EXA_PROVIDER, v);
       }
     }
   });

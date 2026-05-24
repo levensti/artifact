@@ -12,6 +12,7 @@ import { readSSEStream } from "@/lib/sse";
 import type { ParsedPaper } from "@/lib/review-types";
 import {
   openAiCompatibleChatCompletionsUrl,
+  openAiMaxTokensField,
   providerApiErrorLabel,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
@@ -113,7 +114,7 @@ export async function runOpenAIAgentLoop(
         messages: apiMessages,
         tools: openaiTools,
         stream: useStreaming,
-        max_tokens: 16384,
+        ...openAiMaxTokensField(model, 16384),
       };
       // OpenAI/xAI: opt into usage in the final stream chunk so we can report
       // cached_tokens uniformly. Local OpenAI-compatible servers that don't

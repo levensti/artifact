@@ -1,13 +1,13 @@
 /**
  * Provider-agnostic agentic loop. Both the Anthropic and OpenAI handlers
  * supply a `ProviderAdapter` and this module drives the round-loop,
- * watchdog, parallel tool execution, and Brave-sentinel handling.
+ * watchdog, parallel tool execution, and Exa-sentinel handling.
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
 import { getToolByName } from "@/tools/registry";
 import type { ToolDefinition } from "@/tools/types";
-import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import type { ToolContext } from "@/tools/types";
 
 export const MAX_TOOL_ROUNDS = 8;
@@ -72,11 +72,11 @@ export interface ProviderAdapter {
   hasPriorToolResults(): boolean;
 }
 
-/** Wrap a tool output so the model treats it as inert data. The Brave
+/** Wrap a tool output so the model treats it as inert data. The Exa
  *  sentinel is left raw so the model and prompt continue to recognize the
  *  literal string. */
 function wrapToolOutput(name: string, output: string): string {
-  if (output === BRAVE_KEY_REQUIRED_SENTINEL) return output;
+  if (output === EXA_KEY_REQUIRED_SENTINEL) return output;
   return `<tool_result tool="${name}">\n${output}\n</tool_result>`;
 }
 
@@ -132,16 +132,16 @@ export async function runAgentLoop(
       return { id: tc.id, name: tc.name, raw, wrapped: wrapToolOutput(tc.name, raw) };
     });
 
-    // Pause the loop on the Brave sentinel only when nothing usable came
+    // Pause the loop on the Exa sentinel only when nothing usable came
     // back in the same turn. When the agent issued web_search alongside
     // successful arxiv_search calls, it can still proceed with those
     // results; cutting the loop loses 30 candidate papers sitting right
     // there.
-    const sawBraveSentinel = outputs.some((o) => o.raw === BRAVE_KEY_REQUIRED_SENTINEL);
+    const sawExaSentinel = outputs.some((o) => o.raw === EXA_KEY_REQUIRED_SENTINEL);
     const hasUsableResult = outputs.some(
-      (o) => o.raw !== BRAVE_KEY_REQUIRED_SENTINEL && !TOOL_FAILURE_RE.test(o.raw.trim()),
+      (o) => o.raw !== EXA_KEY_REQUIRED_SENTINEL && !TOOL_FAILURE_RE.test(o.raw.trim()),
     );
-    if (sawBraveSentinel && !hasUsableResult) break;
+    if (sawExaSentinel && !hasUsableResult) break;
 
     adapter.appendAssistantTurn(turn);
     adapter.appendToolResults(outputs);

@@ -148,6 +148,31 @@ export function openAiCompatibleModelsListUrl(
   }
 }
 
+/**
+ * OpenAI's reasoning models (o-series) and GPT-5 reject `max_tokens` and
+ * require `max_completion_tokens` instead. Detect by model id so request
+ * builders can pick the right field. Heuristic — model ids on
+ * OpenAI-compatible endpoints can be arbitrary, but the prefixes here
+ * cover OpenAI's own naming.
+ */
+export function openAiUsesMaxCompletionTokens(modelId: string): boolean {
+  return /^(gpt-5|o\d)/i.test(modelId.trim());
+}
+
+/**
+ * Build the `{max_tokens}` or `{max_completion_tokens}` fragment to spread
+ * into an OpenAI-compatible request body, picking the right key for the
+ * model. Use at every call site that posts to a chat-completions endpoint.
+ */
+export function openAiMaxTokensField(
+  modelId: string,
+  value: number,
+): Record<string, number> {
+  return openAiUsesMaxCompletionTokens(modelId)
+    ? { max_completion_tokens: value }
+    : { max_tokens: value };
+}
+
 export function invalidApiProviderMessage(): string {
   const all = [...BUILTIN_PROVIDER_ORDER, ...INFERENCE_PROVIDERS];
   return `Invalid provider. Must be ${all.map((p) => `'${p}'`).join(", ")}.`;

@@ -13,8 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import BraveKeyPromptCard from "./brave-key-prompt-card";
-import { BRAVE_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import ExaKeyPromptCard from "./exa-key-prompt-card";
+import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
@@ -99,11 +99,11 @@ export function ToolCallStep({
       normalizedOutput.startsWith("request failed:"));
   const queryStr = "query" in input && input.query ? String(input.query) : null;
 
-  // web_search returned the "no Brave key" sentinel — show the inline
+  // web_search returned the "no Exa key" sentinel — show the inline
   // configure card instead of the default tool_result rendering. Done
   // before the rest of the rendering so the user sees one clean prompt.
-  if (name === "web_search" && output?.trim() === BRAVE_KEY_REQUIRED_SENTINEL) {
-    return <BraveKeyPromptCard />;
+  if (name === "web_search" && output?.trim() === EXA_KEY_REQUIRED_SENTINEL) {
+    return <ExaKeyPromptCard />;
   }
 
   return (

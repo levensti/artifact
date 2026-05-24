@@ -17,6 +17,7 @@ import {
   isLocalhostUrl,
   isProvider,
   openAiCompatibleChatCompletionsUrl,
+  openAiMaxTokensField,
   providerApiErrorLabel,
   type OpenAiCompatibleProvider,
 } from "@/lib/ai-providers";
@@ -221,7 +222,7 @@ async function callOpenAICompatible(
       // system prompt's instructions still steer the response).
       response_format: { type: "json_object" },
       stream: false,
-      max_tokens: 64000,
+      ...openAiMaxTokensField(model, 64000),
     }),
   });
 

@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSettingsOpenerOptional } from "./settings-opener-context";
-import { useBraveKeyResumeOptional } from "./brave-key-resume-context";
-import { hasBraveSearchApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
+import { useExaKeyResumeOptional } from "./exa-key-resume-context";
+import { hasUsableExaKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
 
 /**
  * Inline card shown in the chat when the agent's `web_search` call
- * returned BRAVE_KEY_REQUIRED. Pauses the assistant turn until the user
+ * returned EXA_KEY_REQUIRED. Pauses the assistant turn until the user
  * either adds a key (chat resumes with web search functional) or dismisses
  * the card (chat resumes with web_search unregistered for that turn).
  *
@@ -22,14 +22,14 @@ import { hasBraveSearchApiKey, KEYS_UPDATED_EVENT } from "@/lib/keys";
  * post-finalize cards so the retry runs the originally-failed query, not
  * whatever the user typed since.
  */
-export default function BraveKeyPromptCard({
+export default function ExaKeyPromptCard({
   queryText,
 }: {
   queryText?: string;
 } = {}) {
   const [acted, setActed] = useState(false);
   const opener = useSettingsOpenerOptional();
-  const resume = useBraveKeyResumeOptional();
+  const resume = useExaKeyResumeOptional();
   // Latch — only the first card in a message should retry; if a previous
   // sibling card already triggered a resume, we go quiet.
   const triggeredRef = useRef(false);
@@ -37,15 +37,16 @@ export default function BraveKeyPromptCard({
   // After the user clicks "Add API key" we open Settings and watch for the
   // key to actually land. As soon as a key exists, retry with web_search
   // functional. We don't peek at the value — we just trust that
-  // hasBraveSearchApiKey() flipping true means the user saved one.
+  // hasUsableExaKey() flipping true means a key arrived (saved by user, or
+  // platform fallback became available on a refresh).
   const [waitingForKey, setWaitingForKey] = useState(false);
   useEffect(() => {
     if (!waitingForKey) return;
     const check = () => {
-      if (hasBraveSearchApiKey() && !triggeredRef.current) {
+      if (hasUsableExaKey() && !triggeredRef.current) {
         triggeredRef.current = true;
         setActed(true);
-        resume?.resumeAfterBraveDecision({ skipWebSearch: false, text: queryText });
+        resume?.resumeAfterExaDecision({ skipWebSearch: false, text: queryText });
       }
     };
     check();
@@ -65,7 +66,7 @@ export default function BraveKeyPromptCard({
     if (triggeredRef.current) return;
     triggeredRef.current = true;
     setActed(true);
-    resume?.resumeAfterBraveDecision({ skipWebSearch: true, text: queryText });
+    resume?.resumeAfterExaDecision({ skipWebSearch: true, text: queryText });
   };
 
   return (
@@ -82,9 +83,8 @@ export default function BraveKeyPromptCard({
             Also search the web?
           </p>
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground/85">
-            Add a Brave Search API key to include lab blogs and other web
-            sources alongside arXiv. Free tier available — or skip and the
-            agent will search arXiv only.
+            Add an Exa API key to include lab blogs and other web sources
+            alongside arXiv — or skip and the agent will search arXiv only.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
