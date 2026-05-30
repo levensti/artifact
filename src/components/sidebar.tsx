@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   FilePen,
   FilePlus,
   AlertCircle,
   KeyRound,
+  Pencil,
   Share2,
   Compass,
 } from "lucide-react";
 import { canShareReview } from "@/lib/client/sharing/share-links";
 import {
   getReviews,
+  updateReviewTitle,
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
@@ -122,6 +124,9 @@ export default function Sidebar({
   }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
   const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const pathname = usePathname();
   const { openSettings } = useSettingsOpener();
@@ -144,6 +149,37 @@ export default function Sidebar({
     setShowNewReview(false);
     router.push(`/review/${reviewId}`);
   };
+
+  const startRenaming = useCallback((id: string, currentTitle: string) => {
+    setRenamingId(id);
+    setRenameValue(currentTitle);
+    requestAnimationFrame(() => {
+      const el = renameInputRef.current;
+      if (el) {
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    });
+  }, []);
+
+  const commitRename = useCallback(
+    (id: string) => {
+      const trimmed = renameValue.trim();
+      if (trimmed && trimmed !== reviews.find((r) => r.id === id)?.title) {
+        void updateReviewTitle(id, trimmed);
+      }
+      setRenamingId(null);
+      setRenameValue("");
+    },
+    [renameValue, reviews],
+  );
+
+  const cancelRename = useCallback(() => {
+    setRenamingId(null);
+    setRenameValue("");
+  }, []);
 
   const grouped = useMemo(() => {
     const byDate = new Map<string, PaperReview[]>();
@@ -402,11 +438,12 @@ export default function Sidebar({
                     ? review.importedFromName.split(/\s+/)[0]
                     : null;
                   const shareable = canShareReview(review);
+                  const isRenaming = renamingId === review.id;
                   return (
                     <div
                       key={review.id}
                       role="link"
-                      tabIndex={0}
+                      tabIndex={isRenaming ? -1 : 0}
                       title={
                         isImported
                           ? sharerFirstName
@@ -414,8 +451,11 @@ export default function Sidebar({
                             : `${review.title} (imported from a share)`
                           : review.title
                       }
-                      onClick={() => router.push(`/review/${review.id}`)}
+                      onClick={() => {
+                        if (!isRenaming) router.push(`/review/${review.id}`);
+                      }}
                       onKeyDown={(e) => {
+                        if (isRenaming) return;
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           router.push(`/review/${review.id}`);
@@ -428,10 +468,35 @@ export default function Sidebar({
                           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
                       )}
                     >
-                      <span className="min-w-0 flex-1 wrap-break-word">
-                        {review.title}
-                      </span>
-                      {isImported ? (
+                      {isRenaming ? (
+                        <textarea
+                          ref={renameInputRef}
+                          rows={1}
+                          className="min-w-0 flex-1 resize-none bg-transparent px-0 py-0 text-[13px] leading-snug text-foreground outline-none"
+                          value={renameValue}
+                          onChange={(e) => {
+                            setRenameValue(e.target.value);
+                            e.target.style.height = "auto";
+                            e.target.style.height = `${e.target.scrollHeight}px`;
+                          }}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              commitRename(review.id);
+                            } else if (e.key === "Escape") {
+                              cancelRename();
+                            }
+                          }}
+                          onBlur={() => commitRename(review.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span className="min-w-0 flex-1 wrap-break-word">
+                          {review.title}
+                        </span>
+                      )}
+                      {isImported && !isRenaming ? (
                         <span
                           className="mt-px inline-flex shrink-0 items-center rounded-full bg-(--badge-imported-bg) px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[var(--badge-imported-fg)]"
                           aria-label={
@@ -445,7 +510,27 @@ export default function Sidebar({
                             : "Imported"}
                         </span>
                       ) : null}
-                      {shareable ? (
+                      {!isRenaming && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRenaming(review.id, review.title);
+                          }}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          title="Rename review"
+                          aria-label={`Rename ${review.title}`}
+                          className={cn(
+                            "mt-px inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60",
+                            isActive
+                              ? "opacity-0 group-hover:opacity-90"
+                              : "opacity-0 group-hover:opacity-90 group-focus-within:opacity-90",
+                          )}
+                        >
+                          <Pencil className="size-3" strokeWidth={2} />
+                        </button>
+                      )}
+                      {shareable && !isRenaming ? (
                         <button
                           type="button"
                           onClick={(e) => {
