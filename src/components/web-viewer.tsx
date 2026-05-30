@@ -255,15 +255,15 @@ export default function WebViewer({
               const isAskAi = ann.kind === "ask_ai";
               const backgroundColor = isAskAi
                 ? isActive
-                  ? "rgba(96, 165, 250, 0.48)"
+                  ? "rgba(96, 165, 250, 0.30)"
                   : isHovered
-                    ? "rgba(147, 197, 253, 0.42)"
-                    : "rgba(186, 230, 253, 0.36)"
+                    ? "rgba(130, 180, 250, 0.26)"
+                    : "rgba(147, 197, 253, 0.22)"
                 : isActive
-                  ? "rgba(250, 204, 21, 0.52)"
+                  ? "rgba(250, 204, 21, 0.28)"
                   : isHovered
-                    ? "rgba(252, 211, 77, 0.44)"
-                    : "rgba(253, 224, 71, 0.38)";
+                    ? "rgba(252, 211, 77, 0.24)"
+                    : "rgba(253, 224, 71, 0.20)";
               return ann.anchorRects.map((r, ri) => (
                 <div
                   key={`hl-${ann.id}-${ri}`}
@@ -275,9 +275,7 @@ export default function WebViewer({
                     width: `${r.w * 100}%`,
                     height: `${r.h * 100}%`,
                     backgroundColor,
-                    boxShadow: isActive
-                      ? `inset 0 0 0 1.5px ${isAskAi ? "color-mix(in srgb, rgb(59 130 246) 50%, transparent)" : "color-mix(in srgb, var(--primary) 55%, transparent)"}`
-                      : undefined,
+                    borderRadius: 2,
                     zIndex: 1,
                   }}
                 />
