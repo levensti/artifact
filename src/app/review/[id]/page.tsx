@@ -16,7 +16,6 @@ import RightPanel from "@/components/right-panel";
 import { CitationContextProvider } from "@/components/citation-context";
 import NotesRail from "@/components/notes-rail";
 import SelectionPopover from "@/components/selection-popover";
-import NoteTooltip from "@/components/note-tooltip";
 import { hydrateClientStore } from "@/lib/client-data";
 import { loadPdfBlob } from "@/lib/client/pdf-blobs";
 import { getReview, updateReviewTitle } from "@/lib/reviews";
@@ -309,11 +308,6 @@ export default function ReviewPage() {
   const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(
     null,
   );
-  const [tooltip, setTooltip] = useState<{
-    annotationId: string;
-    x: number;
-    y: number;
-  } | null>(null);
 
   useEffect(() => {
     if (!clientReady || !dataReady) return;
@@ -345,7 +339,6 @@ export default function ReviewPage() {
 
   const handleTextSelected = useCallback((info: TextSelectionInfo) => {
     setSelectionInfo(info);
-    setTooltip(null);
   }, []);
 
   const handleSelectionCleared = useCallback(() => {
@@ -441,9 +434,6 @@ export default function ReviewPage() {
       void getAnnotation(review.id, annotationId).then((a) => {
         if (a?.kind === "ask_ai") {
           setChatThreadAnnotationId(annotationId);
-          setTooltip(null);
-        } else {
-          setTooltip({ annotationId, x: info.highlightRight, y: info.clickY });
         }
       });
       setHoveredAnnotationId(annotationId);
@@ -451,12 +441,6 @@ export default function ReviewPage() {
     [review],
   );
 
-  const handleFocusNoteThread = useCallback(() => {
-    if (tooltip) {
-      setActiveAnnotationId(tooltip.annotationId);
-      setTooltip(null);
-    }
-  }, [tooltip]);
 
   const handleHighlightClick = useCallback((annotationId: string, pageNumber: number) => {
     // Try PDF container first
@@ -506,9 +490,6 @@ export default function ReviewPage() {
     document.addEventListener("mouseup", handleMouseUp);
   }, []);
 
-  const tooltipAnnotation = tooltip
-    ? (annotations.find((a) => a.id === tooltip.annotationId) ?? null)
-    : null;
 
   if (!clientReady || !dataReady || !review) {
     return (
@@ -533,7 +514,7 @@ export default function ReviewPage() {
                 onTextSelected={handleTextSelected}
                 onSelectionCleared={handleSelectionCleared}
                 annotations={annotations}
-                activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
+                activeAnnotationId={activeAnnotationId}
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
               />
@@ -544,7 +525,7 @@ export default function ReviewPage() {
                 onTextSelected={handleTextSelected}
                 onSelectionCleared={handleSelectionCleared}
                 annotations={annotations}
-                activeAnnotationId={tooltip?.annotationId ?? activeAnnotationId}
+                activeAnnotationId={activeAnnotationId}
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
               />
@@ -724,17 +705,6 @@ export default function ReviewPage() {
         />
       )}
 
-      {tooltipAnnotation && tooltip && tooltipAnnotation.kind === "comment" && (
-        <NoteTooltip
-          annotation={tooltipAnnotation}
-          position={{ x: tooltip.x, y: tooltip.y }}
-          onClose={() => {
-            setTooltip(null);
-            setHoveredAnnotationId(null);
-          }}
-          onFocusThread={handleFocusNoteThread}
-        />
-      )}
     </DashboardLayout>
   );
 }
