@@ -15,7 +15,7 @@
 
 import { NextRequest } from "next/server";
 import type { Provider } from "@/lib/models";
-import { isInferenceProviderType } from "@/lib/models";
+import { isInferenceProviderType, contextWindowFor } from "@/lib/models";
 import {
   invalidApiProviderMessage,
   isAnthropicMessagesProvider,
@@ -27,16 +27,54 @@ import { jsonError } from "@/lib/api-utils";
 import { resolveServerApiKey } from "@/server/provider-env";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
+import {
+  estimateTokens,
+  fitTranscriptToBudget,
+  type TranscriptMessage,
+} from "@/lib/transcript";
+import {
+  processStreamEvent,
+  stepsToBlocks,
+  stepsToContent,
+  type AgentStep,
+} from "@/lib/agent-steps";
+import { requireUserId, HttpError, errorResponse } from "@/server/api";
+import * as store from "@/server/store";
+import { buildPaperBlock } from "./paper-block";
 import { runAnthropicAgentLoop } from "./anthropic-handler";
 import { runOpenAIAgentLoop } from "./openai-handler";
-import type { ParsedPaper } from "@/lib/review-types";
+import type { ChatMessage, ParsedPaper } from "@/lib/review-types";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
 interface ChatRequest {
-  messages: { role: "user" | "assistant"; content: string }[];
+  /**
+   * Stateless history (legacy path). Used by the discover surface and the
+   * selection-thread chat: the client owns the transcript and sends it inline.
+   * For the main review chat the server now owns state — see `userMessage`.
+   * Assistant messages may carry structured `blocks` (text interleaved with
+   * tool calls + outputs) so the agent can replay its own prior tool work.
+   */
+  messages?: TranscriptMessage[];
+  /**
+   * Server-owned path (main review chat). The new user message text. When
+   * present (with `reviewId`, non-discover), the server loads the conversation
+   * from the DB, appends + persists this turn, budgets it to the model's
+   * context window, and persists the assistant reply on completion — the
+   * client no longer sends or stores the history.
+   */
+  userMessage?: string;
+  /** Client-generated id for the new user message, so optimistic UI and the
+   *  persisted row share an id. Re-sending the same id is idempotent (a retry
+   *  re-runs the stored turn instead of duplicating it). */
+  userMessageId?: string;
+  /** Client-generated id for the assistant reply, for the same id alignment. */
+  assistantMessageId?: string;
+  /** Re-run the last stored user message without appending a new one. Used by
+   *  the Exa-key resume flow after the turn paused waiting on a key decision. */
+  resume?: boolean;
   model: string;
   provider: Provider;
   /** Required. Sent inline from the browser; never persisted server-side. */
@@ -89,49 +127,112 @@ interface ChatRequest {
 /*  System prompt                                                      */
 /* ------------------------------------------------------------------ */
 
-const PAPER_SYSTEM_PROMPT = `You are a research assistant working alongside someone reading an academic paper. Your job: help them understand the paper deeply and the ideas around it — explain, search, discover, connect.
+/** Exa-backed `web_search` description + sentinel handling. Shared across all
+ *  three surfaces so the neural-query phrasing guidance never drifts. */
+const WEB_SEARCH_NOTE =
+  "`web_search` — ground claims with real sources and current documentation. " +
+  "Backed by Exa's neural search: phrase the query as a natural-language description of " +
+  'the ideal page ("a clear explanation of X for someone who knows Y"), not as keywords. ' +
+  'If it returns "EXA_KEY_REQUIRED", the UI is already prompting the user to add a key — ' +
+  "do NOT verbalize the failure; continue with what you have.";
 
-How the paper appears in your context:
-- For short papers, the <paper> block contains the full text. Read it directly.
-- For long papers, the <paper> block contains only the title, abstract, an L1 summary, and a numbered table of contents. Use \`read_section\` (by name or index), \`search_paper\` (to find passages by query), or \`lookup_citation\` (to resolve a reference) to fetch specific content. Don't pretend to read what you haven't fetched — if the summary doesn't cover a question, fetch the relevant section.
+/** Never-fabricate rule. Shared by the reading and discover surfaces. */
+const NEVER_INVENT =
+  "Never invent papers, URLs, or arXiv IDs. If you're unsure a citation is real, " +
+  "search for it or leave it out.";
 
-Tools:
-- \`read_section\`, \`search_paper\`, \`lookup_citation\` — paper-internal content (long-paper mode)
-- \`arxiv_search\` — find related papers, prerequisites, or specific cited works
-- \`web_search\` — ground claims with real sources and current documentation. Backed by Exa's neural search: phrase the query as a natural-language description of the ideal page ("a clear explanation of X for someone who knows Y"), not as keywords. If it returns "EXA_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure; continue with what you have from the paper, training, and arXiv.
+/** Knowledge-first, but search-to-fill-gaps: answer from expertise by default,
+ *  and when you genuinely lack something, fetch it instead of disclaiming. */
+const KNOWLEDGE_FIRST =
+  "Lean on your own knowledge first — you have deep expertise across these topics, so answer " +
+  "directly when you can. But when a question needs something you don't have — real papers to " +
+  "cite, recent developments, or external facts — use a tool to find out rather than guessing or replying that you don't know.";
 
-Citations:
+/** Selection-thread grounding. Applies to both reading surfaces. */
+const THREAD_GROUNDING =
+  "When the user starts a thread from a quoted passage, ground your answer in that " +
+  "passage and the surrounding context it comes from.";
+
+/** Length + tone calibration. Identical across reading surfaces. */
+const LENGTH_AND_TONE = `Length — match the answer to the question. There is no target length.
+- Clarifications and definitions usually take 1–3 sentences.
+- Focused questions ("what's the key claim?", "summarize a section") usually take a tight paragraph.
+- Walkthroughs ("explain the method end-to-end", "compare to prior work") take structured multi-paragraph prose with equations and refs.
+
+Don't restate the question, don't preface with "Great question", don't add caveats unless they actually matter. Be selective — surface what matters for this question, not everything you know.`;
+
+/** Curated reading-list format, used when the user asks what to read next. */
+const PICKS_FORMAT =
+  'When the user explicitly asks for a list of papers to read (e.g. "find related work ' +
+  'on X", "what should I read after this?"), emit a curated list under a `**Picks**` ' +
+  "heading: 3–7 numbered items, each as " +
+  "`**[Title](https://arxiv.org/abs/ID)** — one sentence on why it fits.` " +
+  "(No abstract paraphrase, no author/year/venue — those render as a card around the " +
+  "link.) Don't use the Picks format for normal explanatory answers.";
+
+type ReadingKind = "paper" | "web";
+
+/**
+ * Build the system prompt for a reading surface (paper or web page). The two
+ * are the same agent: they differ only in the source noun, how the source
+ * appears in context, and the citation style. Everything else — tools, search
+ * policy, length, tone, format — is shared, so web reading gets the same
+ * grounding discipline papers do.
+ */
+function buildReadingPrompt(kind: ReadingKind): string {
+  const isPaper = kind === "paper";
+  const noun = isPaper ? "paper" : "page";
+
+  const role = isPaper
+    ? "You are a research assistant working alongside someone reading an academic paper. Your job: help them understand the paper deeply and the ideas around it — explain, search, discover, connect."
+    : "You are a research assistant working alongside someone reading a web page — an article, blog post, or documentation. Your job: help them understand it deeply and the ideas around it — explain, search, discover, connect.";
+
+  // Both surfaces support long-mode: a short source arrives as full text; a
+  // long one is parsed to a summary + ToC with the source-internal tools
+  // registered (the chat route gates those tools on the parsed paper).
+  const sourceInContext = `How the ${noun} appears in your context:
+- For a short ${noun}, the source block contains the full text. Read it directly.
+- For a long ${noun}, the source block contains only the title, an L1 summary, and a numbered table of contents. Use \`read_section\` (by name or index), \`search_paper\` (to find passages by query), or \`lookup_citation\` (to resolve a reference) to fetch specific content. Don't pretend to read what you haven't fetched — if the summary doesn't cover a question, fetch the relevant section.`;
+
+  const tools = `Tools:
+- \`read_section\`, \`search_paper\`, \`lookup_citation\` — source-internal content (long-${noun} mode only)
+- \`arxiv_search\` — search Semantic Scholar + arXiv for papers
+- ${WEB_SEARCH_NOTE}`;
+
+  const grounding = isPaper
+    ? `Citations:
 - Cite the paper inline for every distinct statement you make about it. Each one gets its own locator. Don't bundle multiple statements behind a single trailing reference.
 - Sections: write "(§N)", "(§N.M)", or "(§N.M.K)". Always cite at the deepest subsection level that actually grounds the claim. Prefer "(§4.2.1)" over "(§4.2)" when the statement comes from that subsection specifically.
 - Figures: write "(Fig. N)" — e.g. "(Fig. 3)" or "(Fig. 3.2)". For multi-panel figures, cite the parent number and describe the panel in prose ("the right panel of (Fig. 3) shows..."), not "(Fig. 3a)".
 - Tables: write "(Table N)" — e.g. "(Table 1)". Tables are dense, so always pair the citation with the specific row, column, or comparison you want the reader to focus on ("the 'GLUE avg.' column of (Table 2)").
+- Equations: write "(Eq. N)". A cited work in the reference list: write "(Ref. [key])".
+- These all auto-render as clickable nav chips.
+- ${THREAD_GROUNDING}`
+    : `Grounding:
+- Anchor every claim about the page in the page itself: quote the key phrase or name the heading/section it comes from rather than paraphrasing vaguely.
+- For arXiv papers you surface via search, cite them with the abs link.
+- ${THREAD_GROUNDING}`;
 
-When NOT to search:
-- The paper context already covers the question
-- It's a well-known concept you can explain from training (e.g., "what is softmax", "how does backprop work")
-- You're only confirming something you're already confident about
-
-When TO search:
-- The user asks for prerequisites, related work, or the research landscape — use \`arxiv_search\` rather than guessing from training data
-- You're resolving a specific reference or paper the user names
-- A claim is non-obvious or current and a citable source materially helps the answer
-
-Don't run multiple searches when one would do. Don't search to pad an answer.
-
-Length — match the answer to the question. There is no target length.
-- Clarifications and definitions usually take 1–3 sentences.
-- Focused questions ("what's the key claim?", "summarize §3") usually take a tight paragraph.
-- Walkthroughs ("explain the method end-to-end", "compare to prior work") take structured multi-paragraph prose with equations and refs.
-
-Don't restate the question, don't preface with "Great question", don't add caveats unless they actually matter. Be selective — surface what matters for this question, not everything you know.
-
-Format:
+  const format = `Format:
 - Math: LaTeX wrapped in $ (inline) or $$ (block).
-- Anchor every claim about the paper's content with a reference: (§N) for sections, (Fig. N) for figures, (Eq. N) for equations, (Ref. [key]) for references. These auto-render as clickable nav chips.
-- When the user starts a thread from a quoted passage, ground your answer in that passage and the section it comes from.
 - For arXiv papers found via search, include the link https://arxiv.org/abs/ID.
 - Default to prose. Use lists or headers only when the answer is genuinely list-shaped (comparing N items, an M-step walkthrough).
-- When the user explicitly asks for a list of papers to read (e.g. "find related work on X", "what should I read after this?"), emit a curated list under a \`**Picks**\` heading: 3–7 numbered items, each as \`**[Title](https://arxiv.org/abs/ID)** — one sentence on why it fits.\` (No abstract paraphrase, no author/year/venue — those render as a card around the link.) Don't use the Picks format for normal explanatory answers.`;
+- ${PICKS_FORMAT}`;
+
+  return [
+    role,
+    sourceInContext,
+    tools,
+    KNOWLEDGE_FIRST,
+    grounding,
+    LENGTH_AND_TONE,
+    format,
+    NEVER_INVENT,
+  ].join("\n\n");
+}
+
+const PAPER_SYSTEM_PROMPT = buildReadingPrompt("paper");
+const WEB_SYSTEM_PROMPT = buildReadingPrompt("web");
 
 const DISCOVERY_SYSTEM_PROMPT = `You are a research discovery agent. Find research material worth reading for the user's query — primarily papers from arXiv and Semantic Scholar, but ALSO high-signal web sources (lab blog posts, technical writeups from researchers/companies, official documentation, authoritative survey articles) when those would serve the user better than the available academic papers. Submit them via the \`submit_picks\` tool.
 
@@ -168,27 +269,9 @@ Hard rules:
 - If you write text in a turn, the corresponding tool calls (if any) MUST live in the same response.
 - For paper_details, you can pass either an arxiv id ("2401.12345") or the full URL — the tool accepts both.
 - Only ask a clarifying question when the query is a single bare word with no named method, task, or approach attached (e.g. "AI", "transformers", "RAG"). In that case ask exactly one clarifying question on round 1 and stop. Multi-word technical topics like "diffusion transformers", "speculative decoding", or "test-time compute" are NOT ambiguous — search them. Ambiguity between sub-angles (foundational vs. engineering, image vs. video, theory vs. SOTA) is also not a reason to ask: cover the dominant angles across your picks instead.
-- Never invent papers, URLs, or arXiv IDs.
+- ${NEVER_INVENT}
 
 Tone: dense, librarian-level. Technical user.`;
-
-const WEB_SYSTEM_PROMPT = `You are a superintelligent research assistant embedded in a reading and analysis tool. You have deep expertise across all domains — technology, science, business, humanities, and beyond.
-
-Your mission: help the user deeply understand the web page they are reading, explore related topics, and connect ideas.
-
-Capabilities:
-- You have the full extracted text of the web page in context (when available)
-- You can search arXiv to find academic papers related to the content
-- You can search the web to find additional sources, context, and related material. \`web_search\` is backed by Exa's neural search — phrase queries as natural-language descriptions of the ideal page, not keyword strings. If web_search returns "EXA_KEY_REQUIRED", the UI is already prompting the user to add a key — do NOT verbalize the failure; just continue with what you have.
-
-Guidelines:
-- Reference specific passages, claims, or sections from the page when relevant
-- Use LaTeX notation for math when applicable (wrapped in $ or $$)
-- When asked about related research, proactively use your search tools — don't just rely on your training data
-- When explaining technical concepts, consider searching for authoritative explanations to ground your answer
-- Be precise and dense with insight — readers value depth over verbosity
-- When you find relevant papers via search, include arXiv links (https://arxiv.org/abs/ID)
-- Use tools when they add value, but don't force tool use for simple questions you can answer directly from the page context`;
 
 function getSystemPrompt(
   sourceUrl: string | undefined,
@@ -212,6 +295,10 @@ export async function POST(req: NextRequest) {
 
   const {
     messages,
+    userMessage,
+    userMessageId,
+    assistantMessageId,
+    resume,
     model,
     provider,
     apiKey,
@@ -231,11 +318,22 @@ export async function POST(req: NextRequest) {
   if (!isProvider(provider)) {
     return jsonError(invalidApiProviderMessage(), 400);
   }
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return jsonError("Messages array is required and must not be empty.", 400);
-  }
   if (!model || typeof model !== "string") {
     return jsonError("Model ID is required.", 400);
+  }
+
+  // Server-owned path: the main review chat sends a single `userMessage` + a
+  // `reviewId` instead of the full transcript, and the server owns load /
+  // persist / context-budgeting. Discover and the selection-thread chat keep
+  // the legacy stateless `messages` array.
+  const isStateful =
+    mode !== "discover" &&
+    typeof reviewId === "string" &&
+    reviewId.length > 0 &&
+    (typeof userMessage === "string" || resume === true);
+
+  if (!isStateful && (!Array.isArray(messages) || messages.length === 0)) {
+    return jsonError("Messages array is required and must not be empty.", 400);
   }
 
   const effectiveApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
@@ -294,22 +392,75 @@ export async function POST(req: NextRequest) {
     exaApiKey: trimmedExaKey || undefined,
   };
   const systemPrompt = getSystemPrompt(sourceUrl, mode);
+
+  // Resolve the conversation to send the model. Server-owned path: load it
+  // from the DB, append the new user turn, then budget it to the model's
+  // context window. Persistence happens AFTER the stream (see below) so the
+  // only pre-stream cost is auth + one history read — nothing blocks
+  // time-to-first-token. Legacy path: the client supplied the transcript.
+  let conversation: TranscriptMessage[];
+  let persist: { userId: string; reviewId: string; base: ChatMessage[] } | null =
+    null;
+  if (isStateful) {
+    try {
+      const userId = await requireUserId();
+      const history = await store.getMessages(userId, reviewId!);
+      const last = history[history.length - 1];
+      let base: ChatMessage[];
+      if (resume || (last?.role === "user" && last.id === userMessageId)) {
+        // Resume (Exa-key decision) or an idempotent retry: the user turn is
+        // already stored. Re-run the existing history rather than duplicating.
+        base = history;
+      } else {
+        const userMsg: ChatMessage = {
+          id: userMessageId || crypto.randomUUID(),
+          role: "user",
+          content: userMessage ?? "",
+          timestamp: new Date().toISOString(),
+        };
+        base = [...history, userMsg];
+      }
+      persist = { userId, reviewId: reviewId!, base };
+
+      // Budget the conversation to fit the model's context window. Storage
+      // keeps the full history; this only shapes what's sent to the model.
+      const paperBlock = buildPaperBlock(paperContext, parsedPaper) ?? "";
+      const overhead =
+        estimateTokens(systemPrompt) + estimateTokens(paperBlock) + 2_000;
+      const historyBudget =
+        contextWindowFor(provider, model) - 16_384 - overhead - 2_000;
+      conversation = fitTranscriptToBudget(
+        base,
+        Math.max(4_000, historyBudget),
+      ).messages;
+    } catch (err) {
+      if (err instanceof HttpError) return errorResponse(err);
+      throw err;
+    }
+  } else {
+    conversation = messages!;
+  }
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // Accumulate the assistant turn server-side (server-owned path only) so
+      // we can persist it on completion — same step logic the client renders.
+      let steps: AgentStep[] = [];
       const emit = (event: StreamEvent) => {
         try {
           controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
         } catch {
           /* controller may be closed */
         }
+        if (persist) steps = processStreamEvent(steps, event);
       };
 
       try {
         if (isAnthropicMessagesProvider(provider)) {
           await runAnthropicAgentLoop(
-            messages,
+            conversation,
             model,
             resolvedApiKey,
             systemPrompt,
@@ -321,7 +472,7 @@ export async function POST(req: NextRequest) {
           );
         } else {
           await runOpenAIAgentLoop(
-            messages,
+            conversation,
             model,
             resolvedApiKey,
             systemPrompt,
@@ -344,6 +495,39 @@ export async function POST(req: NextRequest) {
           type: "error",
           message: err instanceof Error ? err.message : "Unknown error",
         });
+      }
+
+      // Persist the turn (best-effort) AFTER streaming, so it never delays the
+      // first token — this is also where the one Slack notification fires. The
+      // user message is always written (the server didn't store it up front);
+      // the assistant reply is appended only when the turn produced text, so
+      // an Exa-key pause or hard error leaves just the user message and a
+      // resume re-runs cleanly.
+      if (persist) {
+        const content = stepsToContent(steps);
+        let finalMessages = persist.base;
+        if (content.trim()) {
+          const blocks = stepsToBlocks(steps);
+          const assistantMsg: ChatMessage = {
+            id: assistantMessageId || crypto.randomUUID(),
+            role: "assistant",
+            content,
+            timestamp: new Date().toISOString(),
+            ...(blocks.length > 0 ? { blocks } : {}),
+          };
+          finalMessages = [...persist.base, assistantMsg];
+        }
+        try {
+          await store.setMessages(
+            persist.userId,
+            persist.reviewId,
+            finalMessages,
+          );
+        } catch (e) {
+          // Non-fatal: the client already has the turn on screen. Worst case
+          // it's missing on next load; better than failing the request.
+          console.error("Failed to persist chat turn:", e);
+        }
       }
 
       emit({ type: "done" });

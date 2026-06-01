@@ -6,6 +6,7 @@ import {
   getReviewsSnapshot,
   loadMessages,
   saveMessages,
+  primeMessagesCache,
   updateReviewTitle as updateReviewTitleRemote,
 } from "@/lib/client-data";
 import { normalizeArxivId } from "@/lib/arxiv";
@@ -73,4 +74,4 @@ export async function updateReviewTitle(
   return updateReviewTitleRemote(id, title);
 }
 
-export { loadMessages, saveMessages };
+export { loadMessages, saveMessages, primeMessagesCache };
