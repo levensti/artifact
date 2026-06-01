@@ -133,6 +133,33 @@ export const PROVIDER_META: Record<
   },
 };
 
+/**
+ * Best-effort context-window size (in tokens) for a model, used by the
+ * server's context-budgeting pass. With BYOK + arbitrary OpenAI-compatible
+ * endpoints we can't always know the real window, so this returns a
+ * conservative estimate per provider/family and falls back to 128k. Erring
+ * small only means we trim history a little sooner — never an overflow.
+ */
+export function contextWindowFor(provider: Provider, modelId: string): number {
+  const id = modelId.toLowerCase();
+  if (provider === "anthropic") {
+    // Recent Claude (3.5 / 4 families) are 200k; the 1M window is opt-in and
+    // not assumed here.
+    return 200_000;
+  }
+  if (provider === "openai") {
+    if (id.includes("gpt-4.1")) return 1_000_000;
+    if (id.startsWith("o1") || id.startsWith("o3")) return 200_000;
+    return 128_000; // gpt-4o and the safe default
+  }
+  if (provider === "xai") {
+    if (id.includes("grok-4")) return 256_000;
+    return 131_072;
+  }
+  // openai_compatible / local / unknown — stay conservative.
+  return 128_000;
+}
+
 export function modelsGroupedByProvider(): {
   provider: Provider;
   models: Model[];

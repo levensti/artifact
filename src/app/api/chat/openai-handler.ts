@@ -18,6 +18,7 @@ import {
 } from "@/lib/ai-providers";
 import { toOpenAITools } from "@/tools/registry";
 import type { ToolContext, ToolDefinition } from "@/tools/types";
+import { toOpenAIMessages, type TranscriptMessage } from "@/lib/transcript";
 import { buildPaperBlock } from "./paper-block";
 import {
   runAgentLoop,
@@ -72,7 +73,7 @@ export interface OpenAIHandlerOptions {
 }
 
 export async function runOpenAIAgentLoop(
-  chatMessages: { role: "user" | "assistant"; content: string }[],
+  chatMessages: TranscriptMessage[],
   model: string,
   apiKey: string,
   systemPrompt: string,
@@ -97,9 +98,12 @@ export async function runOpenAIAgentLoop(
     Authorization: `Bearer ${apiKey}`,
   };
 
+  // Seed from the normalized transcript so prior tool work replays as real
+  // assistant `tool_calls` + `tool` messages, not just past answer text. The
+  // live loop appends new turns below in the same shapes.
   const apiMessages: Array<Record<string, unknown>> = [
     { role: "system", content: systemContent },
-    ...chatMessages.map((m) => ({ role: m.role, content: m.content })),
+    ...toOpenAIMessages(chatMessages),
   ];
 
   // Hold the latest turn's raw tool calls so appendAssistantTurn can persist

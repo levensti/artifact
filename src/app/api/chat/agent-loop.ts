@@ -8,6 +8,7 @@ import type { StreamEvent } from "@/lib/stream-types";
 import { getToolByName } from "@/tools/registry";
 import type { ToolDefinition } from "@/tools/types";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import { wrapToolResult } from "@/lib/transcript";
 import type { ToolContext } from "@/tools/types";
 
 export const MAX_TOOL_ROUNDS = 8;
@@ -77,7 +78,7 @@ export interface ProviderAdapter {
  *  literal string. */
 function wrapToolOutput(name: string, output: string): string {
   if (output === EXA_KEY_REQUIRED_SENTINEL) return output;
-  return `<tool_result tool="${name}">\n${output}\n</tool_result>`;
+  return wrapToolResult(name, output);
 }
 
 export async function runAgentLoop(

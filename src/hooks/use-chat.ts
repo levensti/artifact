@@ -12,7 +12,7 @@ import {
 import {
   loadMessages,
   saveMessages,
-  type ChatAssistantBlock,
+  primeMessagesCache,
   type ChatMessage,
 } from "@/lib/reviews";
 import type { AnnotationMessage } from "@/lib/annotations";
@@ -24,21 +24,22 @@ import {
 } from "@/lib/client/parsed-papers";
 import type { ParsedPaper } from "@/lib/review-types";
 import { streamingStore } from "@/lib/streaming-store";
+import {
+  processStreamEvent,
+  stepsToBlocks,
+  stepsToContent,
+  type AgentStep,
+} from "@/lib/agent-steps";
 
-/* ------------------------------------------------------------------ */
-/*  Agent step types (used during streaming for progressive rendering) */
-/* ------------------------------------------------------------------ */
-
-export type AgentStep =
-  | { kind: "thinking" }
-  | { kind: "text"; text: string }
-  | {
-      kind: "tool_call";
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-      output?: string;
-    };
+// Step assembly moved to a shared (non-client) module so the server can run
+// the same logic when it persists the assistant turn. Re-exported here so the
+// long-standing `@/hooks/use-chat` import sites (and tests) keep working.
+export {
+  processStreamEvent,
+  stepsToBlocks,
+  stepsToContent,
+} from "@/lib/agent-steps";
+export type { AgentStep } from "@/lib/agent-steps";
 
 /* ------------------------------------------------------------------ */
 /*  Stream inactivity watchdog                                          */
@@ -117,106 +118,6 @@ async function parseNDJSONStream(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stream event → agent steps                                         */
-/* ------------------------------------------------------------------ */
-
-export function processStreamEvent(
-  steps: AgentStep[],
-  event: StreamEvent,
-): AgentStep[] {
-  const next = [...steps];
-
-  switch (event.type) {
-    case "turn_start": {
-      const last = next[next.length - 1];
-      if (last && last.kind === "tool_call" && last.output !== undefined) {
-        next.push({ kind: "thinking" });
-      } else if (next.length === 0) {
-        next.push({ kind: "thinking" });
-      }
-      break;
-    }
-
-    case "text_delta": {
-      if (next.length > 0 && next[next.length - 1].kind === "thinking") {
-        next.pop();
-      }
-      const last = next[next.length - 1];
-      if (last && last.kind === "text") {
-        next[next.length - 1] = { kind: "text", text: last.text + event.text };
-      } else {
-        next.push({ kind: "text", text: event.text });
-      }
-      break;
-    }
-
-    case "tool_call": {
-      if (next.length > 0 && next[next.length - 1].kind === "thinking") {
-        next.pop();
-      }
-      next.push({
-        kind: "tool_call",
-        id: event.id,
-        name: event.name,
-        input: event.input,
-      });
-      break;
-    }
-
-    case "tool_result": {
-      for (let i = next.length - 1; i >= 0; i--) {
-        const step = next[i];
-        if (step.kind === "tool_call" && step.id === event.id) {
-          next[i] = { ...step, output: event.output };
-          break;
-        }
-      }
-      break;
-    }
-
-    case "done": {
-      if (next.length > 0 && next[next.length - 1].kind === "thinking") {
-        next.pop();
-      }
-      break;
-    }
-  }
-
-  return next;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Steps → persistence helpers                                        */
-/* ------------------------------------------------------------------ */
-
-/** Convert agent steps to ordered blocks for persistence. */
-export function stepsToBlocks(steps: AgentStep[]): ChatAssistantBlock[] {
-  const blocks: ChatAssistantBlock[] = [];
-  for (const step of steps) {
-    if (step.kind === "text" && step.text) {
-      blocks.push({ type: "text_segment", content: step.text });
-    } else if (step.kind === "tool_call") {
-      blocks.push({
-        type: "tool_call",
-        id: step.id,
-        name: step.name,
-        input: step.input,
-        output: step.output,
-      });
-    }
-  }
-  return blocks;
-}
-
-/** Extract concatenated text from steps (for the content field). */
-export function stepsToContent(steps: AgentStep[]): string {
-  return steps
-    .filter((s): s is AgentStep & { kind: "text" } => s.kind === "text")
-    .map((s) => s.text)
-    .join("");
-}
-
-/* ------------------------------------------------------------------ */
 /*  Hook                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -280,6 +181,9 @@ export function useChat({
   const [lastFailedRequest, setLastFailedRequest] = useState<{
     text: string;
     threadAnnotationId: string | null;
+    /** Main-chat only: id of the user message to re-run on retry, so the
+     *  server dedupes instead of appending a duplicate turn. */
+    userMsgId?: string;
   } | null>(null);
   /** ID of the latest user message whose send failed — drives the inline
    *  failure indicator/retry button on the message itself. Cleared on the
@@ -304,10 +208,13 @@ export function useChat({
     return () => window.removeEventListener(KEYS_UPDATED_EVENT, onKeys);
   }, []);
 
-  // Persist messages after streaming finishes
+  // The server now persists each main-chat turn authoritatively. The client
+  // only keeps its in-memory cache in sync so a remount within the same
+  // session doesn't read a stale snapshot — no network write here. Explicit
+  // client-initiated writes (clearing the conversation) still use saveMessages.
   useEffect(() => {
     if (!isStreaming && messages.length > 0) {
-      void saveMessages(reviewId, messages);
+      primeMessagesCache(reviewId, messages);
     }
   }, [messages, isStreaming, reviewId]);
 
@@ -371,15 +278,14 @@ export function useChat({
     async (
       text: string,
       opts?: {
-        /** Reuse this existing user message id instead of appending a new one. Used by resume flows. */
-        existingUserMsgId?: string;
         /**
-         * Explicit message history to send to the server. Used by resume
-         * flows so the truncation done before retry isn't subject to React
-         * state-update timing. Should already include the user message.
+         * Re-run an already-stored user message instead of appending a new
+         * one (Exa resume + error retry). The server dedupes on this id, so
+         * re-sending it never creates a duplicate turn.
          */
-        historyOverride?: ChatMessage[];
-        /** Tell the server not to register web_search for this turn. Used after the user dismisses the Exa card. */
+        existingUserMsgId?: string;
+        /** Tell the server not to register web_search for this turn. Used
+         *  after the user dismisses the Exa card. */
         skipWebSearch?: boolean;
       },
     ) => {
@@ -392,12 +298,8 @@ export function useChat({
       setLastFailedRequest(null);
       setFailedUserMsgId(null);
 
-      const userMsg: ChatMessage = {
-        id: opts?.existingUserMsgId ?? crypto.randomUUID(),
-        role: "user",
-        content: text,
-        timestamp: new Date().toISOString(),
-      };
+      const isResume = !!opts?.existingUserMsgId;
+      const userMsgId = opts?.existingUserMsgId ?? crypto.randomUUID();
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -405,22 +307,25 @@ export function useChat({
         timestamp: new Date().toISOString(),
       };
 
-      // For a fresh submit append both messages. For a resume, the user
-      // message already exists in the list — only append the new assistant.
-      if (opts?.existingUserMsgId) {
+      // Fresh submit appends the user bubble + an assistant placeholder. A
+      // resume re-runs an existing user message (already in the list and the
+      // DB), so only the placeholder is added — the caller has already dropped
+      // any stale trailing assistant.
+      if (isResume) {
         setMessages((prev) => [...prev, assistantMsg]);
       } else {
+        const userMsg: ChatMessage = {
+          id: userMsgId,
+          role: "user",
+          content: text,
+          timestamp: new Date().toISOString(),
+        };
         setMessages((prev) => [...prev, userMsg, assistantMsg]);
       }
       setIsStreaming(true);
       setStreamingMsgId(assistantMsg.id);
       streamingStore.set([]);
 
-      const historyForApi = opts?.historyOverride
-        ? opts.historyOverride
-        : opts?.existingUserMsgId
-          ? messages // already includes the user message
-          : [...messages, userMsg];
       let steps: AgentStep[] = [];
       let rafId: number | null = null;
       const inactivity = createInactivityController(
@@ -435,10 +340,15 @@ export function useChat({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: historyForApi.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
+            // Server-owned conversation: send only this turn. The server loads
+            // history from the DB, appends + persists it, budgets to the
+            // model's window, and persists the reply. Re-sending the same
+            // `userMessageId` is idempotent — the server re-runs the stored
+            // turn rather than duplicating it (powers Exa-resume + retry).
+            reviewId,
+            userMessage: text,
+            userMessageId: userMsgId,
+            assistantMessageId: assistantMsg.id,
             model: selectedModel.modelId,
             provider: selectedModel.provider,
             ...(resolveModelCredentials(selectedModel) ?? {
@@ -447,7 +357,6 @@ export function useChat({
             ...paperPayload,
             paperTitle,
             arxivId,
-            reviewId,
             ...(sourceUrl ? { sourceUrl } : {}),
             ...(exaKey ? { exaApiKey: exaKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
@@ -498,12 +407,17 @@ export function useChat({
         const message =
           err instanceof Error ? err.message : "Something went wrong";
         // Drop the empty assistant placeholder — never repurpose it for an
-        // error, since it visually masquerades as a real reply. The failure
-        // is surfaced inline beneath the user message instead.
+        // error, since it visually masquerades as a real reply. The user
+        // message stays (the server already persisted it up front); retry
+        // re-runs it by id. The failure is surfaced inline beneath it.
         setMessages((prev) => prev.filter((m) => m.id !== assistantMsg.id));
         setError(message);
-        setFailedUserMsgId(userMsg.id);
-        setLastFailedRequest({ text: trimmed, threadAnnotationId: null });
+        setFailedUserMsgId(userMsgId);
+        setLastFailedRequest({
+          text: trimmed,
+          threadAnnotationId: null,
+          userMsgId,
+        });
       } finally {
         inactivity.dispose();
         if (rafId !== null) cancelAnimationFrame(rafId);
@@ -515,7 +429,6 @@ export function useChat({
     [
       isStreaming,
       selectedModel,
-      messages,
       buildPaperPayload,
       paperTitle,
       arxivId,
@@ -553,15 +466,13 @@ export function useChat({
       if (lastUserIdx < 0) return;
 
       const userMsg = messages[lastUserIdx];
-      // Truncate trailing messages — keep up through the user message.
-      const truncated = messages.slice(0, lastUserIdx + 1);
-      setMessages(truncated);
+      // Drop the paused/incomplete assistant turn (the one showing the card);
+      // keep up through the user message. The server still holds the history,
+      // so re-running by id is enough — no need to ship it back.
+      setMessages(messages.slice(0, lastUserIdx + 1));
 
-      // Pass the truncated history explicitly so the retry doesn't depend
-      // on React state-update timing.
       void submitChat(userMsg.content, {
         existingUserMsgId: userMsg.id,
-        historyOverride: truncated,
         skipWebSearch,
       });
     },
@@ -625,6 +536,8 @@ export function useChat({
           i === 0 && m.role === "user"
             ? highlightPreamble + m.content
             : m.content,
+        // Replay the assistant's prior tool work in this thread too.
+        ...(m.blocks ? { blocks: m.blocks } : {}),
       }));
 
       let steps: AgentStep[] = [];
@@ -751,7 +664,7 @@ export function useChat({
 
   const retryLastError = useCallback(async () => {
     if (!lastFailedRequest || isStreaming) return;
-    const { text, threadAnnotationId } = lastFailedRequest;
+    const { text, threadAnnotationId, userMsgId } = lastFailedRequest;
     if (threadAnnotationId) {
       if (chatThreadAnnotationId !== threadAnnotationId) {
         setError("Retry this message from the original selection thread.");
@@ -760,7 +673,9 @@ export function useChat({
       await submitThreadChat(text);
       return;
     }
-    await submitChat(text);
+    // Re-run the stored user message by id so the server dedupes rather than
+    // appending a duplicate turn.
+    await submitChat(text, userMsgId ? { existingUserMsgId: userMsgId } : undefined);
   }, [
     lastFailedRequest,
     isStreaming,

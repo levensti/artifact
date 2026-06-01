@@ -12,6 +12,11 @@ import type { ParsedPaper } from "@/lib/review-types";
 import { toAnthropicTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import type { ToolDefinition } from "@/tools/types";
+import {
+  toAnthropicMessages,
+  type AnthropicHistoryMessage,
+  type TranscriptMessage,
+} from "@/lib/transcript";
 import { buildPaperBlock } from "./paper-block";
 import {
   runAgentLoop,
@@ -64,8 +69,6 @@ interface AnthropicSSEEvent {
   usage?: AnthropicUsage;
 }
 
-type AnthropicMessageContent = AnthropicContentBlock | AnthropicToolResultBlock;
-
 type AnthropicCacheControl = { type: "ephemeral" };
 
 interface AnthropicSystemBlock {
@@ -82,7 +85,7 @@ interface AnthropicToolWithCache {
 }
 
 export async function runAnthropicAgentLoop(
-  chatMessages: { role: "user" | "assistant"; content: string }[],
+  chatMessages: TranscriptMessage[],
   model: string,
   apiKey: string,
   systemPrompt: string,
@@ -121,8 +124,11 @@ export async function runAnthropicAgentLoop(
       ]
     : [];
 
-  const apiMessages: Array<{ role: string; content: string | AnthropicMessageContent[] }> =
-    chatMessages.map((m) => ({ role: m.role, content: m.content }));
+  // Seed from the normalized transcript so the model sees its prior tool work
+  // (searches, sections read, citations resolved) as real tool_use/tool_result
+  // pairs — not just the flattened text of past answers. The live loop appends
+  // new turns below in the same shapes.
+  const apiMessages: AnthropicHistoryMessage[] = toAnthropicMessages(chatMessages);
 
   // Hold the latest turn's content blocks so appendAssistantTurn can persist
   // them in Anthropic's native shape rather than re-deriving from TurnResult.

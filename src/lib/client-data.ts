@@ -234,6 +234,21 @@ export async function saveMessages(
   });
 }
 
+/**
+ * Update the in-memory messages cache WITHOUT a network write. Used by the
+ * main chat flow, where the server now persists each turn authoritatively —
+ * the client only needs its cache kept in sync so a remount in the same
+ * session doesn't read a stale snapshot. Distinct from `saveMessages`, which
+ * is for client-initiated writes (e.g. clearing the conversation).
+ */
+export function primeMessagesCache(
+  reviewId: string,
+  messages: ChatMessage[],
+): void {
+  if (!reviewId?.trim()) return;
+  messagesCache.set(reviewId, messages);
+}
+
 /* ── Annotations ── */
 
 export async function loadAnnotations(reviewId: string): Promise<Annotation[]> {
