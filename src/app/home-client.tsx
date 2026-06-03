@@ -179,8 +179,8 @@ function SetupCallout({
           }}
         >
           {optional
-            ? "While Artifact is in early access we're covering inference costs, so you can start reading right away. Add your own key anytime for higher limits and billing on your account: Anthropic, OpenAI, xAI, any OpenAI-compatible endpoint, or local (Ollama, LM Studio, llama.cpp)."
-            : "Bring your own keys for Anthropic, OpenAI, xAI, or any OpenAI-compatible endpoint. Or run inference locally with Ollama, LM Studio, or llama.cpp."}
+            ? "While Artifact is in early access we're covering inference costs, so you can start reading right away. Add your own OpenRouter key anytime for higher limits on your account."
+            : "Bring your own OpenRouter key."}
         </p>
       </div>
       <button

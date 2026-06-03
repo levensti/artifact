@@ -12,7 +12,6 @@
  * come from the caller (user input or template), not from the model.
  */
 
-import type { Model } from "@/lib/models";
 import type { ChatMessage } from "@/lib/reviews";
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getRecentActivity } from "@/lib/client/session-sources";
@@ -20,9 +19,8 @@ import { stripCodeFences } from "@/lib/json-parse";
 import { loadWikiPages } from "@/lib/client-data";
 
 interface CallArgs {
-  model: Model;
-  apiKey: string;
-  apiBaseUrl?: string;
+  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  apiKey?: string;
 }
 
 export interface AnnotationThreadInput {
@@ -237,10 +235,7 @@ async function streamGenerate(args: StreamArgs): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: args.model.modelId,
-      provider: args.model.provider,
-      apiKey: args.apiKey,
-      ...(args.apiBaseUrl ? { apiBaseUrl: args.apiBaseUrl } : {}),
+      ...(args.apiKey ? { apiKey: args.apiKey } : {}),
       prompt: args.prompt,
       paperContext: "",
       stream: true,

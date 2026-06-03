@@ -4,7 +4,6 @@ import { PanelRightClose, PanelRightOpen, Sparkles } from "lucide-react";
 import type { Model } from "@/lib/models";
 import type { Annotation } from "@/lib/annotations";
 import ChatPanel from "./chat-panel";
-import ModelSelector from "./model-selector";
 
 interface RightPanelProps {
   reviewId: string;
@@ -80,7 +79,6 @@ export default function RightPanel({
           </span>
         </div>
         <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-          <ModelSelector selected={selectedModel} onSelect={onModelChange} />
           {onToggleCollapsed ? (
             <button
               type="button"

@@ -1,16 +1,10 @@
 import { NextRequest } from "next/server";
-import {
-  invalidApiProviderMessage,
-  isAnthropicMessagesProvider,
-  isProvider,
-  openAiCompatibleChatCompletionsUrl,
-  providerApiErrorLabel,
-  type OpenAiCompatibleProvider,
-} from "@/lib/ai-providers";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
-import { resolveServerApiKey } from "@/server/provider-env";
+import { resolveOpenRouterKey } from "@/server/provider-env";
+import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
 import type { GenerateRequest } from "@/lib/explore";
-import { isInferenceProviderType } from "@/lib/models";
+
+const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
 
 const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
 
@@ -27,23 +21,7 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const {
-    model,
-    provider,
-    apiKey,
-    apiBaseUrl,
-    prompt,
-    paperContext,
-    stream,
-  } = body;
-
-  if (!isProvider(provider)) {
-    return jsonError(invalidApiProviderMessage(), 400);
-  }
-
-  if (!model || typeof model !== "string") {
-    return jsonError("Model ID is required.", 400);
-  }
+  const { apiKey, prompt, paperContext, stream } = body;
 
   if (!prompt || typeof prompt !== "string") {
     return jsonError("Prompt is required.", 400);
@@ -52,43 +30,19 @@ export async function POST(req: NextRequest) {
     return jsonError("Request payload too large.", 413);
   }
 
-  const effectiveApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
-  const effectiveBaseUrl =
-    typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
-
-  // Built-in providers fall back to the platform key when the user has none.
-  // `resolveServerApiKey` returns null for openai_compatible without an
-  // inline key, preserving the existing "key required" behavior there.
-  const resolvedApiKey = resolveServerApiKey(provider, effectiveApiKey) ?? "";
-
+  const resolvedApiKey = resolveOpenRouterKey(apiKey);
   if (!resolvedApiKey) {
     return jsonError(
       "API key is required. Manage API keys in the app to add one.",
       401,
     );
   }
-  if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
-    return jsonError(
-      "apiBaseUrl is required for OpenAI-compatible providers.",
-      400,
-    );
-  }
 
   if (stream) {
     try {
-      const upstream = isAnthropicMessagesProvider(provider)
-        ? await openAnthropicStream(model, resolvedApiKey, prompt, paperContext)
-        : await openOpenAICompatibleStream(
-            model,
-            resolvedApiKey,
-            prompt,
-            paperContext,
-            provider as OpenAiCompatibleProvider,
-            provider === "openai_compatible" ? effectiveBaseUrl : undefined,
-          );
-      const isAnthropic = isAnthropicMessagesProvider(provider);
-      const body = transformSseToText(upstream, isAnthropic);
-      return new Response(body, {
+      const upstream = await openStream(resolvedApiKey, prompt, paperContext);
+      const responseBody = transformSseToText(upstream);
+      return new Response(responseBody, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
           "Transfer-Encoding": "chunked",
@@ -102,17 +56,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const content = isAnthropicMessagesProvider(provider)
-      ? await generateAnthropic(model, resolvedApiKey, prompt, paperContext)
-      : await generateOpenAICompatible(
-          model,
-          resolvedApiKey,
-          prompt,
-          paperContext,
-          provider as OpenAiCompatibleProvider,
-          provider === "openai_compatible" ? effectiveBaseUrl : undefined,
-        );
-
+    const content = await generate(resolvedApiKey, prompt, paperContext);
     return new Response(JSON.stringify({ content }), {
       headers: { "Content-Type": "application/json" },
     });
@@ -122,74 +66,43 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function openAnthropicStream(
-  model: string,
+function systemContentFor(paperContext?: string): string {
+  return paperContext
+    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
+    : SYSTEM_PROMPT;
+}
+
+async function openStream(
   apiKey: string,
   prompt: string,
   paperContext?: string,
 ): Promise<ReadableStream<Uint8Array>> {
-  const systemContent = paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
-    : SYSTEM_PROMPT;
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 4096,
-      system: systemContent,
-      messages: [{ role: "user", content: prompt }],
-      stream: true,
-    }),
-  });
-  if (!response.ok) throw await parseError(response, "Anthropic");
-  if (!response.body) throw new Error("Anthropic returned no stream body.");
-  return response.body;
-}
-
-async function openOpenAICompatibleStream(
-  model: string,
-  apiKey: string,
-  prompt: string,
-  paperContext: string | undefined,
-  provider: OpenAiCompatibleProvider,
-  customOpenAiBaseUrl?: string,
-): Promise<ReadableStream<Uint8Array>> {
-  const baseUrl = openAiCompatibleChatCompletionsUrl(provider, customOpenAiBaseUrl);
-  const systemContent = paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
-    : SYSTEM_PROMPT;
-  const response = await fetch(baseUrl, {
+  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: OPENROUTER_MODEL,
       messages: [
-        { role: "system", content: systemContent },
+        { role: "system", content: systemContentFor(paperContext) },
         { role: "user", content: prompt },
       ],
       stream: true,
     }),
   });
-  if (!response.ok) throw await parseError(response, providerApiErrorLabel(provider));
-  if (!response.body) throw new Error("Provider returned no stream body.");
+  if (!response.ok) throw await parseError(response);
+  if (!response.body) throw new Error("OpenRouter returned no stream body.");
   return response.body;
 }
 
 /**
- * Read SSE chunks from an upstream provider and emit just the text deltas
- * as plain UTF-8 to the client. Closes when the upstream stream ends.
+ * Read SSE chunks from OpenRouter and emit just the text deltas as plain
+ * UTF-8 to the client. Closes when the upstream stream ends.
  */
 function transformSseToText(
   upstream: ReadableStream<Uint8Array>,
-  isAnthropic: boolean,
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -207,12 +120,12 @@ function transformSseToText(
           const events = buffer.split("\n\n");
           buffer = events.pop() ?? "";
           for (const evt of events) {
-            const text = parseSseEventText(evt, isAnthropic);
+            const text = parseSseEventText(evt);
             if (text) controller.enqueue(encoder.encode(text));
           }
         }
         if (buffer.trim()) {
-          const text = parseSseEventText(buffer, isAnthropic);
+          const text = parseSseEventText(buffer);
           if (text) controller.enqueue(encoder.encode(text));
         }
       } catch (err) {
@@ -226,7 +139,7 @@ function transformSseToText(
   });
 }
 
-function parseSseEventText(eventBlock: string, isAnthropic: boolean): string {
+function parseSseEventText(eventBlock: string): string {
   let text = "";
   for (const line of eventBlock.split("\n")) {
     if (!line.startsWith("data:")) continue;
@@ -234,18 +147,8 @@ function parseSseEventText(eventBlock: string, isAnthropic: boolean): string {
     if (!payload || payload === "[DONE]") continue;
     try {
       const data = JSON.parse(payload);
-      if (isAnthropic) {
-        if (
-          data?.type === "content_block_delta" &&
-          data?.delta?.type === "text_delta" &&
-          typeof data.delta.text === "string"
-        ) {
-          text += data.delta.text;
-        }
-      } else {
-        const delta = data?.choices?.[0]?.delta?.content;
-        if (typeof delta === "string") text += delta;
-      }
+      const delta = data?.choices?.[0]?.delta?.content;
+      if (typeof delta === "string") text += delta;
     } catch {
       /* ignore malformed events */
     }
@@ -253,82 +156,35 @@ function parseSseEventText(eventBlock: string, isAnthropic: boolean): string {
   return text;
 }
 
-async function generateAnthropic(
-  model: string,
+async function generate(
   apiKey: string,
   prompt: string,
   paperContext?: string,
 ): Promise<string> {
-  const systemContent = paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
-    : SYSTEM_PROMPT;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
-      max_tokens: 4096,
-      system: systemContent,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-    }),
-  });
-
-  if (!response.ok) {
-    throw await parseError(response, "Anthropic");
-  }
-
-  const data = await response.json();
-  return data?.content?.[0]?.text ?? "";
-}
-
-async function generateOpenAICompatible(
-  model: string,
-  apiKey: string,
-  prompt: string,
-  paperContext: string | undefined,
-  provider: OpenAiCompatibleProvider,
-  customOpenAiBaseUrl?: string,
-): Promise<string> {
-  const baseUrl = openAiCompatibleChatCompletionsUrl(provider, customOpenAiBaseUrl);
-
-  const systemContent = paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
-    : SYSTEM_PROMPT;
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
-  };
-
-  const response = await fetch(baseUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
+      model: OPENROUTER_MODEL,
       messages: [
-        { role: "system", content: systemContent },
+        { role: "system", content: systemContentFor(paperContext) },
         { role: "user", content: prompt },
       ],
       stream: false,
     }),
   });
 
-  if (!response.ok) {
-    throw await parseError(response, providerApiErrorLabel(provider));
-  }
+  if (!response.ok) throw await parseError(response);
 
   const data = await response.json();
   return data?.choices?.[0]?.message?.content ?? "";
 }
 
-async function parseError(response: Response, providerLabel: string) {
+async function parseError(response: Response) {
   const errorText = await response.text();
-  const fallback = `${providerLabel} API error: ${response.status}`;
+  const fallback = `OpenRouter API error: ${response.status}`;
   return new Error(parseApiErrorMessage(errorText, fallback));
 }

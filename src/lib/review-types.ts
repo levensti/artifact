@@ -1,5 +1,4 @@
 import type { ArxivSearchResult } from "@/lib/explore";
-import type { Provider } from "@/lib/models";
 
 /** A text segment in an interleaved agent response. */
 export interface TextSegmentBlock {
@@ -97,7 +96,7 @@ export interface ParsedPaper {
    */
   summary: string;
   parsedAt: string;
-  parsedWith: { provider: Provider; modelId: string };
+  parsedWith: { modelId: string };
 }
 
 /**

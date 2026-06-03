@@ -3,7 +3,7 @@ import { authedRoute } from "@/server/api";
 import * as store from "@/server/store";
 import type { SettingsPatch } from "@/server/store";
 import {
-  platformProviderAvailability,
+  platformOpenRouterAvailable,
   platformToolAvailability,
 } from "@/server/provider-env";
 
@@ -13,7 +13,7 @@ export const GET = authedRoute(async (userId) => {
   const settings = await store.getSettings(userId);
   return NextResponse.json({
     settings,
-    platformProviders: platformProviderAvailability(),
+    platformOpenRouter: platformOpenRouterAvailable(),
     platformTools: platformToolAvailability(),
   });
 });
@@ -24,7 +24,7 @@ export const PATCH = authedRoute(async (userId, request: Request) => {
   const settings = await store.getSettings(userId);
   return NextResponse.json({
     settings,
-    platformProviders: platformProviderAvailability(),
+    platformOpenRouter: platformOpenRouterAvailable(),
     platformTools: platformToolAvailability(),
   });
 });

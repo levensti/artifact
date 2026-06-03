@@ -2,7 +2,7 @@
 
 Artifact is an open source (MIT licensed) reading workspace for researchers. Read any paper / blog / PDF with the help of a powerful, personalized AI assistant; build a journal of your learnings; and easily discovery what to read next.
 
-Hosted version available at [withartifact.com](https://withartifact.com). Bring your own keys (Anthropic, OpenAI, xAI, OpenAI-compatible, or local via Ollama / LM Studio / llama.cpp). Completely free to use.
+Hosted version available at [withartifact.com](https://withartifact.com). Powered by OpenRouter — bring your own OpenRouter key, or use the platform key. Completely free to use.
 
 ## Features
 
@@ -82,11 +82,11 @@ npm run db:migrate    # applies prisma/migrations/* to the local Postgres
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000) and sign in with Google. Add your own AI provider keys under Settings, or set the optional platform fallback keys (`PROVIDED_*` in `.env`) so users can start without bringing a key.
+Open [localhost:3000](http://localhost:3000) and sign in with Google. Set `OPENROUTER_API_KEY` in `.env` so users can start chatting immediately, or have each user add their own OpenRouter key under Settings.
 
-#### Built-in models vs. bring-your-own-key
+#### Platform key vs. bring-your-own-key
 
-By default each user supplies their own provider key under Settings. If you set the optional `PROVIDED_ANTHROPIC_API_KEY` / `PROVIDED_OPENAI_API_KEY` / `PROVIDED_XAI_API_KEY` env vars, signed-in users with no key of their own automatically fall back to those platform keys — no setup step required. Users who do bring their own key always use it. The platform key is server-only and never sent to the browser. The fallback is opt-in: leave the vars unset to require keys as before. (See the cost note in `.env.example`.)
+The app runs a single model (`openai/gpt-oss-120b`) via OpenRouter — there is no model picker. If you set `OPENROUTER_API_KEY`, signed-in users with no key of their own automatically use it — no setup step required. A user who enters their own OpenRouter key under Settings uses that instead. The platform key is server-only and never sent to the browser. The fallback is opt-in: leave the var unset to require users to bring a key. (See the cost note in `.env.example`.)
 
 ### Day-to-day commands
 
@@ -114,7 +114,7 @@ npx supabase status            # print URLs and keys again
 - **Web pages**: @mozilla/readability + DOMPurify for cleaned, safe rendering
 - **Markdown**: react-markdown, remark-gfm, remark-math, rehype-katex
 - **Styling**: Tailwind CSS, shadcn/ui
-- **AI**: Anthropic, OpenAI, xAI, OpenAI-compatible APIs (incl. local: Ollama, LM Studio, llama.cpp); streaming chat + structured generation
+- **AI**: OpenRouter (single fixed model: `openai/gpt-oss-120b`); streaming chat + structured generation
 - **Paper search**: Semantic Scholar (primary), arXiv API (fallback)
 
 ## Deployment (self-hosting)
@@ -130,7 +130,7 @@ Artifact can be self-hosted on any platform that runs a Next.js app. You'll need
 
 Copy [`.env.example`](./.env.example) to `.env` and fill in the required values. Every variable is documented inline: what it does, where to get the value, and which are local vs. production-only.
 
-For a deployed instance you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`, plus the multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`). Optionally set `PROVIDED_ANTHROPIC_API_KEY` / `PROVIDED_OPENAI_API_KEY` / `PROVIDED_XAI_API_KEY` to give keyless users built-in models (see the bring-your-own-key note above).
+For a deployed instance you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`, plus the multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`). Optionally set `OPENROUTER_API_KEY` to give keyless users a working model out of the box (see the platform-key note above).
 
 ### 3. Build and run
 
@@ -140,4 +140,4 @@ npm run build:deploy   # runs prisma migrate deploy + next build
 npm start
 ```
 
-Sign in with Google, then add your AI provider keys under Settings.
+Sign in with Google, then add your OpenRouter key under Settings (or rely on the platform `OPENROUTER_API_KEY`).

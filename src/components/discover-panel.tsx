@@ -10,15 +10,13 @@ import {
 } from "react";
 import { Compass, KeyRound, ArrowUp } from "lucide-react";
 import type { Model } from "@/lib/models";
-import { isModelReady } from "@/lib/keys";
+import { hasUsableProvider } from "@/lib/keys";
 import {
   getDiscoverQueriesSnapshot,
   getSavedSelectedModel,
   hydrateClientStore,
-  saveSelectedModel,
 } from "@/lib/client-data";
 import { DISCOVER_UPDATED_EVENT } from "@/lib/storage-events";
-import ModelSelector from "./model-selector";
 import DiscoverQueue from "./discover-queue";
 import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import { useDiscoverChat } from "@/hooks/use-discover-chat";
@@ -182,8 +180,7 @@ export default function DiscoverPanel() {
       try {
         await hydrateClientStore();
         if (cancelled) return;
-        const m = getSavedSelectedModel();
-        if (m && isModelReady(m)) setSelectedModel(m);
+        if (hasUsableProvider()) setSelectedModel(getSavedSelectedModel());
       } finally {
         if (!cancelled) setHydrated(true);
       }
@@ -199,17 +196,12 @@ export default function DiscoverPanel() {
     return () => window.removeEventListener(DISCOVER_UPDATED_EVENT, handler);
   }, []);
 
-  const handleModelChange = useCallback((model: Model | null) => {
-    setSelectedModel(model);
-    void saveSelectedModel(model);
-  }, []);
-
   const chat = useDiscoverChat({ selectedModel });
 
   const composerHint =
     selectedModel && chat.hasKeyForModel
       ? "What would you like to learn?"
-      : "Pick a model with a configured API key to start";
+      : "Add an OpenRouter API key in Settings to start";
 
   const queries = hydrated ? getDiscoverQueriesSnapshot() : [];
   const showEmptyHint =
@@ -239,10 +231,6 @@ export default function DiscoverPanel() {
               </span>
             </div>
           </div>
-          <ModelSelector
-            selected={selectedModel}
-            onSelect={handleModelChange}
-          />
         </div>
       </header>
 
@@ -270,11 +258,11 @@ export default function DiscoverPanel() {
                   />
                   <div className="min-w-0 flex-1 text-[12.5px] leading-relaxed">
                     <p className="font-medium text-foreground">
-                      Pick a model to start
+                      Add an API key to start
                     </p>
                     <p className="text-muted-foreground">
-                      Discover uses the same API keys as the rest of Artifact.
-                      Add one in{" "}
+                      Discover uses the same OpenRouter key as the rest of
+                      Artifact. Add one in{" "}
                       <button
                         type="button"
                         onClick={() => openSettings()}

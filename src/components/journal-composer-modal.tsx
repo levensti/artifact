@@ -48,14 +48,10 @@ export default function JournalComposerModal({
     const trimmed = prompt.trim();
     if (!trimmed) return;
     if (!selectedModel) {
-      setValidationErr("Choose a model first.");
+      setValidationErr("Add an OpenRouter API key in Settings first.");
       return;
     }
-    const creds = resolveModelCredentials(selectedModel);
-    if (!creds) {
-      setValidationErr("API key for this model is not configured.");
-      return;
-    }
+    const creds = resolveModelCredentials();
     setValidationErr(null);
     setSubmitting(true);
 
@@ -89,9 +85,7 @@ export default function JournalComposerModal({
     void streamIntoEntry({
       slug,
       prompt: trimmed,
-      model: selectedModel,
       apiKey: creds.apiKey,
-      apiBaseUrl: creds.apiBaseUrl,
     });
   }, [onClose, onCreated, prompt, selectedModel]);
 
@@ -178,9 +172,7 @@ export default function JournalComposerModal({
 interface StreamArgs {
   slug: string;
   prompt: string;
-  model: Model;
-  apiKey: string;
-  apiBaseUrl: string | undefined;
+  apiKey?: string;
 }
 
 async function streamIntoEntry(opts: StreamArgs): Promise<void> {
@@ -202,9 +194,7 @@ async function streamIntoEntry(opts: StreamArgs): Promise<void> {
   try {
     const final = await composeJournalEntryFromPrompt({
       prompt: opts.prompt,
-      model: opts.model,
       apiKey: opts.apiKey,
-      apiBaseUrl: opts.apiBaseUrl,
       onText: (acc) => {
         const now = Date.now();
         if (now - lastPersistedAt >= 200) {

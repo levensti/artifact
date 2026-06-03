@@ -9,7 +9,7 @@ import {
 import {
   getExaApiKey,
   hasUsableExaKey,
-  isModelReady,
+  hasUsableProvider,
   resolveModelCredentials,
 } from "@/lib/keys";
 import type { StreamEvent } from "@/lib/stream-types";
@@ -227,13 +227,13 @@ export function useDiscoverChat({
     text: string;
   } | null>(null);
 
-  const hasKeyForModel = selectedModel != null && isModelReady(selectedModel);
+  const hasKeyForModel = selectedModel != null && hasUsableProvider();
 
   const submit = useCallback(
     async (text: string, opts?: { skipWebSearch?: boolean }) => {
       const trimmed = text.trim();
       if (!trimmed || isStreaming || !selectedModel) return;
-      if (!isModelReady(selectedModel)) return;
+      if (!hasUsableProvider()) return;
 
       lastQueryRef.current = trimmed;
 
@@ -266,16 +266,13 @@ export function useDiscoverChat({
         queryId = created.id;
         setLiveQueryId(created.id);
 
-        const creds = resolveModelCredentials(selectedModel) ?? { apiKey: "" };
         const exaKey = getExaApiKey();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [{ role: "user", content: trimmed }],
-            model: selectedModel.modelId,
-            provider: selectedModel.provider,
-            ...creds,
+            ...resolveModelCredentials(),
             mode: "discover",
             ...(exaKey ? { exaApiKey: exaKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),

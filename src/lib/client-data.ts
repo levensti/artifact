@@ -7,14 +7,8 @@
  * the same way they did when the data lived in IndexedDB.
  */
 
-import type { InferenceProviderProfile, Provider } from "@/lib/models";
 import type { Model } from "@/lib/models";
-import {
-  BUILTIN_PROVIDER_ORDER,
-  FALLBACK_MODELS,
-  isInferenceProviderType,
-} from "@/lib/models";
-import { hasInferenceCredentials } from "@/lib/ai-providers";
+import { FIXED_MODEL } from "@/lib/openrouter";
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
@@ -32,16 +26,13 @@ import {
 import { apiFetch } from "@/lib/client/api";
 
 interface SettingsCache {
-  keys: Partial<Record<Provider, string>>;
-  inferenceProfiles: InferenceProviderProfile[];
-  selectedModel: Model | null;
+  /** User's optional OpenRouter key override (server falls back to env). */
+  openRouterKey: string | null;
   exaApiKey: string | null;
 }
 
 const EMPTY_SETTINGS: SettingsCache = {
-  keys: {},
-  inferenceProfiles: [],
-  selectedModel: null,
+  openRouterKey: null,
   exaApiKey: null,
 };
 
@@ -53,12 +44,11 @@ export interface CurrentUser {
 }
 
 /**
- * Which built-in providers have a server-side platform-key fallback. This
- * holds booleans only — the env key never reaches the browser. Lets the UI
- * treat a provider as usable (model picker, chat, etc.) even when the user
- * hasn't brought their own key.
+ * Whether the server has a platform OpenRouter key in env. Boolean only —
+ * the key never reaches the browser. Lets the UI treat the app as usable
+ * even when the user hasn't entered their own key.
  */
-let platformProvidersCache: Partial<Record<Provider, boolean>> = {};
+let platformOpenRouterCache = false;
 
 /**
  * Tool-key counterpart to `platformProvidersCache`. Booleans only — the
@@ -93,7 +83,7 @@ export async function hydrateClientStore(): Promise<void> {
     const boot = await apiFetch<{
       reviews: PaperReview[];
       settings: SettingsCache;
-      platformProviders?: Partial<Record<Provider, boolean>>;
+      platformOpenRouter?: boolean;
       platformTools?: PlatformToolsCache;
       deepDives: DeepDiveSession[];
       discoverQueries: DiscoverQuery[];
@@ -102,7 +92,7 @@ export async function hydrateClientStore(): Promise<void> {
     }>("/api/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
-    platformProvidersCache = boot.platformProviders ?? {};
+    platformOpenRouterCache = boot.platformOpenRouter ?? false;
     platformToolsCache = boot.platformTools ?? {};
     deepDivesCache = boot.deepDives;
     discoverQueriesCache = boot.discoverQueries ?? [];
@@ -617,28 +607,17 @@ export async function loadWikiRevision(id: string): Promise<WikiRevision | null>
 
 /* ── Settings / keys ── */
 
-export function getApiKey(provider: Provider): string | null {
-  return settingsCache.keys[provider] ?? null;
-}
-
-export function getInferenceProfiles(): InferenceProviderProfile[] {
-  return settingsCache.inferenceProfiles;
-}
-
-export function getInferenceProfile(
-  id: string,
-): InferenceProviderProfile | undefined {
-  return settingsCache.inferenceProfiles.find((p) => p.id === id);
+/** The user's saved OpenRouter key override, if any. */
+export function getOpenRouterKey(): string | null {
+  return settingsCache.openRouterKey;
 }
 
 /**
- * True when the server has a platform-key fallback for this built-in
- * provider. Booleans only — sourced from /api/bootstrap; the env key is
- * never sent to the browser.
+ * True when the server has a platform OpenRouter key in env. Boolean only —
+ * sourced from /api/bootstrap; the env key is never sent to the browser.
  */
-export function hasPlatformFallback(provider: Provider): boolean {
-  if (isInferenceProviderType(provider)) return false;
-  return platformProvidersCache[provider] === true;
+export function hasPlatformOpenRouterKey(): boolean {
+  return platformOpenRouterCache;
 }
 
 /** True when the server has EXA_API_KEY set in env. Booleans only. */
@@ -646,85 +625,43 @@ export function hasPlatformExaKey(): boolean {
   return platformToolsCache.exa === true;
 }
 
-export function isBuiltinProviderReady(provider: Provider): boolean {
-  if (isInferenceProviderType(provider)) return false;
-  return !!getApiKey(provider) || hasPlatformFallback(provider);
-}
-
-export function isModelReady(model: Model): boolean {
-  if (isInferenceProviderType(model.provider)) {
-    if (!model.profileId) return false;
-    const p = getInferenceProfile(model.profileId);
-    if (!p?.label?.trim()) return false;
-    return hasInferenceCredentials(p);
-  }
-  return isBuiltinProviderReady(model.provider);
-}
-
-/** @deprecated prefer isBuiltinProviderReady or isModelReady */
-export function isProviderReady(provider: Provider): boolean {
-  if (isInferenceProviderType(provider)) return false;
-  return isBuiltinProviderReady(provider);
-}
-
-/**
- * Literal: the user has saved at least one of their own credentials
- * (built-in key or inference profile). Does NOT consider platform
- * fallbacks — used by Settings copy that must reflect what the user
- * actually configured.
- */
+/** Literal: the user has saved their own OpenRouter key. */
 export function hasAnySavedApiKey(): boolean {
-  for (const p of BUILTIN_PROVIDER_ORDER) {
-    if (getApiKey(p)) return true;
-  }
-  return settingsCache.inferenceProfiles.some(hasInferenceCredentials);
+  return !!settingsCache.openRouterKey;
 }
 
 /**
- * True when the user can actually run a model — their own key, an
- * inference profile, OR a platform fallback. This is the gate the chat /
- * discover / model-picker UI should use, so a fresh user with no key can
- * still work out of the box when a fallback is configured.
+ * True when the app can run — the user has their own OpenRouter key OR the
+ * server has a platform key. The gate the chat / discover UI uses, so a
+ * fresh user can work out of the box when a platform key is configured.
  */
 export function hasUsableProvider(): boolean {
-  if (hasAnySavedApiKey()) return true;
-  for (const p of BUILTIN_PROVIDER_ORDER) {
-    if (hasPlatformFallback(p)) return true;
-  }
-  return false;
+  return hasAnySavedApiKey() || hasPlatformOpenRouterKey();
 }
 
 interface SettingsPatchBody {
-  keys?: Partial<Record<Provider, string | null>>;
-  inferenceProfiles?: InferenceProviderProfile[] | null;
-  selectedModel?: Model | null;
+  openRouterKey?: string | null;
   exaApiKey?: string | null;
 }
 
 async function patchSettings(patch: SettingsPatchBody): Promise<void> {
-  const { settings, platformProviders, platformTools } = await apiFetch<{
+  const { settings, platformOpenRouter, platformTools } = await apiFetch<{
     settings: SettingsCache;
-    platformProviders?: Partial<Record<Provider, boolean>>;
+    platformOpenRouter?: boolean;
     platformTools?: PlatformToolsCache;
   }>("/api/settings", { method: "PATCH", body: patch });
   settingsCache = settings;
-  if (platformProviders) platformProvidersCache = platformProviders;
+  if (platformOpenRouter !== undefined) platformOpenRouterCache = platformOpenRouter;
   if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);
 }
 
-export async function setApiKey(provider: Provider, key: string): Promise<void> {
-  await patchSettings({ keys: { [provider]: key } });
+export async function setOpenRouterKey(key: string): Promise<void> {
+  await patchSettings({ openRouterKey: key });
 }
 
-export async function saveInferenceProfiles(
-  profiles: InferenceProviderProfile[],
-): Promise<void> {
-  await patchSettings({ inferenceProfiles: profiles });
-}
-
-export async function clearApiKey(provider: Provider): Promise<void> {
-  await patchSettings({ keys: { [provider]: null } });
+export async function clearOpenRouterKey(): Promise<void> {
+  await patchSettings({ openRouterKey: null });
 }
 
 /* ── Tool keys (currently just Exa Search) ── */
@@ -745,28 +682,23 @@ export async function clearExaApiKey(): Promise<void> {
   await patchSettings({ exaApiKey: null });
 }
 
-export async function saveSelectedModel(model: Model | null): Promise<void> {
-  await patchSettings({ selectedModel: model });
-}
-
-export function getSavedSelectedModel(): Model | null {
-  const m = settingsCache.selectedModel;
-  if (m && isModelReady(m)) return m;
-  // Nothing usable saved (fresh user, or their provider's key was
-  // removed). When a provider is ready — own key OR platform fallback —
-  // default to the first built-in model so a new user can start chatting
-  // without first opening the model picker.
-  return FALLBACK_MODELS.find((fm) => isModelReady(fm)) ?? null;
+/**
+ * The model used everywhere. The app uses one fixed model; there is no
+ * picker. Returns the fixed model unconditionally — readiness (whether a key
+ * exists) is a separate concern, see `hasUsableProvider()`.
+ */
+export function getSavedSelectedModel(): Model {
+  return FIXED_MODEL;
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {
-  const { settings, platformProviders, platformTools } = await apiFetch<{
+  const { settings, platformOpenRouter, platformTools } = await apiFetch<{
     settings: SettingsCache;
-    platformProviders?: Partial<Record<Provider, boolean>>;
+    platformOpenRouter?: boolean;
     platformTools?: PlatformToolsCache;
   }>("/api/settings");
   settingsCache = settings;
-  if (platformProviders) platformProvidersCache = platformProviders;
+  if (platformOpenRouter !== undefined) platformOpenRouterCache = platformOpenRouter;
   if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);
 }

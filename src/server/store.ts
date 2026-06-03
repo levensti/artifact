@@ -680,72 +680,39 @@ async function rebuildBacklinks(
 
 /* ── Settings ─────────────────────────────────────────────────── */
 
-import {
-  isInferenceProviderType,
-  type InferenceProviderProfile,
-  type Model,
-  type Provider,
-} from "@/lib/models";
 import { decrypt, encrypt } from "./crypto";
 
 /** Pseudo-provider identifying the Exa Search tool key in the ApiKey table. */
 const EXA_PROVIDER = "exa";
+/** Provider slug for the user's optional OpenRouter key override. */
+const OPENROUTER_PROVIDER = "openrouter";
 
 export interface SettingsSnapshot {
-  keys: Partial<Record<Provider, string>>;
-  inferenceProfiles: InferenceProviderProfile[];
-  selectedModel: Model | null;
+  /** User's optional OpenRouter key override (server falls back to env). */
+  openRouterKey: string | null;
   exaApiKey: string | null;
 }
 
 export async function getSettings(userId: string): Promise<SettingsSnapshot> {
-  const [apiKeys, profiles, prefs] = await Promise.all([
-    prisma.apiKey.findMany({ where: { userId } }),
-    prisma.inferenceProfile.findMany({ where: { userId } }),
-    prisma.userPreferences.findUnique({ where: { userId } }),
-  ]);
+  const apiKeys = await prisma.apiKey.findMany({ where: { userId } });
 
-  const keys: Partial<Record<Provider, string>> = {};
+  let openRouterKey: string | null = null;
   let exaApiKey: string | null = null;
   for (const row of apiKeys) {
-    const value = decrypt(row.value);
-    if (row.provider === EXA_PROVIDER) {
-      exaApiKey = value;
-    } else if (row.provider === "brave") {
-      // Legacy rows from the pre-Exa Brave Search integration. Ignored here;
-      // not migrated. New keys are stored under EXA_PROVIDER.
-      continue;
-    } else {
-      keys[row.provider as Provider] = value;
+    if (row.provider === OPENROUTER_PROVIDER) {
+      openRouterKey = decrypt(row.value);
+    } else if (row.provider === EXA_PROVIDER) {
+      exaApiKey = decrypt(row.value);
     }
+    // Any other rows (legacy per-provider keys: anthropic/openai/xai/brave)
+    // are ignored — the app now uses a single OpenRouter key.
   }
 
-  const inferenceProfiles: InferenceProviderProfile[] = profiles.map((p) => ({
-    id: p.id,
-    label: p.label,
-    kind: p.kind as InferenceProviderProfile["kind"],
-    baseUrl: p.baseUrl,
-    apiKey: decrypt(p.apiKey),
-    supportsStreaming: p.supportsStreaming,
-  }));
-
-  let selectedModel = (prefs?.selectedModel as unknown as Model | null) ?? null;
-  if (
-    selectedModel &&
-    isInferenceProviderType(selectedModel.provider) &&
-    (!selectedModel.profileId ||
-      !inferenceProfiles.some((p) => p.id === selectedModel!.profileId))
-  ) {
-    selectedModel = null;
-  }
-
-  return { keys, inferenceProfiles, selectedModel, exaApiKey };
+  return { openRouterKey, exaApiKey };
 }
 
 export interface SettingsPatch {
-  keys?: Partial<Record<Provider, string | null>>;
-  inferenceProfiles?: InferenceProviderProfile[] | null;
-  selectedModel?: Model | null;
+  openRouterKey?: string | null;
   exaApiKey?: string | null;
 }
 
@@ -763,61 +730,19 @@ export async function patchSettings(
     const deleteKey = (provider: string) =>
       tx.apiKey.deleteMany({ where: { userId, provider } });
 
-    if (patch.keys) {
-      for (const [provider, v] of Object.entries(patch.keys) as [
-        Provider,
-        string | null | undefined,
-      ][]) {
-        if (v === null || v === undefined || v === "") {
-          await deleteKey(provider);
-        } else {
-          await upsertKey(provider, v);
-        }
-      }
-    }
-
-    if (patch.inferenceProfiles !== undefined && patch.inferenceProfiles !== null) {
-      const next = patch.inferenceProfiles;
-      const keepIds = next.map((p) => p.id);
-      await tx.inferenceProfile.deleteMany({
-        where: keepIds.length
-          ? { userId, NOT: { id: { in: keepIds } } }
-          : { userId },
-      });
-      for (const p of next) {
-        const data = {
-          label: p.label,
-          kind: p.kind,
-          baseUrl: p.baseUrl,
-          apiKey: encrypt(p.apiKey),
-          supportsStreaming: p.supportsStreaming !== false,
-        };
-        await tx.inferenceProfile.upsert({
-          where: { id: p.id },
-          create: { id: p.id, userId, ...data },
-          update: data,
-        });
-      }
-    }
-
-    if ("selectedModel" in patch) {
-      const value = patch.selectedModel
-        ? (patch.selectedModel as unknown as Prisma.InputJsonValue)
-        : Prisma.DbNull;
-      await tx.userPreferences.upsert({
-        where: { userId },
-        create: { userId, selectedModel: value },
-        update: { selectedModel: value },
-      });
-    }
-
-    if ("exaApiKey" in patch) {
-      const v = patch.exaApiKey;
+    const applyKey = async (provider: string, v: string | null | undefined) => {
       if (v === null || v === undefined || v === "") {
-        await deleteKey(EXA_PROVIDER);
+        await deleteKey(provider);
       } else {
-        await upsertKey(EXA_PROVIDER, v);
+        await upsertKey(provider, v);
       }
+    };
+
+    if ("openRouterKey" in patch) {
+      await applyKey(OPENROUTER_PROVIDER, patch.openRouterKey);
+    }
+    if ("exaApiKey" in patch) {
+      await applyKey(EXA_PROVIDER, patch.exaApiKey);
     }
   });
 }
