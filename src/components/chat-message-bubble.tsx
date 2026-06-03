@@ -5,7 +5,7 @@ import { AlertCircle, RotateCw } from "lucide-react";
 import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
 import type { AnnotationMessage } from "@/lib/annotations";
-import MarkdownMessage from "./markdown-message";
+import MarkdownMessage, { MarkdownStreamingBoundary } from "./markdown-message";
 import {
   ThinkingIndicator,
   ToolCallStep,
@@ -122,7 +122,9 @@ function StreamingMessageBody() {
         {agentSteps.length === 0 ? (
           <ThinkingIndicator />
         ) : (
-          <AgentSteps steps={agentSteps} />
+          <MarkdownStreamingBoundary>
+            <AgentSteps steps={agentSteps} />
+          </MarkdownStreamingBoundary>
         )}
       </div>
     </div>

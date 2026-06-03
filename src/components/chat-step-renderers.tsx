@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ShimmerStatus from "./shimmer-status";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
@@ -49,28 +50,7 @@ const TOOL_ICONS: Record<string, typeof Search> = {
 /* ------------------------------------------------------------------ */
 
 export function ThinkingIndicator() {
-  return (
-    <div
-      className="flex items-center gap-2.5 py-1.5"
-      role="status"
-      aria-label="Thinking"
-    >
-      <span
-        className="font-mono text-[10.5px] uppercase"
-        style={{
-          letterSpacing: "0.18em",
-          color: "color-mix(in srgb, var(--primary) 70%, transparent)",
-        }}
-      >
-        Thinking
-      </span>
-      <span className="inline-flex items-center gap-1.5" aria-hidden>
-        <span className="think-dot" />
-        <span className="think-dot" />
-        <span className="think-dot" />
-      </span>
-    </div>
-  );
+  return <ShimmerStatus label="Thinking" />;
 }
 
 /* ------------------------------------------------------------------ */

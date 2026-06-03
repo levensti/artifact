@@ -398,6 +398,10 @@ export default function ChatPanel({
   useEffect(() => {
     pinnedRef.current = pinnedToBottom;
   }, [pinnedToBottom]);
+  // Tracks whether the view is actually at the bottom. The "jump to latest"
+  // button keys off this real position rather than `pinnedToBottom`, which
+  // can flip false on a mousedown even while you're sitting at the bottom.
+  const [atBottom, setAtBottom] = useState(true);
   const [checkpointOpen, setCheckpointOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
@@ -434,11 +438,14 @@ export default function ChatPanel({
   useLayoutEffect(() => {
     const wasStreaming = wasStreamingRef.current;
     wasStreamingRef.current = chat.isStreaming;
-    if (!pinnedRef.current) return;
-    if (wasStreaming && !chat.isStreaming) return;
     const el = scrollAreaRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    if (pinnedRef.current && !(wasStreaming && !chat.isStreaming)) {
+      el.scrollTop = el.scrollHeight;
+    }
+    // Keep the real bottom-position in sync as content grows so the
+    // jump-to-latest button reflects where the view actually is.
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight <= 2);
   }, [chat.messages, displayThread, chat.isStreaming]);
 
   // Called by the streaming bubble after each typewriter advance commits.
@@ -497,7 +504,9 @@ export default function ChatPanel({
     // chips upward between mousedown and mouseup so the click never lands.
     const onMouseDown = () => unpin();
     const onScroll = () => {
-      if (!pinnedRef.current && isAtBottom()) {
+      const bottom = isAtBottom();
+      setAtBottom(bottom);
+      if (!pinnedRef.current && bottom) {
         pinnedRef.current = true;
         setPinnedToBottom(true);
       }
@@ -824,7 +833,7 @@ export default function ChatPanel({
             </div>
             </ChatScrollContext.Provider>
           </div>
-          {chat.isStreaming && !pinnedToBottom && (
+          {chat.isStreaming && !atBottom && (
             <button
               type="button"
               onClick={jumpToLatest}

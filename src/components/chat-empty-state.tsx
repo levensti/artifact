@@ -123,25 +123,6 @@ export default function ChatEmptyState({
           </button>
         ))}
       </div>
-
-      <div className="mt-5 flex items-start gap-2 px-2">
-        <BrainCircuit
-          className="mt-0.5 size-3 shrink-0"
-          strokeWidth={1.5}
-          style={{
-            color: "color-mix(in srgb, var(--muted-foreground) 50%, transparent)",
-          }}
-        />
-        <span
-          className="text-[10.5px] leading-snug"
-          style={{
-            color:
-              "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
-          }}
-        >
-          Searches arXiv &amp; the web automatically when needed
-        </span>
-      </div>
     </div>
   );
 }
