@@ -32,7 +32,7 @@ const NOTES_COLLAPSED_KEY = "artifact-notes-rail-collapsed";
 const ASSISTANT_COLLAPSED_KEY = "artifact-assistant-panel-collapsed";
 const ASSISTANT_WIDTH_KEY = "artifact-assistant-panel-width";
 
-import { getSavedSelectedModel, saveSelectedModel } from "@/lib/keys";
+import { getSavedSelectedModel } from "@/lib/keys";
 import type { Model } from "@/lib/models";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
 
@@ -279,10 +279,10 @@ export default function ReviewPage() {
     });
   }, [clientReady]);
 
-  // Wrap setter to also persist the choice
+  // The app uses one fixed model; this just keeps local state in sync with
+  // the (single) model passed down from child components.
   const handleModelChange = useCallback((model: Model | null) => {
     setSelectedModel(model);
-    void saveSelectedModel(model);
   }, []);
 
   const [annotationVersion, setAnnotationVersion] = useState(0);

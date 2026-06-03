@@ -1,9 +1,8 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { Provider } from "@/lib/models";
 
-export type OpenSettingsOptions = { provider?: Provider };
+export type OpenSettingsOptions = Record<string, never>;
 
 type SettingsOpenerContextValue = {
   openSettings: (options?: OpenSettingsOptions) => void;

@@ -45,22 +45,15 @@ import {
   type ImportProgress,
 } from "@/lib/cc-import/import-agent";
 import type { CcSessionMeta } from "@/lib/cc-import/types";
+import { hasUsableProvider } from "@/lib/client-data";
 import {
-  getSavedSelectedModel,
-  hasUsableProvider,
-  saveSelectedModel,
-} from "@/lib/client-data";
-import {
-  isModelReady,
   resolveModelCredentials,
   KEYS_UPDATED_EVENT,
 } from "@/lib/keys";
-import { FALLBACK_MODELS } from "@/lib/models";
 import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
-import SettingsDialog, { ProviderRow } from "@/components/settings-dialog";
-import ModelSelector from "@/components/model-selector";
-import type { Model } from "@/lib/models";
+import SettingsDialog from "@/components/settings-dialog";
+import { OpenRouterKeyRow } from "@/components/openrouter-key-row";
 
 interface JournalImportModalProps {
   onClose: () => void;
@@ -99,23 +92,6 @@ export default function JournalImportModal({
     "separate",
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedModel, setSelectedModelState] = useState<Model | null>(() =>
-    getSavedSelectedModel(),
-  );
-
-  // Keep the local selected model in sync with the global setting so
-  // that external selectors (main app) stay authoritative.
-  useEffect(() => {
-    const sync = () => setSelectedModelState(getSavedSelectedModel());
-    window.addEventListener(KEYS_UPDATED_EVENT, sync);
-    return () => window.removeEventListener(KEYS_UPDATED_EVENT, sync);
-  }, []);
-
-  const handleModelSelect = useCallback((m: Model | null) => {
-    setSelectedModelState(m);
-    void saveSelectedModel(m);
-  }, []);
-
   // Tracks whether the user has at least one API key saved so the
   // Import button can flip from disabled to enabled without a reload.
   const [hasKey, setHasKey] = useState<boolean>(() => hasUsableProvider());
@@ -276,29 +252,8 @@ export default function JournalImportModal({
     if (!handle || phase.kind !== "ready") return;
     if (selected.size === 0) return;
 
-    let model = selectedModel ?? getSavedSelectedModel();
-    if (!model || !isModelReady(model)) {
-      // Auto-fallback: a provider is usable (own key or platform fallback)
-      // but the user never picked a model. The Import button is disabled
-      // until something is usable, but keep the safety net.
-      if (hasUsableProvider()) {
-        const fallback = FALLBACK_MODELS.find((m) => {
-          try {
-            return isModelReady(m);
-          } catch {
-            return false;
-          }
-        });
-        if (fallback) {
-          await saveSelectedModel(fallback);
-          setSelectedModelState(fallback);
-          model = fallback;
-        }
-      }
-      if (!model || !isModelReady(model)) return;
-    }
-    const creds = resolveModelCredentials(model);
-    if (!creds) return;
+    if (!hasUsableProvider()) return;
+    const creds = resolveModelCredentials();
 
     // Read full transcripts for the selected ids.
     const ids = [...selected];
@@ -320,9 +275,7 @@ export default function JournalImportModal({
     const result = await importCcSessions({
       sessions: parsed,
       mode: effectiveMode,
-      model,
       apiKey: creds.apiKey,
-      apiBaseUrl: creds.apiBaseUrl,
       onProgress: (p) => {
         setPhase((prev) => {
           if (prev.kind !== "importing") return prev;
@@ -354,7 +307,6 @@ export default function JournalImportModal({
     phase,
     selected,
     mergeMode,
-    selectedModel,
     onImported,
     refreshImportedMap,
   ]);
@@ -589,46 +541,26 @@ export default function JournalImportModal({
                 <div className="mb-2 flex items-start gap-2">
                   <Key className="mt-0.5 size-3 shrink-0 text-muted-foreground/70" />
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Your key stays on-device and is sent only to the provider
-                    you pick.
+                    Your key stays on-device and is sent only to OpenRouter.
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <ProviderRow
-                    provider="anthropic"
-                    placeholder="sk-ant-..."
-                    docsUrl=""
-                  />
-                  <ProviderRow
-                    provider="openai"
-                    placeholder="sk-..."
-                    docsUrl=""
-                  />
-                  <ProviderRow
-                    provider="xai"
-                    placeholder="xai-..."
-                    docsUrl=""
-                  />
+                  <OpenRouterKeyRow />
                 </div>
               </div>
             ) : null}
-            <div className="mb-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/80">
-              <span>Journal agent model:</span>
-              <ModelSelector
-                selected={selectedModel}
-                onSelect={handleModelSelect}
-              />
-              {!hasKey ? (
+            {!hasKey ? (
+              <div className="mb-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/80">
                 <button
                   type="button"
                   onClick={() => setKeyMenuOpen((v) => !v)}
-                  className="ml-2 inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/5 px-2 py-0.5 text-[11px] font-medium text-warning hover:bg-warning/10 dark:bg-warning/10 dark:text-warning"
+                  className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/5 px-2 py-0.5 text-[11px] font-medium text-warning hover:bg-warning/10 dark:bg-warning/10 dark:text-warning"
                 >
                   <Key className="size-2.75" />
                   Add API key
                 </button>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-muted-foreground/70">
                 {selected.size} selected
@@ -697,7 +629,6 @@ export default function JournalImportModal({
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        focusProvider={null}
       />
     </div>
   );

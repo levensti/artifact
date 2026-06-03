@@ -3,7 +3,6 @@
 /* Hydration: localStorage / sessionStorage after mount (avoids SSR/client mismatch). */
 /* eslint-disable react-hooks/set-state-in-effect */
 import { Suspense, useCallback, useEffect, useState } from "react";
-import type { Provider } from "@/lib/models";
 import { PanelLeft } from "lucide-react";
 import { cn, BREAKPOINTS } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,8 +24,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsFocusProvider, setSettingsFocusProvider] =
-    useState<Provider | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_KEY);
@@ -62,7 +59,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     try {
       if (sessionStorage.getItem(OPEN_SETTINGS_FLAG) === "1") {
         sessionStorage.removeItem(OPEN_SETTINGS_FLAG);
-        setSettingsFocusProvider(null);
         setSettingsOpen(true);
       }
     } catch {
@@ -70,14 +66,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, []);
 
-  const openSettings = useCallback((options?: { provider?: Provider }) => {
-    setSettingsFocusProvider(options?.provider ?? null);
+  const openSettings = useCallback(() => {
     setSettingsOpen(true);
   }, []);
 
   const handleSettingsOpenChange = useCallback((open: boolean) => {
     setSettingsOpen(open);
-    if (!open) setSettingsFocusProvider(null);
   }, []);
 
   const toggle = useCallback(() => {
@@ -166,7 +160,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <SettingsDialog
           open={settingsOpen}
           onOpenChange={handleSettingsOpenChange}
-          focusProvider={settingsFocusProvider}
         />
       </div>
     </SettingsOpenerProvider>

@@ -28,16 +28,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  PROVIDER_META,
-  isInferenceProviderType,
-  type Model,
-} from "@/lib/models";
-import { getInferenceProfile } from "@/lib/keys";
+import { type Model } from "@/lib/models";
+import { getSavedSelectedModel } from "@/lib/keys";
 import type { Annotation } from "@/lib/annotations";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import ModelSelector from "./model-selector";
 import { useSettingsOpener } from "./settings-opener-context";
 import { useCitationContext } from "./citation-context";
 import { ExaKeyResumeProvider } from "./exa-key-resume-context";
@@ -354,16 +349,15 @@ export default function ChatPanel({
   externalPrompt,
   onExternalPromptConsumed,
   selectedModel: externalModel,
-  onModelChange,
   sourceUrl,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const { parseReady } = useCitationContext();
-  const [internalModel, setInternalModel] = useState<Model | null>(null);
 
+  // The app uses one fixed model. When no model is passed in, fall back to it
+  // so a standalone chat panel still works.
   const selectedModel =
-    externalModel !== undefined ? externalModel : internalModel;
-  const setSelectedModel = onModelChange ?? setInternalModel;
+    externalModel !== undefined ? externalModel : getSavedSelectedModel();
 
   const chat = useChat({
     reviewId,
@@ -686,8 +680,7 @@ export default function ChatPanel({
   }, [pendingQuote, chat, chatThreadAnnotationId]);
 
   const openKeysForChat = () => {
-    if (selectedModel) openSettings({ provider: selectedModel.provider });
-    else openSettings();
+    openSettings();
   };
 
   const handleRetry = useCallback(() => {
@@ -726,10 +719,6 @@ export default function ChatPanel({
                 Ask the paper
               </span>
             </div>
-            <ModelSelector
-              selected={selectedModel}
-              onSelect={setSelectedModel}
-            />
           </div>
         )}
 
@@ -851,10 +840,7 @@ export default function ChatPanel({
         {selectedModel && !chat.hasKeyForModel && (
           <div className="mx-3 mb-2 px-3 py-2.5 rounded-md border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              {isInferenceProviderType(selectedModel.provider) &&
-              selectedModel.profileId
-                ? `Configure “${getInferenceProfile(selectedModel.profileId)?.label ?? "inference"}” in Settings to send messages.`
-                : `${PROVIDER_META[selectedModel.provider as keyof typeof PROVIDER_META].label} API key required to send messages.`}
+              An OpenRouter API key is required to send messages.
             </span>
             <Button
               type="button"

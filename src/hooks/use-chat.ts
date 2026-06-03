@@ -5,7 +5,6 @@ import type { Model } from "@/lib/models";
 import {
   getExaApiKey,
   hasUsableProvider,
-  isModelReady,
   KEYS_UPDATED_EVENT,
   resolveModelCredentials,
 } from "@/lib/keys";
@@ -230,7 +229,7 @@ export function useChat({
   // fallback. Drives the chat input lock; a fresh user with a fallback
   // is not locked out.
   const hasSavedKeys = hasUsableProvider();
-  const hasKeyForModel = selectedModel != null && isModelReady(selectedModel);
+  const hasKeyForModel = selectedModel != null && hasUsableProvider();
 
   /**
    * Decide what paper payload to send to /api/chat. Short papers go in as
@@ -250,15 +249,11 @@ export function useChat({
       if (!isLongPaper(paperContext)) return { paperContext };
       if (!selectedModel) return { paperContext };
 
-      const creds = resolveModelCredentials(selectedModel);
-      if (!creds) return { paperContext };
+      const creds = resolveModelCredentials();
 
       try {
         const parsed = await parseAndCachePaper(paperContext, {
-          model: selectedModel.modelId,
-          provider: selectedModel.provider,
           apiKey: creds.apiKey,
-          apiBaseUrl: creds.apiBaseUrl,
         });
         return { parsedPaper: parsed };
       } catch (err) {
@@ -292,7 +287,7 @@ export function useChat({
       const trimmed = text.trim();
       if (!trimmed || isStreaming || !selectedModel) return;
 
-      if (!isModelReady(selectedModel)) return;
+      if (!hasUsableProvider()) return;
 
       setError(null);
       setLastFailedRequest(null);
@@ -349,11 +344,7 @@ export function useChat({
             userMessage: text,
             userMessageId: userMsgId,
             assistantMessageId: assistantMsg.id,
-            model: selectedModel.modelId,
-            provider: selectedModel.provider,
-            ...(resolveModelCredentials(selectedModel) ?? {
-              apiKey: "",
-            }),
+            ...resolveModelCredentials(),
             ...paperPayload,
             paperTitle,
             arxivId,
@@ -489,7 +480,7 @@ export function useChat({
       if (!trimmed || isStreaming || !selectedModel || !chatThreadAnnotationId)
         return;
 
-      if (!isModelReady(selectedModel)) return;
+      if (!hasUsableProvider()) return;
 
       const ann = await getAnnotation(reviewId, chatThreadAnnotationId);
       if (!ann || ann.kind !== "ask_ai") return;
@@ -555,11 +546,7 @@ export function useChat({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: historyForApi,
-            model: selectedModel.modelId,
-            provider: selectedModel.provider,
-            ...(resolveModelCredentials(selectedModel) ?? {
-              apiKey: "",
-            }),
+            ...resolveModelCredentials(),
             ...paperPayload,
             paperTitle,
             arxivId,

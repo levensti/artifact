@@ -14,17 +14,10 @@
  */
 
 import { NextRequest } from "next/server";
-import type { Provider } from "@/lib/models";
-import { isInferenceProviderType, contextWindowFor } from "@/lib/models";
-import {
-  invalidApiProviderMessage,
-  isAnthropicMessagesProvider,
-  isProvider,
-  type OpenAiCompatibleProvider,
-} from "@/lib/ai-providers";
+import { OPENROUTER_CONTEXT_WINDOW } from "@/lib/openrouter";
 import type { StreamEvent } from "@/lib/stream-types";
 import { jsonError } from "@/lib/api-utils";
-import { resolveServerApiKey } from "@/server/provider-env";
+import { resolveOpenRouterKey } from "@/server/provider-env";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import {
@@ -41,8 +34,7 @@ import {
 import { requireUserId, HttpError, errorResponse } from "@/server/api";
 import * as store from "@/server/store";
 import { buildPaperBlock } from "./paper-block";
-import { runAnthropicAgentLoop } from "./anthropic-handler";
-import { runOpenAIAgentLoop } from "./openai-handler";
+import { runOpenRouterAgentLoop } from "./openrouter-handler";
 import type { ChatMessage, ParsedPaper } from "@/lib/review-types";
 
 /* ------------------------------------------------------------------ */
@@ -75,14 +67,8 @@ interface ChatRequest {
   /** Re-run the last stored user message without appending a new one. Used by
    *  the Exa-key resume flow after the turn paused waiting on a key decision. */
   resume?: boolean;
-  model: string;
-  provider: Provider;
-  /** Required. Sent inline from the browser; never persisted server-side. */
-  apiKey: string;
-  /** Base URL for OpenAI-compatible providers. */
-  apiBaseUrl?: string;
-  /** Whether the OpenAI-compatible endpoint supports streaming. Default: true. */
-  supportsStreaming?: boolean;
+  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  apiKey?: string;
   /**
    * Full paper text. For short papers (<~30k tokens) the browser sends this
    * and the agent works directly off it. For long papers, the browser sends
@@ -299,11 +285,7 @@ export async function POST(req: NextRequest) {
     userMessageId,
     assistantMessageId,
     resume,
-    model,
-    provider,
     apiKey,
-    apiBaseUrl,
-    supportsStreaming,
     paperContext,
     parsedPaper,
     paperTitle,
@@ -314,13 +296,6 @@ export async function POST(req: NextRequest) {
     skipWebSearch,
     mode,
   } = body;
-
-  if (!isProvider(provider)) {
-    return jsonError(invalidApiProviderMessage(), 400);
-  }
-  if (!model || typeof model !== "string") {
-    return jsonError("Model ID is required.", 400);
-  }
 
   // Server-owned path: the main review chat sends a single `userMessage` + a
   // `reviewId` instead of the full transcript, and the server owns load /
@@ -336,28 +311,11 @@ export async function POST(req: NextRequest) {
     return jsonError("Messages array is required and must not be empty.", 400);
   }
 
-  const effectiveApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
-  const effectiveBaseUrl =
-    typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
-  const profileSupportsStreaming = supportsStreaming !== false;
-
-  // For built-in providers, fall back to the platform key when the user
-  // didn't bring their own. Never echoed back — used only upstream below.
-  const resolvedApiKey = isInferenceProviderType(provider)
-    ? effectiveApiKey
-    : resolveServerApiKey(provider, effectiveApiKey) ?? "";
-
-  // OpenAI-compatible providers may be unauthenticated (localhost Ollama, or
-  // a tunnel fronting one). If the upstream actually requires a key, it will
-  // 401 and we surface that error — better than blocking valid setups here.
-  if (!resolvedApiKey && !isInferenceProviderType(provider)) {
+  // Resolve the OpenRouter key: the user's inline override when present,
+  // otherwise the platform env key. Never echoed back — used only upstream.
+  const resolvedApiKey = resolveOpenRouterKey(apiKey);
+  if (!resolvedApiKey) {
     return jsonError("API key is required.", 401);
-  }
-  if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
-    return jsonError(
-      "apiBaseUrl is required for OpenAI-compatible providers.",
-      400,
-    );
   }
 
   const trimmedExaKey =
@@ -428,7 +386,7 @@ export async function POST(req: NextRequest) {
       const overhead =
         estimateTokens(systemPrompt) + estimateTokens(paperBlock) + 2_000;
       const historyBudget =
-        contextWindowFor(provider, model) - 16_384 - overhead - 2_000;
+        OPENROUTER_CONTEXT_WINDOW - 16_384 - overhead - 2_000;
       conversation = fitTranscriptToBudget(
         base,
         Math.max(4_000, historyBudget),
@@ -458,38 +416,16 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        if (isAnthropicMessagesProvider(provider)) {
-          await runAnthropicAgentLoop(
-            conversation,
-            model,
-            resolvedApiKey,
-            systemPrompt,
-            paperContext,
-            parsedPaper,
-            tools,
-            toolContext,
-            emit,
-          );
-        } else {
-          await runOpenAIAgentLoop(
-            conversation,
-            model,
-            resolvedApiKey,
-            systemPrompt,
-            paperContext,
-            parsedPaper,
-            provider as OpenAiCompatibleProvider,
-            tools,
-            toolContext,
-            emit,
-            provider === "openai_compatible"
-              ? {
-                  customOpenAiBaseUrl: effectiveBaseUrl,
-                  supportsStreaming: profileSupportsStreaming,
-                }
-              : undefined,
-          );
-        }
+        await runOpenRouterAgentLoop(
+          conversation,
+          resolvedApiKey,
+          systemPrompt,
+          paperContext,
+          parsedPaper,
+          tools,
+          toolContext,
+          emit,
+        );
       } catch (err) {
         emit({
           type: "error",

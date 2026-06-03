@@ -1,45 +1,22 @@
 import "server-only";
-import { BUILTIN_PROVIDER_ORDER, type Provider } from "@/lib/models";
 
 /**
- * Platform-key fallback.
+ * OpenRouter key resolution + tool-key availability.
  *
- * When a signed-in user has not saved their own key for a built-in provider,
- * the AI route handlers fall back to a platform key read from the
- * environment. This keeps new users out of the "bring your own key" friction
- * while leaving existing key-bringers untouched.
+ * The app calls exactly one provider (OpenRouter). A signed-in user may save
+ * their own OpenRouter key; otherwise the route handlers fall back to a
+ * platform key read from `OPENROUTER_API_KEY` in the environment.
  *
  * Hard rules:
  *   - This module is server-only. The env value MUST NOT reach the browser.
  *     Routes that serialize settings (`/api/bootstrap`, `/api/settings`) may
- *     surface ONLY the booleans from `platformProviderAvailability()` —
- *     never the key itself.
- *   - Fallback is opt-in by deployment: it activates only when the matching
- *     env var is set. Leave the vars unset to disable it entirely.
- *   - Inference profiles (`openai_compatible`) get no platform fallback —
- *     they're user-defined endpoints, not a provider we hold a key for.
+ *     surface ONLY the boolean from `platformOpenRouterAvailable()` — never
+ *     the key itself.
+ *   - The fallback activates only when `OPENROUTER_API_KEY` is set.
  */
 
-/** Built-in providers eligible for an env fallback. */
-export type PlatformProvider = "anthropic" | "openai" | "xai";
-
-const PLATFORM_ENV_VAR: Record<PlatformProvider, string> = {
-  anthropic: "PROVIDED_ANTHROPIC_API_KEY",
-  openai: "PROVIDED_OPENAI_API_KEY",
-  xai: "PROVIDED_XAI_API_KEY",
-};
-
-function isPlatformProvider(p: Provider): p is PlatformProvider {
-  return p === "anthropic" || p === "openai" || p === "xai";
-}
-
-/**
- * The platform key for a provider, or null when unconfigured. Reads
- * `process.env` on every call so deploys can rotate without a rebuild.
- */
-export function platformKeyFor(provider: Provider): string | null {
-  if (!isPlatformProvider(provider)) return null;
-  const raw = process.env[PLATFORM_ENV_VAR[provider]];
+function envOpenRouterKey(): string | null {
+  const raw = process.env.OPENROUTER_API_KEY;
   const trimmed = typeof raw === "string" ? raw.trim() : "";
   return trimmed ? trimmed : null;
 }
@@ -50,32 +27,24 @@ export function platformKeyFor(provider: Provider): string | null {
  * caller surfaces a 401). Never returns the env value to anything that
  * serializes to the client — handlers only pass it to `fetch`.
  */
-export function resolveServerApiKey(
-  provider: Provider,
+export function resolveOpenRouterKey(
   inlineKey: string | null | undefined,
 ): string | null {
   const trimmed = typeof inlineKey === "string" ? inlineKey.trim() : "";
   if (trimmed) return trimmed;
-  return platformKeyFor(provider);
+  return envOpenRouterKey();
 }
 
 /**
- * Per-provider booleans indicating whether a platform fallback is
- * configured. Safe to send to the client — leaks existence only, never
- * the key. Inference-compatible providers are always false.
+ * Whether a platform OpenRouter key is configured. Safe to send to the
+ * client — leaks existence only, never the key.
  */
-export function platformProviderAvailability(): Record<Provider, boolean> {
-  const out = {} as Record<Provider, boolean>;
-  for (const p of BUILTIN_PROVIDER_ORDER) {
-    out[p] = platformKeyFor(p) !== null;
-  }
-  out.openai_compatible = false;
-  return out;
+export function platformOpenRouterAvailable(): boolean {
+  return envOpenRouterKey() !== null;
 }
 
 /**
- * Tool-key counterpart to `platformProviderAvailability()`. Tool keys
- * (currently just Exa) aren't `Provider` values, so they get their own
+ * Tool-key availability. Tool keys (currently just Exa) get their own
  * surface. Booleans only — the env key never reaches the browser.
  */
 export interface PlatformToolAvailability {

@@ -6,7 +6,6 @@
  * paper hits the cache and skips the LLM call.
  */
 
-import type { Provider } from "@/lib/models";
 import type { PageMap } from "@/lib/review-types";
 import { apiFetch } from "@/lib/client/api";
 import {
@@ -44,10 +43,8 @@ export async function cachePageMap(
 
 interface PageMapRequestPayload {
   paperText: string;
-  model: string;
-  provider: Provider;
-  apiKey: string;
-  apiBaseUrl?: string;
+  /** Optional per-user OpenRouter key override. */
+  apiKey?: string;
 }
 
 export type PageMapProgress = (done: number, total: number) => void;

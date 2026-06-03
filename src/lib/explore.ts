@@ -1,15 +1,6 @@
-import type { Provider } from "./models";
-
-/** Same as chat/generate API providers — kept as alias for explore/generation call sites. */
-export type ExploreProvider = Provider;
-
 export interface GenerateRequest {
-  model: string;
-  provider: ExploreProvider;
-  /** Required. Sent inline from the browser. */
-  apiKey: string;
-  /** Base URL for OpenAI-compatible providers. */
-  apiBaseUrl?: string;
+  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  apiKey?: string;
   prompt: string;
   paperContext?: string;
   /** When true, response is streamed as text/plain text deltas. */

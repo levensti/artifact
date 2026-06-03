@@ -7,7 +7,6 @@
  * the per-turn tokens, not the parse.
  */
 
-import type { Provider } from "@/lib/models";
 import type { ParsedPaper } from "@/lib/review-types";
 import { apiFetch } from "@/lib/client/api";
 
@@ -54,10 +53,8 @@ export async function cacheParsedPaper(
 
 interface ParseRequestPayload {
   paperText: string;
-  model: string;
-  provider: Provider;
-  apiKey: string;
-  apiBaseUrl?: string;
+  /** Optional per-user OpenRouter key override. */
+  apiKey?: string;
 }
 
 /** Call the parse endpoint and cache the result. */

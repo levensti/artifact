@@ -12,36 +12,23 @@
  * burden from the model (the page is an input, not something to discover),
  * which both lowers wall-clock latency and removes the marker-drift
  * failure mode the single-call version had to guard against.
- *
- * Uses the user's selected provider+model+key — never hardcodes a model
- * on the platform side. Mirrors the conventions in /api/papers/parse.
  */
 
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-import {
-  invalidApiProviderMessage,
-  isAnthropicMessagesProvider,
-  isLocalhostUrl,
-  isProvider,
-  openAiCompatibleChatCompletionsUrl,
-  openAiMaxTokensField,
-  providerApiErrorLabel,
-  type OpenAiCompatibleProvider,
-} from "@/lib/ai-providers";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
-import { resolveServerApiKey } from "@/server/provider-env";
-import { isInferenceProviderType, type Provider } from "@/lib/models";
+import { resolveOpenRouterKey } from "@/server/provider-env";
+import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
 import type { PageMap } from "@/lib/review-types";
+
+const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
 
 interface PageMapRequest {
   paperText: string;
-  model: string;
-  provider: Provider;
-  apiKey: string;
-  apiBaseUrl?: string;
+  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  apiKey?: string;
 }
 
 const MAX_PAPER_CHARS = 3_000_000;
@@ -93,14 +80,8 @@ export async function POST(req: NextRequest) {
     return jsonError("Invalid JSON body", 400);
   }
 
-  const { paperText, model, provider, apiKey, apiBaseUrl } = body;
+  const { paperText, apiKey } = body;
 
-  if (!isProvider(provider)) {
-    return jsonError(invalidApiProviderMessage(), 400);
-  }
-  if (!model || typeof model !== "string") {
-    return jsonError("Model ID is required.", 400);
-  }
   if (!paperText || typeof paperText !== "string") {
     return jsonError("paperText is required.", 400);
   }
@@ -111,47 +92,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const effectiveApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
-  const effectiveBaseUrl =
-    typeof apiBaseUrl === "string" ? apiBaseUrl.trim() : "";
-
-  // Built-in providers fall back to the platform key; inference providers
-  // keep their existing (key or localhost) behavior unchanged.
-  const resolvedApiKey = isInferenceProviderType(provider)
-    ? effectiveApiKey
-    : resolveServerApiKey(provider, effectiveApiKey) ?? "";
-
-  const isLocalInferenceCall =
-    isInferenceProviderType(provider) &&
-    !!effectiveBaseUrl &&
-    isLocalhostUrl(effectiveBaseUrl);
-  if (!resolvedApiKey && !isLocalInferenceCall) {
+  const resolvedApiKey = resolveOpenRouterKey(apiKey);
+  if (!resolvedApiKey) {
     return jsonError("API key is required.", 401);
-  }
-  if (isInferenceProviderType(provider) && !effectiveBaseUrl) {
-    return jsonError(
-      "apiBaseUrl is required for OpenAI-compatible providers.",
-      400,
-    );
   }
 
   const pages = splitByPage(paperText);
 
-  const dispatch = async (
-    systemPrompt: string,
-    userPrompt: string,
-  ): Promise<string> => {
-    return isAnthropicMessagesProvider(provider)
-      ? callAnthropic(model, resolvedApiKey, systemPrompt, userPrompt)
-      : callOpenAICompatible(
-          model,
-          resolvedApiKey,
-          systemPrompt,
-          userPrompt,
-          provider as OpenAiCompatibleProvider,
-          provider === "openai_compatible" ? effectiveBaseUrl : undefined,
-        );
-  };
+  const dispatch = (systemPrompt: string, userPrompt: string): Promise<string> =>
+    callOpenRouter(resolvedApiKey, systemPrompt, userPrompt);
 
   const callOne = (pageText: string): Promise<string> =>
     dispatch(
@@ -273,85 +222,46 @@ function splitByPage(paperText: string): Array<{ page: number; text: string }> {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Provider calls                                                     */
+/*  OpenRouter call                                                    */
 /* ------------------------------------------------------------------ */
 
-async function callAnthropic(
-  model: string,
+async function callOpenRouter(
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
 ): Promise<string> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      // Output is just three small dictionaries — a few hundred tokens is
-      // plenty for even a 50-section paper.
-      max_tokens: 8000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-      stream: false,
-    }),
-  });
-
-  if (!response.ok) throw await parseError(response, "Anthropic");
-
-  const data = await response.json();
-  return data?.content?.[0]?.text ?? "";
-}
-
-async function callOpenAICompatible(
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  provider: OpenAiCompatibleProvider,
-  customOpenAiBaseUrl?: string,
-): Promise<string> {
-  const baseUrl = openAiCompatibleChatCompletionsUrl(
-    provider,
-    customOpenAiBaseUrl,
-  );
-
-  const response = await fetch(baseUrl, {
+  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: OPENROUTER_MODEL,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
       stream: false,
-      ...openAiMaxTokensField(model, 8000),
+      // Output is just three small dictionaries — a few hundred tokens is
+      // plenty for even a 50-section paper.
+      max_tokens: 8000,
       // Page mapping is mechanical extraction — skip the reasoning pass on
-      // models that support it (OpenAI o-series/gpt-5, xAI Grok reasoning).
-      // Non-reasoning models and most openai-compatible servers ignore this.
+      // models that support it. Models without reasoning ignore this.
       reasoning_effort: "low",
     }),
   });
 
-  if (!response.ok) {
-    throw await parseError(response, providerApiErrorLabel(provider));
-  }
+  if (!response.ok) throw await parseError(response);
 
   const data = await response.json();
   return data?.choices?.[0]?.message?.content ?? "";
 }
 
-async function parseError(response: Response, providerLabel: string) {
+async function parseError(response: Response) {
   const errorText = await response.text();
-  const fallback = `${providerLabel} API error: ${response.status}`;
+  const fallback = `OpenRouter API error: ${response.status}`;
   return new Error(parseApiErrorMessage(errorText, fallback));
 }
 

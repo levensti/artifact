@@ -79,14 +79,10 @@ export default function JournalCheckpointModal({
 
   const handleSave = useCallback(async () => {
     if (!selectedModel) {
-      setValidationErr("Choose a model first.");
+      setValidationErr("Add an OpenRouter API key in Settings first.");
       return;
     }
-    const creds = resolveModelCredentials(selectedModel);
-    if (!creds) {
-      setValidationErr("API key for this model is not configured.");
-      return;
-    }
+    const creds = resolveModelCredentials();
     if (mode === "append" && !targetSlug) {
       setValidationErr("Pick an entry to append to.");
       return;
@@ -97,9 +93,7 @@ export default function JournalCheckpointModal({
     const angleSnapshot = angle.trim() || undefined;
     const modeSnapshot = mode;
     const targetSlugSnapshot = targetSlug;
-    const model = selectedModel;
     const apiKey = creds.apiKey;
-    const apiBaseUrl = creds.apiBaseUrl;
 
     try {
       const messages = await loadMessages(reviewId);
@@ -168,9 +162,7 @@ export default function JournalCheckpointModal({
         messages,
         annotationThreads,
         angle: angleSnapshot,
-        model,
         apiKey,
-        apiBaseUrl,
       });
     } catch (err) {
       setSubmitting(false);
@@ -371,9 +363,7 @@ interface StreamIntoEntryArgs {
     messages: Annotation["thread"];
   }[];
   angle: string | undefined;
-  model: Model;
-  apiKey: string;
-  apiBaseUrl: string | undefined;
+  apiKey?: string;
 }
 
 async function streamIntoEntry(opts: StreamIntoEntryArgs): Promise<void> {
@@ -417,9 +407,7 @@ async function streamIntoEntry(opts: StreamIntoEntryArgs): Promise<void> {
         messages: opts.messages,
         annotationThreads: opts.annotationThreads,
         angle: opts.angle,
-        model: opts.model,
         apiKey: opts.apiKey,
-        apiBaseUrl: opts.apiBaseUrl,
         onText,
       });
     } else {
@@ -432,9 +420,7 @@ async function streamIntoEntry(opts: StreamIntoEntryArgs): Promise<void> {
         angle: opts.angle,
         existingTitle: opts.existingTitle,
         existingMarkdown: opts.existingMarkdown,
-        model: opts.model,
         apiKey: opts.apiKey,
-        apiBaseUrl: opts.apiBaseUrl,
         onText,
       });
     }

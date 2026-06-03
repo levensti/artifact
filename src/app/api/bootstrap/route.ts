@@ -3,7 +3,7 @@ import { authedRoute } from "@/server/api";
 import { auth } from "@/server/auth";
 import * as store from "@/server/store";
 import {
-  platformProviderAvailability,
+  platformOpenRouterAvailable,
   platformToolAvailability,
 } from "@/server/provider-env";
 
@@ -30,9 +30,9 @@ export const GET = authedRoute(async (userId) => {
   return NextResponse.json({
     reviews,
     settings,
-    // Booleans only — which built-in providers have a platform-key
-    // fallback configured. NEVER the key itself.
-    platformProviders: platformProviderAvailability(),
+    // Boolean only — whether a platform OpenRouter key is configured.
+    // NEVER the key itself.
+    platformOpenRouter: platformOpenRouterAvailable(),
     // Same shape, for tool keys (Exa). Lets the client suppress the
     // "add a key" prompt when the server already has one in env.
     platformTools: platformToolAvailability(),

@@ -17,7 +17,6 @@
  * progress on sessions 1-3.
  */
 
-import type { Model } from "@/lib/models";
 import {
   finalizeWikiIngest,
   loadWikiPages,
@@ -38,9 +37,8 @@ import type { ParsedCcSession } from "./types";
 
 export interface ImportSessionsArgs {
   sessions: ParsedCcSession[];
-  model: Model;
-  apiKey: string;
-  apiBaseUrl?: string;
+  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  apiKey?: string;
   /**
    * "separate" (default): one agent call per session, one entry per session.
    * "combined": a single agent call that sees all selected transcripts at
@@ -123,9 +121,7 @@ export async function importCcSessions(
         const upserts = await runAgentForCombined({
           sessions: args.sessions,
           knownPages,
-          model: args.model,
           apiKey: args.apiKey,
-          apiBaseUrl: args.apiBaseUrl,
         });
 
         if (upserts.length === 0) {
@@ -190,9 +186,7 @@ export async function importCcSessions(
         const upserts = await runAgentForSession({
           session,
           knownPages,
-          model: args.model,
           apiKey: args.apiKey,
-          apiBaseUrl: args.apiBaseUrl,
         });
 
         if (upserts.length === 0) {
@@ -275,9 +269,7 @@ interface RunAgentArgs {
     updatedAt: string;
     contentPreview: string;
   }>;
-  model: Model;
-  apiKey: string;
-  apiBaseUrl?: string;
+  apiKey?: string;
 }
 
 interface AgentUpsert {
@@ -296,9 +288,7 @@ interface AgentResponse {
 interface RunCombinedArgs {
   sessions: ParsedCcSession[];
   knownPages: RunAgentArgs["knownPages"];
-  model: Model;
-  apiKey: string;
-  apiBaseUrl?: string;
+  apiKey?: string;
 }
 
 async function runAgentForCombined(
@@ -314,10 +304,7 @@ async function runAgentForCombined(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: args.model.modelId,
-      provider: args.model.provider,
-      apiKey: args.apiKey,
-      ...(args.apiBaseUrl ? { apiBaseUrl: args.apiBaseUrl } : {}),
+      ...(args.apiKey ? { apiKey: args.apiKey } : {}),
       prompt,
       paperContext: transcript,
     }),
@@ -351,10 +338,7 @@ async function runAgentForSession(args: RunAgentArgs): Promise<WikiFinalizePage[
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: args.model.modelId,
-      provider: args.model.provider,
-      apiKey: args.apiKey,
-      ...(args.apiBaseUrl ? { apiBaseUrl: args.apiBaseUrl } : {}),
+      ...(args.apiKey ? { apiKey: args.apiKey } : {}),
       prompt,
       // Ferry the (potentially huge) transcript through the
       // 500 KB-capped paperContext channel so we don't blow the

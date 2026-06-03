@@ -1,21 +1,15 @@
 /**
- * OpenAI-compatible agentic loop — works with OpenAI, xAI, and any
- * OpenAI-compatible inference provider (e.g. Fireworks, OpenRouter).
- * The round/watchdog/tool-execution logic lives in `agent-loop.ts`; this
- * file is the OpenAI-specific adapter (HTTP call, SSE parser, tool/role
- * message format).
+ * OpenRouter agentic loop. OpenRouter speaks the OpenAI Chat Completions
+ * shape, so this is the OpenAI-compatible adapter — HTTP call, SSE parser,
+ * tool/role message format. The round/watchdog/tool-execution logic lives in
+ * `agent-loop.ts`; this file just supplies a `ProviderAdapter`.
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
 import type { ParsedPaper } from "@/lib/review-types";
-import {
-  openAiCompatibleChatCompletionsUrl,
-  openAiMaxTokensField,
-  providerApiErrorLabel,
-  type OpenAiCompatibleProvider,
-} from "@/lib/ai-providers";
+import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
 import { toOpenAITools } from "@/tools/registry";
 import type { ToolContext, ToolDefinition } from "@/tools/types";
 import { toOpenAIMessages, type TranscriptMessage } from "@/lib/transcript";
@@ -29,8 +23,10 @@ import {
   type TurnResult,
 } from "./agent-loop";
 
+const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+
 /* ------------------------------------------------------------------ */
-/*  OpenAI API types                                                   */
+/*  OpenAI-compatible API types                                        */
 /* ------------------------------------------------------------------ */
 
 interface OpenAIToolCall {
@@ -65,33 +61,21 @@ interface OpenAIStreamEvent {
   usage?: OpenAIUsage;
 }
 
-export interface OpenAIHandlerOptions {
-  /** Custom OpenAI-compatible base URL. */
-  customOpenAiBaseUrl?: string | null;
-  /** Whether the provider supports streaming. Default: true. */
-  supportsStreaming?: boolean;
-}
-
-export async function runOpenAIAgentLoop(
+export async function runOpenRouterAgentLoop(
   chatMessages: TranscriptMessage[],
-  model: string,
   apiKey: string,
   systemPrompt: string,
   paperContext: string | undefined,
   parsedPaper: ParsedPaper | undefined,
-  provider: OpenAiCompatibleProvider,
   tools: ToolDefinition[],
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
-  options?: OpenAIHandlerOptions,
 ) {
-  const useStreaming = options?.supportsStreaming !== false;
   const paperBlock = buildPaperBlock(paperContext, parsedPaper);
   const baseSystem = systemPrompt + TOOL_RESULT_GUARDRAIL;
   const systemContent = paperBlock ? `${baseSystem}\n\n${paperBlock}` : baseSystem;
 
   const openaiTools = toOpenAITools(tools);
-  const baseUrl = openAiCompatibleChatCompletionsUrl(provider, options?.customOpenAiBaseUrl);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -113,77 +97,42 @@ export async function runOpenAIAgentLoop(
 
   const adapter: ProviderAdapter = {
     async request(): Promise<TurnResult> {
-      const requestBody: Record<string, unknown> = {
-        model,
-        messages: apiMessages,
-        tools: openaiTools,
-        stream: useStreaming,
-        ...openAiMaxTokensField(model, 16384),
-      };
-      // OpenAI/xAI: opt into usage in the final stream chunk so we can report
-      // cached_tokens uniformly. Local OpenAI-compatible servers that don't
-      // recognize this option typically ignore it; if any reject it, we'd need
-      // a capability flag, but at present this is universally accepted.
-      if (useStreaming) {
-        requestBody.stream_options = { include_usage: true };
-      }
-
-      const response = await fetch(baseUrl, {
+      const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
         method: "POST",
         headers,
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          model: OPENROUTER_MODEL,
+          messages: apiMessages,
+          tools: openaiTools,
+          stream: true,
+          max_tokens: 16384,
+          // Opt into usage in the final stream chunk so we can report
+          // cached_tokens uniformly.
+          stream_options: { include_usage: true },
+        }),
       });
 
       if (!response.ok) {
         const errText = await response.text();
-        const label = providerApiErrorLabel(provider);
-        throw new Error(parseApiErrorMessage(errText, `${label} API error: ${response.status}`));
+        throw new Error(
+          parseApiErrorMessage(errText, `OpenRouter API error: ${response.status}`),
+        );
       }
+      if (!response.body) throw new Error("No response body from OpenRouter");
 
-      let textContent: string;
-      let rawToolCalls: OpenAIToolCall[];
-      let finishReason: string;
-      let usage: OpenAIUsage | undefined;
-
-      if (!useStreaming) {
-        const data = (await response.json()) as {
-          choices?: Array<{
-            finish_reason?: string;
-            message?: { content?: string; tool_calls?: OpenAIToolCall[] };
-          }>;
-          usage?: OpenAIUsage;
-        };
-        const choice = data.choices?.[0];
-        textContent = choice?.message?.content ?? "";
-        rawToolCalls = choice?.message?.tool_calls ?? [];
-        finishReason = choice?.finish_reason ?? "stop";
-        usage = data.usage;
-
-        if (textContent) {
-          emit({ type: "text_delta", text: textContent });
-        }
-      } else {
-        if (!response.body) {
-          throw new Error(`No response body from ${providerApiErrorLabel(provider)}`);
-        }
-        const parsed = await parseOpenAISSE(response.body, emit);
-        textContent = parsed.textContent;
-        rawToolCalls = parsed.toolCalls;
-        finishReason = parsed.finishReason;
-        usage = parsed.usage;
-      }
+      const parsed = await parseOpenAISSE(response.body, emit);
+      const { textContent, toolCalls: rawToolCalls, finishReason, usage } = parsed;
 
       if (usage) {
         const promptTokens = usage.prompt_tokens ?? 0;
         const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
         emit({
           type: "cache_stats",
-          // OpenAI reports the *total* prompt_tokens including the cached
-          // portion. Surface non-cached input separately so the event has the
-          // same meaning as for Anthropic.
+          // OpenRouter reports the *total* prompt_tokens including the cached
+          // portion. Surface non-cached input separately.
           inputTokens: Math.max(0, promptTokens - cached),
           cacheReadTokens: cached,
-          cacheCreationTokens: 0, // OpenAI auto-caches; no creation accounting.
+          cacheCreationTokens: 0,
           outputTokens: usage.completion_tokens ?? 0,
         });
       }
@@ -211,7 +160,7 @@ export async function runOpenAIAgentLoop(
 
     appendAssistantTurn() {
       // Skip empty turns (watchdog path with no text and no tool_calls):
-      // OpenAI rejects assistant messages with neither content nor tool_calls.
+      // the API rejects assistant messages with neither content nor tool_calls.
       if (!lastTextContent && lastRawToolCalls.length === 0) return;
       const message: Record<string, unknown> = {
         role: "assistant",
@@ -250,7 +199,7 @@ export async function runOpenAIAgentLoop(
 }
 
 /* ------------------------------------------------------------------ */
-/*  OpenAI SSE parser                                                  */
+/*  OpenAI-compatible SSE parser                                       */
 /* ------------------------------------------------------------------ */
 
 async function parseOpenAISSE(
@@ -268,8 +217,7 @@ async function parseOpenAISSE(
   let usage: OpenAIUsage | undefined;
 
   await readSSEStream<OpenAIStreamEvent>(body, (event) => {
-    // Final chunk: choices is empty array, usage is populated. Capture it
-    // and bail before scanning choices below.
+    // Final chunk: choices is empty array, usage is populated.
     if (event.usage) {
       usage = event.usage;
     }

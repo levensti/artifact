@@ -204,16 +204,10 @@ export function CitationContextProvider({
           return;
         }
         if (!selectedModel) return;
-        const creds = resolveModelCredentials(selectedModel);
-        if (!creds) return;
+        const creds = resolveModelCredentials();
         const fresh = await fetchAndCachePageMap(
           paperText,
-          {
-            model: selectedModel.modelId,
-            provider: selectedModel.provider,
-            apiKey: creds.apiKey,
-            apiBaseUrl: creds.apiBaseUrl,
-          },
+          { apiKey: creds.apiKey },
           (done, total) => {
             if (!cancelled) setPageMapProgress({ done, total });
           },
@@ -248,16 +242,10 @@ export function CitationContextProvider({
     if (!paperText || !isLongPaper(paperText)) return;
     if (parsedPaper) return;
     if (!selectedModel) return;
-    const creds = resolveModelCredentials(selectedModel);
-    if (!creds) return;
+    const creds = resolveModelCredentials();
 
     let cancelled = false;
-    void parseAndCachePaper(paperText, {
-      model: selectedModel.modelId,
-      provider: selectedModel.provider,
-      apiKey: creds.apiKey,
-      apiBaseUrl: creds.apiBaseUrl,
-    })
+    void parseAndCachePaper(paperText, { apiKey: creds.apiKey })
       .then((parsed) => {
         if (!cancelled) setParsedPaper(parsed);
       })
