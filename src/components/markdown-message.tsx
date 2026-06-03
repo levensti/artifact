@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -17,18 +17,122 @@ import {
 } from "@/lib/citation-transform";
 import WikiLinkHover from "./wiki-link-hover";
 import CitationChip from "./citation-chip";
+import MermaidDiagram from "./mermaid-diagram";
 import { useSettingsOpenerOptional } from "./settings-opener-context";
+
+// Mermaid block languages: the model usually fences with `mermaid`, but it
+// sometimes uses the diagram type as the language (```xychart-beta, ```flowchart).
+// Treat those as mermaid too so the diagram still renders.
+const MERMAID_LANGS = new Set([
+  "mermaid",
+  "flowchart",
+  "graph",
+  "sequencediagram",
+  "statediagram",
+  "statediagram-v2",
+  "classdiagram",
+  "erdiagram",
+  "journey",
+  "gantt",
+  "gitgraph",
+  "mindmap",
+  "timeline",
+  "pie",
+  "quadrantchart",
+  "xychart",
+  "xychart-beta",
+  "requirementdiagram",
+  "sankey",
+  "sankey-beta",
+  "block",
+  "block-beta",
+  "packet",
+  "packet-beta",
+  "architecture",
+  "architecture-beta",
+  "c4context",
+  "kanban",
+  "radar",
+  "radar-beta",
+]);
+
+/** The mermaid language token from a code element's className, or null. */
+function mermaidLangFromClass(className: unknown): string | null {
+  if (typeof className !== "string") return null;
+  const m = /\blanguage-([\w-]+)/.exec(className);
+  if (!m) return null;
+  const lang = m[1].toLowerCase();
+  return MERMAID_LANGS.has(lang) ? lang : null;
+}
+
+function isMermaidClass(className: unknown): boolean {
+  return mermaidLangFromClass(className) !== null;
+}
+
+/**
+ * Build the mermaid source to render. If the block was fenced with the
+ * diagram type as the language (```xychart-beta) and the content doesn't
+ * already begin with a diagram keyword, prepend it so the source parses.
+ */
+function mermaidSource(className: unknown, children: unknown): string {
+  const src = String(children ?? "").replace(/\n$/, "");
+  const lang = mermaidLangFromClass(className);
+  if (!lang || lang === "mermaid") return src;
+  const firstWord = src.trimStart().split(/[\s\n]/)[0]?.toLowerCase() ?? "";
+  return MERMAID_LANGS.has(firstWord) ? src : `${lang}\n${src}`;
+}
+
+// Fenced blocks (```…``` / ~~~…~~~, incl. an unterminated trailing fence
+// while streaming) and inline `code`. Captured so split() keeps them.
+const CODE_SEGMENT_RE =
+  /(```[\s\S]*?```|```[\s\S]*$|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+
+/**
+ * Apply a text transform everywhere EXCEPT inside code. Citation/wiki-link
+ * rewriting must not touch fenced or inline code — otherwise a Mermaid node
+ * label like "Fig. 1" or "Section 3" gets turned into a markdown link inside
+ * the diagram source and the diagram no longer parses.
+ */
+function transformOutsideCode(
+  content: string,
+  fn: (text: string) => string,
+): string {
+  return content
+    .split(CODE_SEGMENT_RE)
+    .map((part, i) => (i % 2 === 0 ? fn(part) : part))
+    .join("");
+}
+
+/**
+ * Signals that the markdown being rendered is still streaming in. Diagrams
+ * read this to show a placeholder instead of trying to render a half-written
+ * (and therefore broken) Mermaid block on every token. The streaming chat
+ * bubble wraps its content in <MarkdownStreamingBoundary>.
+ */
+const MarkdownStreamingContext = createContext(false);
+
+export function MarkdownStreamingBoundary({ children }: { children: ReactNode }) {
+  return (
+    <MarkdownStreamingContext.Provider value={true}>
+      {children}
+    </MarkdownStreamingContext.Provider>
+  );
+}
 
 interface MarkdownMessageProps {
   content: string;
 }
 
 export default function MarkdownMessage({ content }: MarkdownMessageProps) {
+  const streaming = useContext(MarkdownStreamingContext);
   // Normalize [[slug]] tokens and (§N) / (Fig. N) / (Ref. [key]) citation
   // tokens into markdown links so the renderer can pick them up and swap
   // them for rich chip components. Runs once per content change.
   const processed = useMemo(
-    () => transformCitations(transformWikiLinks(content)),
+    () =>
+      transformOutsideCode(content, (text) =>
+        transformCitations(transformWikiLinks(text)),
+      ),
     [content],
   );
   const settingsOpener = useSettingsOpenerOptional();
@@ -99,6 +203,35 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
               return <Link href={href}>{props.children}</Link>;
             }
             return <a {...props} target="_blank" rel="noopener noreferrer" />;
+          },
+          // Wrap tables so wide ones scroll horizontally instead of
+          // blowing out the panel width.
+          table: ({ children }) => (
+            <div className="chat-md-table-wrap">
+              <table>{children}</table>
+            </div>
+          ),
+          // A ```mermaid block renders as a diagram (no code-block chrome);
+          // every other fenced block keeps the normal <pre> styling.
+          pre: ({ children }) => {
+            const only = Array.isArray(children) ? children[0] : children;
+            const cls =
+              only && typeof only === "object" && "props" in only
+                ? (only as { props?: { className?: unknown } }).props?.className
+                : undefined;
+            if (isMermaidClass(cls)) return <>{children}</>;
+            return <pre>{children}</pre>;
+          },
+          code: ({ className, children }) => {
+            if (isMermaidClass(className)) {
+              return (
+                <MermaidDiagram
+                  code={mermaidSource(className, children)}
+                  streaming={streaming}
+                />
+              );
+            }
+            return <code className={className as string}>{children}</code>;
           },
         }}
       >
