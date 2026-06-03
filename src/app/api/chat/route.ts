@@ -233,6 +233,12 @@ radar-beta
   max 100
   min 0
 
+Pie — proportions/composition of a whole (e.g. dataset split, compute breakdown). Labels quoted, values numeric:
+pie title Dataset composition
+  "Train" : 70
+  "Validation" : 15
+  "Test" : 15
+
 XY chart — a numeric series across categories. NO legend and NO per-series labels or colors; a bar line is just the value array. For multiple labeled series or yes/no flags, use a Markdown table instead, not a chart:
 xychart-beta
   title "Throughput by batch size"

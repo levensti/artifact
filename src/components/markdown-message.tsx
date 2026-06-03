@@ -35,6 +35,7 @@ const MERMAID_LANGS = new Set([
   "statediagram-v2",
   "mindmap",
   "timeline",
+  "pie",
   "quadrantchart",
   "xychart",
   "xychart-beta",
