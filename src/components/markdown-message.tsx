@@ -22,7 +22,10 @@ import { useSettingsOpenerOptional } from "./settings-opener-context";
 
 // Mermaid block languages: the model usually fences with `mermaid`, but it
 // sometimes uses the diagram type as the language (```xychart-beta, ```flowchart).
-// Treat those as mermaid too so the diagram still renders.
+// Treat those as mermaid too so the diagram still renders. Scoped to the
+// diagram types useful for reading research papers (see the system prompt's
+// Mermaid reference) — project-management / software-engineering types
+// (kanban, gantt, gitGraph, classDiagram, ER, etc.) are intentionally omitted.
 const MERMAID_LANGS = new Set([
   "mermaid",
   "flowchart",
@@ -30,28 +33,15 @@ const MERMAID_LANGS = new Set([
   "sequencediagram",
   "statediagram",
   "statediagram-v2",
-  "classdiagram",
-  "erdiagram",
-  "journey",
-  "gantt",
-  "gitgraph",
   "mindmap",
   "timeline",
-  "pie",
   "quadrantchart",
   "xychart",
   "xychart-beta",
-  "requirementdiagram",
-  "sankey",
-  "sankey-beta",
   "block",
   "block-beta",
-  "packet",
-  "packet-beta",
   "architecture",
   "architecture-beta",
-  "c4context",
-  "kanban",
   "radar",
   "radar-beta",
 ]);
