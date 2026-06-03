@@ -20,7 +20,7 @@ const STARTERS = [
     label: "Prerequisites",
     desc: "Background concepts and papers to read first",
     prompt:
-      "What concepts and background should I understand before reading this paper? Search for the most important prerequisite papers.",
+      "What concepts and background should I understand before reading this paper?",
   },
   {
     icon: Network,
