@@ -1040,6 +1040,31 @@
   }
 }
 
+/* ── Discover skeletons — result-shaped placeholders while the agent runs ── */
+@keyframes discover-skeleton-pan {
+  to { background-position: -200% 0; }
+}
+.discover-skeleton {
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--muted) 55%, transparent) 0%,
+    color-mix(in srgb, var(--muted) 55%, transparent) 40%,
+    color-mix(in srgb, var(--foreground) 8%, transparent) 50%,
+    color-mix(in srgb, var(--muted) 55%, transparent) 60%,
+    color-mix(in srgb, var(--muted) 55%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 6px;
+  animation: discover-skeleton-pan 1.5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .discover-skeleton {
+    animation: none;
+    background-image: none;
+    background-color: color-mix(in srgb, var(--muted) 55%, transparent);
+  }
+}
+
 /* Safe areas for notched phones and home indicators */
 .safe-area-p {
   padding-top: env(safe-area-inset-top, 0px);

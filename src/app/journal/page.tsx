@@ -2,15 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import {
-  AlertTriangle,
-  ChevronDown,
-  FilePen,
-  Plus,
-  Search,
-  Sparkles,
-  Terminal,
-} from "lucide-react";
+import { AlertTriangle, Plus, Search, Terminal } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import JournalCard, { type JournalEntry } from "@/components/journal-card";
 import JournalEntryModal from "@/components/journal-entry-modal";
@@ -26,13 +18,6 @@ import type { WikiPage } from "@/lib/wiki";
 import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import { localDateKey } from "@/lib/date-keys";
 import { buildSessionSlug, uniquifySlug } from "@/lib/journal-entry-builder";
-import { enumerateSessions } from "@/lib/cc-import/enumerate";
-import {
-  ensurePermission,
-  getStoredHandle,
-  isFileSystemAccessSupported,
-} from "@/lib/cc-import/handle-store";
-import { getAllImported } from "@/lib/cc-import/imported-store";
 import { MonoLabel } from "@/components/folio";
 
 function dateFromSessionSlug(slug: string): Date | null {
@@ -66,6 +51,16 @@ function relativeDayLabel(d: Date): string {
     month: "long",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function shortDate(d: Date): string {
+  const today = new Date();
+  const sameYear = d.getFullYear() === today.getFullYear();
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
   });
 }
 
@@ -105,9 +100,7 @@ function JournalPageInner() {
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
-  const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
-  const [ccNewCount, setCcNewCount] = useState(0);
   const selectedSlug = searchParams.get("page");
 
   const refreshPages = useCallback(async () => {
@@ -141,42 +134,6 @@ function JournalPageInner() {
       window.removeEventListener(WIKI_UPDATED_EVENT, handler);
     };
   }, [refreshPages, reloadTick]);
-
-  // Ambient check: if the user has previously granted access to their
-  // ~/.claude/projects directory, count how many sessions are not yet
-  // imported so we can badge the toolbar Import button.
-  const refreshCcNewCount = useCallback(async () => {
-    if (!isFileSystemAccessSupported()) {
-      setCcNewCount(0);
-      return;
-    }
-    try {
-      const handle = await getStoredHandle();
-      if (!handle) {
-        setCcNewCount(0);
-        return;
-      }
-      // queryPermission only — never request on background load (no
-      // user gesture). The badge silently disappears if the browser
-      // dropped permission.
-      const state = await ensurePermission(handle);
-      if (state !== "granted") {
-        setCcNewCount(0);
-        return;
-      }
-      const sessions = await enumerateSessions(handle);
-      const imported = getAllImported();
-      let n = 0;
-      for (const s of sessions) if (!(s.sessionId in imported)) n++;
-      setCcNewCount(n);
-    } catch {
-      setCcNewCount(0);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshCcNewCount();
-  }, [refreshCcNewCount, reloadTick]);
 
   const openPage = useCallback(
     (slug: string) => {
@@ -232,10 +189,9 @@ function JournalPageInner() {
     );
   }, [journalEntries, search]);
 
-  // Group entries by last-updated date so the grid has visible day
-  // sections rather than a fully flat masonry. We sort entries by
-  // updatedAt (newest first) inside each section so a streaming entry
-  // bubbles to the top as it changes.
+  // Group entries by last-updated date so the timeline has visible day
+  // sections. We sort entries by updatedAt (newest first) inside each
+  // section so a streaming entry bubbles to the top as it changes.
   const groupedEntries = useMemo(() => {
     const sorted = [...filteredEntries].sort((a, b) => {
       const ua = new Date(a.page.updatedAt).getTime();
@@ -245,6 +201,7 @@ function JournalPageInner() {
     const groups: {
       key: string;
       label: string;
+      date: Date;
       entries: typeof filteredEntries;
     }[] = [];
     const seen = new Map<string, number>();
@@ -254,7 +211,7 @@ function JournalPageInner() {
       const idx = seen.get(key);
       if (idx === undefined) {
         seen.set(key, groups.length);
-        groups.push({ key, label: relativeDayLabel(d), entries: [e] });
+        groups.push({ key, label: relativeDayLabel(d), date: d, entries: [e] });
       } else {
         groups[idx].entries.push(e);
       }
@@ -324,11 +281,12 @@ function JournalPageInner() {
           <div className="mx-auto w-full max-w-160 px-6 pt-[min(12vh,112px)] pb-16">
             {/* Header */}
             <div className="mb-9">
-              <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] text-foreground">
-                Journal
+              <MonoLabel>Journal</MonoLabel>
+              <h1 className="mt-3 text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-foreground">
+                Everything you&apos;ve read.
               </h1>
               <p
-                className="mt-2 max-w-[460px] text-[14px] leading-[1.6]"
+                className="mt-3 max-w-[460px] text-[14px] leading-[1.6]"
                 style={{
                   fontFamily: "var(--font-reading)",
                   color:
@@ -407,7 +365,6 @@ function JournalPageInner() {
           <JournalImportModal
             onClose={() => {
               setImportOpen(false);
-              void refreshCcNewCount();
               void refreshPages();
               setReloadTick((t) => t + 1);
             }}
@@ -435,143 +392,118 @@ function JournalPageInner() {
         className="flex h-full flex-col overflow-y-auto"
         style={{ background: "var(--reader-mat)" }}
       >
-        <div className="mx-auto w-full max-w-295 px-5 pb-16 pt-12 sm:px-8 sm:pt-16">
-          {/* Header + toolbar row — match the landing journal section voice */}
-          <div className="mb-9 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mx-auto w-full max-w-[1040px] px-5 pb-16 pt-12 sm:px-12 sm:pt-[52px]">
+          {/* Header + toolbar */}
+          <div className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
             <header className="max-w-[520px]">
               <MonoLabel>Journal</MonoLabel>
               <h1 className="mt-3 text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-foreground">
                 Everything you&apos;ve read.
               </h1>
               <p
-                className="mt-3 text-[14px] leading-[1.6]"
+                className="mt-3 text-[15px] leading-[1.6]"
                 style={{
                   fontFamily: "var(--font-reading)",
                   color:
-                    "color-mix(in srgb, var(--foreground) 70%, transparent)",
+                    "color-mix(in srgb, var(--foreground) 66%, transparent)",
                 }}
               >
-                {journalEntries.length}{" "}
-                {journalEntries.length === 1 ? "entry" : "entries"} so far,
-                cross-linked across the topics you keep returning to.
+                <span className="font-semibold text-foreground">
+                  {journalEntries.length}{" "}
+                  {journalEntries.length === 1 ? "entry" : "entries"}
+                </span>{" "}
+                so far, cross-linked across the topics you keep returning to.
               </p>
             </header>
 
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-1.5 transition-colors focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/10">
-                <Search className="size-3 shrink-0 text-muted-foreground/45" />
+              <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-1.5 transition-colors focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/10">
+                <Search className="size-3.5 shrink-0 text-muted-foreground/45" />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search…"
-                  className="w-35 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/45 focus:outline-none sm:w-45"
+                  placeholder="Search entries…"
+                  className="w-40 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/55 focus:outline-none sm:w-52"
                 />
               </div>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setNewMenuOpen(!newMenuOpen)}
-                  className="relative flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
-                >
-                  <Plus className="size-3" strokeWidth={2.25} />
-                  New entry
-                  <ChevronDown className="size-3 text-primary/70" />
-                  {ccNewCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[8px] font-semibold leading-none text-primary-foreground shadow-sm">
-                      {ccNewCount > 99 ? "99+" : ccNewCount}
-                    </span>
-                  ) : null}
-                </button>
-                {newMenuOpen ? (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setNewMenuOpen(false)}
-                    />
-                    <div className="absolute right-0 top-full z-50 mt-1 w-60 rounded-lg border border-border bg-card p-1 shadow-md animate-in fade-in slide-in-from-top-1 duration-150">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewMenuOpen(false);
-                          void handleNewBlankEntry();
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
-                      >
-                        <FilePen className="size-3.5 shrink-0 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">Blank entry</p>
-                          <p className="text-[10px] text-muted-foreground/60">
-                            Start with an empty page
-                          </p>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewMenuOpen(false);
-                          setComposerOpen(true);
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
-                      >
-                        <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">Draft from a prompt</p>
-                          <p className="text-[10px] text-muted-foreground/60">
-                            AI summarizes recent activity
-                          </p>
-                        </div>
-                      </button>
-                      <div className="my-1 h-px bg-border/60" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewMenuOpen(false);
-                          setImportOpen(true);
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted"
-                      >
-                        <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">From Claude Code</p>
-                          <p className="text-[10px] text-muted-foreground/60">
-                            Import recent conversations
-                          </p>
-                        </div>
-                        {ccNewCount > 0 ? (
-                          <span className="ml-auto shrink-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
-                            {ccNewCount > 99 ? "99+" : ccNewCount}
-                          </span>
-                        ) : null}
-                      </button>
-                    </div>
-                  </>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                onClick={() => void handleNewBlankEntry()}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[13px] font-medium text-foreground transition-colors hover:border-primary/25 hover:bg-muted"
+              >
+                <Plus className="size-3.5" strokeWidth={2} />
+                New entry
+              </button>
             </div>
           </div>
 
-          {/* Grouped grid */}
+          {/* Timeline */}
           {filteredEntries.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center text-[12.5px] text-muted-foreground/70">
               No entries match &ldquo;{search}&rdquo;.
             </div>
           ) : (
-            <div className="space-y-7">
-              {groupedEntries.map((group) => (
-                <section key={group.key}>
-                  <h2 className="mb-2.5">
-                    <MonoLabel>{group.label}</MonoLabel>
-                  </h2>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
-                    {group.entries.map((entry) => (
-                      <div key={entry.page.id} id={`card-${entry.page.slug}`}>
-                        <JournalCard entry={entry} onOpen={openPage} />
+            <div className="relative">
+              {/* Spine — aligned to the timeline nodes */}
+              <div
+                className="absolute top-1.5 bottom-1.5 hidden w-px sm:block"
+                style={{
+                  left: 119,
+                  background:
+                    "color-mix(in srgb, var(--border) 80%, transparent)",
+                }}
+              />
+              {groupedEntries.map((group) => {
+                const showSub = !/\d/.test(group.label);
+                return (
+                  <section key={group.key} className="mb-7">
+                    {group.entries.map((entry, i) => (
+                      <div
+                        key={entry.page.id}
+                        id={`card-${entry.page.slug}`}
+                        className="relative mb-3.5 grid gap-4 sm:grid-cols-[104px_1fr] sm:gap-8"
+                      >
+                        {/* Date column */}
+                        <div className="pt-4 text-left sm:text-right">
+                          {i === 0 ? (
+                            <>
+                              <div className="text-[14px] font-semibold leading-tight tracking-[-0.01em] text-foreground">
+                                {group.label}
+                              </div>
+                              {showSub ? (
+                                <span className="mt-0.5 block">
+                                  <MonoLabel>{shortDate(group.date)}</MonoLabel>
+                                </span>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </div>
+
+                        {/* Spine node */}
+                        <div
+                          className="absolute hidden size-[9px] rounded-full sm:block"
+                          style={{
+                            left: 116,
+                            top: 22,
+                            background: "var(--background)",
+                            border: `2px solid ${
+                              entry.kind === "digest"
+                                ? "var(--primary)"
+                                : "color-mix(in srgb, var(--muted-foreground) 55%, transparent)"
+                            }`,
+                          }}
+                        />
+
+                        {/* Card */}
+                        <div className="sm:pl-2">
+                          <JournalCard entry={entry} onOpen={openPage} />
+                        </div>
                       </div>
                     ))}
-                  </div>
-                </section>
-              ))}
+                  </section>
+                );
+              })}
             </div>
           )}
         </div>
@@ -581,7 +513,6 @@ function JournalPageInner() {
         <JournalImportModal
           onClose={() => {
             setImportOpen(false);
-            void refreshCcNewCount();
             void refreshPages();
           }}
         />

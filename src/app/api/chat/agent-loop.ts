@@ -73,6 +73,16 @@ export interface ProviderAdapter {
   hasPriorToolResults(): boolean;
 }
 
+export interface AgentLoopOptions {
+  /** When set, the loop refuses to exit until a tool named `name` has been
+   *  called — as long as usable (non-failure) tool results were gathered.
+   *  Nudges the model up to `maxNudges` times (default 2) before giving up.
+   *  Stronger than the empty-turn watchdog: it also catches the model ending
+   *  with stray text, or repeatedly missing the call. Used by discover mode
+   *  to guarantee `submit_picks` whenever candidates exist. */
+  requiredFinalTool?: { name: string; nudge: string; maxNudges?: number };
+}
+
 /** Wrap a tool output so the model treats it as inert data. The Exa
  *  sentinel is left raw so the model and prompt continue to recognize the
  *  literal string. */
@@ -86,8 +96,14 @@ export async function runAgentLoop(
   tools: ToolDefinition[],
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
+  options: AgentLoopOptions = {},
 ): Promise<void> {
+  const { requiredFinalTool } = options;
+  const maxForcedNudges = requiredFinalTool?.maxNudges ?? 2;
   let watchdogFired = false;
+  let requiredToolCalled = false;
+  let anyUsableResult = false;
+  let forcedNudges = 0;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     emit({ type: "turn_start" });
@@ -95,6 +111,21 @@ export async function runAgentLoop(
     const turn = await adapter.request();
 
     if (!turn.isToolStop || turn.toolCalls.length === 0) {
+      // Completion gate (discover): don't exit without the required final
+      // tool when usable results exist. Catches the model searching, reading,
+      // then stopping (or trailing off with text) before submit_picks.
+      if (
+        requiredFinalTool &&
+        !requiredToolCalled &&
+        anyUsableResult &&
+        forcedNudges < maxForcedNudges
+      ) {
+        forcedNudges++;
+        adapter.appendAssistantTurn(turn);
+        adapter.appendUserNudge(requiredFinalTool.nudge);
+        continue;
+      }
+
       // Loop is about to exit. If the model produced an empty turn after
       // prior tool work, nudge it once — catches the "stuck mid-procedure"
       // failure mode.
@@ -105,6 +136,13 @@ export async function runAgentLoop(
         continue;
       }
       break;
+    }
+
+    if (
+      requiredFinalTool &&
+      turn.toolCalls.some((tc) => tc.name === requiredFinalTool.name)
+    ) {
+      requiredToolCalled = true;
     }
 
     // Emit tool_call events upfront so the UI can show the whole batch
@@ -142,6 +180,7 @@ export async function runAgentLoop(
     const hasUsableResult = outputs.some(
       (o) => o.raw !== EXA_KEY_REQUIRED_SENTINEL && !TOOL_FAILURE_RE.test(o.raw.trim()),
     );
+    if (hasUsableResult) anyUsableResult = true;
     if (sawExaSentinel && !hasUsableResult) break;
 
     adapter.appendAssistantTurn(turn);

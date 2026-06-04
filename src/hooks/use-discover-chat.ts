@@ -79,7 +79,10 @@ export interface UseDiscoverChatReturn {
   liveQueryText: string | null;
   error: string | null;
   hasKeyForModel: boolean;
-  submit: (text: string, opts?: { skipWebSearch?: boolean }) => Promise<void>;
+  submit: (
+    text: string,
+    opts?: { skipWebSearch?: boolean; promptText?: string },
+  ) => Promise<void>;
   /** Re-submits a query after the user resolves the Exa key prompt
    *  (added a key → skipWebSearch=false; dismissed → true). Defaults to
    *  the most recent query; pass `text` to retry a specific historical
@@ -113,56 +116,59 @@ function stepsToFinalText(steps: AgentStep[]): string {
 }
 
 /**
- * One-line summary of every tool call in a stream — name + key arg + a
- * meaningful status (result count for searches, ok/error/none for others).
- * Appended to `notes` when picks weren't submitted so the queue section
- * shows what actually happened.
+ * A human-readable research log of what the agent actually did — appended to
+ * `notes` when no picks were submitted, so the brief can show "what I tried"
+ * without leaking raw tool names. The "What I did:" marker is also how the UI
+ * distinguishes "ran tools but didn't finalize" from "narrated only" (see
+ * research-brief.tsx). The literal "exa key required" phrase is preserved so
+ * the Exa-key prompt can still detect that failure mode.
  */
 function toolActivitySummary(steps: AgentStep[]): string {
   const calls = steps.filter(
     (s): s is Extract<AgentStep, { kind: "tool_call" }> => s.kind === "tool_call",
   );
-  if (calls.length === 0) return "";
-  const lines = calls.map((c) => {
-    const arg =
-      typeof c.input.query === "string"
-        ? `"${c.input.query}"`
-        : typeof c.input.arxivId === "string"
-          ? c.input.arxivId
-          : "";
-    return `- \`${c.name}\`${arg ? ` ${arg}` : ""} — ${describeOutput(c.name, c.output)}`;
-  });
-  return `**Tool activity:**\n${lines.join("\n")}`;
+  const lines = calls.map(humanToolLine).filter(Boolean);
+  if (lines.length === 0) return "";
+  return `**What I did:**\n${lines.join("\n")}`;
 }
 
-function describeOutput(name: string, output: string | undefined): string {
-  if (!output) return "no result";
-  const trimmed = output.trim();
-  if (trimmed === "EXA_KEY_REQUIRED") return "exa key required";
-  if (
-    /^(?:error:|paper search failed:|web search failed:|request failed:|tool error:)/i.test(
-      trimmed,
-    )
-  ) {
-    return "error";
+function searchCount(output: string, kind: "papers" | "web results"): string | null {
+  const m = output.match(new RegExp(`^Found (\\d+) ${kind}`, "m"));
+  if (m) return m[1];
+  if (new RegExp(`^No ${kind}`, "i").test(output)) return "0";
+  return null;
+}
+
+function humanToolLine(c: Extract<AgentStep, { kind: "tool_call" }>): string {
+  const query = typeof c.input.query === "string" ? c.input.query : "";
+  const arxivId = typeof c.input.arxivId === "string" ? c.input.arxivId : "";
+  const out = (c.output ?? "").trim();
+
+  switch (c.name) {
+    case "arxiv_search": {
+      const n = out ? searchCount(out, "papers") : null;
+      return `- Searched arXiv${query ? ` for “${query}”` : ""}${
+        n !== null ? ` — ${n} found` : ""
+      }`;
+    }
+    case "web_search": {
+      if (out === "EXA_KEY_REQUIRED") return "- Web search — exa key required";
+      const n = out ? searchCount(out, "web results") : null;
+      return `- Searched the web${query ? ` for “${query}”` : ""}${
+        n !== null ? ` — ${n} found` : ""
+      }`;
+    }
+    case "paper_details": {
+      if (/^Failed to fetch/i.test(out) || /^No details found/i.test(out)) {
+        return `- Couldn’t open ${arxivId || "a paper"}`;
+      }
+      return `- Read ${arxivId || "a paper"}`;
+    }
+    case "submit_picks":
+      return "";
+    default:
+      return "";
   }
-  if (name === "arxiv_search") {
-    const m = trimmed.match(/^Found (\d+) papers/m);
-    if (m) return `${m[1]} results`;
-    if (/^No papers found/i.test(trimmed)) return "0 results";
-  }
-  if (name === "web_search") {
-    const m = trimmed.match(/^Found (\d+) web results/m);
-    if (m) return `${m[1]} results`;
-    if (/^No web results found/i.test(trimmed)) return "0 results";
-  }
-  if (name === "paper_details") {
-    if (/^No details found/i.test(trimmed)) return "no metadata";
-    if (/^Failed to fetch/i.test(trimmed)) return "fetch failed";
-    return "ok";
-  }
-  if (name === "submit_picks") return "submitted";
-  return "ok";
 }
 
 interface StructuredPick {
@@ -215,9 +221,14 @@ export function useDiscoverChat({
   const [pendingExaDecision, setPendingExaDecision] = useState<
     { text: string } | null
   >(null);
-  // Last text the user submitted, kept across submissions so the Exa
-  // key prompt can resume by re-submitting the same query.
-  const lastQueryRef = useRef<string | null>(null);
+  // Last submission, kept across submissions so the Exa key prompt can
+  // resume by re-submitting. `text` is what's stored/displayed; `promptText`
+  // is the (optional) context-augmented prompt actually sent to the agent —
+  // both are preserved so a follow-up resumed after an Exa decision keeps
+  // its context.
+  const lastSubmitRef = useRef<{ text: string; promptText?: string } | null>(
+    null,
+  );
   // Pending resume queued while a stream was still in flight. Fires from
   // an effect once `isStreaming` flips false — without this the inline
   // card hides immediately on key-add but submit() early-returns due to
@@ -225,17 +236,21 @@ export function useDiscoverChat({
   const pendingResumeRef = useRef<{
     skipWebSearch: boolean;
     text: string;
+    promptText?: string;
   } | null>(null);
 
   const hasKeyForModel = selectedModel != null && hasUsableProvider();
 
   const submit = useCallback(
-    async (text: string, opts?: { skipWebSearch?: boolean }) => {
+    async (
+      text: string,
+      opts?: { skipWebSearch?: boolean; promptText?: string },
+    ) => {
       const trimmed = text.trim();
       if (!trimmed || isStreaming || !selectedModel) return;
       if (!hasUsableProvider()) return;
 
-      lastQueryRef.current = trimmed;
+      lastSubmitRef.current = { text: trimmed, promptText: opts?.promptText };
 
       // Pre-flight: if neither the user nor the server has an Exa key,
       // pause and surface the prompt card. Otherwise the agent dispatches
@@ -267,11 +282,15 @@ export function useDiscoverChat({
         setLiveQueryId(created.id);
 
         const exaKey = getExaApiKey();
+        // What's sent to the agent. For follow-ups this carries the prior
+        // question + picks as context, while the stored `query` row keeps the
+        // short user-facing text (set via createDiscoverQuery above).
+        const agentPrompt = opts?.promptText?.trim() || trimmed;
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: [{ role: "user", content: trimmed }],
+            messages: [{ role: "user", content: agentPrompt }],
             ...resolveModelCredentials(),
             mode: "discover",
             ...(exaKey ? { exaApiKey: exaKey } : {}),
@@ -308,19 +327,19 @@ export function useDiscoverChat({
             const finalText = stepsToFinalText(steps);
             const structured = extractStructuredPicks(steps);
             // When picks aren't submitted, append a tool-activity summary
-            // to notes so the queue's auto-expanded notes shows whether
-            // the agent actually ran any searches — without it, you can't
-            // tell narrate-and-stop from search-found-nothing.
-            const activity =
-              structured && structured.length > 0 ? "" : toolActivitySummary(steps);
+            // to notes — both so a no-picks run shows whether the agent
+            // actually searched, AND so a successful brief retains its
+            // research trajectory ("How I researched") after the live steps
+            // are gone. The brief UI splits this back into synthesis + log.
+            const activity = toolActivitySummary(steps);
             const enrichedText = activity
               ? `${finalText.trim()}\n\n${activity}`.trim()
-              : finalText;
+              : finalText.trim();
 
             await finalizeDiscoverQuery(queryId, {
               status: streamSucceeded ? "complete" : "errored",
               ...(structured && structured.length > 0
-                ? { picks: structured, notes: finalText.trim() || null }
+                ? { picks: structured, notes: enrichedText || null }
                 : { text: enrichedText }),
             });
           } catch {
@@ -339,17 +358,19 @@ export function useDiscoverChat({
 
   const resumeAfterExaDecision = useCallback(
     ({ skipWebSearch, text }: { skipWebSearch: boolean; text?: string }) => {
-      const target = text ?? lastQueryRef.current;
+      // Explicit `text` (a historical retry from a queue card) runs as a
+      // fresh query; otherwise replay the last submission, preserving any
+      // follow-up context carried in `promptText`.
+      const last = lastSubmitRef.current;
+      const target = text ?? last?.text ?? null;
       if (!target) return;
+      const promptText = text ? undefined : last?.promptText;
       if (isStreaming) {
         // Queue and let the effect below fire when the stream ends.
-        pendingResumeRef.current = { skipWebSearch, text: target };
+        pendingResumeRef.current = { skipWebSearch, text: target, promptText };
         return;
       }
-      // The previous query row stays in the queue with status "complete"
-      // but no recommendations — the user can delete it from the section
-      // header if they want to clean up.
-      void submit(target, { skipWebSearch });
+      void submit(target, { skipWebSearch, promptText });
     },
     [isStreaming, submit],
   );
@@ -359,7 +380,10 @@ export function useDiscoverChat({
     const pending = pendingResumeRef.current;
     if (!pending) return;
     pendingResumeRef.current = null;
-    void submit(pending.text, { skipWebSearch: pending.skipWebSearch });
+    void submit(pending.text, {
+      skipWebSearch: pending.skipWebSearch,
+      promptText: pending.promptText,
+    });
   }, [isStreaming, submit]);
 
   return {
