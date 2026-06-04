@@ -17,6 +17,7 @@ import { buildPaperBlock } from "./paper-block";
 import {
   runAgentLoop,
   TOOL_RESULT_GUARDRAIL,
+  type AgentLoopOptions,
   type NormalizedToolCall,
   type ProviderAdapter,
   type ToolOutput,
@@ -70,6 +71,7 @@ export async function runOpenRouterAgentLoop(
   tools: ToolDefinition[],
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
+  options?: AgentLoopOptions,
 ) {
   const paperBlock = buildPaperBlock(paperContext, parsedPaper);
   const baseSystem = systemPrompt + TOOL_RESULT_GUARDRAIL;
@@ -195,7 +197,7 @@ export async function runOpenRouterAgentLoop(
     },
   };
 
-  await runAgentLoop(adapter, tools, toolContext, emit);
+  await runAgentLoop(adapter, tools, toolContext, emit, options);
 }
 
 /* ------------------------------------------------------------------ */

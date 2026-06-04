@@ -71,38 +71,38 @@ export default function ExaKeyPromptCard({
 
   return (
     <div
-      className="my-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs"
+      className="my-1.5 rounded-lg border border-border/70 bg-muted/15 px-3.5 py-3 text-xs"
       style={{ animation: "fadeIn 200ms ease-out" }}
     >
       <div className="flex items-start gap-2.5">
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary mt-0.5">
+        <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Globe size={13} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[12.5px] font-semibold text-foreground/90">
-            Also search the web?
+            Search arXiv, or add the web too?
           </p>
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground/85">
-            Add an Exa API key to include lab blogs and other web sources
-            alongside arXiv — or skip and the agent will search arXiv only.
+            By default I&rsquo;ll search arXiv. Optionally add an Exa key to also
+            pull in lab blogs and other web sources — you can do this anytime.
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              className="h-7 px-2.5 text-[11.5px]"
-              onClick={handleAddKey}
-              disabled={!opener || waitingForKey}
+              className="h-7 px-3 text-[11.5px]"
+              onClick={handleDismiss}
+              disabled={waitingForKey}
             >
-              {waitingForKey ? "Waiting for key…" : "Add API key"}
+              Search arXiv only
             </Button>
             <Button
               size="sm"
               variant="outline"
               className="h-7 px-2.5 text-[11.5px]"
-              onClick={handleDismiss}
-              disabled={waitingForKey}
+              onClick={handleAddKey}
+              disabled={!opener || waitingForKey}
             >
-              Search arXiv only
+              {waitingForKey ? "Waiting for key…" : "Add web search"}
             </Button>
           </div>
         </div>
