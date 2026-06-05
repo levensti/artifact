@@ -28,6 +28,9 @@ interface PdfViewerProps {
   activeAnnotationId?: string | null;
   hoveredAnnotationId?: string | null;
   onAnnotationClick?: (annotationId: string, info: { clickY: number; highlightRight: number; pageRight: number }) => void;
+  /** Fired as the cursor moves over (or off) a highlight, with the hovered
+   *  line's viewport rect + the page column edges so a margin note can dock. */
+  onAnnotationHover?: (annotationId: string | null, anchor: import("@/components/note-hover-card").HoverAnchor | null) => void;
 }
 
 const H_PADDING = 16;
@@ -53,6 +56,7 @@ export default function PdfViewer({
   activeAnnotationId,
   hoveredAnnotationId,
   onAnnotationClick,
+  onAnnotationHover,
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -308,6 +312,78 @@ export default function PdfViewer({
       container.removeEventListener("touchend", handlePointerUp);
     };
   }, [onTextSelected, onSelectionCleared, annotations, onAnnotationClick]);
+
+  // Hover detection for margin notes. Highlights stay `pointer-events-none`
+  // (so text selection over them still works), so we hit-test geometrically
+  // on mousemove, rAF-throttled, emitting only when the hovered id changes.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !onAnnotationHover) return;
+
+    let rafId: number | null = null;
+    let lastId: string | null = null;
+
+    const hitTest = (cx: number, cy: number) => {
+      const target =
+        (document.elementFromPoint(cx, cy) as Element | null) ?? null;
+      const pageEl = target?.closest("[data-page-number]");
+      if (!pageEl) return null;
+      const pageRect = pageEl.getBoundingClientRect();
+      const nx = (cx - pageRect.left) / pageRect.width;
+      const ny = (cy - pageRect.top) / pageRect.height;
+      const pageNum = parseInt(
+        pageEl.getAttribute("data-page-number") || "0",
+        10,
+      );
+      for (const ann of annotations) {
+        if (ann.pageNumber !== pageNum) continue;
+        for (const r of ann.anchorRects) {
+          if (nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h) {
+            return {
+              id: ann.id,
+              top: pageRect.top + r.y * pageRect.height,
+              bottom: pageRect.top + (r.y + r.h) * pageRect.height,
+              left: pageRect.left + r.x * pageRect.width,
+              right: pageRect.left + (r.x + r.w) * pageRect.width,
+              colLeft: pageRect.left,
+              colRight: pageRect.right,
+            };
+          }
+        }
+      }
+      return null;
+    };
+
+    const onMove = (e: MouseEvent) => {
+      if (rafId !== null) return;
+      const { clientX, clientY } = e;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const hit = hitTest(clientX, clientY);
+        const id = hit?.id ?? null;
+        if (id === lastId) return;
+        lastId = id;
+        if (hit) {
+          onAnnotationHover(hit.id, {
+            top: hit.top,
+            bottom: hit.bottom,
+            left: hit.left,
+            right: hit.right,
+            colLeft: hit.colLeft,
+            colRight: hit.colRight,
+          });
+        } else {
+          onAnnotationHover(null, null);
+        }
+      });
+    };
+
+    container.addEventListener("mousemove", onMove);
+    return () => {
+      container.removeEventListener("mousemove", onMove);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [annotations, onAnnotationHover]);
 
   useEffect(() => {
     const container = containerRef.current;

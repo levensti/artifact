@@ -62,6 +62,10 @@ interface WebViewerProps {
     annotationId: string,
     info: { clickY: number; highlightRight: number; pageRight: number },
   ) => void;
+  onAnnotationHover?: (
+    annotationId: string | null,
+    anchor: import("@/components/note-hover-card").HoverAnchor | null,
+  ) => void;
 }
 
 export default function WebViewer({
@@ -73,6 +77,7 @@ export default function WebViewer({
   activeAnnotationId,
   hoveredAnnotationId,
   onAnnotationClick,
+  onAnnotationHover,
 }: WebViewerProps) {
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const [title, setTitle] = useState<string | null>(null);
@@ -206,6 +211,67 @@ export default function WebViewer({
       container.removeEventListener("touchend", handlePointerUp);
     };
   }, [htmlContent, onTextSelected, onSelectionCleared, onAnnotationClick, annotations]);
+
+  // Hover detection for margin notes — mirrors PdfViewer. Highlights are
+  // pointer-events-none, so we hit-test geometrically on mousemove.
+  useEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content || !onAnnotationHover) return;
+
+    let rafId: number | null = null;
+    let lastId: string | null = null;
+
+    const onMove = (e: MouseEvent) => {
+      if (rafId !== null) return;
+      const { clientX: cx, clientY: cy } = e;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const contentRect = content.getBoundingClientRect();
+        const nx = (cx - contentRect.left) / contentRect.width;
+        const ny = (cy - contentRect.top) / contentRect.height;
+        let hit: { id: string } & import("@/components/note-hover-card").HoverAnchor | null = null;
+        outer: for (const ann of annotations) {
+          if (ann.pageNumber !== 1) continue;
+          for (const r of ann.anchorRects) {
+            if (nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h) {
+              hit = {
+                id: ann.id,
+                top: contentRect.top + r.y * contentRect.height,
+                bottom: contentRect.top + (r.y + r.h) * contentRect.height,
+                left: contentRect.left + r.x * contentRect.width,
+                right: contentRect.left + (r.x + r.w) * contentRect.width,
+                colLeft: contentRect.left,
+                colRight: contentRect.right,
+              };
+              break outer;
+            }
+          }
+        }
+        const id = hit?.id ?? null;
+        if (id === lastId) return;
+        lastId = id;
+        if (hit) {
+          onAnnotationHover(hit.id, {
+            top: hit.top,
+            bottom: hit.bottom,
+            left: hit.left,
+            right: hit.right,
+            colLeft: hit.colLeft,
+            colRight: hit.colRight,
+          });
+        } else {
+          onAnnotationHover(null, null);
+        }
+      });
+    };
+
+    container.addEventListener("mousemove", onMove);
+    return () => {
+      container.removeEventListener("mousemove", onMove);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [htmlContent, annotations, onAnnotationHover]);
 
   // Filter annotations for this "page"
   const pageAnnotations = annotations.filter((a) => a.pageNumber === 1);

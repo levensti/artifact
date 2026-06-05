@@ -740,7 +740,7 @@ export default function ChatPanel({
             <div className="space-y-5 px-4 pb-5 pt-5">
               {chatThreadAnnotationId && activeThreadAnn ? (
                 <>
-                  <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-2.5 border-b border-border/60 pb-4">
                     <Button
                       type="button"
                       variant="ghost"
@@ -753,35 +753,22 @@ export default function ChatPanel({
                       Main thread
                     </Button>
 
-                    <div
-                      className="rounded-lg border px-3 py-2.5"
-                      style={{
-                        borderColor:
-                          "color-mix(in srgb, var(--primary) 22%, transparent)",
-                        background:
-                          "color-mix(in srgb, var(--primary) 5%, transparent)",
-                      }}
-                    >
-                      <div className="flex gap-2">
-                        <MessageSquareQuote
-                          className="mt-0.5 size-4 shrink-0"
-                          strokeWidth={2}
-                          style={{
-                            color:
-                              "color-mix(in srgb, var(--primary) 72%, transparent)",
-                          }}
-                        />
-                        <p
-                          className="text-xs leading-snug italic"
-                          style={{
-                            fontFamily: "var(--font-reading)",
-                            color:
-                              "color-mix(in srgb, var(--foreground) 72%, transparent)",
-                          }}
-                        >
-                          &ldquo;{activeThreadAnn.highlightText}&rdquo;
-                        </p>
-                      </div>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                        From the paper
+                      </span>
+                      <blockquote
+                        className="line-clamp-4 border-l-2 pl-3 text-[13px] italic leading-relaxed"
+                        style={{
+                          fontFamily: "var(--font-reading)",
+                          borderColor:
+                            "color-mix(in srgb, var(--primary) 35%, transparent)",
+                          color:
+                            "color-mix(in srgb, var(--foreground) 80%, transparent)",
+                        }}
+                      >
+                        &ldquo;{activeThreadAnn.highlightText}&rdquo;
+                      </blockquote>
                     </div>
                   </div>
 

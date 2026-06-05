@@ -12,9 +12,9 @@ import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2, MessageSquare, StickyNote, X } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
-import RightPanel from "@/components/right-panel";
+import RightPanel, { type RightPanelTab } from "@/components/right-panel";
 import { CitationContextProvider } from "@/components/citation-context";
-import NotesRail from "@/components/notes-rail";
+import NoteHoverCard, { type HoverAnchor } from "@/components/note-hover-card";
 import SelectionPopover from "@/components/selection-popover";
 import { hydrateClientStore } from "@/lib/client-data";
 import { loadPdfBlob } from "@/lib/client/pdf-blobs";
@@ -25,10 +25,10 @@ import {
   getAnnotations,
   addAnnotation,
   getAnnotation,
+  deleteAnnotation,
 } from "@/lib/annotations";
 import { arxivPdfUrl, BREAKPOINTS } from "@/lib/utils";
 
-const NOTES_COLLAPSED_KEY = "artifact-notes-rail-collapsed";
 const ASSISTANT_COLLAPSED_KEY = "artifact-assistant-panel-collapsed";
 const ASSISTANT_WIDTH_KEY = "artifact-assistant-panel-width";
 
@@ -183,16 +183,10 @@ export default function ReviewPage() {
   const [narrowViewport, setNarrowViewport] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 1280,
   );
-  const [notesOpen, setNotesOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [notesCollapsed, setNotesCollapsed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem(NOTES_COLLAPSED_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
+  /** Which tab the assistant panel shows. Lifted so creating/selecting a note
+   *  can switch to the Notes tab, and "Dive deeper" can switch to chat. */
+  const [assistantTab, setAssistantTab] = useState<RightPanelTab>("chat");
   const [assistantCollapsed, setAssistantCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -201,18 +195,6 @@ export default function ReviewPage() {
       return false;
     }
   });
-
-  const toggleNotesCollapsed = useCallback(() => {
-    setNotesCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(NOTES_COLLAPSED_KEY, String(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
 
   const toggleAssistantCollapsed = useCallback(() => {
     setAssistantCollapsed((prev) => {
@@ -225,7 +207,6 @@ export default function ReviewPage() {
       return next;
     });
   }, []);
-  const notesOverlayRef = useRef<HTMLDivElement>(null);
   const assistantOverlayRef = useRef<HTMLDivElement>(null);
 
   // Auto-collapse side panels on narrow viewports
@@ -234,7 +215,6 @@ export default function ReviewPage() {
     const handler = (e: MediaQueryListEvent) => {
       setNarrowViewport(e.matches);
       if (e.matches) {
-        setNotesOpen(false);
         setAssistantOpen(false);
       }
     };
@@ -242,17 +222,10 @@ export default function ReviewPage() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Close overlay panels when clicking outside
+  // Close overlay panel when clicking outside
   useEffect(() => {
     if (!narrowViewport) return;
     const handler = (e: MouseEvent) => {
-      if (
-        notesOpen &&
-        notesOverlayRef.current &&
-        !notesOverlayRef.current.contains(e.target as Node)
-      ) {
-        setNotesOpen(false);
-      }
       if (
         assistantOpen &&
         assistantOverlayRef.current &&
@@ -263,7 +236,7 @@ export default function ReviewPage() {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [narrowViewport, notesOpen, assistantOpen]);
+  }, [narrowViewport, assistantOpen]);
 
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   /** Passage threads (Dive deeper) / selection: which annotation thread is open in chat */
@@ -308,6 +281,45 @@ export default function ReviewPage() {
   const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(
     null,
   );
+  /** Viewport geometry of the highlight the hover note points at. */
+  const [cardAnchor, setCardAnchor] = useState<{
+    id: string;
+    anchor: HoverAnchor;
+  } | null>(null);
+  const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Emitted by the viewers as the cursor moves over / off a highlight. A short
+  // close delay bridges the gap between the highlight and the card so moving
+  // onto the card (which cancels the timer) doesn't dismiss it.
+  const handleViewerHover = useCallback(
+    (id: string | null, anchor: HoverAnchor | null) => {
+      if (hoverCloseTimer.current) {
+        clearTimeout(hoverCloseTimer.current);
+        hoverCloseTimer.current = null;
+      }
+      if (id && anchor) {
+        setHoveredAnnotationId(id);
+        setCardAnchor({ id, anchor });
+      } else {
+        hoverCloseTimer.current = setTimeout(
+          () => setHoveredAnnotationId(null),
+          140,
+        );
+      }
+    },
+    [],
+  );
+
+  // A scroll anywhere desyncs the cached anchor from the highlight, so dismiss
+  // a (non-pinned) hover card on scroll. Pinned editing cards stay put.
+  useEffect(() => {
+    const onScroll = () => {
+      if (hoverCloseTimer.current) clearTimeout(hoverCloseTimer.current);
+      setHoveredAnnotationId(null);
+    };
+    window.addEventListener("scroll", onScroll, true);
+    return () => window.removeEventListener("scroll", onScroll, true);
+  }, []);
 
   useEffect(() => {
     if (!clientReady || !dataReady) return;
@@ -359,13 +371,12 @@ export default function ReviewPage() {
       setActiveAnnotationId(ann.id);
       setChatThreadAnnotationId(ann.id);
     });
-    // Reveal the assistant so the user lands on the thread they just
-    // started rather than a still-collapsed rail. On narrow viewports
-    // the rail lives behind an overlay (notesOpen/assistantOpen mutex);
-    // on wide viewports it has a collapsed strip mode.
+    // Reveal the assistant (Dive deeper) so the user lands on the thread they
+    // just started. On narrow viewports it lives behind an overlay; on wide
+    // viewports it has a collapsed strip mode.
+    setAssistantTab("chat");
     if (narrowViewport) {
       setAssistantOpen(true);
-      setNotesOpen(false);
     } else if (assistantCollapsed) {
       toggleAssistantCollapsed();
     }
@@ -382,6 +393,9 @@ export default function ReviewPage() {
 
   const handleAnnotateSelection = useCallback(() => {
     if (selectionInfo && review) {
+      // Seed the hover card anchored to the selection so the new note opens
+      // inline for immediate editing — no rail required.
+      const r = selectionInfo.rect;
       void addAnnotation(review.id, {
         pageNumber: selectionInfo.pageNumber,
         highlightText: selectionInfo.text,
@@ -391,34 +405,36 @@ export default function ReviewPage() {
         kind: "comment",
       }).then((ann) => {
         refreshAnnotations();
+        setCardAnchor({
+          id: ann.id,
+          anchor: {
+            top: r.top,
+            bottom: r.bottom,
+            left: r.left,
+            right: r.right,
+            colLeft: r.left,
+            colRight: r.right,
+          },
+        });
         setActiveAnnotationId(ann.id);
         setChatThreadAnnotationId(null);
       });
-      if (narrowViewport) {
-        setNotesOpen(true);
-        setAssistantOpen(false);
-      } else if (notesCollapsed) {
-        toggleNotesCollapsed();
-      }
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
     }
-  }, [
-    selectionInfo,
-    review,
-    refreshAnnotations,
-    narrowViewport,
-    notesCollapsed,
-    toggleNotesCollapsed,
-  ]);
+  }, [selectionInfo, review, refreshAnnotations]);
 
   const handleAnnotationSelect = useCallback(
     (id: string) => {
       setActiveAnnotationId(id);
       if (!review) return;
       void getAnnotation(review.id, id).then((a) => {
-        if (a?.kind === "ask_ai") setChatThreadAnnotationId(id);
-        else setChatThreadAnnotationId(null);
+        if (a?.kind === "ask_ai") {
+          setChatThreadAnnotationId(id);
+          setAssistantTab("chat");
+        } else {
+          setChatThreadAnnotationId(null);
+        }
       });
     },
     [review],
@@ -491,6 +507,16 @@ export default function ReviewPage() {
   }, []);
 
 
+  // The hover card shows for whichever highlight is hovered, or — when pinned
+  // for editing — the active one, provided we still hold its anchor geometry.
+  const hoverCardId = hoveredAnnotationId ?? activeAnnotationId;
+  const hoverCardAnn =
+    cardAnchor && hoverCardId === cardAnchor.id
+      ? annotations.find((a) => a.id === cardAnchor.id) ?? null
+      : null;
+  const hoverCardPinned =
+    !!hoverCardAnn && activeAnnotationId === hoverCardAnn.id;
+
   if (!clientReady || !dataReady || !review) {
     return (
       <DashboardLayout>
@@ -517,6 +543,7 @@ export default function ReviewPage() {
                 activeAnnotationId={activeAnnotationId}
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
+                onAnnotationHover={handleViewerHover}
               />
             ) : pdfUrl ? (
               <PdfViewer
@@ -528,6 +555,7 @@ export default function ReviewPage() {
                 activeAnnotationId={activeAnnotationId}
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
+                onAnnotationHover={handleViewerHover}
               />
             ) : (
               <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
@@ -536,23 +564,6 @@ export default function ReviewPage() {
               </div>
             )}
           </div>
-
-          {/* Inline notes rail — only when viewport is wide */}
-          {!narrowViewport && (
-            <NotesRail
-              reviewId={review.id}
-              annotations={annotations}
-              activeAnnotationId={activeAnnotationId}
-              hoveredAnnotationId={hoveredAnnotationId}
-              onAnnotationsChanged={refreshAnnotations}
-              onHighlightClick={handleHighlightClick}
-              onAnnotationHover={setHoveredAnnotationId}
-              onAnnotationSelect={handleAnnotationSelect}
-              onAnnotationDeactivate={() => setActiveAnnotationId(null)}
-              collapsed={notesCollapsed}
-              onToggleCollapsed={toggleNotesCollapsed}
-            />
-          )}
         </div>
 
         {/* Inline drag handle + right panel — only when viewport is wide */}
@@ -594,32 +605,41 @@ export default function ReviewPage() {
                   sourceUrl={review.sourceUrl}
                   collapsed={assistantCollapsed}
                   onToggleCollapsed={toggleAssistantCollapsed}
+                  activeTab={assistantTab}
+                  onTabChange={setAssistantTab}
+                  activeAnnotationId={activeAnnotationId}
+                  hoveredAnnotationId={hoveredAnnotationId}
+                  onHighlightClick={handleHighlightClick}
+                  onAnnotationHover={setHoveredAnnotationId}
+                  onAnnotationSelect={handleAnnotationSelect}
+                  onAnnotationDeactivate={() => setActiveAnnotationId(null)}
                 />
               </CitationContextProvider>
             </div>
           </>
         )}
 
-        {/* Toggle buttons — only when viewport is narrow */}
+        {/* Toggle buttons — only when viewport is narrow. Both open the same
+            panel; Notes just lands on the Notes tab. */}
         {narrowViewport && (
           <div className="absolute z-30 flex flex-col gap-2 bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-[max(1rem,env(safe-area-inset-right,0px))]">
             <button
-              onClick={() => { setNotesOpen((v) => !v); setAssistantOpen(false); }}
-              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium shadow-lg border transition-colors ${notesOpen ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"}`}
-              title="Toggle notes"
+              onClick={() => { setAssistantTab("notes"); setAssistantOpen(true); }}
+              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium shadow-lg border transition-colors ${assistantOpen && assistantTab === "notes" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"}`}
+              title="Notes"
             >
               <StickyNote size={16} />
               <span className="hidden sm:inline">Notes</span>
               {annotations.length > 0 && (
-                <span className={`text-xs tabular-nums rounded-full px-1.5 py-0.5 ${notesOpen ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                <span className={`text-xs tabular-nums rounded-full px-1.5 py-0.5 ${assistantOpen && assistantTab === "notes" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
                   {annotations.length}
                 </span>
               )}
             </button>
             <button
-              onClick={() => { setAssistantOpen((v) => !v); setNotesOpen(false); }}
-              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium shadow-lg border transition-colors ${assistantOpen ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"}`}
-              title="Toggle assistant"
+              onClick={() => { setAssistantTab("chat"); setAssistantOpen(true); }}
+              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium shadow-lg border transition-colors ${assistantOpen && assistantTab === "chat" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"}`}
+              title="Assistant"
             >
               <MessageSquare size={16} />
               <span className="hidden sm:inline">Assistant</span>
@@ -628,40 +648,14 @@ export default function ReviewPage() {
         )}
 
         {/* Overlay backdrop */}
-        {narrowViewport && (notesOpen || assistantOpen) && (
+        {narrowViewport && assistantOpen && (
           <div
             className="absolute inset-0 z-30 bg-black/20"
-            onClick={() => { setNotesOpen(false); setAssistantOpen(false); }}
+            onClick={() => setAssistantOpen(false)}
           />
         )}
 
-        {/* Overlay notes rail */}
-        {narrowViewport && notesOpen && (
-          <div
-            ref={notesOverlayRef}
-            className="absolute right-0 top-0 bottom-0 z-40 w-[min(320px,85vw)] animate-in slide-in-from-right duration-200 shadow-2xl"
-          >
-            <button
-              onClick={() => setNotesOpen(false)}
-              className="absolute top-3 right-3 z-50 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-            >
-              <X size={16} />
-            </button>
-            <NotesRail
-              reviewId={review.id}
-              annotations={annotations}
-              activeAnnotationId={activeAnnotationId}
-              hoveredAnnotationId={hoveredAnnotationId}
-              onAnnotationsChanged={refreshAnnotations}
-              onHighlightClick={handleHighlightClick}
-              onAnnotationHover={setHoveredAnnotationId}
-              onAnnotationSelect={handleAnnotationSelect}
-              onAnnotationDeactivate={() => setActiveAnnotationId(null)}
-            />
-          </div>
-        )}
-
-        {/* Overlay assistant panel */}
+        {/* Overlay assistant panel (with Notes tab) */}
         {narrowViewport && assistantOpen && (
           <div
             ref={assistantOverlayRef}
@@ -691,6 +685,14 @@ export default function ReviewPage() {
                 selectedModel={selectedModel}
                 onModelChange={handleModelChange}
                 sourceUrl={review.sourceUrl}
+                activeTab={assistantTab}
+                onTabChange={setAssistantTab}
+                activeAnnotationId={activeAnnotationId}
+                hoveredAnnotationId={hoveredAnnotationId}
+                onHighlightClick={handleHighlightClick}
+                onAnnotationHover={setHoveredAnnotationId}
+                onAnnotationSelect={handleAnnotationSelect}
+                onAnnotationDeactivate={() => setActiveAnnotationId(null)}
               />
             </CitationContextProvider>
           </div>
@@ -702,6 +704,50 @@ export default function ReviewPage() {
           rect={selectionInfo.rect}
           onAsk={handleAskAboutSelection}
           onAnnotate={handleAnnotateSelection}
+        />
+      )}
+
+      {/* Inline note that surfaces on highlight hover / pins for editing. */}
+      {hoverCardAnn && cardAnchor && (
+        <NoteHoverCard
+          key={hoverCardAnn.id}
+          annotation={hoverCardAnn}
+          reviewId={review.id}
+          anchor={cardAnchor.anchor}
+          pinned={hoverCardPinned}
+          onChanged={refreshAnnotations}
+          onDelete={() => {
+            void deleteAnnotation(review.id, hoverCardAnn.id).then(() => {
+              refreshAnnotations();
+              setActiveAnnotationId(null);
+              setHoveredAnnotationId(null);
+              setCardAnchor(null);
+            });
+          }}
+          onRequestPin={() => {
+            setActiveAnnotationId(hoverCardAnn.id);
+            setChatThreadAnnotationId(null);
+          }}
+          onClose={() => {
+            setActiveAnnotationId(null);
+            setHoveredAnnotationId(null);
+          }}
+          onOpenThread={() => {
+            setChatThreadAnnotationId(hoverCardAnn.id);
+            setActiveAnnotationId(hoverCardAnn.id);
+            setAssistantTab("chat");
+            if (narrowViewport) setAssistantOpen(true);
+            else if (assistantCollapsed) toggleAssistantCollapsed();
+          }}
+          onPointerEnter={() => {
+            if (hoverCloseTimer.current) {
+              clearTimeout(hoverCloseTimer.current);
+              hoverCloseTimer.current = null;
+            }
+          }}
+          onPointerLeave={() => {
+            if (!hoverCardPinned) setHoveredAnnotationId(null);
+          }}
         />
       )}
 
