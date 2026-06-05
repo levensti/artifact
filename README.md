@@ -20,12 +20,9 @@ The assistant has the full text in context, so you can ask questions, request de
 
 ### Share a review with a colleague
 
-Generate a live link to any review. Recipients import a copy with chats, annotations, and deep dives intact, into their own workspace.
+Generate a link that your colleagues can use to import your paper review, including your chats, notes, and deep dives.
 
-<p align="center">
-  <img src="docs/screenshots/share-review-init.png" alt="Share dialog with copy link" width="49%" />
-  <img src="docs/screenshots/share-review-accept.png" alt="Recipient landing page for a shared review" width="49%" />
-</p>
+<img src="docs/screenshots/share-review-init.png" alt="Share dialog with copy link" width="49%" />
 
 ## Contributing
 
