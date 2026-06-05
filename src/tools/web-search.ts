@@ -18,6 +18,7 @@
  */
 
 import type { ToolDefinition } from "./types";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
 
 /**
  * Sentinel returned by web_search when no Exa key is configured. Both the
@@ -41,7 +42,7 @@ async function exaSearch(
   count: number,
   apiKey: string,
 ): Promise<{ title: string; url: string; description: string }[]> {
-  const response = await fetch("https://api.exa.ai/search", {
+  const response = await fetchWithTimeout("https://api.exa.ai/search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -99,7 +100,7 @@ export const webSearchTool: ToolDefinition = {
 
   async execute(input: Record<string, unknown>, context) {
     const query = String(input.query ?? "").trim();
-    if (!query) return "Error: query parameter is required.";
+    if (!query) return { content: "Error: query parameter is required.", ok: false };
 
     const count = Math.max(1, Math.min(10, Number(input.count) || 5));
     const apiKey =
@@ -107,17 +108,25 @@ export const webSearchTool: ToolDefinition = {
       process.env.EXA_API_KEY ||
       "";
     if (!apiKey) {
-      // The chat UI watches for this exact string and renders an inline
-      // "Configure Exa Search" card in place of the tool result. The
-      // agent is told (in the system prompt) not to verbalize the failure.
-      return EXA_KEY_REQUIRED_SENTINEL;
+      // No key: raise a control signal so the loop can pause for the user. The
+      // chat UI watches for this exact `content` string and renders an inline
+      // "Configure Exa Search" card; the agent is told (in the system prompt)
+      // not to verbalize the failure.
+      return {
+        content: EXA_KEY_REQUIRED_SENTINEL,
+        ok: false,
+        control: "needs_user_input",
+      };
     }
 
     try {
       const results = await exaSearch(query, count, apiKey);
 
       if (results.length === 0) {
-        return `No web results found for: "${query}". Try rephrasing the search.`;
+        return {
+          content: `No web results found for: "${query}". Try rephrasing the search.`,
+          ok: false,
+        };
       }
 
       const formatted = results.map((r, i) =>
@@ -130,7 +139,10 @@ export const webSearchTool: ToolDefinition = {
 
       return `Found ${results.length} web results for "${query}":\n\n${formatted.join("\n\n")}`;
     } catch (err) {
-      return `Web search failed: ${err instanceof Error ? err.message : "unknown error"}`;
+      return {
+        content: `Web search failed: ${err instanceof Error ? err.message : "unknown error"}`,
+        ok: false,
+      };
     }
   },
 };

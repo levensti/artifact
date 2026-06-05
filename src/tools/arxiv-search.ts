@@ -7,6 +7,8 @@
  */
 
 import type { ToolDefinition } from "./types";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
+import { SEMANTIC_SCHOLAR_BASE, semanticScholarHeaders } from "@/lib/semantic-scholar";
 
 interface PaperResult {
   title: string;
@@ -76,19 +78,21 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  maxRetries = 2,
+): Promise<Response> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (attempt > 0) await sleep(2000 * attempt);
 
-    const response = await fetch(url, {
-      headers: { "User-Agent": "Artifact/1.0 (academic research tool)" },
-    });
+    const response = await fetchWithTimeout(url, { headers });
 
     if (response.status === 429) {
       // Check for Retry-After header
       const retryAfter = response.headers.get("Retry-After");
       if (retryAfter && attempt < maxRetries - 1) {
-        await sleep(Math.min(Number(retryAfter) * 1000 || 5000, 15000));
+        await sleep(Math.min(Number(retryAfter) * 1000 || 5000, 8000));
         continue;
       }
       if (attempt < maxRetries - 1) continue;
@@ -108,7 +112,8 @@ async function searchSemanticScholar(query: string, limit: number): Promise<Pape
   });
 
   const response = await fetchWithRetry(
-    `https://api.semanticscholar.org/graph/v1/paper/search?${params}`,
+    `${SEMANTIC_SCHOLAR_BASE}/paper/search?${params}`,
+    semanticScholarHeaders(),
   );
 
   if (!response.ok) {
@@ -157,7 +162,9 @@ function extractAll(xml: string, regex: RegExp): string[] {
 async function searchArxivFallback(query: string, maxResults: number): Promise<PaperResult[]> {
   const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&start=0&max_results=${maxResults}&sortBy=relevance&sortOrder=descending`;
 
-  const response = await fetchWithRetry(url);
+  const response = await fetchWithRetry(url, {
+    "User-Agent": "Artifact/1.0 (academic research tool)",
+  });
 
   if (!response.ok) {
     throw new Error(`arXiv API returned ${response.status}`);
@@ -220,7 +227,7 @@ export const arxivSearchTool: ToolDefinition = {
 
   async execute(input: Record<string, unknown>) {
     const query = String(input.query ?? "").trim();
-    if (!query) return "Error: query parameter is required.";
+    if (!query) return { content: "Error: query parameter is required.", ok: false };
 
     const maxResults = Math.max(1, Math.min(20, Number(input.max_results) || 8));
     const queryAttempts = [
@@ -255,12 +262,18 @@ export const arxivSearchTool: ToolDefinition = {
     }
 
     if (results.length === 0 && lastErr) {
-      return `Paper search failed: ${lastErr instanceof Error ? lastErr.message : "unknown error"}. Both Semantic Scholar and arXiv are unavailable.`;
+      return {
+        content: `Paper search failed: ${lastErr instanceof Error ? lastErr.message : "unknown error"}. Both Semantic Scholar and arXiv are unavailable.`,
+        ok: false,
+      };
     }
 
     if (results.length === 0) {
       const broadened = queryAttempts.length > 1 ? ` Also tried broader query: "${queryAttempts[1]}".` : "";
-      return `No papers found for: "${query}". Try broader concepts (method family, task, or domain) instead of very specific phrases.${broadened}`;
+      return {
+        content: `No papers found for: "${query}". Try broader concepts (method family, task, or domain) instead of very specific phrases.${broadened}`,
+        ok: false,
+      };
     }
 
     const broadenNote =

@@ -210,6 +210,59 @@ function extractStructuredPicks(steps: AgentStep[]): StructuredPick[] | null {
   return null;
 }
 
+/**
+ * Diagnose why a run did or didn't produce picks, logged at finalize. The
+ * "couldn't assemble a ranked list" empty state has two very different causes
+ * that look identical in the UI; this separates them:
+ *   - submit_picks never called → upstream agent-loop issue (see the server's
+ *     "[agent-loop] exit WITHOUT submit_picks" line for why the gate let go).
+ *   - submit_picks called but 0 valid picks → the payload failed validation
+ *     here (items missing url/title, or `picks` wasn't an array). The raw
+ *     payload is logged so the malformed shape is visible.
+ */
+function logFinalizeDiagnostics(
+  queryId: string,
+  steps: AgentStep[],
+  structured: StructuredPick[] | null,
+  proseChars: number,
+  streamSucceeded: boolean,
+): void {
+  const toolCounts: Record<string, number> = {};
+  let submitStep: Extract<AgentStep, { kind: "tool_call" }> | null = null;
+  for (const s of steps) {
+    if (s.kind !== "tool_call") continue;
+    toolCounts[s.name] = (toolCounts[s.name] ?? 0) + 1;
+    if (s.name === "submit_picks") submitStep = s;
+  }
+
+  const submitCalled = submitStep !== null;
+  const validPicks = structured?.length ?? 0;
+  const producedPicks = validPicks > 0;
+
+  // The happy path is uninteresting — only log when something's off, so the
+  // console stays quiet on normal runs.
+  if (producedPicks && streamSucceeded) return;
+
+  const rawPicks = submitStep?.input?.picks;
+  const rawPickCount = Array.isArray(rawPicks) ? rawPicks.length : null;
+
+  console.warn(
+    `[discover] finalize ${queryId}: producedPicks=${producedPicks} ` +
+      `submit_picks called=${submitCalled} rawPicks=${rawPickCount} validPicks=${validPicks} ` +
+      `proseChars=${proseChars} streamSucceeded=${streamSucceeded} ` +
+      `tools=${JSON.stringify(toolCounts)}`,
+  );
+
+  // submit_picks fired but nothing survived validation: show the payload so the
+  // bad shape (missing url/title, wrong nesting) is diagnosable.
+  if (submitCalled && !producedPicks) {
+    console.warn(
+      `[discover] finalize ${queryId}: submit_picks payload dropped to 0 valid picks. Raw:`,
+      rawPicks,
+    );
+  }
+}
+
 export function useDiscoverChat({
   selectedModel,
 }: UseDiscoverChatOptions): UseDiscoverChatReturn {
@@ -326,6 +379,13 @@ export function useDiscoverChat({
           try {
             const finalText = stepsToFinalText(steps);
             const structured = extractStructuredPicks(steps);
+            logFinalizeDiagnostics(
+              queryId,
+              steps,
+              structured,
+              finalText.trim().length,
+              streamSucceeded,
+            );
             // When picks aren't submitted, append a tool-activity summary
             // to notes — both so a no-picks run shows whether the agent
             // actually searched, AND so a successful brief retains its

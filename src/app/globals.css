@@ -1077,28 +1077,33 @@
   }
 }
 
-/* ── Discover skeletons — result-shaped placeholders while the agent runs ── */
-@keyframes discover-skeleton-pan {
-  to { background-position: -200% 0; }
+/* ── Discover live activity — the agent surfacing its work in real time ──
+   No result-shaped skeletons here: the in-flight run shows the actual stream
+   of searches and the real source titles it finds (see discover-picks.tsx).
+   These keyframes give that stream its sense of life — newly-arrived rows
+   fade up into place, and the active phase/marker breathes. */
+
+/* Each newly-mounted activity row (a surfaced source, a new step) eases in.
+   Rows are keyed by step/source id, so React doesn't remount existing ones —
+   only genuinely new arrivals animate, which reads as the agent adding to its
+   findings rather than the whole list re-flashing on every stream tick. */
+@keyframes discover-row-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.discover-skeleton {
-  background-image: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--muted) 55%, transparent) 0%,
-    color-mix(in srgb, var(--muted) 55%, transparent) 40%,
-    color-mix(in srgb, var(--foreground) 8%, transparent) 50%,
-    color-mix(in srgb, var(--muted) 55%, transparent) 60%,
-    color-mix(in srgb, var(--muted) 55%, transparent) 100%
-  );
-  background-size: 200% 100%;
-  border-radius: 6px;
-  animation: discover-skeleton-pan 1.5s linear infinite;
+.discover-row-in {
+  animation: discover-row-in 320ms var(--ease-out) both;
 }
+
+/* The "live" breath — the active phase dot and the planning bars. */
+@keyframes discover-phase-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .discover-skeleton {
+  .discover-row-in {
     animation: none;
-    background-image: none;
-    background-color: color-mix(in srgb, var(--muted) 55%, transparent);
   }
 }
 

@@ -18,7 +18,10 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   if (!url) {
-    return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing url parameter" },
+      { status: 400 },
+    );
   }
 
   let parsed: URL;
@@ -51,12 +54,14 @@ export async function GET(req: NextRequest) {
         "Sec-Fetch-User": "?1",
       },
       redirect: "follow",
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(25_000),
     });
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: `Failed to fetch page: ${response.status} ${response.statusText}` },
+        {
+          error: `Failed to fetch page: ${response.status} ${response.statusText}`,
+        },
         { status: 502 },
       );
     }
@@ -67,7 +72,9 @@ export async function GET(req: NextRequest) {
       !contentType.includes("application/xhtml")
     ) {
       return NextResponse.json(
-        { error: `Unsupported content type: ${contentType}. Only HTML pages are supported.` },
+        {
+          error: `Unsupported content type: ${contentType}. Only HTML pages are supported.`,
+        },
         { status: 400 },
       );
     }
@@ -79,7 +86,10 @@ export async function GET(req: NextRequest) {
 
     if (!article) {
       return NextResponse.json(
-        { error: "Could not extract readable content from this page. The page may be too dynamic or require JavaScript." },
+        {
+          error:
+            "Could not extract readable content from this page. The page may be too dynamic or require JavaScript.",
+        },
         { status: 422 },
       );
     }
@@ -99,7 +109,9 @@ export async function GET(req: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: `Failed to fetch page: ${err instanceof Error ? err.message : "Unknown error"}` },
+      {
+        error: `Failed to fetch page: ${err instanceof Error ? err.message : "Unknown error"}`,
+      },
       { status: 500 },
     );
   }

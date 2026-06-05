@@ -66,6 +66,54 @@ export interface ToolContext {
 /*  Tool definition — the contract every tool file implements          */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Tool result — structured return value from a tool                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Out-of-band control signal a tool can raise on its result. The agent loop
+ * branches on this generically instead of string-matching tool output.
+ *
+ * - `needs_user_input`: the tool can't proceed until the user supplies
+ *   something (e.g. `web_search` with no Exa key). The loop pauses the round
+ *   when nothing else usable came back, and the `content` is fed to the model
+ *   and UI verbatim (not wrapped) so both recognize the literal signal.
+ */
+export type ToolControl = "needs_user_input";
+
+/**
+ * A tool's return value. Tools may return a bare string (treated as a
+ * successful result) or this richer shape when they need to report failure or
+ * raise a control signal. Keeping `ok` on the result is what lets the loop
+ * decide "did this round produce anything usable?" without a brittle
+ * failure-string regex.
+ */
+export interface ToolResult {
+  /** Text fed back to the model (and emitted to the UI as the tool_result). */
+  content: string;
+  /** Did the tool produce a usable result? Defaults to `true`. A `false`
+   *  marks errors / empty results so the loop doesn't count them as progress. */
+  ok?: boolean;
+  /** Optional out-of-band signal — see {@link ToolControl}. */
+  control?: ToolControl;
+}
+
+/** A tool result with defaults applied — what the loop actually consumes. */
+export interface NormalizedToolResult {
+  content: string;
+  ok: boolean;
+  control?: ToolControl;
+}
+
+/** Coerce a tool's `string | ToolResult` return into a uniform shape. A bare
+ *  string is a success; an object's `ok` defaults to `true`. */
+export function normalizeToolResult(
+  result: string | ToolResult,
+): NormalizedToolResult {
+  if (typeof result === "string") return { content: result, ok: true };
+  return { content: result.content, ok: result.ok ?? true, control: result.control };
+}
+
 export interface ToolDefinition {
   /** Unique snake_case name (sent to the LLM as the tool name). */
   name: string;
@@ -74,11 +122,13 @@ export interface ToolDefinition {
   /** JSON-Schema-style parameter spec. */
   parameters: ToolParameters;
   /**
-   * Execute the tool with validated input and return a text result
-   * that gets fed back into the LLM conversation.
+   * Execute the tool with validated input. Return a bare string for a normal
+   * successful result, or a {@link ToolResult} to report failure (`ok: false`)
+   * or raise a control signal. The returned text is fed back into the LLM
+   * conversation.
    */
   execute: (
     input: Record<string, unknown>,
     context: ToolContext,
-  ) => Promise<string>;
+  ) => Promise<string | ToolResult>;
 }

@@ -6,7 +6,6 @@
 
 export interface Model {
   id: string;
-  label: string;
   /** OpenRouter model id sent upstream. */
   modelId: string;
 }

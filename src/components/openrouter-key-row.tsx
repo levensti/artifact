@@ -19,7 +19,6 @@ import {
   KEYS_UPDATED_EVENT,
   setOpenRouterKey,
 } from "@/lib/keys";
-import { OPENROUTER_MODEL_LABEL } from "@/lib/openrouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -27,7 +26,6 @@ import { cn } from "@/lib/utils";
 /**
  * Settings row for the OpenRouter API key. Mirrors `ExaKeyRow`'s structure.
  *
- * The app runs a single model ({@link OPENROUTER_MODEL_LABEL}) via OpenRouter.
  * A key is optional for the user: when the platform has its own key in env,
  * chat works out of the box. A user-entered key overrides the platform key.
  */
@@ -125,7 +123,7 @@ export function OpenRouterKeyRow() {
             }}
           >
             {hasKey
-              ? `Using your key · ${OPENROUTER_MODEL_LABEL}`
+              ? `Using your key`
               : usingPlatformKey
                 ? "Covered by Artifact during early access"
                 : "API key required to chat"}
@@ -174,8 +172,9 @@ export function OpenRouterKeyRow() {
                   "color-mix(in srgb, var(--muted-foreground) 85%, transparent)",
               }}
             >
-              Artifact runs {OPENROUTER_MODEL_LABEL} via OpenRouter. Add your own
-              key to use your account instead of the platform&apos;s.
+              Artifact offers a platform-provided OpenRouter key for easy
+              quickstart. Add your own key to use your account instead of the
+              platform&apos;s.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative min-w-0">
