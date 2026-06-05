@@ -24,5 +24,12 @@ export type StreamEvent =
       cacheCreationTokens: number;
       outputTokens: number;
     }
-  | { type: "error"; message: string }
+  | {
+      type: "error";
+      message: string;
+      /** Set when the upstream provider rejected the turn for hitting a usage
+       *  limit, so the client can surface an "add your own key" prompt rather
+       *  than a generic failure. */
+      code?: "rate_limit";
+    }
   | { type: "done" };

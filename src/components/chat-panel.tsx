@@ -149,10 +149,8 @@ function ChatInput({
   sendMessage,
   isStreaming,
   selectedModel,
-  hasSavedKeys,
   isPreparingPaper,
   chatThreadAnnotationId,
-  onOpenSettings,
   focusToken,
 }: {
   input: string;
@@ -160,18 +158,18 @@ function ChatInput({
   sendMessage: () => Promise<void>;
   isStreaming: boolean;
   selectedModel: Model | null;
-  hasSavedKeys: boolean;
   /** Paper parse hasn't finished yet — disable input with a preparing state. */
   isPreparingPaper: boolean;
   chatThreadAnnotationId: string | null;
-  onOpenSettings: () => void;
   /** Increment to imperatively focus the composer (e.g. after a quote insert). */
   focusToken: number;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
   const { pageMapProgress, pageMapError } = useCitationContext();
-  const inputLocked = !hasSavedKeys || isPreparingPaper;
+  // Chat is available by default (platform key); only the paper-indexing step
+  // gates input. Provider/usage failures surface inline on the message.
+  const inputLocked = isPreparingPaper;
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -213,11 +211,9 @@ function ChatInput({
       <div
         className={cn(
           "flex items-end gap-2 rounded-xl border transition-[box-shadow,border-color,background-color] duration-200",
-          !hasSavedKeys
-            ? "border-warning/35 bg-warning/5"
-            : isPreparingPaper
-              ? "bg-muted/30 border-border/60"
-              : "bg-card border-border shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 focus-within:shadow-md focus-within:shadow-primary/5",
+          isPreparingPaper
+            ? "bg-muted/30 border-border/60"
+            : "bg-card border-border shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 focus-within:shadow-md focus-within:shadow-primary/5",
         )}
       >
         <textarea
@@ -229,11 +225,9 @@ function ChatInput({
           placeholder={
             isPreparingPaper
               ? "Indexing paper for chat…"
-              : !hasSavedKeys
-                ? "Add an API key to start chatting…"
-                : chatThreadAnnotationId
-                  ? "Reply in this selection thread…"
-                  : "Ask about the paper…"
+              : chatThreadAnnotationId
+                ? "Reply in this selection thread…"
+                : "Ask about the paper…"
           }
           rows={1}
           className={cn(
@@ -258,9 +252,7 @@ function ChatInput({
           }
           aria-label={
             !selectedModel
-              ? hasSavedKeys
-                ? "Choose a model to send"
-                : "Manage API keys to send"
+              ? "Choose a model to send"
               : isStreaming
                 ? "Sending..."
                 : "Send message"
@@ -274,11 +266,6 @@ function ChatInput({
         </Button>
       </div>
       <div className="mt-1.5 space-y-0.5">
-        {!hasSavedKeys && (
-          <p className="px-1 text-center text-[11px] leading-snug text-warning">
-            Chat is locked until you add an API key.
-          </p>
-        )}
         {pageMapError && !isPreparingPaper && (
           <p className="px-1 text-center text-[11px] leading-snug text-warning">
             Page index unavailable: {pageMapError} Chat still works; citation
@@ -312,19 +299,6 @@ function ChatInput({
                 </div>
               );
             })()}
-          </div>
-        )}
-        {!hasSavedKeys && (
-          <div className="flex justify-center">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="h-7 text-xs"
-              onClick={onOpenSettings}
-            >
-              Add API key to unlock chat
-            </Button>
           </div>
         )}
       </div>
@@ -370,13 +344,9 @@ export default function ChatPanel({
     sourceUrl,
   });
 
-  // Only surface the "preparing" gate when the user would otherwise be able
-  // to send — i.e. we'd hide it behind the existing key/model lock states.
-  const isPreparingPaper =
-    !parseReady &&
-    chat.hasSavedKeys &&
-    !!selectedModel &&
-    chat.hasKeyForModel;
+  // Only surface the "preparing" gate when the user could otherwise send —
+  // i.e. a model is selected. Chat itself is available by default.
+  const isPreparingPaper = !parseReady && !!selectedModel;
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
@@ -698,7 +668,13 @@ export default function ChatPanel({
 
   const buildFailure = (msgId: string) =>
     chat.failedUserMsgId === msgId && chat.error
-      ? { error: chat.error, canRetry: chat.canRetry, onRetry: handleRetry }
+      ? {
+          error: chat.error,
+          canRetry: chat.canRetry,
+          onRetry: handleRetry,
+          kind: chat.errorCode === "rate_limit" ? ("rate_limit" as const) : undefined,
+          onAddKey: openKeysForChat,
+        }
       : null;
 
   /* ---------------------------------------------------------------- */
@@ -796,10 +772,7 @@ export default function ChatPanel({
                   {chat.messages.length === 0 && (
                     <ChatEmptyState
                       canSend={
-                        !!selectedModel &&
-                        chat.hasKeyForModel &&
-                        !chat.isStreaming &&
-                        !isPreparingPaper
+                        !!selectedModel && !chat.isStreaming && !isPreparingPaper
                       }
                       onSend={chat.submitChat}
                     />
@@ -833,22 +806,6 @@ export default function ChatPanel({
           )}
         </div>
 
-        {selectedModel && !chat.hasKeyForModel && (
-          <div className="mx-3 mb-2 px-3 py-2.5 rounded-md border border-border bg-muted/40 text-sm text-foreground leading-snug flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              An OpenRouter API key is required to send messages.
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="shrink-0 h-8"
-              onClick={openKeysForChat}
-            >
-              Add API key
-            </Button>
-          </div>
-        )}
 
         {pendingQuote && (
           <div
@@ -926,10 +883,8 @@ export default function ChatPanel({
           sendMessage={sendWithQuote}
           isStreaming={chat.isStreaming}
           selectedModel={selectedModel}
-          hasSavedKeys={chat.hasSavedKeys}
           isPreparingPaper={isPreparingPaper}
           chatThreadAnnotationId={chatThreadAnnotationId}
-          onOpenSettings={openSettings}
           focusToken={composerFocusToken}
         />
         {snippetSel && (

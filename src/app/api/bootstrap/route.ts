@@ -10,15 +10,15 @@ import {
 export const dynamic = "force-dynamic";
 
 export const GET = authedRoute(async (userId) => {
-  const [reviews, settings, deepDives, discoverQueries, recommendations, session] =
-    await Promise.all([
-      store.listReviews(userId),
-      store.getSettings(userId),
-      store.listDeepDives(userId),
-      store.listDiscoverQueries(userId),
-      store.listRecommendations(userId),
-      auth(),
-    ]);
+  // Discover (queries + recommendations) is intentionally NOT bootstrapped:
+  // only the /discover route reads it, so it's lazy-loaded there via
+  // /api/discover-queries instead of riding in every page's bootstrap.
+  const [reviews, settings, deepDives, session] = await Promise.all([
+    store.listReviews(userId),
+    store.getSettings(userId),
+    store.listDeepDives(userId),
+    auth(),
+  ]);
   const user = session?.user
     ? {
         id: session.user.id,
@@ -37,8 +37,6 @@ export const GET = authedRoute(async (userId) => {
     // "add a key" prompt when the server already has one in env.
     platformTools: platformToolAvailability(),
     deepDives,
-    discoverQueries,
-    recommendations,
     user,
   });
 });

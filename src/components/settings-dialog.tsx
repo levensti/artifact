@@ -65,7 +65,7 @@ export default function SettingsDialog({
               ? "Using your OpenRouter key."
               : status === "platform"
                 ? "Artifact is covering AI costs while in early access."
-                : "Add an OpenRouter key to start chatting."}
+                : "Add your own OpenRouter key for higher usage limits."}
           </DialogDescription>
         </DialogHeader>
 

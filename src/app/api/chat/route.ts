@@ -513,10 +513,20 @@ export async function POST(req: NextRequest) {
             : undefined,
         );
       } catch (err) {
-        emit({
-          type: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
-        });
+        const rateLimited = !!(err as { isRateLimit?: boolean })?.isRateLimit;
+        emit(
+          rateLimited
+            ? {
+                type: "error",
+                code: "rate_limit",
+                message:
+                  "You've reached the current usage limit. Add your own OpenRouter key for higher limits.",
+              }
+            : {
+                type: "error",
+                message: err instanceof Error ? err.message : "Unknown error",
+              },
+        );
       }
 
       // Persist the turn (best-effort) AFTER streaming, so it never delays the

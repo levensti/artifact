@@ -10,6 +10,7 @@ import {
   hasPlatformExaKey as hasPlatformExaKeyCached,
   hasPlatformOpenRouterKey as hasPlatformOpenRouterKeyCached,
   hasUsableProvider as hasUsableProviderCached,
+  isSettingsHydrated as isSettingsHydratedCached,
   setExaApiKey as setExaApiKeyRemote,
   setOpenRouterKey as setOpenRouterKeyRemote,
 } from "@/lib/client-data";
@@ -51,6 +52,14 @@ export function hasPlatformOpenRouterKey(): boolean {
 /** User can run the app: own OpenRouter key or a platform key. */
 export function hasUsableProvider(): boolean {
   return hasUsableProviderCached();
+}
+
+/**
+ * Whether key/settings state has loaded yet. Before this, key state is
+ * unknown (not "no keys") — used to suppress setup prompts until we know.
+ */
+export function isSettingsHydrated(): boolean {
+  return isSettingsHydratedCached();
 }
 
 export function getExaApiKey(): string | null {
