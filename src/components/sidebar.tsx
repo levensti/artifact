@@ -234,8 +234,13 @@ export default function Sidebar({
       >
         <div className="shrink-0 px-2 pb-2 pt-5">
           <div className="mb-4 flex items-start justify-between gap-2 px-2">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[#1e2b5e]">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              aria-label="Go to home"
+              className="group flex min-w-0 items-center gap-3 rounded-lg text-left transition-opacity hover:opacity-90"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[#1e2b5e] transition-transform duration-150 group-hover:scale-105">
                 <svg viewBox="4 4 24 24" aria-hidden className="size-[18px]">
                   <polygon points="5,24 12,7 19,24" fill="#fafafa" opacity="0.4" />
                   <polygon points="13,24 20,12 27,24" fill="#fafafa" />
@@ -256,7 +261,7 @@ export default function Sidebar({
                   Push the frontier.
                 </span>
               </div>
-            </div>
+            </button>
             <a
               href="https://github.com/levensti/artifact"
               target="_blank"

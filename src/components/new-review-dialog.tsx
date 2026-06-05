@@ -38,14 +38,23 @@ interface NewReviewDialogProps {
   open: boolean;
   onClose: () => void;
   onCreated: (reviewId: string) => void;
+  /** Tab to open in. Lets callers deep-link straight to PDF/web import. */
+  initialMode?: SourceMode;
 }
 
 export default function NewReviewDialog({
   open,
   onClose,
   onCreated,
+  initialMode = "arxiv",
 }: NewReviewDialogProps) {
-  const [mode, setMode] = useState<SourceMode>("arxiv");
+  const [mode, setMode] = useState<SourceMode>(initialMode);
+
+  // Re-sync the tab each time the dialog opens, so opening it from a specific
+  // affordance ("upload a PDF") lands on the matching tab.
+  useEffect(() => {
+    if (open) setMode(initialMode);
+  }, [open, initialMode]);
   const [url, setUrl] = useState("");
   const [webUrl, setWebUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
