@@ -568,18 +568,13 @@ export default function PdfViewer({
                 {pageAnnotations.map((ann) => {
                   const isActive = ann.id === activeAnnotationId;
                   const isHovered = ann.id === hoveredAnnotationId;
-                  const isAskAi = ann.kind === "ask_ai";
-                  const backgroundColor = isAskAi
-                    ? isActive
-                      ? "rgba(96, 165, 250, 0.30)"
-                      : isHovered
-                        ? "rgba(130, 180, 250, 0.26)"
-                        : "rgba(147, 197, 253, 0.22)"
-                    : isActive
-                      ? "rgba(250, 204, 21, 0.28)"
-                      : isHovered
-                        ? "rgba(252, 211, 77, 0.24)"
-                        : "rgba(253, 224, 71, 0.20)";
+                  // All highlights (notes + Ask AI) share the app's primary
+                  // (periwinkle) tint — the same accent used everywhere else.
+                  const backgroundColor = isActive
+                    ? "color-mix(in srgb, var(--primary) 32%, transparent)"
+                    : isHovered
+                      ? "color-mix(in srgb, var(--primary) 22%, transparent)"
+                      : "color-mix(in srgb, var(--primary) 14%, transparent)";
                   return ann.anchorRects.map((r, ri) => (
                     <div
                       key={`hl-${ann.id}-${ri}`}

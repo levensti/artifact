@@ -21,11 +21,8 @@ export function BrandPanel({ children }: BrandPanelProps) {
         aria-hidden
         className="pointer-events-none absolute -right-20 -top-20 size-[460px] opacity-[0.08]"
       >
-        <path
-          d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z"
-          fill="currentColor"
-        />
-        <circle cx="22" cy="10" r="3.2" fill="currentColor" />
+        <polygon points="5,24 12,7 19,24" fill="currentColor" opacity="0.55" />
+        <polygon points="13,24 20,12 27,24" fill="currentColor" />
       </svg>
       <div
         aria-hidden
@@ -115,12 +112,12 @@ export function SigninWelcome() {
 export function BrandGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="4 4 24 24" aria-hidden className={className}>
-      <path
-        d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z"
-        fill="currentColor"
-        opacity="0.4"
-      />
-      <circle cx="22" cy="10" r="3.2" fill="currentColor" />
+      {/* Two peaks: the back/left peak is lighter (opacity), the front/right
+          peak full — monochrome so it inherits whatever color the context
+          paints (currentColor). The true periwinkle + navy live in the app
+          icon (src/app/icon.svg). */}
+      <polygon points="5,24 12,7 19,24" fill="currentColor" opacity="0.4" />
+      <polygon points="13,24 20,12 27,24" fill="currentColor" />
     </svg>
   );
 }

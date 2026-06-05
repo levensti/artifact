@@ -117,16 +117,14 @@ function StreamingMessageBody() {
     scrollIfPinned();
   }, [agentSteps, scrollIfPinned]);
   return (
-    <div className="max-w-full">
-      <div className="border-l-2 border-l-primary/15 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
-        {agentSteps.length === 0 ? (
-          <ThinkingIndicator />
-        ) : (
-          <MarkdownStreamingBoundary>
-            <AgentSteps steps={agentSteps} />
-          </MarkdownStreamingBoundary>
-        )}
-      </div>
+    <div className="max-w-full text-[15px] leading-relaxed text-foreground">
+      {agentSteps.length === 0 ? (
+        <ThinkingIndicator />
+      ) : (
+        <MarkdownStreamingBoundary>
+          <AgentSteps steps={agentSteps} />
+        </MarkdownStreamingBoundary>
+      )}
     </div>
   );
 }
@@ -148,7 +146,7 @@ export function ChatMessageBubble({
   if (msg.role === "user") {
     return (
       <div className="flex flex-col items-end gap-1">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed bg-primary/10 text-foreground shadow-sm">
+        <div className="max-w-[80%] rounded-[18px] border border-primary/20 bg-primary/10 px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
           <div className="whitespace-pre-wrap">{msg.content}</div>
         </div>
         {failure && (
@@ -190,20 +188,16 @@ export function ChatMessageBubble({
 
   if (hasBlocks && hasInterleavedBlocks(msg.blocks!)) {
     return (
-      <div className="max-w-full">
-        <div className="border-l-2 border-l-primary/15 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
-          <InterleavedBlocks blocks={msg.blocks!} />
-        </div>
+      <div className="max-w-full text-[15px] leading-relaxed text-foreground">
+        <InterleavedBlocks blocks={msg.blocks!} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-full">
-      <div className="border-l-[3px] border-l-primary/30 pl-3 pr-0.5 text-sm leading-relaxed text-foreground max-w-full">
-        {msg.content ? <MarkdownMessage content={msg.content} /> : null}
-        {hasBlocks ? <InterleavedBlocks blocks={msg.blocks!} /> : null}
-      </div>
+    <div className="max-w-full text-[15px] leading-relaxed text-foreground">
+      {msg.content ? <MarkdownMessage content={msg.content} /> : null}
+      {hasBlocks ? <InterleavedBlocks blocks={msg.blocks!} /> : null}
     </div>
   );
 }
