@@ -6,7 +6,7 @@
  * adopts when asked for a list of related papers.
  *
  * Used by both the discover panel and the reading-pane chat. The split:
- *   - discover-picks.tsx      → wraps these in DiscoverSteps + SearchChip
+ *   - discover-picks.tsx      → renders these in the live research timeline
  *   - chat-step-renderers.tsx → wraps these in AgentSteps for reading-pane chat
  *   - chat-message-bubble.tsx → wraps these in InterleavedBlocks for persisted msgs
  */

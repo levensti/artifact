@@ -1,21 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Check,
-  ChevronDown,
   ChevronRight,
   FileText,
   Globe,
-  Lightbulb,
   Loader2,
   Search,
-  Sparkles,
   X,
 } from "lucide-react";
 import { MonoLabel } from "./folio";
 import { cn } from "@/lib/utils";
-import { ThinkingIndicator } from "./chat-step-renderers";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import { PaperCard, parseArxivSearchOutput } from "./discover-arxiv-cards";
@@ -23,7 +19,7 @@ import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
 /* ------------------------------------------------------------------ */
-/*  Search chip — collapsed tool_call with cards in expanded pane      */
+/*  Tool-call display helpers                                           */
 /* ------------------------------------------------------------------ */
 
 function resultCount(name: string, output: string | undefined): number | null {
@@ -45,6 +41,9 @@ const TOOL_DISPLAY: Record<string, { active: string; done: string }> = {
   paper_details: { active: "Verifying", done: "Verified" },
 };
 
+const TOOL_FAILED_RE =
+  /^(?:error:|paper search failed:|web search failed:|request failed:|no papers found|no web results)/i;
+
 function chipSubject(name: string, input: Record<string, unknown>): string | null {
   if (name === "paper_details") {
     return typeof input.arxivId === "string" ? input.arxivId : null;
@@ -52,28 +51,13 @@ function chipSubject(name: string, input: Record<string, unknown>): string | nul
   return typeof input.query === "string" ? `"${input.query}"` : null;
 }
 
-function SearchChip({
-  name,
-  input,
-  output,
-}: {
-  name: string;
-  input: Record<string, unknown>;
-  output?: string;
-}) {
-  const [open, setOpen] = useState(false);
-
-  if (name === "web_search" && output?.trim() === EXA_KEY_REQUIRED_SENTINEL) {
-    return <ExaKeyPromptCard />;
-  }
-
+function toolFields(
+  name: string,
+  input: Record<string, unknown>,
+  output: string | undefined,
+) {
   const done = !!output;
-  const trimmedOutput = (output ?? "").trim();
-  const failed =
-    done &&
-    /^(?:error:|paper search failed:|web search failed:|request failed:|no papers found|no web results)/i.test(
-      trimmedOutput,
-    );
+  const failed = done && TOOL_FAILED_RE.test((output ?? "").trim());
   const subject = chipSubject(name, input);
   const count = done ? resultCount(name, output) : null;
   const display = TOOL_DISPLAY[name];
@@ -85,112 +69,19 @@ function SearchChip({
       ? "Ran"
       : "Running";
   const displayName =
-    name === "web_search" ? "web" : name === "paper_details" ? "paper" : "papers";
-
-  // Expanded pane: for arxiv_search show the same card list users used to see
-  // auto-rendered, so the full candidate set is still browsable behind the
-  // chip. web_search falls back to raw text.
-  const expanded = !output ? null : name === "arxiv_search" ? (
-    (() => {
-      const { papers } = parseArxivSearchOutput(output);
-      if (papers.length === 0) {
-        return (
-          <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
-            {output.trim()}
-          </pre>
-        );
-      }
-      return (
-        <div className="grid grid-cols-1 gap-2">
-          {papers.map((p, i) => (
-            <PaperCard key={`${p.url || p.title}-${i}`} paper={p} />
-          ))}
-        </div>
-      );
-    })()
-  ) : (
-    <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground/80 leading-relaxed">
-      {output.trim()}
-    </pre>
-  );
-
-  return (
-    <div className="my-1.5 rounded-md border border-border/70 bg-muted/15 text-xs overflow-hidden">
-      <button
-        type="button"
-        className={cn(
-          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors",
-          done && "hover:bg-muted/30 cursor-pointer",
-          !done && "cursor-default",
-        )}
-        onClick={() => done && setOpen((v) => !v)}
-        disabled={!done}
-      >
-        {done ? (
-          failed ? (
-            <X className="size-3 text-destructive shrink-0" strokeWidth={2.5} />
-          ) : (
-            <Check className="size-3 text-success shrink-0" strokeWidth={2.5} />
-          )
-        ) : (
-          <Loader2 className="size-3 text-primary/60 animate-spin shrink-0" />
-        )}
-        {name === "web_search" ? (
-          <Globe className="size-3 text-muted-foreground/70 shrink-0" />
-        ) : name === "paper_details" ? (
-          <FileText className="size-3 text-muted-foreground/70 shrink-0" />
-        ) : (
-          <Search className="size-3 text-muted-foreground/70 shrink-0" />
-        )}
-        <span
-          className={cn(
-            "font-medium",
-            failed ? "text-destructive/90" : "text-foreground/80",
-          )}
-        >
-          {verb} {displayName}
-        </span>
-        {subject ? (
-          <span className="truncate max-w-[28ch] text-muted-foreground/70">
-            · {subject}
-          </span>
-        ) : null}
-        {count !== null ? (
-          <span className="text-muted-foreground/60 shrink-0">
-            · {count} results
-          </span>
-        ) : null}
-        {done ? (
-          <span className="ml-auto text-muted-foreground/50 shrink-0">
-            {open ? (
-              <ChevronDown className="size-3" />
-            ) : (
-              <ChevronRight className="size-3" />
-            )}
-          </span>
-        ) : null}
-      </button>
-      {open && expanded ? (
-        <div className="border-t border-border/40 bg-muted/5 px-2.5 py-2 max-h-[28rem] overflow-y-auto">
-          {expanded}
-        </div>
-      ) : null}
-    </div>
-  );
+    name === "web_search"
+      ? "web"
+      : name === "paper_details"
+        ? "paper"
+        : "papers";
+  return { done, failed, subject, count, verb, displayName };
 }
 
 /* ------------------------------------------------------------------ */
-/*  Phased progress — the legible arc of a research run                 */
+/*  Phase derivation — drives the single live status line               */
 /* ------------------------------------------------------------------ */
 
 type Phase = "planning" | "searching" | "reading" | "synthesizing";
-
-const PHASES: { key: Phase; label: string; icon: typeof Search }[] = [
-  { key: "planning", label: "Planning", icon: Lightbulb },
-  { key: "searching", label: "Searching", icon: Search },
-  { key: "reading", label: "Reading", icon: FileText },
-  { key: "synthesizing", label: "Synthesizing", icon: Sparkles },
-];
 
 interface Progress {
   phase: Phase;
@@ -242,64 +133,235 @@ function statusLine({ phase, papersFound, papersRead }: Progress): string {
       return "Planning the search…";
     case "searching":
       return papersFound > 0
-        ? `Searching sources — ${papersFound} candidates found`
+        ? `Searching sources, ${papersFound} candidates found`
         : "Searching arXiv and the web…";
     case "reading":
       return papersRead > 0
-        ? `Reading candidates — ${papersRead} verified`
+        ? `Reading candidates, ${papersRead} verified`
         : "Reading the most promising candidates…";
     case "synthesizing":
-      return "Ranking against your library…";
+      return "Writing your briefing…";
   }
 }
 
-function PhaseTracker({ phase }: { phase: Phase }) {
-  const currentIdx = PHASES.findIndex((p) => p.key === phase);
+/* ------------------------------------------------------------------ */
+/*  Living document — the brief assembling itself, top to bottom        */
+/* ------------------------------------------------------------------ */
+
+/** Expandable detail for a finished search/verify call. */
+function ToolExpanded({ name, output }: { name: string; output: string }) {
+  if (name === "arxiv_search") {
+    const { papers } = parseArxivSearchOutput(output);
+    if (papers.length > 0) {
+      return (
+        <div className="grid grid-cols-1 gap-2">
+          {papers.map((p, i) => (
+            <PaperCard key={`${p.url || p.title}-${i}`} paper={p} />
+          ))}
+        </div>
+      );
+    }
+  }
   return (
-    <div className="flex items-center gap-1.5">
-      {PHASES.map((p, i) => {
-        const done = i < currentIdx;
-        const active = i === currentIdx;
-        const Icon = p.icon;
-        return (
-          <div key={p.key} className="flex items-center gap-1.5">
-            <div
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors",
-                active
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : done
-                    ? "border-success/30 bg-success/[0.07] text-success/85"
-                    : "border-border/60 bg-transparent text-muted-foreground/55",
-              )}
+    <pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground/80">
+      {output.trim()}
+    </pre>
+  );
+}
+
+/** One tool action's content. The spine marker is supplied by TimelineRow. */
+function ToolAction({
+  name,
+  input,
+  output,
+}: {
+  name: string;
+  input: Record<string, unknown>;
+  output?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (name === "web_search" && output?.trim() === EXA_KEY_REQUIRED_SENTINEL) {
+    return <ExaKeyPromptCard />;
+  }
+
+  const { done, failed, subject, count, verb, displayName } = toolFields(
+    name,
+    input,
+    output,
+  );
+  const Icon =
+    name === "web_search" ? Globe : name === "paper_details" ? FileText : Search;
+
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        onClick={() => done && setOpen((v) => !v)}
+        disabled={!done}
+        className={cn(
+          "flex w-full items-center gap-1.5 text-left text-[12.5px]",
+          done ? "cursor-pointer" : "cursor-default",
+        )}
+      >
+        <Icon
+          className="size-3.5 shrink-0 text-muted-foreground/55"
+          strokeWidth={1.9}
+        />
+        <span
+          className={cn(
+            "font-medium",
+            failed ? "text-destructive/90" : "text-foreground/85",
+          )}
+        >
+          {verb} {displayName}
+        </span>
+        {subject ? (
+          <span className="truncate text-muted-foreground/65">· {subject}</span>
+        ) : null}
+        {count !== null ? (
+          <span className="shrink-0 text-muted-foreground/55">
+            · {count} results
+          </span>
+        ) : null}
+        {done ? (
+          <ChevronRight
+            className={cn(
+              "ml-0.5 size-3 shrink-0 text-muted-foreground/40 transition-transform",
+              open && "rotate-90",
+            )}
+          />
+        ) : null}
+      </button>
+      {open && output ? (
+        <div className="mt-2 max-h-[26rem] overflow-y-auto rounded-md border border-border/40 bg-muted/10 p-2">
+          <ToolExpanded name={name} output={output} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const RUNNING_MARKER = (
+  <Loader2 className="size-3.5 animate-spin text-primary/70" />
+);
+const THINKING_MARKER = (
+  <span className="size-1.5 animate-pulse rounded-full bg-primary/45" />
+);
+function doneMarker(failed: boolean): ReactNode {
+  if (failed) return <X className="size-3 text-destructive" strokeWidth={3} />;
+  return (
+    <span className="flex size-4 items-center justify-center rounded-full bg-primary/12 text-primary">
+      <Check className="size-2.5" strokeWidth={3} />
+    </span>
+  );
+}
+
+/** A row on the spine: a marker column (dot + connector) and the content. */
+function TimelineRow({
+  marker,
+  isLast,
+  children,
+}: {
+  marker: ReactNode;
+  isLast: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex w-4 shrink-0 flex-col items-center">
+        <span className="mt-px flex size-4 items-center justify-center">
+          {marker}
+        </span>
+        {!isLast ? (
+          <span className="w-px flex-1 bg-border/55" aria-hidden />
+        ) : null}
+      </div>
+      <div className="min-w-0 flex-1 pb-3.5">{children}</div>
+    </div>
+  );
+}
+
+/** The agent's work — searches, reads, thinking — as a living timeline. */
+function WorkTimeline({ steps }: { steps: AgentStep[] }) {
+  const nodes = steps.filter(
+    (s) =>
+      s.kind === "thinking" ||
+      (s.kind === "tool_call" && s.name !== "submit_picks"),
+  );
+  if (nodes.length === 0) return null;
+
+  return (
+    <div>
+      {nodes.map((step, i) => {
+        const isLast = i === nodes.length - 1;
+        if (step.kind === "tool_call") {
+          const done = !!step.output;
+          const failed =
+            done && TOOL_FAILED_RE.test((step.output ?? "").trim());
+          return (
+            <TimelineRow
+              key={step.id}
+              isLast={isLast}
+              marker={done ? doneMarker(failed) : RUNNING_MARKER}
             >
-              {done ? (
-                <Check className="size-3" strokeWidth={2.5} />
-              ) : active ? (
-                <Icon className="size-3 animate-pulse" strokeWidth={2} />
-              ) : (
-                <Icon className="size-3" strokeWidth={2} />
-              )}
-              {p.label}
-            </div>
-            {i < PHASES.length - 1 ? (
-              <span
-                className={cn(
-                  "h-px w-2.5 shrink-0",
-                  i < currentIdx ? "bg-success/40" : "bg-border/60",
-                )}
+              <ToolAction
+                name={step.name}
+                input={step.input}
+                output={step.output}
               />
-            ) : null}
-          </div>
+            </TimelineRow>
+          );
+        }
+        return (
+          <TimelineRow key={`th-${i}`} isLast={isLast} marker={THINKING_MARKER}>
+            <span
+              className="text-[12.5px] italic text-muted-foreground/65"
+              style={{ fontFamily: "var(--font-reading)" }}
+            >
+              Thinking…
+            </span>
+          </TimelineRow>
         );
       })}
     </div>
   );
 }
 
-function SkeletonCard() {
+/** The synthesis, writing itself as the agent narrates after searching. */
+function LiveSynthesis({
+  steps,
+  pool,
+}: {
+  steps: AgentStep[];
+  pool: ReturnType<typeof buildPoolFromSteps>;
+}) {
+  const text = steps
+    .flatMap((s) => (s.kind === "text" && s.text.trim() ? [s.text] : []))
+    .join("\n\n")
+    .trim();
+  if (!text) return null;
+
   return (
-    <div className="rounded-xl border border-border/60 bg-card/50 px-4 py-3.5">
+    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] px-3.5 py-3">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <MonoLabel tone="accent">Writing the brief</MonoLabel>
+        <span
+          className="size-1.5 animate-pulse rounded-full bg-primary/60"
+          aria-hidden
+        />
+      </div>
+      <div className="text-[13px] leading-relaxed">
+        <TextWithPicks text={text} pool={pool} />
+      </div>
+    </div>
+  );
+}
+
+/** A reading-list-shaped placeholder so the forming brief foreshadows itself. */
+function ReadingSkeleton() {
+  return (
+    <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5">
       <div className="discover-skeleton h-2.5 w-16" />
       <div className="discover-skeleton mt-2.5 h-3.5 w-3/4" />
       <div className="discover-skeleton mt-2 h-2.5 w-full" />
@@ -309,74 +371,36 @@ function SkeletonCard() {
 }
 
 /**
- * The in-flight view of a research run: a high-level phase arc + a plain
- * status line, the live tool trace beneath it for transparency, and
- * result-shaped skeletons so the user can see a reading list is coming.
+ * The in-flight research run as a single living document: one live status
+ * line, the agent's work building down a timeline, the synthesis writing
+ * itself, and the reading list forming below.
  */
 export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
   const progress = useMemo(() => deriveProgress(steps), [steps]);
-  const showSkeletons = progress.phase !== "synthesizing";
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <PhaseTracker phase={progress.phase} />
-      </div>
-      <p className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-        <span className="landing-pulse-dot" />
-        {statusLine(progress)}
-      </p>
-
-      {/* Live trace — transparency without dominating the view */}
-      <div className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
-        <div className="mb-1.5">
-          <MonoLabel>What I&apos;m doing</MonoLabel>
-        </div>
-        <DiscoverSteps steps={steps} />
-      </div>
-
-      {showSkeletons ? (
-        <div className="space-y-2">
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Public: DiscoverSteps                                              */
-/* ------------------------------------------------------------------ */
-
-export default function DiscoverSteps({ steps }: { steps: AgentStep[] }) {
   const pool = useMemo(() => buildPoolFromSteps(steps), [steps]);
+  const synthesizing = progress.phase === "synthesizing";
 
   return (
-    <>
-      {steps.map((step, i) => {
-        switch (step.kind) {
-          case "thinking":
-            return <ThinkingIndicator key={`think-${i}`} />;
-          case "tool_call":
-            // submit_picks is a finalize signal, not a meaningful user-facing
-            // step. The agent's closing text confirmation is enough; the
-            // queue itself is the visible outcome.
-            if (step.name === "submit_picks") return null;
-            return (
-              <SearchChip
-                key={step.id}
-                name={step.name}
-                input={step.input}
-                output={step.output}
-              />
-            );
-          case "text":
-            return (
-              <TextWithPicks key={`text-${i}`} text={step.text} pool={pool} />
-            );
-        }
-      })}
-    </>
+    <div className="space-y-4">
+      {/* One consolidated live status (no chip stepper, no duplicate sentence) */}
+      <div className="flex items-center gap-2.5">
+        <span className="landing-pulse-dot" />
+        <span className="text-[13px] font-medium text-foreground/85">
+          {statusLine(progress)}
+        </span>
+      </div>
+
+      {/* The work, building down a spine */}
+      <WorkTimeline steps={steps} />
+
+      {/* The brief, writing itself */}
+      {synthesizing ? <LiveSynthesis steps={steps} pool={pool} /> : null}
+
+      {/* The reading list, forming below */}
+      <div className="space-y-2">
+        <ReadingSkeleton />
+        <ReadingSkeleton />
+      </div>
+    </div>
   );
 }

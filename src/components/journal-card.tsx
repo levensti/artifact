@@ -72,10 +72,12 @@ export default function JournalCard({ entry, onOpen }: JournalCardProps) {
   const chips = isDigest
     ? [{ label: "weekly digest", count: 0 }]
     : sessionChips(entry.page.content);
-  const time = entry.date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
+  const dateLabel = entry.date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(entry.date.getFullYear() === new Date().getFullYear()
+      ? {}
+      : { year: "numeric" }),
   });
   const Icon = isDigest ? Sparkles : BookMarked;
   const typeLabel = isDigest ? "Weekly digest" : "Session";
@@ -84,7 +86,7 @@ export default function JournalCard({ entry, onOpen }: JournalCardProps) {
     <button
       type="button"
       onClick={() => onOpen(entry.page.slug)}
-      className="group block w-full rounded-xl border px-[22px] py-[18px] text-left transition-all duration-200 hover:-translate-y-px hover:shadow-[var(--shadow-md)]"
+      className="group flex h-full w-full flex-col rounded-xl border px-[22px] py-[18px] text-left transition-all duration-200 hover:-translate-y-px hover:shadow-[var(--shadow-md)]"
       style={{
         borderColor: isDigest
           ? "color-mix(in srgb, var(--primary) 16%, transparent)"
@@ -111,18 +113,16 @@ export default function JournalCard({ entry, onOpen }: JournalCardProps) {
         </span>
         <MonoLabel tone={isDigest ? "accent" : "muted"}>{typeLabel}</MonoLabel>
         <span className="flex-1" />
-        {!isDigest && time ? (
-          <span
-            className="font-mono text-[10px] tabular-nums"
-            style={{
-              letterSpacing: "0.06em",
-              color:
-                "color-mix(in srgb, var(--muted-foreground) 75%, transparent)",
-            }}
-          >
-            {time}
-          </span>
-        ) : null}
+        <span
+          className="font-mono text-[10px] tabular-nums"
+          style={{
+            letterSpacing: "0.06em",
+            color:
+              "color-mix(in srgb, var(--muted-foreground) 75%, transparent)",
+          }}
+        >
+          {dateLabel}
+        </span>
       </div>
 
       {/* Title */}
@@ -136,11 +136,10 @@ export default function JournalCard({ entry, onOpen }: JournalCardProps) {
       {/* Excerpt */}
       {excerpt ? (
         <p
-          className="mt-2 text-[14.5px] leading-[1.6]"
+          className="mt-2 line-clamp-3 text-[14.5px] leading-[1.6]"
           style={{
             fontFamily: "var(--font-reading)",
             color: "color-mix(in srgb, var(--foreground) 66%, transparent)",
-            maxWidth: 640,
           }}
         >
           {excerpt}
@@ -149,7 +148,7 @@ export default function JournalCard({ entry, onOpen }: JournalCardProps) {
 
       {/* Stat chips */}
       <div
-        className="mt-3.5 flex items-center pt-3 text-[11.5px]"
+        className="mt-auto flex items-center pt-3.5 text-[11.5px]"
         style={{
           borderTop: isDigest
             ? "1px solid color-mix(in srgb, var(--primary) 14%, transparent)"

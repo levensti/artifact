@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ChevronRight } from "lucide-react";
+import { AlertCircle, Compass } from "lucide-react";
 import {
   getDiscoverQueriesSnapshot,
   getRecommendationsSnapshot,
@@ -26,15 +26,6 @@ import type { BriefRunData } from "./research-brief";
 /* ------------------------------------------------------------------ */
 
 export type DateBucket = "today" | "yesterday" | "this-week" | "earlier";
-
-const BUCKET_LABELS: Record<DateBucket, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  "this-week": "This week",
-  earlier: "Earlier",
-};
-
-const BUCKET_ORDER: DateBucket[] = ["today", "yesterday", "this-week", "earlier"];
 
 function dateBucket(iso: string): DateBucket {
   const then = new Date(iso);
@@ -179,55 +170,78 @@ function RecentRow({
   const live = !!root.liveSteps;
   const picks = root.recommendations.length;
   const accepted = root.acceptedCount;
+  const errored = q.status === "errored";
+  const hasMeta = picks > 0 || accepted > 0 || followups.length > 0;
 
   return (
     <button
       type="button"
       onClick={() => onOpen(q.id)}
-      className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/50 bg-card/40 px-3.5 py-2.5 text-left transition-colors hover:border-border hover:bg-card"
+      className="group flex h-full w-full flex-col rounded-xl border border-border/60 bg-card/50 px-5 py-4 text-left transition-all duration-200 hover:-translate-y-px hover:border-primary/25 hover:bg-card hover:shadow-[var(--shadow-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
     >
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium text-foreground">
-          {q.query}
+      {/* Status / time */}
+      <div className="mb-2.5 flex items-center gap-2">
+        <span className="inline-flex size-5 items-center justify-center rounded-md bg-muted text-primary/70">
+          <Compass className="size-3" strokeWidth={1.9} />
         </span>
-        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-          {live ? (
-            <span className="inline-flex items-center gap-1 text-primary">
-              <span className="landing-pulse-dot" />
-              Researching now
-            </span>
-          ) : (
-            <span>{relativeTime(q.createdAt)}</span>
-          )}
-          {!live && picks > 0 ? (
-            <>
-              <span aria-hidden>·</span>
+        {live ? (
+          <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
+            <span className="landing-pulse-dot" />
+            Researching
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
+            {relativeTime(q.createdAt)}
+          </span>
+        )}
+      </div>
+
+      {/* Query */}
+      <p className="line-clamp-3 text-[14px] font-medium leading-snug text-foreground">
+        {q.query}
+      </p>
+
+      {/* Footer meta */}
+      <div
+        className="mt-auto flex items-center gap-x-1.5 pt-3.5 text-[11px] text-muted-foreground"
+        style={{ borderTop: "1px solid var(--border)" }}
+      >
+        {errored ? (
+          <span className="inline-flex items-center gap-1 text-destructive/85">
+            <AlertCircle className="size-3" strokeWidth={2} />
+            Errored
+          </span>
+        ) : hasMeta ? (
+          <span className="flex flex-wrap items-center gap-x-1.5">
+            {picks > 0 ? (
               <span>
                 {picks} pick{picks === 1 ? "" : "s"}
-                {accepted > 0 ? ` · ${accepted} in library` : ""}
               </span>
-            </>
-          ) : null}
-          {followups.length > 0 ? (
-            <>
-              <span aria-hidden>·</span>
-              <span>
-                {followups.length} follow-up{followups.length === 1 ? "" : "s"}
-              </span>
-            </>
-          ) : null}
-          {q.status === "errored" ? (
-            <>
-              <span aria-hidden>·</span>
-              <span className="inline-flex items-center gap-0.5 text-destructive/85">
-                <AlertCircle className="size-3" strokeWidth={2} />
-                errored
-              </span>
-            </>
-          ) : null}
-        </span>
-      </span>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground/45" />
+            ) : null}
+            {accepted > 0 ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>{accepted} in library</span>
+              </>
+            ) : null}
+            {followups.length > 0 ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>
+                  {followups.length} follow-up{followups.length === 1 ? "" : "s"}
+                </span>
+              </>
+            ) : null}
+          </span>
+        ) : (
+          <span
+            className="italic text-muted-foreground/60"
+            style={{ fontFamily: "var(--font-reading)" }}
+          >
+            {live ? "Working…" : "No picks yet"}
+          </span>
+        )}
+      </div>
     </button>
   );
 }
@@ -239,30 +253,26 @@ export function RecentBriefsList({
   threads: ThreadView[];
   onOpen: (id: string) => void;
 }) {
-  const byBucket = useMemo(() => {
-    const map = new Map<DateBucket, ThreadView[]>();
-    for (const t of threads) {
-      const list = map.get(t.bucket) ?? [];
-      list.push(t);
-      map.set(t.bucket, list);
-    }
-    return map;
-  }, [threads]);
+  const sorted = useMemo(
+    () =>
+      [...threads].sort(
+        (a, b) =>
+          new Date(b.root.query.createdAt).getTime() -
+          new Date(a.root.query.createdAt).getTime(),
+      ),
+    [threads],
+  );
 
   if (threads.length === 0) return null;
 
   return (
-    <div className="space-y-6">
-      {BUCKET_ORDER.filter((b) => byBucket.has(b)).map((bucket) => (
-        <div key={bucket} className="space-y-2.5">
-          <MonoLabel>{BUCKET_LABELS[bucket]}</MonoLabel>
-          <div className="space-y-2">
-            {byBucket.get(bucket)!.map((t) => (
-              <RecentRow key={t.root.query.id} thread={t} onOpen={onOpen} />
-            ))}
-          </div>
-        </div>
-      ))}
+    <div className="space-y-2.5">
+      <MonoLabel>Recent research</MonoLabel>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {sorted.map((t) => (
+          <RecentRow key={t.root.query.id} thread={t} onOpen={onOpen} />
+        ))}
+      </div>
     </div>
   );
 }
