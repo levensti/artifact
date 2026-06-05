@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
-export const alt = "Artifact: a workspace for researchers to push the frontier";
+export const alt =
+  "Artifact: an AI-native workspace for researchers to discovery and read papers";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -71,7 +72,7 @@ export default async function OpengraphImage() {
               color: TEXT,
             }}
           >
-            Study anything. Push the frontier.
+            Explore the frontier.
           </div>
           <div
             style={{

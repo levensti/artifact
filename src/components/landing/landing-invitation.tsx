@@ -17,7 +17,7 @@ export function LandingInvitation({ signupHref }: LandingInvitationProps) {
               textWrap: "balance",
             }}
           >
-            Study anything. Capture what you learn. Push the frontier.
+            Explore the frontier. Capture what you learn.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <a

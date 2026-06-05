@@ -15,10 +15,7 @@ export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
       <MonoLabel>Open source · Free to use</MonoLabel>
 
       <h1 id="cover-title" className="landing-cover-h1 mt-6">
-        Study anything.
-        <br />
-        Push the
-        <br />
+        Explore the
         <span className="frontier">frontier.</span>
       </h1>
 

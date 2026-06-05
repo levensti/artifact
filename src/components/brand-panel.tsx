@@ -49,7 +49,7 @@ export function SignupPitch() {
   return (
     <div className="relative max-w-md">
       <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.03em]">
-        Push the{" "}
+        Explore the{" "}
         <span
           className="text-primary-foreground/85"
           style={{
@@ -64,8 +64,8 @@ export function SignupPitch() {
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
         Read papers, blogs, and arbitrary PDFs alongside a powerful AI
-        assistant. Build a personal journal that compounds with you, year
-        after year.
+        assistant. Build a personal journal that compounds with you, year after
+        year.
       </p>
 
       <ul className="mt-9 space-y-5">

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   FilePen,
@@ -242,7 +249,11 @@ export default function Sidebar({
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[#1e2b5e] transition-transform duration-150 group-hover:scale-105">
                 <svg viewBox="4 4 24 24" aria-hidden className="size-[18px]">
-                  <polygon points="5,24 12,7 19,24" fill="#fafafa" opacity="0.4" />
+                  <polygon
+                    points="5,24 12,7 19,24"
+                    fill="#fafafa"
+                    opacity="0.4"
+                  />
                   <polygon points="13,24 20,12 27,24" fill="#fafafa" />
                 </svg>
               </span>
@@ -258,7 +269,7 @@ export default function Sidebar({
                       "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
                   }}
                 >
-                  Push the frontier.
+                  Explore the frontier.
                 </span>
               </div>
             </button>
@@ -289,10 +300,7 @@ export default function Sidebar({
             className="sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px] text-foreground/80 hover:text-foreground"
           >
             <span className="flex w-6 shrink-0 items-center justify-center">
-              <FilePlus
-                className="size-[18px] opacity-80"
-                strokeWidth={1.75}
-              />
+              <FilePlus className="size-[18px] opacity-80" strokeWidth={1.75} />
             </span>
             <span className="truncate">Start a review</span>
           </button>
@@ -307,10 +315,7 @@ export default function Sidebar({
             )}
           >
             <span className="flex w-6 shrink-0 items-center justify-center">
-              <Compass
-                className="size-[18px] opacity-80"
-                strokeWidth={1.75}
-              />
+              <Compass className="size-[18px] opacity-80" strokeWidth={1.75} />
             </span>
             <span className="truncate">Discover</span>
           </button>
@@ -326,7 +331,10 @@ export default function Sidebar({
               )}
             >
               <span className="relative flex w-6 shrink-0 items-center justify-center">
-                <FilePen className="size-[18px] opacity-80" strokeWidth={1.75} />
+                <FilePen
+                  className="size-[18px] opacity-80"
+                  strokeWidth={1.75}
+                />
                 {ingestActive ? (
                   <span
                     aria-hidden
