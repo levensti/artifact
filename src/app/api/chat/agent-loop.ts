@@ -93,7 +93,6 @@ async function executeToolCalls(
   tools: ToolDefinition[],
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
-  label: string,
 ): Promise<ToolOutput[]> {
   // Emit tool_call events upfront so the UI can show the whole batch in-flight,
   // then execute in parallel — multiple tool calls per turn (e.g. discover-mode
@@ -102,7 +101,6 @@ async function executeToolCalls(
     emit({ type: "tool_call", id: tc.id, name: tc.name, input: tc.input });
   }
 
-  const toolStart = Date.now();
   const results = await Promise.all(
     toolCalls.map(async (tc) => {
       try {
@@ -121,11 +119,6 @@ async function executeToolCalls(
         };
       }
     }),
-  );
-  // Wall-clock for the whole parallel batch — the slowest single call, not the
-  // sum. Compare against the per-tool times to confirm they overlapped.
-  console.debug(
-    `[agent-loop] ${label}: ${toolCalls.length} tool(s) executed in ${Date.now() - toolStart}ms (parallel wall-clock)`,
   );
 
   return toolCalls.map((tc, i) => {
@@ -156,21 +149,7 @@ export async function runAgentLoop(
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     emit({ type: "turn_start" });
 
-    const requestStart = Date.now();
     const turn = await adapter.request();
-    const requestMs = Date.now() - requestStart;
-
-    // Diagnostic: how many tool calls did the model batch into this one turn,
-    // and how long did the generation take? A turn with N>1 calls confirms the
-    // model is parallelizing; a run that's all N=1 turns means it's serializing
-    // work the loop would have run concurrently.
-    console.debug(
-      `[agent-loop] round ${round}: ${turn.toolCalls.length} tool call(s)` +
-        (turn.toolCalls.length
-          ? ` [${turn.toolCalls.map((t) => t.name).join(", ")}]`
-          : "") +
-        ` · model ${requestMs}ms`,
-    );
 
     if (!turn.isToolStop || turn.toolCalls.length === 0) {
       // Completion gate (discover): don't exit without the required final
@@ -212,7 +191,6 @@ export async function runAgentLoop(
       tools,
       toolContext,
       emit,
-      `round ${round}`,
     );
 
     // Pause the loop on a "needs user input" signal only when nothing usable
@@ -258,7 +236,6 @@ export async function runAgentLoop(
       tools,
       toolContext,
       emit,
-      `finalize nudge ${forcedNudges}`,
     );
     adapter.appendAssistantTurn(turn);
     adapter.appendToolResults(outputs);
@@ -266,21 +243,5 @@ export async function runAgentLoop(
       requiredToolCalled = true;
       break;
     }
-  }
-
-  // Exit diagnostic: when a required final tool was configured (discover's
-  // `submit_picks`) but the loop ended without it, this is the upstream cause
-  // of the client's "couldn't assemble a ranked list" state. The fields say
-  // WHY the completion gate didn't force the call:
-  //   - usableResults=false → the gate never fired (no usable search results),
-  //     so the run legitimately had nothing to submit.
-  //   - usableResults=true + called=false → the gate fired but the model
-  //     ignored the nudges; forcedNudges shows how many it burned.
-  if (requiredFinalTool && !requiredToolCalled) {
-    console.warn(
-      `[agent-loop] exit WITHOUT ${requiredFinalTool.name}: ` +
-        `usableResults=${anyUsableResult} forcedNudges=${forcedNudges}/${maxForcedNudges} ` +
-        `watchdogFired=${watchdogFired}`,
-    );
   }
 }

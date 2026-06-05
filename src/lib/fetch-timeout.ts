@@ -8,12 +8,15 @@
  * attempt fails fast instead, letting retry/fallback logic move on.
  */
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 25_000;
 
 /** Thrown when a request exceeds its timeout, so callers can distinguish a
  *  timeout from a network error if they care. */
 export class FetchTimeoutError extends Error {
-  constructor(public readonly timeoutMs: number, url: string) {
+  constructor(
+    public readonly timeoutMs: number,
+    url: string,
+  ) {
     super(`Request to ${url} timed out after ${timeoutMs}ms`);
     this.name = "FetchTimeoutError";
   }
@@ -34,7 +37,10 @@ export async function fetchWithTimeout(
   // Chain any caller-supplied signal so we don't clobber it.
   if (init.signal) {
     if (init.signal.aborted) controller.abort();
-    else init.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    else
+      init.signal.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
   }
 
   try {
