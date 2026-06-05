@@ -10,6 +10,8 @@
  */
 
 import type { ToolDefinition } from "./types";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
+import { SEMANTIC_SCHOLAR_BASE, semanticScholarHeaders } from "@/lib/semantic-scholar";
 
 interface S2PaperDetail {
   paperId: string;
@@ -43,17 +45,19 @@ function sleep(ms: number) {
 }
 
 async function fetchS2(paperId: string): Promise<S2PaperDetail | null> {
-  const url = `https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(paperId)}?fields=${FIELDS}`;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const url = `${SEMANTIC_SCHOLAR_BASE}/paper/${encodeURIComponent(paperId)}?fields=${FIELDS}`;
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) await sleep(2000 * attempt);
-    const response = await fetch(url, {
-      headers: { "User-Agent": "Artifact/1.0 (academic research tool)" },
+    const response = await fetchWithTimeout(url, {
+      headers: semanticScholarHeaders(),
     });
     if (response.status === 404) return null;
     if (response.status === 429) {
       const retryAfter = response.headers.get("Retry-After");
-      const wait = Math.min(Number(retryAfter) * 1000 || 5000, 15000);
-      if (attempt < 2) {
+      const wait = Math.min(Number(retryAfter) * 1000 || 5000, 8000);
+      // Only back off if there's another attempt left — no point sleeping
+      // before throwing.
+      if (attempt < 1) {
         await sleep(wait);
         continue;
       }
@@ -84,7 +88,7 @@ export const paperDetailsTool: ToolDefinition = {
 
   async execute(input: Record<string, unknown>) {
     const raw = String(input.arxivId ?? "").trim();
-    if (!raw) return "Error: arxivId parameter is required.";
+    if (!raw) return { content: "Error: arxivId parameter is required.", ok: false };
     // Accept either bare ids or full URLs — the agent often copies the URL
     // straight from search results, no reason to make it strip the prefix.
     const idFromUrl = raw.match(/arxiv\.org\/abs\/([^/?#\s]+)/i)?.[1];
@@ -93,7 +97,10 @@ export const paperDetailsTool: ToolDefinition = {
     try {
       const detail = await fetchS2(`ARXIV:${arxivId}`);
       if (!detail)
-        return `No details found for arXiv:${arxivId}. The paper may not be indexed by Semantic Scholar.`;
+        return {
+          content: `No details found for arXiv:${arxivId}. The paper may not be indexed by Semantic Scholar.`,
+          ok: false,
+        };
 
       const lines: string[] = [];
       if (detail.title) lines.push(`Title: ${detail.title}`);
@@ -115,7 +122,10 @@ export const paperDetailsTool: ToolDefinition = {
       lines.push(`URL: https://arxiv.org/abs/${arxivId}`);
       return lines.join("\n\n");
     } catch (err) {
-      return `Failed to fetch paper details for arXiv:${arxivId}: ${err instanceof Error ? err.message : "unknown error"}.`;
+      return {
+        content: `Failed to fetch paper details for arXiv:${arxivId}: ${err instanceof Error ? err.message : "unknown error"}.`,
+        ok: false,
+      };
     }
   },
 };

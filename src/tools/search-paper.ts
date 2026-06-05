@@ -37,20 +37,22 @@ export const searchPaperTool: ToolDefinition = {
   async execute(input, context) {
     const parsed = context.parsedPaper;
     if (!parsed) {
-      return (
-        "Error: this paper hasn't been parsed into sections yet. " +
-        "Search the existing flat paper context directly instead."
-      );
+      return {
+        content:
+          "Error: this paper hasn't been parsed into sections yet. " +
+          "Search the existing flat paper context directly instead.",
+        ok: false,
+      };
     }
 
     const query = String(input.query ?? "").trim();
-    if (!query) return "Error: query is required.";
+    if (!query) return { content: "Error: query is required.", ok: false };
 
     const k = Math.max(1, Math.min(10, Number(input.k) || 5));
 
     const queryTokens = tokenize(query);
     if (queryTokens.length === 0) {
-      return "Error: query produced no searchable tokens.";
+      return { content: "Error: query produced no searchable tokens.", ok: false };
     }
 
     // Score each section by a TF-IDF-ish overlap: sum of (term_count /
@@ -70,7 +72,7 @@ export const searchPaperTool: ToolDefinition = {
       .slice(0, k);
 
     if (ranked.length === 0) {
-      return `No passages match "${query}".`;
+      return { content: `No passages match "${query}".`, ok: false };
     }
 
     const blocks = ranked.map((r) => {

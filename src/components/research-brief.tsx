@@ -82,15 +82,60 @@ function isTrivialSynthesis(prose: string): boolean {
   return t.length === 0 || /^(picks submitted|submitted|done|here you go)[.!]?$/i.test(t);
 }
 
+/** Full-width synthesis (single-column contexts): the boxed treatment. */
 function Synthesis({ prose }: { prose: string }) {
   return (
-    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] px-3.5 py-3">
-      <div className="mb-1.5">
-        <MonoLabel tone="accent">What I found</MonoLabel>
+    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] px-4 py-3.5">
+      <div className="mb-2">
+        <MonoLabel tone="accent">Overview</MonoLabel>
       </div>
-      <div className="text-[13px] leading-relaxed">
+      <div
+        className="text-[13.5px] leading-relaxed text-foreground/90"
+        style={{ fontFamily: "var(--font-reading)" }}
+      >
         <MarkdownMessage content={prose} />
       </div>
+    </div>
+  );
+}
+
+/** Editorial lede (focus view): a concise standfirst directly under the
+ *  title that frames what the reading list collectively covers. Clamped to a
+ *  few lines at a comfortable reading measure so it sets context without
+ *  burying the materials; the full synthesis expands in place. */
+function OverviewLede({ prose }: { prose: string }) {
+  const [expanded, setExpanded] = useState(false);
+  // Heuristic: only offer the toggle when there's meaningfully more to read
+  // than the 3-line clamp reveals, so short overviews don't get a dead toggle.
+  const isLong = prose.length > 240;
+  return (
+    <div className="max-w-[64ch]">
+      <MonoLabel tone="accent">Overview</MonoLabel>
+      <div
+        className={cn(
+          "mt-2.5 text-[15px] leading-[1.65] text-foreground/90",
+          isLong && !expanded && "line-clamp-3",
+        )}
+        style={{ fontFamily: "var(--font-reading)" }}
+      >
+        <MarkdownMessage content={prose} />
+      </div>
+      {isLong ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-primary/85 transition-colors hover:text-primary"
+        >
+          {expanded ? "Show less" : "Read full overview"}
+          <ChevronDown
+            className={cn(
+              "size-3 transition-transform",
+              expanded && "rotate-180",
+            )}
+            strokeWidth={2.25}
+          />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -129,11 +174,23 @@ function ResearchLog({ log }: { log: string }) {
 
 function ReadingList({ recs }: { recs: Recommendation[] }) {
   return (
-    <div className="space-y-2">
-      <MonoLabel>Reading list</MonoLabel>
-      <div className="grid grid-cols-1 gap-2">
-        {recs.map((rec) => (
-          <RecommendationCard key={rec.id} rec={rec} />
+    <div className="space-y-3">
+      <MonoLabel>
+        Reading list · {recs.length} paper{recs.length === 1 ? "" : "s"}
+      </MonoLabel>
+      <div className="grid grid-cols-1 gap-3">
+        {recs.map((rec, i) => (
+          <div
+            key={rec.id}
+            style={{
+              animation: "fadeIn 360ms var(--ease-out) both",
+              // Cap the stagger so a long list doesn't trail off — the first
+              // few reveal in sequence, the rest land together.
+              animationDelay: `${Math.min(i, 5) * 45}ms`,
+            }}
+          >
+            <RecommendationCard rec={rec} />
+          </div>
         ))}
       </div>
     </div>
@@ -334,15 +391,23 @@ function EmptyState({
 }
 
 /** Renders a single run's outcome: live progress, or the finished brief
- *  body (synthesis → reading list → dismissed), or a calm empty state. */
+ *  body, or a calm empty state.
+ *
+ *  Finished layout: the reading list is the payoff, so in the focus view
+ *  (`wide`) it owns the primary column directly under the title, while the
+ *  Overview and the research trajectory move into a sticky right rail — the
+ *  context is one glance to the side instead of a tall block the reader has to
+ *  scroll past. Narrow contexts (queue cards, follow-ups) stack single-column. */
 function RunBody({
   run,
   hasExaKey,
   onRetry,
+  wide = false,
 }: {
   run: BriefRunData;
   hasExaKey: boolean;
   onRetry?: (text: string) => void;
+  wide?: boolean;
 }) {
   if (run.liveSteps) {
     return <DiscoverLiveProgress steps={run.liveSteps} />;
@@ -364,12 +429,36 @@ function RunBody({
   const { prose, log } = splitNotes(query.notes);
   const synthesis = prose && !isTrivialSynthesis(prose) ? prose : null;
 
+  // Compact contexts (queue cards, threaded follow-ups): keep the boxed
+  // synthesis stacked above a tight list — these live in narrow space.
+  if (!wide) {
+    return (
+      <div className="space-y-4">
+        {synthesis ? <Synthesis prose={synthesis} /> : null}
+        {log ? <ResearchLog log={log} /> : null}
+        <ReadingList recs={recommendations} />
+        {dismissed.length > 0 ? <DismissedList dismissed={dismissed} /> : null}
+      </div>
+    );
+  }
+
+  // Focus view: an editorial brief, single column at the app's reading width.
+  // A concise overview lede frames the set, the reading list is the spacious
+  // body, and the agent's trajectory sits quietly at the foot as provenance.
   return (
-    <div className="space-y-4">
-      {synthesis ? <Synthesis prose={synthesis} /> : null}
-      {log ? <ResearchLog log={log} /> : null}
-      <ReadingList recs={recommendations} />
-      {dismissed.length > 0 ? <DismissedList dismissed={dismissed} /> : null}
+    <div className="space-y-7">
+      {synthesis ? <OverviewLede prose={synthesis} /> : null}
+
+      <div className="space-y-3">
+        <ReadingList recs={recommendations} />
+        {dismissed.length > 0 ? <DismissedList dismissed={dismissed} /> : null}
+      </div>
+
+      {log ? (
+        <div className="border-t border-border/50 pt-4">
+          <ResearchLog log={log} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -439,13 +528,20 @@ export default function ResearchBrief({
     <span className="min-w-0 flex-1">
       <span
         className={cn(
-          "block font-semibold leading-snug tracking-[-0.01em] text-foreground",
-          pinned ? "text-[19px]" : "text-[15px]",
+          "block font-semibold text-foreground",
+          pinned
+            ? "text-[26px] leading-[1.15] tracking-[-0.025em]"
+            : "text-[15px] leading-snug tracking-[-0.01em]",
         )}
       >
         {query.query}
       </span>
-      <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+      <span
+        className={cn(
+          "flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground",
+          pinned ? "mt-2 text-[12px]" : "mt-1 text-[11px]",
+        )}
+      >
         <span title={new Date(query.createdAt).toLocaleString()}>
           {isLive ? "Researching now" : relativeTime(query.createdAt)}
         </span>
@@ -476,19 +572,24 @@ export default function ResearchBrief({
     <section
       className={cn(
         pinned
-          ? ""
+          ? cn("relative", isLive && "pl-5")
           : "rounded-xl border border-border/60 bg-card/40 px-4 py-3.5",
       )}
       style={pinned ? undefined : { animation: "fadeIn 220ms ease-out" }}
     >
+      {/* The brief's single live indicator: one pulse dot in the left gutter,
+          vertically centered on the title. Everything else (subtitle, the live
+          status line, the work timeline) aligns to the content column to its
+          right — no stacked decorative dots. */}
+      {pinned && isLive ? (
+        <span
+          className="landing-pulse-dot absolute left-1.5 top-3"
+          aria-hidden
+        />
+      ) : null}
       <header>
         {pinned ? (
-          <div className="flex items-start gap-2">
-            {isLive ? (
-              <span className="landing-pulse-dot mt-2 block shrink-0" />
-            ) : null}
-            {meta}
-          </div>
+          meta
         ) : (
           <button
             type="button"
@@ -511,7 +612,12 @@ export default function ResearchBrief({
 
       {open ? (
         <div className="mt-3.5 space-y-4">
-          <RunBody run={run} hasExaKey={hasExaKey} onRetry={onRetry} />
+          <RunBody
+            run={run}
+            hasExaKey={hasExaKey}
+            onRetry={onRetry}
+            wide={pinned}
+          />
 
           {followups.map((f) => (
             <FollowupRun

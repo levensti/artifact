@@ -8,6 +8,8 @@
  */
 
 import type { ToolDefinition } from "./types";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
+import { SEMANTIC_SCHOLAR_BASE, semanticScholarHeaders } from "@/lib/semantic-scholar";
 
 export const lookupCitationTool: ToolDefinition = {
   name: "lookup_citation",
@@ -35,18 +37,20 @@ export const lookupCitationTool: ToolDefinition = {
   async execute(input, context) {
     const parsed = context.parsedPaper;
     if (!parsed) {
-      return (
-        "Error: this paper hasn't been parsed into structured form yet. " +
-        "References aren't available."
-      );
+      return {
+        content:
+          "Error: this paper hasn't been parsed into structured form yet. " +
+          "References aren't available.",
+        ok: false,
+      };
     }
 
     if (parsed.references.length === 0) {
-      return "Error: parsed paper has no references.";
+      return { content: "Error: parsed paper has no references.", ok: false };
     }
 
     const keyRaw = String(input.key ?? "").trim();
-    if (!keyRaw) return "Error: key is required.";
+    if (!keyRaw) return { content: "Error: key is required.", ok: false };
 
     const needle = normalizeKey(keyRaw);
     let match = parsed.references.find(
@@ -65,7 +69,10 @@ export const lookupCitationTool: ToolDefinition = {
     }
 
     if (!match) {
-      return `No reference matches "${keyRaw}". The paper has ${parsed.references.length} references.`;
+      return {
+        content: `No reference matches "${keyRaw}". The paper has ${parsed.references.length} references.`,
+        ok: false,
+      };
     }
 
     const lines: string[] = [];
@@ -94,9 +101,9 @@ function normalizeKey(s: string): string {
 
 async function fetchArxivAbstract(arxivId: string): Promise<string | null> {
   try {
-    const response = await fetch(
-      `https://api.semanticscholar.org/graph/v1/paper/arXiv:${arxivId}?fields=abstract`,
-      { headers: { "User-Agent": "Artifact/1.0 (paper reading tool)" } },
+    const response = await fetchWithTimeout(
+      `${SEMANTIC_SCHOLAR_BASE}/paper/arXiv:${arxivId}?fields=abstract`,
+      { headers: semanticScholarHeaders() },
     );
     if (!response.ok) return null;
     const data = (await response.json()) as { abstract?: string | null };

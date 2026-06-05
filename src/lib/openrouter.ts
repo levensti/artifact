@@ -15,10 +15,7 @@ import type { Model } from "@/lib/models";
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 /** The single model every surface uses. OpenRouter model id. */
-export const OPENROUTER_MODEL = "openai/gpt-oss-120b";
-
-/** Human-readable label shown in the UI where a model name is surfaced. */
-export const OPENROUTER_MODEL_LABEL = "GPT-OSS 120B";
+export const OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 
 /**
  * Conservative context-window estimate (tokens) for the fixed model, used by
@@ -30,6 +27,5 @@ export const OPENROUTER_CONTEXT_WINDOW = 131_072;
 /** The fixed model object, used everywhere a `selectedModel` is expected. */
 export const FIXED_MODEL: Model = {
   id: OPENROUTER_MODEL,
-  label: OPENROUTER_MODEL_LABEL,
   modelId: OPENROUTER_MODEL,
 };

@@ -6,8 +6,8 @@
 
 import type { StreamEvent } from "@/lib/stream-types";
 import { getToolByName } from "@/tools/registry";
-import type { ToolDefinition } from "@/tools/types";
-import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import { normalizeToolResult } from "@/tools/types";
+import type { ToolControl, ToolDefinition } from "@/tools/types";
 import { wrapToolResult } from "@/lib/transcript";
 import type { ToolContext } from "@/tools/types";
 
@@ -27,10 +27,6 @@ const WATCHDOG_NUDGE =
   "if you have search results, call paper_details on the top candidates and then submit_picks; " +
   "if you have verification results, call submit_picks with 5–7 picks; " +
   "if every search returned zero, emit a refusal text. Do not stop without one of those.";
-
-/** Matches the leading sentinel of every tool failure string we emit. */
-const TOOL_FAILURE_RE =
-  /^(?:error:|paper search failed:|web search failed:|request failed:|tool error:|no papers found|no web results)/i;
 
 export interface NormalizedToolCall {
   id: string;
@@ -52,9 +48,13 @@ export interface ToolOutput {
   name: string;
   /** Output as fed back to the model (already wrapped). */
   wrapped: string;
-  /** Raw output as returned by the tool (used for sentinel detection
-   *  and UI emission). */
+  /** Raw output content as returned by the tool (used for UI emission). */
   raw: string;
+  /** Did the tool produce a usable result? Drives the completion gate and
+   *  the control-signal pause without inspecting the output string. */
+  ok: boolean;
+  /** Out-of-band control signal the tool raised, if any. */
+  control?: ToolControl;
 }
 
 export interface ProviderAdapter {
@@ -83,12 +83,53 @@ export interface AgentLoopOptions {
   requiredFinalTool?: { name: string; nudge: string; maxNudges?: number };
 }
 
-/** Wrap a tool output so the model treats it as inert data. The Exa
- *  sentinel is left raw so the model and prompt continue to recognize the
- *  literal string. */
-function wrapToolOutput(name: string, output: string): string {
-  if (output === EXA_KEY_REQUIRED_SENTINEL) return output;
-  return wrapToolResult(name, output);
+/**
+ * Emit the tool_call events, execute the batch in parallel, emit tool_result
+ * events, and return the normalized outputs. Shared by the main round loop and
+ * the post-loop finalization backstop so both run tools identically.
+ */
+async function executeToolCalls(
+  toolCalls: NormalizedToolCall[],
+  tools: ToolDefinition[],
+  toolContext: ToolContext,
+  emit: (e: StreamEvent) => void,
+): Promise<ToolOutput[]> {
+  // Emit tool_call events upfront so the UI can show the whole batch in-flight,
+  // then execute in parallel — multiple tool calls per turn (e.g. discover-mode
+  // sub-query searches) shouldn't serialize.
+  for (const tc of toolCalls) {
+    emit({ type: "tool_call", id: tc.id, name: tc.name, input: tc.input });
+  }
+
+  const results = await Promise.all(
+    toolCalls.map(async (tc) => {
+      try {
+        const tool = getToolByName(tc.name);
+        if (!tool) {
+          return {
+            content: `Unknown tool "${tc.name}". Available tools: ${tools.map((t) => t.name).join(", ")}`,
+            ok: false,
+          };
+        }
+        return normalizeToolResult(await tool.execute(tc.input, toolContext));
+      } catch (err) {
+        return {
+          content: `Tool error: ${err instanceof Error ? err.message : "unknown error"}`,
+          ok: false,
+        };
+      }
+    }),
+  );
+
+  return toolCalls.map((tc, i) => {
+    const { content, ok, control } = results[i];
+    emit({ type: "tool_result", id: tc.id, name: tc.name, output: content });
+    // Control signals (e.g. the Exa "needs key" prompt) are fed back raw so the
+    // model and UI recognize the literal string; normal output is wrapped so the
+    // model treats it as inert data.
+    const wrapped = control ? content : wrapToolResult(tc.name, content);
+    return { id: tc.id, name: tc.name, raw: content, wrapped, ok, control };
+  });
 }
 
 export async function runAgentLoop(
@@ -145,45 +186,62 @@ export async function runAgentLoop(
       requiredToolCalled = true;
     }
 
-    // Emit tool_call events upfront so the UI can show the whole batch
-    // in-flight, then execute in parallel — multiple tool calls per turn
-    // (e.g. discover-mode sub-query searches) shouldn't serialize.
-    for (const tc of turn.toolCalls) {
-      emit({ type: "tool_call", id: tc.id, name: tc.name, input: tc.input });
-    }
-
-    const rawOutputs = await Promise.all(
-      turn.toolCalls.map(async (tc) => {
-        try {
-          const tool = getToolByName(tc.name);
-          return tool
-            ? await tool.execute(tc.input, toolContext)
-            : `Unknown tool "${tc.name}". Available tools: ${tools.map((t) => t.name).join(", ")}`;
-        } catch (err) {
-          return `Tool error: ${err instanceof Error ? err.message : "unknown error"}`;
-        }
-      }),
+    const outputs = await executeToolCalls(
+      turn.toolCalls,
+      tools,
+      toolContext,
+      emit,
     );
 
-    const outputs: ToolOutput[] = turn.toolCalls.map((tc, i) => {
-      const raw = rawOutputs[i];
-      emit({ type: "tool_result", id: tc.id, name: tc.name, output: raw });
-      return { id: tc.id, name: tc.name, raw, wrapped: wrapToolOutput(tc.name, raw) };
-    });
-
-    // Pause the loop on the Exa sentinel only when nothing usable came
-    // back in the same turn. When the agent issued web_search alongside
-    // successful arxiv_search calls, it can still proceed with those
-    // results; cutting the loop loses 30 candidate papers sitting right
-    // there.
-    const sawExaSentinel = outputs.some((o) => o.raw === EXA_KEY_REQUIRED_SENTINEL);
-    const hasUsableResult = outputs.some(
-      (o) => o.raw !== EXA_KEY_REQUIRED_SENTINEL && !TOOL_FAILURE_RE.test(o.raw.trim()),
-    );
+    // Pause the loop on a "needs user input" signal only when nothing usable
+    // came back in the same turn. When the agent issued web_search (no key)
+    // alongside successful arxiv_search calls, it can still proceed with those
+    // results; cutting the loop loses the candidate papers sitting right there.
+    const needsUserInput = outputs.some((o) => o.control === "needs_user_input");
+    const hasUsableResult = outputs.some((o) => o.ok);
     if (hasUsableResult) anyUsableResult = true;
-    if (sawExaSentinel && !hasUsableResult) break;
+    if (needsUserInput && !hasUsableResult) break;
 
     adapter.appendAssistantTurn(turn);
     adapter.appendToolResults(outputs);
+  }
+
+  // Round-budget backstop. The in-loop gate above only fires when the model
+  // *stops* calling tools. If instead the loop exhausted MAX_TOOL_ROUNDS while
+  // the model was still mid-procedure (kept searching/verifying one-at-a-time
+  // and never reached the required final tool), that gate was bypassed and
+  // usable results would be silently dropped. Give the required tool a bounded
+  // last chance here, reusing the same nudge budget as the in-loop gate.
+  while (
+    requiredFinalTool &&
+    !requiredToolCalled &&
+    anyUsableResult &&
+    forcedNudges < maxForcedNudges
+  ) {
+    forcedNudges++;
+    adapter.appendUserNudge(requiredFinalTool.nudge);
+    emit({ type: "turn_start" });
+    const turn = await adapter.request();
+    if (turn.toolCalls.length === 0) {
+      // Model answered with text instead of submitting — it's done; stop
+      // nudging and let whatever it produced stand.
+      adapter.appendAssistantTurn(turn);
+      break;
+    }
+    const calledRequired = turn.toolCalls.some(
+      (tc) => tc.name === requiredFinalTool.name,
+    );
+    const outputs = await executeToolCalls(
+      turn.toolCalls,
+      tools,
+      toolContext,
+      emit,
+    );
+    adapter.appendAssistantTurn(turn);
+    adapter.appendToolResults(outputs);
+    if (calledRequired) {
+      requiredToolCalled = true;
+      break;
+    }
   }
 }

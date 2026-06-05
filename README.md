@@ -86,7 +86,7 @@ Open [localhost:3000](http://localhost:3000) and sign in with Google. Set `OPENR
 
 #### Platform key vs. bring-your-own-key
 
-The app runs a single model (`openai/gpt-oss-120b`) via OpenRouter — there is no model picker. If you set `OPENROUTER_API_KEY`, signed-in users with no key of their own automatically use it — no setup step required. A user who enters their own OpenRouter key under Settings uses that instead. The platform key is server-only and never sent to the browser. The fallback is opt-in: leave the var unset to require users to bring a key. (See the cost note in `.env.example`.)
+The app runs a single model (`deepseek/deepseek-v4-flash`) via OpenRouter — there is no model picker. If you set `OPENROUTER_API_KEY`, signed-in users with no key of their own automatically use it — no setup step required. A user who enters their own OpenRouter key under Settings uses that instead. The platform key is server-only and never sent to the browser. The fallback is opt-in: leave the var unset to require users to bring a key. (See the cost note in `.env.example`.)
 
 ### Day-to-day commands
 
@@ -114,7 +114,7 @@ npx supabase status            # print URLs and keys again
 - **Web pages**: @mozilla/readability + DOMPurify for cleaned, safe rendering
 - **Markdown**: react-markdown, remark-gfm, remark-math, rehype-katex
 - **Styling**: Tailwind CSS, shadcn/ui
-- **AI**: OpenRouter (single fixed model: `openai/gpt-oss-120b`); streaming chat + structured generation
+- **AI**: OpenRouter (single fixed model: `deepseek/deepseek-v4-flash`); streaming chat + structured generation
 - **Paper search**: Semantic Scholar (primary), arXiv API (fallback)
 
 ## Deployment (self-hosting)

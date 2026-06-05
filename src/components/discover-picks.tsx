@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import {
+  ArrowUpRight,
   Check,
   ChevronRight,
   FileText,
   Globe,
-  Loader2,
   Search,
   X,
 } from "lucide-react";
@@ -14,7 +14,7 @@ import { MonoLabel } from "./folio";
 import { cn } from "@/lib/utils";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
-import { PaperCard, parseArxivSearchOutput } from "./discover-arxiv-cards";
+import type { PaperMeta } from "./discover-arxiv-cards";
 import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
@@ -130,57 +130,165 @@ function deriveProgress(steps: AgentStep[]): Progress {
 function statusLine({ phase, papersFound, papersRead }: Progress): string {
   switch (phase) {
     case "planning":
-      return "Planning the search…";
+      return "Planning your research…";
     case "searching":
       return papersFound > 0
-        ? `Searching sources, ${papersFound} candidates found`
-        : "Searching arXiv and the web…";
+        ? `Mapping the landscape · ${papersFound} sources`
+        : "Mapping the landscape…";
     case "reading":
       return papersRead > 0
-        ? `Reading candidates, ${papersRead} verified`
-        : "Reading the most promising candidates…";
+        ? `Reading the key work · ${papersRead} verified`
+        : "Reading the most relevant work…";
     case "synthesizing":
-      return "Writing your briefing…";
+      return "Writing your brief…";
   }
 }
 
 /* ------------------------------------------------------------------ */
-/*  Living document — the brief assembling itself, top to bottom        */
+/*  Phase rail — a calm Map → Read → Write progress indicator           */
 /* ------------------------------------------------------------------ */
 
-/** Expandable detail for a finished search/verify call. */
-function ToolExpanded({ name, output }: { name: string; output: string }) {
-  if (name === "arxiv_search") {
-    const { papers } = parseArxivSearchOutput(output);
-    if (papers.length > 0) {
-      return (
-        <div className="grid grid-cols-1 gap-2">
-          {papers.map((p, i) => (
-            <PaperCard key={`${p.url || p.title}-${i}`} paper={p} />
-          ))}
-        </div>
-      );
-    }
-  }
+const PHASE_ORDER: Phase[] = ["searching", "reading", "synthesizing"];
+const PHASE_LABEL: Record<Phase, string> = {
+  planning: "Map",
+  searching: "Map",
+  reading: "Read",
+  synthesizing: "Write",
+};
+
+function PhaseRail({ phase }: { phase: Phase }) {
+  const currentIdx = PHASE_ORDER.indexOf(phase === "planning" ? "searching" : phase);
   return (
-    <pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground/80">
-      {output.trim()}
-    </pre>
+    <div
+      className="flex items-center gap-2 font-mono text-[10px] uppercase"
+      style={{ letterSpacing: "0.16em" }}
+      aria-hidden
+    >
+      {PHASE_ORDER.map((p, i) => {
+        const done = i < currentIdx;
+        const active = i === currentIdx;
+        return (
+          <Fragment key={p}>
+            {i > 0 ? (
+              <span
+                className={cn(
+                  "h-px w-3.5 transition-colors duration-500",
+                  done ? "bg-primary/45" : "bg-border/60",
+                )}
+              />
+            ) : null}
+            <span
+              className={cn(
+                "transition-colors duration-500",
+                active
+                  ? "text-primary"
+                  : done
+                    ? "text-foreground/45"
+                    : "text-muted-foreground/35",
+              )}
+            >
+              {PHASE_LABEL[p]}
+            </span>
+          </Fragment>
+        );
+      })}
+    </div>
   );
 }
 
-/** One tool action's content. The spine marker is supplied by TimelineRow. */
+/* ------------------------------------------------------------------ */
+/*  Activity stream — the agent's work, surfaced live                   */
+/* ------------------------------------------------------------------ */
+
+/** Parse the sources a single search step turned up, reusing the pool builder
+ *  so arXiv + web outputs are handled identically to the final reading list. */
+function sourcesForStep(name: string, output: string | undefined): PaperMeta[] {
+  if (!output || (name !== "arxiv_search" && name !== "web_search")) return [];
+  const step: AgentStep = { kind: "tool_call", id: "_", name, input: {}, output };
+  return Array.from(buildPoolFromSteps([step]).byUrl.values());
+}
+
+/** One discovered source, surfaced inline as the agent finds it — a compact,
+ *  scannable row that links straight out so an eager reader can jump ahead. */
+function SourceRow({ p }: { p: PaperMeta }) {
+  const kind = p.arxivId ? "Paper" : "Web";
+  const inner = (
+    <>
+      <span className="mt-px shrink-0 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground/50">
+        {kind}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[12px] leading-snug text-foreground/70 transition-colors group-hover/src:text-foreground">
+        {p.title}
+      </span>
+      {p.year ? (
+        <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/45">
+          {p.year}
+        </span>
+      ) : null}
+      {p.url ? (
+        <ArrowUpRight className="size-3 shrink-0 text-muted-foreground/0 transition-colors group-hover/src:text-muted-foreground/60" />
+      ) : null}
+    </>
+  );
+  const className =
+    "discover-row-in group/src -mx-1.5 flex items-baseline gap-2 rounded-md px-1.5 py-1";
+  return p.url ? (
+    <a
+      href={p.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(className, "transition-colors hover:bg-muted/40")}
+    >
+      {inner}
+    </a>
+  ) : (
+    <div className={className}>{inner}</div>
+  );
+}
+
+/** The list of sources a search surfaced. Shows a peek by default and lets the
+ *  reader expand the rest — the surfaced titles are what make the wait feel
+ *  like progress rather than a spinner. */
+function DiscoveredSources({ sources }: { sources: PaperMeta[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (sources.length === 0) return null;
+  const PEEK = 3;
+  const shown = expanded ? sources : sources.slice(0, PEEK);
+  const rest = sources.length - PEEK;
+  return (
+    <div className="mt-1.5 space-y-px">
+      {shown.map((p, i) => (
+        <SourceRow key={`${p.arxivId ?? p.url ?? p.title}-${i}`} p={p} />
+      ))}
+      {!expanded && rest > 0 ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="-mx-1.5 px-1.5 py-1 text-[11px] font-medium text-muted-foreground/60 transition-colors hover:text-foreground"
+        >
+          + {rest} more {rest === 1 ? "source" : "sources"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** One tool action's content. The spine marker is supplied by TimelineRow.
+ *  Searches surface the sources they found inline; reads resolve the paper's
+ *  title from the pool so "Reading · 2401.12345" reads as a real title. */
 function ToolAction({
   name,
   input,
   output,
+  pool,
+  active,
 }: {
   name: string;
   input: Record<string, unknown>;
   output?: string;
+  pool: ReturnType<typeof buildPoolFromSteps>;
+  active: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
   if (name === "web_search" && output?.trim() === EXA_KEY_REQUIRED_SENTINEL) {
     return <ExaKeyPromptCard />;
   }
@@ -193,58 +301,63 @@ function ToolAction({
   const Icon =
     name === "web_search" ? Globe : name === "paper_details" ? FileText : Search;
 
+  // For a read, prefer the resolved paper title over the bare arXiv id.
+  const arxivId = typeof input.arxivId === "string" ? input.arxivId : null;
+  const readTitle =
+    name === "paper_details" && arxivId
+      ? pool.byArxivId.get(arxivId)?.title ?? null
+      : null;
+  const sources = sourcesForStep(name, output);
+
   return (
     <div className="min-w-0">
-      <button
-        type="button"
-        onClick={() => done && setOpen((v) => !v)}
-        disabled={!done}
-        className={cn(
-          "flex w-full items-center gap-1.5 text-left text-[12.5px]",
-          done ? "cursor-pointer" : "cursor-default",
-        )}
-      >
+      <div className="flex items-center gap-1.5 text-[12.5px]">
         <Icon
-          className="size-3.5 shrink-0 text-muted-foreground/55"
+          className={cn(
+            "size-3.5 shrink-0",
+            active ? "text-primary/70" : "text-muted-foreground/55",
+          )}
           strokeWidth={1.9}
         />
         <span
           className={cn(
             "font-medium",
-            failed ? "text-destructive/90" : "text-foreground/85",
+            failed
+              ? "text-destructive/90"
+              : active
+                ? "thinking-shimmer"
+                : "text-foreground/85",
           )}
         >
           {verb} {displayName}
         </span>
-        {subject ? (
+        {readTitle ? (
+          <span className="truncate text-foreground/70">· {readTitle}</span>
+        ) : subject ? (
           <span className="truncate text-muted-foreground/65">· {subject}</span>
         ) : null}
         {count !== null ? (
           <span className="shrink-0 text-muted-foreground/55">
-            · {count} results
+            · {count} found
           </span>
         ) : null}
-        {done ? (
-          <ChevronRight
-            className={cn(
-              "ml-0.5 size-3 shrink-0 text-muted-foreground/40 transition-transform",
-              open && "rotate-90",
-            )}
-          />
-        ) : null}
-      </button>
-      {open && output ? (
-        <div className="mt-2 max-h-[26rem] overflow-y-auto rounded-md border border-border/40 bg-muted/10 p-2">
-          <ToolExpanded name={name} output={output} />
-        </div>
-      ) : null}
+      </div>
+      {done && !failed ? <DiscoveredSources sources={sources} /> : null}
     </div>
   );
 }
 
-const RUNNING_MARKER = (
-  <Loader2 className="size-3.5 animate-spin text-primary/70" />
-);
+function RunningMarker() {
+  // A calm breathing dot — no expanding halo, so it sits on the spine cleanly
+  // and reads as one marker rather than a stray circle.
+  return (
+    <span
+      className="block size-2 rounded-full bg-primary"
+      style={{ animation: "discover-phase-pulse 1.4s ease-in-out infinite" }}
+      aria-hidden
+    />
+  );
+}
 const THINKING_MARKER = (
   <span className="size-1.5 animate-pulse rounded-full bg-primary/45" />
 );
@@ -277,13 +390,21 @@ function TimelineRow({
           <span className="w-px flex-1 bg-border/55" aria-hidden />
         ) : null}
       </div>
-      <div className="min-w-0 flex-1 pb-3.5">{children}</div>
+      <div className="min-w-0 flex-1 pb-4">{children}</div>
     </div>
   );
 }
 
-/** The agent's work — searches, reads, thinking — as a living timeline. */
-function WorkTimeline({ steps }: { steps: AgentStep[] }) {
+/** The agent's work — searches (with the sources they surface), reads, and
+ *  thinking — as a living timeline. This IS the content while the agent is
+ *  gathering: showing real titles arrive is what turns latency into progress. */
+function WorkTimeline({
+  steps,
+  pool,
+}: {
+  steps: AgentStep[];
+  pool: ReturnType<typeof buildPoolFromSteps>;
+}) {
   const nodes = steps.filter(
     (s) =>
       s.kind === "thinking" ||
@@ -303,23 +424,22 @@ function WorkTimeline({ steps }: { steps: AgentStep[] }) {
             <TimelineRow
               key={step.id}
               isLast={isLast}
-              marker={done ? doneMarker(failed) : RUNNING_MARKER}
+              marker={done ? doneMarker(failed) : <RunningMarker />}
             >
               <ToolAction
                 name={step.name}
                 input={step.input}
                 output={step.output}
+                pool={pool}
+                active={!done}
               />
             </TimelineRow>
           );
         }
         return (
           <TimelineRow key={`th-${i}`} isLast={isLast} marker={THINKING_MARKER}>
-            <span
-              className="text-[12.5px] italic text-muted-foreground/65"
-              style={{ fontFamily: "var(--font-reading)" }}
-            >
-              Thinking…
+            <span className="thinking-shimmer text-[12.5px] font-medium">
+              Thinking through the approach
             </span>
           </TimelineRow>
         );
@@ -358,49 +478,126 @@ function LiveSynthesis({
   );
 }
 
-/** A reading-list-shaped placeholder so the forming brief foreshadows itself. */
-function ReadingSkeleton() {
+/** Before the first search returns there's nothing real to show yet — a quiet
+ *  "setting up" line is more honest than fake result-shaped boxes. */
+function PlanningState() {
   return (
-    <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5">
-      <div className="discover-skeleton h-2.5 w-16" />
-      <div className="discover-skeleton mt-2.5 h-3.5 w-3/4" />
-      <div className="discover-skeleton mt-2 h-2.5 w-full" />
-      <div className="discover-skeleton mt-1.5 h-2.5 w-5/6" />
+    <div className="rounded-xl border border-dashed border-border/55 bg-card/20 px-4 py-5">
+      <p className="thinking-shimmer text-[12.5px] font-medium">
+        Scoping the question and lining up the first searches…
+      </p>
+      <div className="mt-3 flex items-center gap-1.5" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="h-1 rounded-full bg-primary/20"
+            style={{
+              width: i === 0 ? 64 : i === 1 ? 40 : 28,
+              animation: `discover-phase-pulse 1.6s ease-in-out ${i * 0.2}s infinite`,
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
 /**
- * The in-flight research run as a single living document: one live status
- * line, the agent's work building down a timeline, the synthesis writing
- * itself, and the reading list forming below.
+ * The in-flight research run, presented as an agent visibly at work. While it's
+ * gathering, the activity stream IS the content — every search and the real
+ * source titles it turns up are surfaced as they arrive, so the wait reads as
+ * progress (the deep-research pattern: show the work to hide the latency). The
+ * moment the agent starts writing, focus shifts: the forming brief becomes the
+ * star and the research trace recedes into a compact, expandable summary.
  */
 export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
   const progress = useMemo(() => deriveProgress(steps), [steps]);
   const pool = useMemo(() => buildPoolFromSteps(steps), [steps]);
-  const synthesizing = progress.phase === "synthesizing";
+  const [traceOpen, setTraceOpen] = useState(false);
+
+  // Show the brief writing itself only once real prose has started streaming —
+  // the phase flips to "synthesizing" the moment submit_picks is called, a beat
+  // before the explainer text arrives, so gate on text to avoid an empty flash.
+  const hasSynthesisText = useMemo(
+    () => steps.some((s) => s.kind === "text" && s.text.trim().length > 0),
+    [steps],
+  );
+
+  const searchCount = useMemo(
+    () =>
+      steps.filter(
+        (s) =>
+          s.kind === "tool_call" &&
+          (s.name === "arxiv_search" || s.name === "web_search"),
+      ).length,
+    [steps],
+  );
+  const sourceCount = pool.byUrl.size;
+  const hasWork = useMemo(
+    () =>
+      steps.some(
+        (s) =>
+          s.kind === "thinking" ||
+          (s.kind === "tool_call" && s.name !== "submit_picks"),
+      ),
+    [steps],
+  );
 
   return (
     <div className="space-y-4">
-      {/* One consolidated live status (no chip stepper, no duplicate sentence) */}
-      <div className="flex items-center gap-2.5">
-        <span className="landing-pulse-dot" />
-        <span className="text-[13px] font-medium text-foreground/85">
+      {/* Header: a live narrative line + the Map → Read → Write phase rail.
+          The single live "pulse" lives on the brief's title (see
+          research-brief.tsx); this line stays dot-free so the left column
+          reads as one clean text edge. */}
+      <div className="flex items-baseline justify-between gap-4">
+        <span
+          className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground/85"
+          style={{ fontFamily: "var(--font-reading)" }}
+        >
           {statusLine(progress)}
         </span>
+        <div className="shrink-0">
+          <PhaseRail phase={progress.phase} />
+        </div>
       </div>
 
-      {/* The work, building down a spine */}
-      <WorkTimeline steps={steps} />
-
-      {/* The brief, writing itself */}
-      {synthesizing ? <LiveSynthesis steps={steps} pool={pool} /> : null}
-
-      {/* The reading list, forming below */}
-      <div className="space-y-2">
-        <ReadingSkeleton />
-        <ReadingSkeleton />
-      </div>
+      {hasSynthesisText ? (
+        <>
+          {/* Writing: the brief is the star; the trace recedes to a summary. */}
+          <LiveSynthesis steps={steps} pool={pool} />
+          {hasWork ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => setTraceOpen((v) => !v)}
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground"
+              >
+                <ChevronRight
+                  className={cn(
+                    "size-3 transition-transform",
+                    traceOpen && "rotate-90",
+                  )}
+                />
+                {traceOpen ? "Hide research" : "Research"}
+                {sourceCount > 0
+                  ? ` · ${sourceCount} source${sourceCount === 1 ? "" : "s"} across ${searchCount} search${searchCount === 1 ? "" : "es"}`
+                  : ""}
+              </button>
+              {traceOpen ? (
+                <div className="mt-3">
+                  <WorkTimeline steps={steps} pool={pool} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : hasWork ? (
+        // Gathering: the activity stream is the content.
+        <WorkTimeline steps={steps} pool={pool} />
+      ) : (
+        // Nothing has come back yet — a calm "setting up" state.
+        <PlanningState />
+      )}
     </div>
   );
 }

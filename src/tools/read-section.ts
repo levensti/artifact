@@ -40,21 +40,26 @@ export const readSectionTool: ToolDefinition = {
   async execute(input, context) {
     const parsed = context.parsedPaper;
     if (!parsed) {
-      return (
-        "Error: this paper hasn't been parsed into sections yet. " +
-        "The agent has the paper as flat text instead — use the existing " +
-        "context rather than this tool."
-      );
+      return {
+        content:
+          "Error: this paper hasn't been parsed into sections yet. " +
+          "The agent has the paper as flat text instead — use the existing " +
+          "context rather than this tool.",
+        ok: false,
+      };
     }
 
     if (parsed.sections.length === 0) {
-      return "Error: parsed paper has no sections.";
+      return { content: "Error: parsed paper has no sections.", ok: false };
     }
 
     const idx = typeof input.index === "number" ? input.index : null;
     if (idx !== null) {
       if (idx < 0 || idx >= parsed.sections.length) {
-        return `Error: index ${idx} is out of range (0..${parsed.sections.length - 1}).`;
+        return {
+          content: `Error: index ${idx} is out of range (0..${parsed.sections.length - 1}).`,
+          ok: false,
+        };
       }
       return formatSection(idx, parsed.sections[idx]);
     }
@@ -86,7 +91,10 @@ export const readSectionTool: ToolDefinition = {
         .slice(0, 30)
         .map((s, i) => `[${i}] ${s.heading}`)
         .join("\n");
-      return `No section heading matches "${nameRaw}". Available:\n\n${toc}`;
+      return {
+        content: `No section heading matches "${nameRaw}". Available:\n\n${toc}`,
+        ok: false,
+      };
     }
 
     return formatSection(match, parsed.sections[match]);
