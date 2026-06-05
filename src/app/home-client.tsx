@@ -86,11 +86,8 @@ function HomeBody() {
           aria-hidden
           className="pointer-events-none absolute right-[8%] top-[12%] size-80 opacity-[0.025]"
         >
-          <path
-            d="M 20.5 11.5 Q 16 15, 8 23 Q 7 24, 7.5 24.5 Q 8 25, 9 24 Q 17 16, 21.5 12.5 Z"
-            fill="currentColor"
-          />
-          <circle cx="22" cy="10" r="3.2" fill="currentColor" />
+          <polygon points="5,24 12,7 19,24" fill="currentColor" opacity="0.55" />
+          <polygon points="13,24 20,12 27,24" fill="currentColor" />
         </svg>
 
         <div className="mx-auto w-full max-w-170 px-8 pt-[min(14vh,128px)] pb-16">

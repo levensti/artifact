@@ -8,9 +8,9 @@
  */
 export default function ShimmerStatus({ label }: { label: string }) {
   return (
-    <div className="py-1.5" role="status" aria-label={label}>
+    <div className="py-0.5" role="status" aria-label={label}>
       <span
-        className="thinking-shimmer text-[14px]"
+        className="thinking-shimmer text-[15px]"
         style={{ fontFamily: "var(--font-reading)", fontWeight: 500 }}
       >
         {label}…
