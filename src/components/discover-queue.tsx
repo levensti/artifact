@@ -30,7 +30,11 @@ export type DateBucket = "today" | "yesterday" | "this-week" | "earlier";
 function dateBucket(iso: string): DateBucket {
   const then = new Date(iso);
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
   const startOfYesterday = new Date(startOfToday);
   startOfYesterday.setDate(startOfYesterday.getDate() - 1);
   const startOfWeek = new Date(startOfToday);
@@ -228,7 +232,8 @@ function RecentRow({
               <>
                 <span aria-hidden>·</span>
                 <span>
-                  {followups.length} follow-up{followups.length === 1 ? "" : "s"}
+                  {followups.length} follow-up
+                  {followups.length === 1 ? "" : "s"}
                 </span>
               </>
             ) : null}
@@ -267,7 +272,7 @@ export function RecentBriefsList({
 
   return (
     <div className="space-y-2.5">
-      <MonoLabel>Recent research</MonoLabel>
+      <MonoLabel>Recent sessions</MonoLabel>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sorted.map((t) => (
           <RecentRow key={t.root.query.id} thread={t} onOpen={onOpen} />

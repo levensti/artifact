@@ -11,10 +11,7 @@ import {
 import { ArrowLeft, ArrowUp, KeyRound } from "lucide-react";
 import type { Model } from "@/lib/models";
 import { hasUsableProvider } from "@/lib/keys";
-import {
-  getSavedSelectedModel,
-  hydrateClientStore,
-} from "@/lib/client-data";
+import { getSavedSelectedModel, hydrateClientStore } from "@/lib/client-data";
 import { useDiscoverBriefs, RecentBriefsList } from "./discover-queue";
 import ResearchBrief from "./research-brief";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
@@ -190,7 +187,7 @@ export default function DiscoverPanel() {
   );
 
   const composerHint = canSubmit
-    ? "Ask a research question…"
+    ? "What do you want to explore?"
     : "Add an OpenRouter API key in Settings to start";
 
   // Browse vs focus. We're "in focus" while a run is active (streaming or
