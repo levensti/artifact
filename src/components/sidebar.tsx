@@ -31,7 +31,6 @@ import {
 import { cn } from "@/lib/utils";
 import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MonoLabel } from "@/components/folio";
 import NewReviewDialog from "./new-review-dialog";
 import ShareReviewDialog from "./share-review-dialog";
 import UserMenu from "./user-menu";
@@ -73,6 +72,10 @@ function reviewsSnapshot() {
 function reviewsServerSnapshot() {
   return JSON.stringify({ reviews: [], wikiPageCount: 0 });
 }
+
+// TODO: Re-enable the Journal tab once the journal experience is ready.
+// Flip this to `true` to restore the nav item (the button is otherwise intact).
+const JOURNAL_TAB_ENABLED: boolean = false;
 
 interface SidebarProps {
   collapsed: boolean;
@@ -247,11 +250,11 @@ export default function Sidebar({
                   Artifact
                 </span>
                 <span
-                  className="truncate text-[11px] font-normal italic"
+                  className="truncate text-[11.5px] font-normal italic"
                   style={{
                     fontFamily: "var(--font-reading)",
                     color:
-                      "color-mix(in srgb, var(--primary) 75%, transparent)",
+                      "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
                   }}
                 >
                   Push the frontier.
@@ -282,11 +285,11 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => setShowNewReview(true)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
+            className="sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px] text-foreground/80 hover:text-foreground"
           >
             <span className="flex w-6 shrink-0 items-center justify-center">
               <FilePlus
-                className="size-3.75 text-primary/85"
+                className="size-[18px] opacity-80"
                 strokeWidth={1.75}
               />
             </span>
@@ -296,51 +299,53 @@ export default function Sidebar({
             type="button"
             onClick={() => router.push("/discover")}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150",
+              "sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px]",
               pathname === "/discover"
-                ? "bg-sidebar-accent text-foreground font-medium"
-                : "text-foreground/80 hover:bg-sidebar-accent/60 hover:text-foreground",
+                ? "sb-row-active text-foreground font-medium"
+                : "text-foreground/80 hover:text-foreground",
             )}
           >
             <span className="flex w-6 shrink-0 items-center justify-center">
               <Compass
-                className="size-3.75 text-primary/85"
+                className="size-[18px] opacity-80"
                 strokeWidth={1.75}
               />
             </span>
             <span className="truncate">Discover</span>
           </button>
-          <button
-            type="button"
-            onClick={() => router.push("/journal")}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150",
-              pathname === "/journal"
-                ? "bg-sidebar-accent text-foreground font-medium"
-                : "text-foreground/80 hover:bg-sidebar-accent/60 hover:text-foreground",
-            )}
-          >
-            <span className="relative flex w-6 shrink-0 items-center justify-center">
-              <FilePen className="size-[15px] opacity-80" strokeWidth={1.75} />
+          {JOURNAL_TAB_ENABLED ? (
+            <button
+              type="button"
+              onClick={() => router.push("/journal")}
+              className={cn(
+                "sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px]",
+                pathname === "/journal"
+                  ? "sb-row-active text-foreground font-medium"
+                  : "text-foreground/80 hover:text-foreground",
+              )}
+            >
+              <span className="relative flex w-6 shrink-0 items-center justify-center">
+                <FilePen className="size-[18px] opacity-80" strokeWidth={1.75} />
+                {ingestActive ? (
+                  <span
+                    aria-hidden
+                    className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-primary animate-pulse"
+                  />
+                ) : null}
+              </span>
+              <span className="truncate">Journal</span>
               {ingestActive ? (
-                <span
-                  aria-hidden
-                  className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-primary animate-pulse"
-                />
+                <span className="ml-auto text-[10px] font-medium italic text-primary/80 animate-pulse">
+                  {ingestLabel}
+                </span>
               ) : null}
-            </span>
-            <span className="truncate">Journal</span>
-            {ingestActive ? (
-              <span className="ml-auto text-[10px] font-medium italic text-primary/80 animate-pulse">
-                {ingestLabel}
-              </span>
-            ) : null}
-            {wikiPageCount > 0 && !ingestActive ? (
-              <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-sidebar-accent/80 px-1.5 py-0.5 tabular-nums text-[10px] font-semibold text-muted-foreground">
-                {wikiPageCount}
-              </span>
-            ) : null}
-          </button>
+              {wikiPageCount > 0 && !ingestActive ? (
+                <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-sidebar-accent/80 px-1.5 py-0.5 tabular-nums text-[10px] font-semibold text-muted-foreground">
+                  {wikiPageCount}
+                </span>
+              ) : null}
+            </button>
+          ) : null}
           {ingestError ? (
             <div
               className="mx-1 mt-2 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[10px] leading-snug text-destructive"
@@ -364,13 +369,13 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => openSettings()}
-            className="mt-0.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-foreground"
+            className="sb-row mt-0.5 flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px] text-foreground/80 hover:text-foreground"
             aria-label={
               hasKeys ? "Manage API keys" : "Add an API key to start chatting"
             }
           >
             <span className="relative flex w-6 shrink-0 items-center justify-center">
-              <KeyRound className="size-[15px] opacity-80" strokeWidth={1.75} />
+              <KeyRound className="size-[18px] opacity-80" strokeWidth={1.75} />
               {!hasKeys ? (
                 <span
                   aria-hidden
@@ -398,11 +403,9 @@ export default function Sidebar({
           </button>
         </div>
 
-        <div className="mx-2 mt-3 mb-1 shrink-0 border-t border-sidebar-border/60 pt-2">
-          <p className="px-2 py-1">
-            <MonoLabel>Reviews</MonoLabel>
-          </p>
-        </div>
+        {/* Hairline divider between nav and the reviews list. The date-group
+            labels (e.g. "May 23") organize the list, so no "Reviews" header. */}
+        <div className="mx-3 mt-3 mb-1.5 shrink-0 border-t border-sidebar-border/60" />
 
         <ScrollArea className="min-h-0 flex-1 px-2 pb-2 pt-1">
           {grouped.length === 0 && (
@@ -462,10 +465,10 @@ export default function Sidebar({
                         }
                       }}
                       className={cn(
-                        "group relative flex w-full cursor-pointer items-start gap-1.5 break-words rounded-md px-2.5 py-1.5 text-left text-[13px] leading-snug transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50",
+                        "sb-row group flex w-full cursor-pointer items-start gap-2 break-words px-2.5 py-2 text-left text-[13.5px] leading-snug focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40",
                         isActive
-                          ? "bg-sidebar-accent font-medium text-foreground before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-primary"
-                          : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+                          ? "sb-row-active font-medium text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                     >
                       {isRenaming ? (

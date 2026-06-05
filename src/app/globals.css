@@ -720,6 +720,43 @@
   transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ----------------------------------------------------------------------------
+   Unified sidebar surface — one row language shared by the global sidebar's
+   nav + review rows and Discover's recent-research rows. Every row sits
+   transparent at rest, warms on hover, and lifts to a white "active card"
+   (hairline primary inset + soft shadow) when selected, so the sidebar and
+   the Discover canvas read as a single system rather than two.
+   ------------------------------------------------------------------------- */
+.sb-row {
+  border-radius: 9px;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
+}
+.sb-row:hover {
+  background-color: color-mix(in srgb, var(--sidebar-accent) 58%, transparent);
+}
+/* Keyboard focus mirrors hover so focus-visible rows never look "dead". */
+.sb-row:focus-visible {
+  background-color: color-mix(in srgb, var(--sidebar-accent) 58%, transparent);
+}
+/* Active wins over the :hover / :focus-visible warm fill above (equal
+   specificity, declared later) so a focused active row keeps its white card. */
+.sb-row-active,
+.sb-row-active:hover,
+.sb-row-active:focus-visible {
+  background-color: var(--card);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-row {
+    transition: none;
+  }
+}
+
 @keyframes pageEnter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }

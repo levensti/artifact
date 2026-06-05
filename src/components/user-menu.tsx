@@ -35,14 +35,14 @@ export default function UserMenu() {
 
   return (
     <div className="shrink-0 border-t border-sidebar-border px-2 py-2">
-      <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+      <div className="flex items-center gap-2.5 rounded-md px-2 py-2">
         <Avatar user={user} />
         <div className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate text-[13px] font-medium text-foreground">
+          <span className="truncate text-[14px] font-medium text-foreground">
             {display}
           </span>
           {subline ? (
-            <span className="truncate text-[11px] text-muted-foreground/80">
+            <span className="truncate text-[11.5px] text-muted-foreground/80">
               {subline}
             </span>
           ) : null}
@@ -53,11 +53,11 @@ export default function UserMenu() {
             title="Sign out"
             aria-label="Sign out"
             className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors duration-150",
+              "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors duration-150",
               "hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60",
             )}
           >
-            <LogOut className="size-3.5" strokeWidth={2} />
+            <LogOut className="size-4" strokeWidth={2} />
           </button>
         </form>
       </div>
@@ -73,12 +73,12 @@ function Avatar({ user }: { user: CurrentUser }) {
         src={user.image}
         alt=""
         referrerPolicy="no-referrer"
-        className="size-7 shrink-0 rounded-full bg-sidebar-accent object-cover"
+        className="size-8 shrink-0 rounded-full bg-sidebar-accent object-cover"
       />
     );
   }
   return (
-    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-semibold text-foreground/80">
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-foreground/80">
       {initialsFor(user)}
     </span>
   );

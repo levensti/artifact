@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useState } from "react";
 import {
   AlertCircle,
-  ArrowUp,
   ChevronDown,
   ChevronRight,
   CornerDownRight,
@@ -409,60 +408,6 @@ function FollowupRun({
   );
 }
 
-function FollowupComposer({
-  disabled,
-  onSubmit,
-}: {
-  disabled: boolean;
-  onSubmit: (text: string) => void;
-}) {
-  const [text, setText] = useState("");
-  const canSend = !disabled && text.trim().length > 0;
-
-  const send = () => {
-    if (!canSend) return;
-    const trimmed = text.trim();
-    setText("");
-    onSubmit(trimmed);
-  };
-
-  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  };
-
-  return (
-    <div className="flex items-end gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKey}
-        placeholder="Ask a follow-up — go deeper, narrow the scope, compare…"
-        rows={1}
-        disabled={disabled}
-        className="min-h-[22px] flex-1 resize-none bg-transparent text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/55 focus:outline-none disabled:cursor-not-allowed"
-        style={{ fontFamily: "var(--font-reading)" }}
-      />
-      <button
-        type="button"
-        onClick={send}
-        disabled={!canSend}
-        aria-label="Send follow-up"
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-          canSend
-            ? "bg-primary text-primary-foreground hover:bg-primary/90"
-            : "text-muted-foreground/40",
-        )}
-      >
-        <ArrowUp className="size-3.5" strokeWidth={2.25} />
-      </button>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /*  Research brief                                                     */
 /* ------------------------------------------------------------------ */
@@ -473,9 +418,6 @@ export default function ResearchBrief({
   defaultCollapsed,
   pinned = false,
   hasExaKey,
-  canFollowup,
-  followupBusy,
-  onFollowup,
   onRetry,
 }: {
   run: BriefRunData;
@@ -484,11 +426,6 @@ export default function ResearchBrief({
   /** Focus view: always-open, no collapse chrome. */
   pinned?: boolean;
   hasExaKey: boolean;
-  /** Whether follow-ups can be submitted (a usable model key exists). */
-  canFollowup: boolean;
-  /** A run is currently streaming — pause the follow-up composer. */
-  followupBusy: boolean;
-  onFollowup: (parentId: string, text: string) => void;
   /** Re-run a query that came back empty or errored. */
   onRetry: (text: string) => void;
 }) {
@@ -584,13 +521,6 @@ export default function ResearchBrief({
               onRetry={onRetry}
             />
           ))}
-
-          {canFollowup ? (
-            <FollowupComposer
-              disabled={followupBusy}
-              onSubmit={(t) => onFollowup(query.id, t)}
-            />
-          ) : null}
         </div>
       ) : null}
     </section>
