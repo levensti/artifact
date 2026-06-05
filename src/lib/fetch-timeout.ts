@@ -23,7 +23,7 @@ export class FetchTimeoutError extends Error {
 }
 
 /**
- * Like `fetch`, but aborts after `timeoutMs` (default 20s). An external
+ * Like `fetch`, but aborts after `timeoutMs` (default 25s). An external
  * `signal` passed via `init` is respected too — either aborting wins.
  */
 export async function fetchWithTimeout(
