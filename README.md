@@ -1,41 +1,32 @@
 # Artifact
 
-Artifact is an open source (MIT licensed) reading workspace for researchers. Read any paper / blog / PDF with the help of a powerful, personalized AI assistant; build a journal of your learnings; and easily discovery what to read next.
+Artifact is an open source (MIT licensed) workspace for researchers to discover and dive deep on papers with the help of a powerful, personalized AI assistant, supporting papers on ArXiv, uploaded documents, and arbitrary website links (e.g. technical blog).
 
-Hosted version available at [withartifact.com](https://withartifact.com). Powered by OpenRouter — bring your own OpenRouter key, or use the platform key. Completely free to use.
+We offer a free-to-use hosted version at [withartifact.com](https://withartifact.com) and include instructions for self-hosting below.
 
 ## Features
 
-### Read with an AI assistant that knows the paper
+### Discover what to read
 
-Open any arXiv paper, blog, or PDF. The assistant has the full text in context, so you can ask questions, request derivations, pull side-by-side definitions, or highlight a passage to dive deeper. Margin notes and AI threads live in a notes rail next to the page.
-
-![Paper review: PDF with AI assistant and notes rail](docs/screenshots/paper-review.png)
-
-### A journal that compounds across sessions
-
-Every reading session becomes a linked entry. Concepts, methods, and papers cross-reference each other automatically, so what you learned last week shows up when it's relevant this week.
-
-![Journal: cross-linked entries from past sessions](docs/screenshots/journal.png)
-
-### Discover what to read next
-
-A personalized feed of papers based on what you've been reading and what you've journaled. One click to start a review.
+Have a domain in mind and want to get a lay of the land? Tell Artifact what you'd like to go deep on and it performs web search, reads the papers it finds, and synthesizes a list of papers (in order of importance) for you to explore.
 
 ![Discover feed of recommended papers](docs/screenshots/discovery.png)
 
+### Read with an AI assistant that knows the paper
+
+The assistant has the full text in context, so you can ask questions, request derivations, pull side-by-side definitions, or highlight a passage to dive deeper. Margin notes and AI threads live in a notes rail next to the page.
+
+![Paper review: PDF with AI assistant and notes rail](docs/screenshots/paper-review.png)
+
 ### Share a review with a colleague
 
-Generate a live link to any review. Recipients import a copy with chats, annotations, and deep dives intact, into their own workspace.
+Generate a link that your colleagues can use to import your paper review, including your chats, notes, and deep dives.
 
-<p align="center">
-  <img src="docs/screenshots/share-review-init.png" alt="Share dialog with copy link" width="49%" />
-  <img src="docs/screenshots/share-review-accept.png" alt="Recipient landing page for a shared review" width="49%" />
-</p>
+<img src="docs/screenshots/share-review-init.png" alt="Share dialog with copy link" width="49%" />
 
 ## Contributing
 
-Contributions are welcome. Open an issue before making changes so the approach can be discussed.
+Open source contributions are welcome. Open an issue before making changes so the approach can be discussed.
 
 ### Local development
 
@@ -84,11 +75,7 @@ npm run dev
 
 Open [localhost:3000](http://localhost:3000) and sign in with Google. Set `OPENROUTER_API_KEY` in `.env` so users can start chatting immediately, or have each user add their own OpenRouter key under Settings.
 
-#### Platform key vs. bring-your-own-key
-
-The app runs a single model (`deepseek/deepseek-v4-flash`) via OpenRouter — there is no model picker. If you set `OPENROUTER_API_KEY`, signed-in users with no key of their own automatically use it — no setup step required. A user who enters their own OpenRouter key under Settings uses that instead. The platform key is server-only and never sent to the browser. The fallback is opt-in: leave the var unset to require users to bring a key. (See the cost note in `.env.example`.)
-
-### Day-to-day commands
+### Relevant commands
 
 ```bash
 npm run lint                   # ESLint
@@ -103,19 +90,6 @@ npx supabase start             # bring it back up
 npx supabase db reset          # nuke the DB and re-run all prisma migrations from scratch
 npx supabase status            # print URLs and keys again
 ```
-
-### Tech stack
-
-- **Framework**: Next.js (App Router, Turbopack), React, TypeScript
-- **Auth**: Auth.js with Google OAuth
-- **Database**: Postgres (Supabase), Prisma ORM
-- **Object storage**: Supabase Storage (PDFs and other uploads, scoped per user)
-- **PDF**: react-pdf / pdfjs-dist (full text extraction and selection)
-- **Web pages**: @mozilla/readability + DOMPurify for cleaned, safe rendering
-- **Markdown**: react-markdown, remark-gfm, remark-math, rehype-katex
-- **Styling**: Tailwind CSS, shadcn/ui
-- **AI**: OpenRouter (single fixed model: `deepseek/deepseek-v4-flash`); streaming chat + structured generation
-- **Paper search**: Semantic Scholar (primary), arXiv API (fallback)
 
 ## Deployment (self-hosting)
 
