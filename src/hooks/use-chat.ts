@@ -137,6 +137,9 @@ export interface UseChatReturn {
   setInput: (v: string) => void;
   isStreaming: boolean;
   error: string | null;
+  /** "rate_limit" when the last failure was an upstream usage-limit rejection,
+   *  so the UI can prompt for the user's own key instead of a generic error. */
+  errorCode: "rate_limit" | null;
   /** ID of the latest user message whose send failed. Renderers attach an
    *  inline retry/error indicator to this message. */
   failedUserMsgId: string | null;
@@ -172,6 +175,7 @@ export function useChat({
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<"rate_limit" | null>(null);
   const [keysVersion, setKeysVersion] = useState(0);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [threadStream, setThreadStream] = useState<AnnotationMessage[] | null>(
@@ -287,9 +291,11 @@ export function useChat({
       const trimmed = text.trim();
       if (!trimmed || isStreaming || !selectedModel) return;
 
-      if (!hasUsableProvider()) return;
-
+      // No client-side key gate: the platform key covers chat by default, and
+      // if a send genuinely can't be served (e.g. rate limit) the failure
+      // surfaces inline beneath the message — see the catch below.
       setError(null);
+      setErrorCode(null);
       setLastFailedRequest(null);
       setFailedUserMsgId(null);
 
@@ -356,8 +362,12 @@ export function useChat({
         });
 
         if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || `Request failed: ${response.status}`);
+          const data = await response.json().catch(() => ({}));
+          const e = new Error(data.error || `Request failed: ${response.status}`);
+          if (response.status === 429 || response.status === 402) {
+            (e as { code?: string }).code = "rate_limit";
+          }
+          throw e;
         }
 
         if (!response.body) throw new Error("No response body received");
@@ -366,7 +376,9 @@ export function useChat({
           inactivity.noteActivity();
           if (event.type === "error") {
             // Throw so the catch block handles cleanup uniformly with HTTP errors.
-            throw new Error(event.message);
+            const e = new Error(event.message);
+            if (event.code) (e as { code?: string }).code = event.code;
+            throw e;
           }
           steps = processStreamEvent(steps, event);
           // Batch state flushes to one per animation frame. Without this,
@@ -397,12 +409,14 @@ export function useChat({
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
+        const code = (err as { code?: string })?.code;
         // Drop the empty assistant placeholder — never repurpose it for an
         // error, since it visually masquerades as a real reply. The user
         // message stays (the server already persisted it up front); retry
         // re-runs it by id. The failure is surfaced inline beneath it.
         setMessages((prev) => prev.filter((m) => m.id !== assistantMsg.id));
         setError(message);
+        setErrorCode(code === "rate_limit" ? "rate_limit" : null);
         setFailedUserMsgId(userMsgId);
         setLastFailedRequest({
           text: trimmed,
@@ -480,12 +494,11 @@ export function useChat({
       if (!trimmed || isStreaming || !selectedModel || !chatThreadAnnotationId)
         return;
 
-      if (!hasUsableProvider()) return;
-
       const ann = await getAnnotation(reviewId, chatThreadAnnotationId);
       if (!ann || ann.kind !== "ask_ai") return;
 
       setError(null);
+      setErrorCode(null);
       setLastFailedRequest(null);
       setFailedUserMsgId(null);
 
@@ -558,8 +571,12 @@ export function useChat({
         });
 
         if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || `Request failed: ${response.status}`);
+          const data = await response.json().catch(() => ({}));
+          const e = new Error(data.error || `Request failed: ${response.status}`);
+          if (response.status === 429 || response.status === 402) {
+            (e as { code?: string }).code = "rate_limit";
+          }
+          throw e;
         }
 
         if (!response.body) throw new Error("No response body received");
@@ -567,7 +584,9 @@ export function useChat({
         await parseNDJSONStream(response.body, (event) => {
           inactivity.noteActivity();
           if (event.type === "error") {
-            throw new Error(event.message);
+            const e = new Error(event.message);
+            if (event.code) (e as { code?: string }).code = event.code;
+            throw e;
           }
           steps = processStreamEvent(steps, event);
           if (rafId === null) {
@@ -592,6 +611,7 @@ export function useChat({
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Something went wrong";
+        const code = (err as { code?: string })?.code;
         // On error, roll back to the thread with only the user message —
         // don't persist an empty/broken assistant placeholder to the DB.
         thread = threadWithUser;
@@ -599,6 +619,7 @@ export function useChat({
         onAnnotationsPersist();
         setThreadStream(thread);
         setError(message);
+        setErrorCode(code === "rate_limit" ? "rate_limit" : null);
         setFailedUserMsgId(userMsg.id);
         setLastFailedRequest({
           text: trimmed,
@@ -631,6 +652,7 @@ export function useChat({
     setMessages([]);
     setInput("");
     setError(null);
+    setErrorCode(null);
     setFailedUserMsgId(null);
     setLastFailedRequest(null);
     streamingStore.set([]);
@@ -677,6 +699,7 @@ export function useChat({
     setInput,
     isStreaming,
     error,
+    errorCode,
     failedUserMsgId,
     streamingMsgId,
     hasSavedKeys,
@@ -685,6 +708,7 @@ export function useChat({
     retryLastError,
     clearError: () => {
       setError(null);
+      setErrorCode(null);
       setFailedUserMsgId(null);
       setLastFailedRequest(null);
     },

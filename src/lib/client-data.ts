@@ -61,6 +61,12 @@ interface PlatformToolsCache {
 let platformToolsCache: PlatformToolsCache = {};
 
 let hydratePromise: Promise<void> | null = null;
+/**
+ * Whether settings (API keys) have been loaded at least once. Until then the
+ * key state is genuinely unknown — UI should render a neutral state rather
+ * than assuming "no keys", which causes a "set up your keys" flash on load.
+ */
+let settingsHydrated = false;
 let reviewsCache: PaperReview[] = [];
 let settingsCache: SettingsCache = EMPTY_SETTINGS;
 let deepDivesCache: DeepDiveSession[] = [];
@@ -80,30 +86,29 @@ export async function hydrateClientStore(): Promise<void> {
   if (typeof window === "undefined") return;
   if (hydratePromise) return hydratePromise;
   hydratePromise = (async () => {
+    // Discover data is deliberately excluded — it's lazy-loaded by the
+    // /discover route via ensureDiscoverLoaded() so it never bloats the
+    // app-wide bootstrap that every page pays for.
     const boot = await apiFetch<{
       reviews: PaperReview[];
       settings: SettingsCache;
       platformOpenRouter?: boolean;
       platformTools?: PlatformToolsCache;
       deepDives: DeepDiveSession[];
-      discoverQueries: DiscoverQuery[];
-      recommendations: Recommendation[];
       user: CurrentUser | null;
     }>("/api/bootstrap");
     reviewsCache = boot.reviews;
     settingsCache = boot.settings;
+    settingsHydrated = true;
     platformOpenRouterCache = boot.platformOpenRouter ?? false;
     platformToolsCache = boot.platformTools ?? {};
     deepDivesCache = boot.deepDives;
-    discoverQueriesCache = boot.discoverQueries ?? [];
-    recommendationsCache = boot.recommendations ?? [];
     currentUser = boot.user;
     messagesCache.clear();
     annotationsCache.clear();
     dispatch(REVIEWS_UPDATED_EVENT);
     dispatch(KEYS_UPDATED_EVENT);
     dispatch(DEEP_DIVES_UPDATED_EVENT);
-    dispatch(DISCOVER_UPDATED_EVENT);
     dispatch(USER_UPDATED_EVENT);
   })();
   return hydratePromise;
@@ -308,6 +313,29 @@ export async function refreshDiscover(): Promise<void> {
   discoverQueriesCache = data.queries;
   recommendationsCache = data.recommendations;
   dispatch(DISCOVER_UPDATED_EVENT);
+}
+
+let discoverHydrated = false;
+let discoverInflight: Promise<void> | null = null;
+
+/**
+ * Lazy, deduped discover load. The /discover route calls this on mount so the
+ * discover queries + recommendations stay out of the app-wide bootstrap that
+ * every page (the overview, a review, the journal) pays for.
+ */
+export async function ensureDiscoverLoaded(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (discoverHydrated) return;
+  if (discoverInflight) return discoverInflight;
+  discoverInflight = (async () => {
+    try {
+      await refreshDiscover();
+      discoverHydrated = true;
+    } finally {
+      discoverInflight = null;
+    }
+  })();
+  return discoverInflight;
 }
 
 export async function createDiscoverQuery(query: string): Promise<DiscoverQuery> {
@@ -607,6 +635,15 @@ export async function loadWikiRevision(id: string): Promise<WikiRevision | null>
 
 /* ── Settings / keys ── */
 
+/**
+ * Whether settings have loaded at least once. Before this is true the key
+ * state is unknown, not "no keys" — callers use it to avoid a setup-prompt
+ * flash during the initial bootstrap.
+ */
+export function isSettingsHydrated(): boolean {
+  return settingsHydrated;
+}
+
 /** The user's saved OpenRouter key override, if any. */
 export function getOpenRouterKey(): string | null {
   return settingsCache.openRouterKey;
@@ -651,6 +688,7 @@ async function patchSettings(patch: SettingsPatchBody): Promise<void> {
     platformTools?: PlatformToolsCache;
   }>("/api/settings", { method: "PATCH", body: patch });
   settingsCache = settings;
+  settingsHydrated = true;
   if (platformOpenRouter !== undefined) platformOpenRouterCache = platformOpenRouter;
   if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);
@@ -698,6 +736,7 @@ export async function refreshSettingsFromServer(): Promise<void> {
     platformTools?: PlatformToolsCache;
   }>("/api/settings");
   settingsCache = settings;
+  settingsHydrated = true;
   if (platformOpenRouter !== undefined) platformOpenRouterCache = platformOpenRouter;
   if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);

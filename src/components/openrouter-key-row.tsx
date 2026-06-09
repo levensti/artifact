@@ -126,7 +126,7 @@ export function OpenRouterKeyRow() {
               ? `Using your key`
               : usingPlatformKey
                 ? "Covered by Artifact during early access"
-                : "API key required to chat"}
+                : "Add a key for higher usage limits"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

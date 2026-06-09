@@ -116,9 +116,16 @@ export async function runOpenRouterAgentLoop(
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(
+        const err = new Error(
           parseApiErrorMessage(errText, `OpenRouter API error: ${response.status}`),
         );
+        // Tag rate-limit (429) so the client can prompt for the user's own key
+        // instead of showing a generic error. 402 = out of credits behaves the
+        // same from the user's standpoint (the platform allowance is spent).
+        if (response.status === 429 || response.status === 402) {
+          (err as { isRateLimit?: boolean }).isRateLimit = true;
+        }
+        throw err;
       }
       if (!response.body) throw new Error("No response body from OpenRouter");
 

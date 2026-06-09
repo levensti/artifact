@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useLayoutEffect, useMemo } from "react";
-import { AlertCircle, RotateCw } from "lucide-react";
+import { AlertCircle, KeyRound, RotateCw } from "lucide-react";
 import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
 import type { AnnotationMessage } from "@/lib/annotations";
@@ -141,6 +141,9 @@ export function ChatMessageBubble({
     error: string;
     canRetry: boolean;
     onRetry: () => void;
+    /** "rate_limit" swaps the generic error for an add-your-key prompt. */
+    kind?: "rate_limit";
+    onAddKey?: () => void;
   } | null;
 }) {
   if (msg.role === "user") {
@@ -149,7 +152,48 @@ export function ChatMessageBubble({
         <div className="max-w-[80%] rounded-[18px] border border-primary/20 bg-primary/10 px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
           <div className="whitespace-pre-wrap">{msg.content}</div>
         </div>
-        {failure && (
+        {failure?.kind === "rate_limit" ? (
+          <div className="mt-1 flex max-w-[88%] flex-col gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3.5 py-3">
+            <div className="flex items-center gap-1.5 text-[12.5px] font-semibold tracking-tight text-foreground">
+              <KeyRound
+                className="size-3.5 shrink-0"
+                strokeWidth={2}
+                style={{
+                  color: "color-mix(in srgb, var(--primary) 75%, transparent)",
+                }}
+              />
+              You&rsquo;ve hit the current usage limit
+            </div>
+            <p
+              className="text-[12px] leading-relaxed text-muted-foreground"
+              style={{ fontFamily: "var(--font-reading)" }}
+            >
+              Add your own OpenRouter key for higher limits, then resend.
+            </p>
+            <div className="flex items-center gap-2">
+              {failure.onAddKey && (
+                <button
+                  type="button"
+                  onClick={failure.onAddKey}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <KeyRound className="size-3" strokeWidth={2} />
+                  Add your key
+                </button>
+              )}
+              {failure.canRetry && (
+                <button
+                  type="button"
+                  onClick={failure.onRetry}
+                  className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <RotateCw className="size-3" strokeWidth={2.25} />
+                  Retry
+                </button>
+              )}
+            </div>
+          </div>
+        ) : failure ? (
           <div className="flex max-w-[85%] flex-col items-end gap-0.5 pr-1">
             <div className="flex items-center gap-1.5 text-[11px] text-destructive/90">
               <AlertCircle className="size-3" strokeWidth={2.25} />
@@ -175,7 +219,7 @@ export function ChatMessageBubble({
               {failure.error}
             </p>
           </div>
-        )}
+        ) : null}
       </div>
     );
   }

@@ -11,7 +11,11 @@ import {
 import { ArrowLeft, ArrowUp, KeyRound } from "lucide-react";
 import type { Model } from "@/lib/models";
 import { hasUsableProvider } from "@/lib/keys";
-import { getSavedSelectedModel, hydrateClientStore } from "@/lib/client-data";
+import {
+  ensureDiscoverLoaded,
+  getSavedSelectedModel,
+  hydrateClientStore,
+} from "@/lib/client-data";
 import { useDiscoverBriefs, RecentBriefsList } from "./discover-queue";
 import ResearchBrief from "./research-brief";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
@@ -150,7 +154,9 @@ export default function DiscoverPanel() {
     let cancelled = false;
     void (async () => {
       try {
-        await hydrateClientStore();
+        // Keys/reviews come from the shared bootstrap; discover data is
+        // lazy-loaded here so it's never in the app-wide bootstrap.
+        await Promise.all([hydrateClientStore(), ensureDiscoverLoaded()]);
         if (cancelled) return;
         if (hasUsableProvider()) setSelectedModel(getSavedSelectedModel());
       } finally {
