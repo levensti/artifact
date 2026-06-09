@@ -68,6 +68,13 @@ let hydratePromise: Promise<void> | null = null;
  */
 let settingsHydrated = false;
 let reviewsCache: PaperReview[] = [];
+/**
+ * Whether the reviews list has been loaded at least once. Until then an empty
+ * `reviewsCache` is "unknown", not "no reviews" — the sidebar uses this to show
+ * a loading state instead of flashing the "Your reviews will appear here"
+ * empty state on every refresh. Mirrors {@link settingsHydrated}.
+ */
+let reviewsHydrated = false;
 let settingsCache: SettingsCache = EMPTY_SETTINGS;
 let deepDivesCache: DeepDiveSession[] = [];
 let discoverQueriesCache: DiscoverQuery[] = [];
@@ -98,6 +105,7 @@ export async function hydrateClientStore(): Promise<void> {
       user: CurrentUser | null;
     }>("/api/bootstrap");
     reviewsCache = boot.reviews;
+    reviewsHydrated = true;
     settingsCache = boot.settings;
     settingsHydrated = true;
     platformOpenRouterCache = boot.platformOpenRouter ?? false;
@@ -127,7 +135,13 @@ export function getReviewsSnapshot(): PaperReview[] {
 export async function refreshReviews(): Promise<void> {
   const { reviews } = await apiFetch<{ reviews: PaperReview[] }>("/api/reviews");
   reviewsCache = reviews;
+  reviewsHydrated = true;
   dispatch(REVIEWS_UPDATED_EVENT);
+}
+
+/** Whether the reviews list has been loaded at least once. */
+export function areReviewsHydrated(): boolean {
+  return reviewsHydrated;
 }
 
 export function getReview(id: string): PaperReview | undefined {

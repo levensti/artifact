@@ -21,6 +21,7 @@ import {
 import { canShareReview } from "@/lib/client/sharing/share-links";
 import {
   getReviews,
+  areReviewsHydrated,
   updateReviewTitle,
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
@@ -56,11 +57,39 @@ function reviewsSnapshot() {
   return JSON.stringify({
     reviews: getReviews(),
     wikiPageCount: wikiPages.length,
+    hydrated: areReviewsHydrated(),
   });
 }
 
 function reviewsServerSnapshot() {
-  return JSON.stringify({ reviews: [], wikiPageCount: 0 });
+  return JSON.stringify({ reviews: [], wikiPageCount: 0, hydrated: false });
+}
+
+/**
+ * Placeholder shown while the reviews list is loading. Mirrors the real list's
+ * row rhythm (a date-group label + indented rows) with pulsing bars so the
+ * loading window reads as intentional rather than as an empty library.
+ */
+function ReviewsListSkeleton() {
+  // Varied widths so the rows read like real titles of different lengths.
+  const widths = ["74%", "58%", "86%", "47%", "67%", "53%"];
+  return (
+    <div className="animate-pulse px-2 pt-1" aria-hidden>
+      <div className="mb-1.5 px-2 py-1">
+        <div className="h-2 w-10 rounded-full bg-muted-foreground/15" />
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {widths.map((w, i) => (
+          <div key={i} className="px-2.5 py-2">
+            <div
+              className="h-3 rounded-full bg-muted-foreground/10"
+              style={{ width: w }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // TODO: Re-enable the Journal tab once the journal experience is ready.
@@ -82,14 +111,16 @@ export default function Sidebar({
     reviewsSnapshot,
     reviewsServerSnapshot,
   );
-  const { reviews, wikiPageCount } = useMemo(() => {
+  const { reviews, wikiPageCount, reviewsHydrated } = useMemo(() => {
     const parsed = JSON.parse(reviewsJson) as {
       reviews: PaperReview[];
       wikiPageCount: number;
+      hydrated: boolean;
     };
     return {
       reviews: parsed.reviews ?? [],
       wikiPageCount: parsed.wikiPageCount ?? 0,
+      reviewsHydrated: parsed.hydrated ?? false,
     };
   }, [reviewsJson]);
 
@@ -370,7 +401,12 @@ export default function Sidebar({
         <div className="mx-3 mt-3 mb-1.5 shrink-0 border-t border-sidebar-border/60" />
 
         <ScrollArea className="min-h-0 flex-1 px-2 pb-2 pt-1">
-          {grouped.length === 0 && (
+          {/* Until the list has hydrated, an empty `reviews` means "still
+              loading", not "none" — show a skeleton so we never flash the
+              empty state on refresh when reviews actually exist. */}
+          {!reviewsHydrated && grouped.length === 0 ? (
+            <ReviewsListSkeleton />
+          ) : grouped.length === 0 ? (
             <div className="mx-2 mt-8 flex flex-col items-center gap-2 text-center">
               <FilePlus
                 className="size-5 text-muted-foreground/50"
@@ -380,7 +416,7 @@ export default function Sidebar({
                 Your reviews will appear here.
               </p>
             </div>
-          )}
+          ) : null}
           {grouped.map((group) => (
             <div key={group.key} className="mb-5 last:mb-0">
               <p className="sticky top-0 z-10 mb-1 px-2 py-1 bg-sidebar/95 backdrop-blur-sm">

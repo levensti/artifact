@@ -4,6 +4,7 @@ import {
   createWebReview as createWebReviewRemote,
   getReview as getReviewCached,
   getReviewsSnapshot,
+  areReviewsHydrated,
   loadMessages,
   saveMessages,
   primeMessagesCache,
@@ -24,6 +25,8 @@ export type { ChatAssistantBlock, ChatMessage, PaperReview };
 export function getReviews(): PaperReview[] {
   return getReviewsSnapshot();
 }
+
+export { areReviewsHydrated };
 
 export function getReview(id: string): PaperReview | undefined {
   return getReviewCached(id);
