@@ -62,7 +62,7 @@ export default function SettingsDialog({
             }}
           >
             {status === "user"
-              ? "Artifact's free daily allowance runs first, then your own key."
+              ? "Artifact taps into free, platform-provided usage first, then taps into your own key."
               : status === "platform"
                 ? "Artifact covers a free daily allowance. Add your own key to get unmetered usage"
                 : "Add your own key to get unmetered usage"}
