@@ -64,8 +64,8 @@ export default function SettingsDialog({
             {status === "user"
               ? "Artifact's free daily allowance runs first, then your own key."
               : status === "platform"
-                ? "Artifact covers a free daily allowance. Add your own key to keep going past it."
-                : "Add your own OpenRouter key to run the AI."}
+                ? "Artifact covers a free daily allowance. Add your own key to get unmetered usage"
+                : "Add your own key to get unmetered usage"}
           </DialogDescription>
         </DialogHeader>
 
