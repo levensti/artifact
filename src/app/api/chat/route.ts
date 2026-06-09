@@ -17,7 +17,6 @@ import { NextRequest } from "next/server";
 import { OPENROUTER_CONTEXT_WINDOW } from "@/lib/openrouter";
 import type { StreamEvent } from "@/lib/stream-types";
 import { jsonError } from "@/lib/api-utils";
-import { resolveOpenRouterKey } from "@/server/provider-env";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import {
@@ -32,6 +31,7 @@ import {
   type AgentStep,
 } from "@/lib/agent-steps";
 import { requireUserId, HttpError, errorResponse } from "@/server/api";
+import { resolveMeteredKey, charge } from "@/server/rate-limit";
 import * as store from "@/server/store";
 import { buildPaperBlock } from "./paper-block";
 import { runOpenRouterAgentLoop } from "./openrouter-handler";
@@ -347,6 +347,34 @@ function getSystemPrompt(
 /*  POST handler                                                       */
 /* ------------------------------------------------------------------ */
 
+/** NDJSON headers shared by the streaming response and the rate-limit reject. */
+const NDJSON_HEADERS = {
+  "Content-Type": "application/x-ndjson; charset=utf-8",
+  "Transfer-Encoding": "chunked",
+  "Cache-Control": "no-cache",
+} as const;
+
+/**
+ * Reject a request that exceeded the platform token budget. Emits the same
+ * in-stream `rate_limit` error the client already handles for upstream 429s,
+ * so the UI shows its "add your own OpenRouter key" prompt with no client
+ * changes. Returned with HTTP 200 (the payload is the NDJSON stream) so the
+ * client parses events rather than treating it as a transport failure.
+ */
+function rateLimitedResponse(): Response {
+  const events: StreamEvent[] = [
+    {
+      type: "error",
+      code: "rate_limit",
+      message:
+        "You've reached the current usage limit. Add your own OpenRouter key for higher limits.",
+    },
+    { type: "done" },
+  ];
+  const body = events.map((e) => JSON.stringify(e) + "\n").join("");
+  return new Response(body, { headers: NDJSON_HEADERS });
+}
+
 export async function POST(req: NextRequest) {
   let body: ChatRequest;
   try {
@@ -387,11 +415,28 @@ export async function POST(req: NextRequest) {
     return jsonError("Messages array is required and must not be empty.", 400);
   }
 
-  // Resolve the OpenRouter key: the user's inline override when present,
-  // otherwise the platform env key. Never echoed back — used only upstream.
-  const resolvedApiKey = resolveOpenRouterKey(apiKey);
-  if (!resolvedApiKey) {
-    return jsonError("API key is required.", 401);
+  // Resolve the OpenRouter key, spending the user's free platform allowance
+  // before falling back to their own key. `meter` is true only while we're on
+  // the platform key — usage is charged to the user's buckets after the stream
+  // (see the cache_stats accumulation below). This gates both the assistant and
+  // discovery surfaces, since both run through this route. Never echoed back.
+  let resolvedApiKey: string;
+  let meter = false;
+  let meterUserId: string | null = null;
+  try {
+    const outcome = await resolveMeteredKey(apiKey);
+    if (!outcome.ok) {
+      // Out of allowance with no personal key → surface the BYOK prompt the
+      // client already renders for the upstream-429 path below.
+      if (outcome.reason === "rate_limited") return rateLimitedResponse();
+      return jsonError("API key is required.", 401);
+    }
+    resolvedApiKey = outcome.apiKey;
+    meter = outcome.meter;
+    meterUserId = outcome.userId;
+  } catch (err) {
+    if (err instanceof HttpError) return errorResponse(err);
+    throw err;
   }
 
   const trimmedExaKey =
@@ -437,7 +482,9 @@ export async function POST(req: NextRequest) {
     null;
   if (isStateful) {
     try {
-      const userId = await requireUserId();
+      // Reuse the user already resolved during metered key resolution to avoid
+      // a second session read on the pre-stream path.
+      const userId = meterUserId ?? (await requireUserId());
       const history = await store.getMessages(userId, reviewId!);
       const last = history[history.length - 1];
       let base: ChatMessage[];
@@ -482,6 +529,8 @@ export async function POST(req: NextRequest) {
       // Accumulate the assistant turn server-side (server-owned path only) so
       // we can persist it on completion — same step logic the client renders.
       let steps: AgentStep[] = [];
+      // Sum real token usage across every tool round for the reconcile below.
+      let actualTokens = 0;
       const emit = (event: StreamEvent) => {
         try {
           controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
@@ -489,6 +538,14 @@ export async function POST(req: NextRequest) {
           /* controller may be closed */
         }
         if (persist) steps = processStreamEvent(steps, event);
+        if (event.type === "cache_stats") {
+          // Charge all tokens the model processed. cacheCreationTokens is
+          // omitted because it's always 0 for the current provider
+          // (OpenRouter/DeepSeek); revisit if an Anthropic-style provider that
+          // reports cache-write tokens is ever routed through this event.
+          actualTokens +=
+            event.inputTokens + event.cacheReadTokens + event.outputTokens;
+        }
       };
 
       try {
@@ -562,16 +619,17 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Charge the real usage to the user's buckets (best-effort; the helper
+      // swallows its own errors). A heavy turn can push the bucket negative,
+      // which gates the next request until it refills.
+      if (meter && meterUserId) {
+        await charge(meterUserId, actualTokens);
+      }
+
       emit({ type: "done" });
       controller.close();
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "application/x-ndjson; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-      "Cache-Control": "no-cache",
-    },
-  });
+  return new Response(stream, { headers: NDJSON_HEADERS });
 }
