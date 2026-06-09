@@ -173,8 +173,7 @@ export function OpenRouterKeyRow() {
               }}
             >
               Artifact offers a platform-provided OpenRouter key for easy
-              quickstart. Add your own key to use your account instead of the
-              platform&apos;s.
+              quickstart. Add your own key to get unmetered usage.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative min-w-0">
