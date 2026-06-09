@@ -64,8 +64,8 @@ export default function SettingsDialog({
             {status === "user"
               ? "Artifact taps into free, platform-provided usage first, then taps into your own key."
               : status === "platform"
-                ? "Artifact covers a free daily allowance. Add your own key to get unmetered usage"
-                : "Add your own key to get unmetered usage"}
+                ? "Artifact covers a free daily allowance. Add your own key to get unmetered usage."
+                : "Add your own key to get unmetered usage."}
           </DialogDescription>
         </DialogHeader>
 
