@@ -123,10 +123,10 @@ export function OpenRouterKeyRow() {
             }}
           >
             {hasKey
-              ? `Using your key`
+              ? `Artifact taps into free, platform-provided usage first, then taps into your own key.`
               : usingPlatformKey
-                ? "Covered by Artifact during early access"
-                : "Add a key for higher usage limits"}
+                ? "Artifact covers a free daily allowance. Add your own key to get unmetered usage"
+                : "Add your own key to get unmetered usage"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -173,8 +173,7 @@ export function OpenRouterKeyRow() {
               }}
             >
               Artifact offers a platform-provided OpenRouter key for easy
-              quickstart. Add your own key to use your account instead of the
-              platform&apos;s.
+              quickstart. Add your own key to get unmetered usage.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative min-w-0">
