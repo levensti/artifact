@@ -31,7 +31,7 @@ import {
   type AgentStep,
 } from "@/lib/agent-steps";
 import { requireUserId, HttpError, errorResponse } from "@/server/api";
-import { resolveMeteredKey, charge } from "@/server/rate-limit";
+import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
 import * as store from "@/server/store";
 import { buildPaperBlock } from "./paper-block";
 import { runOpenRouterAgentLoop } from "./openrouter-handler";
@@ -539,12 +539,16 @@ export async function POST(req: NextRequest) {
         }
         if (persist) steps = processStreamEvent(steps, event);
         if (event.type === "cache_stats") {
-          // Charge all tokens the model processed. cacheCreationTokens is
-          // omitted because it's always 0 for the current provider
-          // (OpenRouter/DeepSeek); revisit if an Anthropic-style provider that
-          // reports cache-write tokens is ever routed through this event.
-          actualTokens +=
-            event.inputTokens + event.cacheReadTokens + event.outputTokens;
+          // Cost-weighted: cache reads count at 10% (see meteredTokens).
+          // cacheCreationTokens is omitted because it's always 0 for the
+          // current provider (OpenRouter/DeepSeek); revisit if an
+          // Anthropic-style provider that reports cache-write tokens is ever
+          // routed through this event.
+          actualTokens += meteredTokens(
+            event.inputTokens,
+            event.cacheReadTokens,
+            event.outputTokens,
+          );
         }
       };
 

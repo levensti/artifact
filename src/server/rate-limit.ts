@@ -69,6 +69,27 @@ function dayKey(userId: string): string {
   return `rl:${userId}:day`;
 }
 
+/**
+ * Weight applied to cached input tokens when counting usage. The provider bills
+ * cache reads at roughly a tenth of full input price, so we count them at 10%
+ * toward the limit — keeping the budget cost-weighted rather than penalizing
+ * the (large, cacheable) static paper prefix re-sent on every turn.
+ */
+export const CACHE_READ_WEIGHT = 0.1;
+
+/**
+ * Tokens charged against a user's budget for one usage report: full-rate input
+ * and output, cache reads discounted by {@link CACHE_READ_WEIGHT}. Returns a
+ * float; `charge` rounds when it debits.
+ */
+export function meteredTokens(
+  inputTokens: number,
+  cacheReadTokens: number,
+  outputTokens: number,
+): number {
+  return inputTokens + cacheReadTokens * CACHE_READ_WEIGHT + outputTokens;
+}
+
 /** Shared bucket params for the Lua scripts: hourCap, hourRate, dayCap, dayRate. */
 function bucketArgs(): [number, number, number, number] {
   return [HOURLY_LIMIT, HOURLY_REFILL_PER_SEC, DAILY_LIMIT, DAILY_REFILL_PER_SEC];
