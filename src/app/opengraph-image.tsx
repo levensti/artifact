@@ -2,141 +2,208 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
 export const alt =
-  "Artifact: an AI-native workspace for researchers to discovery and read papers";
+  "Artifact: an AI-native workspace for researchers to discover and read papers";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 const INK = "#1e2b5e";
 const PAPER = "#f6f5f2";
 const PAPER_DARK = "#ecebe5";
-const TEXT = "#1d1c1a";
+const TEXT = "#37352f";
 const MUTED = "#787570";
-const HAIRLINE = "rgba(55, 53, 47, 0.10)";
+const SUBTEXT = "rgba(55, 53, 47, 0.82)";
+const KICKER = "rgba(30, 43, 94, 0.72)";
+const HAIRLINE = "rgba(55, 53, 47, 0.12)";
+
+const HEADLINE_LEAD = "Explore the";
+const HEADLINE_ACCENT = "frontier.";
+const KICKER_TEXT = "Open source · Free to use";
+const SUB_LEAD = "Discover and read papers, blogs, and PDFs alongside";
+const SUB_ACCENT = "a powerful, personalized AI assistant.";
+const FOOT_URL = "withartifact.com";
+const FOOT_TAG = "An AI-native workspace for researchers";
+
+/// Every glyph rendered on the canvas — used to subset the Google Font
+/// requests (which also forces a truetype response that satori can parse).
+const GLYPHS = [
+  "Artifact",
+  KICKER_TEXT,
+  HEADLINE_LEAD,
+  HEADLINE_ACCENT,
+  SUB_LEAD,
+  SUB_ACCENT,
+  FOOT_URL,
+  FOOT_TAG,
+].join(" ");
+
+/// Fetch a single weight/style of a Google Font as a truetype buffer. Passing
+/// `&text=` subsets the file and makes Google serve truetype (not woff2), which
+/// is the only format satori/next-og can consume.
+async function loadGoogleFont(family: string, text: string): Promise<ArrayBuffer> {
+  const url = `https://fonts.googleapis.com/css2?family=${family}&text=${encodeURIComponent(
+    text,
+  )}`;
+  // No browser User-Agent: Google then serves truetype (satori can't read
+  // woff2), and `&text=` subsetting keeps each file tiny.
+  const css = await (await fetch(url)).text();
+  const resource = css.match(/src: url\((.+?)\) format\('(?:opentype|truetype)'\)/);
+  if (!resource) throw new Error(`Failed to parse font source for ${family}`);
+  const res = await fetch(resource[1]);
+  if (!res.ok) throw new Error(`Failed to download font for ${family}`);
+  return res.arrayBuffer();
+}
 
 export default async function OpengraphImage() {
-  return new ImageResponse(
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        background: `linear-gradient(180deg, ${PAPER} 0%, ${PAPER_DARK} 100%)`,
-        padding: "72px 80px",
-        fontFamily: "Inter, sans-serif",
-        color: TEXT,
-        position: "relative",
-      }}
-    >
-      <BrandRow />
+  const [inter400, inter600, inter700, interItalic500, mono500] =
+    await Promise.all([
+      loadGoogleFont("Inter:wght@400", GLYPHS),
+      loadGoogleFont("Inter:wght@600", GLYPHS),
+      loadGoogleFont("Inter:wght@700", GLYPHS),
+      loadGoogleFont("Inter:ital,wght@1,500", GLYPHS),
+      loadGoogleFont("JetBrains+Mono:wght@500", GLYPHS),
+    ]);
 
+  return new ImageResponse(
+    (
       <div
         style={{
-          marginTop: 92,
+          width: "100%",
+          height: "100%",
           display: "flex",
-          flexDirection: "row",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: 64,
-          flex: 1,
+          flexDirection: "column",
+          background: `linear-gradient(180deg, ${PAPER} 0%, ${PAPER_DARK} 100%)`,
+          padding: "76px 84px 64px",
+          fontFamily: "Inter",
+          color: TEXT,
+          position: "relative",
         }}
       >
+        {/* Oversized ghost glyph — quiet brand texture bleeding off-canvas. */}
+        <div
+          style={{
+            position: "absolute",
+            right: -70,
+            bottom: -150,
+            display: "flex",
+            opacity: 0.05,
+          }}
+        >
+          <BrandGlyphSvg color={INK} size={560} />
+        </div>
+
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            maxWidth: 720,
+            alignItems: "center",
+            justifyContent: "space-between",
           }}
         >
+          <BrandRow />
           <div
             style={{
               display: "flex",
-              fontSize: 16,
-              fontWeight: 600,
-              letterSpacing: "0.18em",
+              fontFamily: "JetBrains Mono",
+              fontSize: 15,
+              fontWeight: 500,
+              letterSpacing: "0.22em",
               textTransform: "uppercase",
-              color: INK,
-              opacity: 0.75,
+              color: KICKER,
             }}
           >
-            For researchers
+            {KICKER_TEXT}
           </div>
-          <div
+        </div>
+
+        <div
+          style={{
+            marginTop: "auto",
+            display: "flex",
+            flexWrap: "wrap",
+            columnGap: 30,
+            fontSize: 108,
+            lineHeight: 0.95,
+            letterSpacing: "-0.045em",
+            fontWeight: 700,
+          }}
+        >
+          <span style={{ color: TEXT }}>{HEADLINE_LEAD}</span>
+          <span
             style={{
-              marginTop: 18,
-              display: "flex",
-              fontSize: 88,
-              fontWeight: 600,
+              fontStyle: "italic",
+              fontWeight: 500,
               letterSpacing: "-0.035em",
-              lineHeight: 1.0,
-              color: TEXT,
+              color: INK,
             }}
           >
-            Explore the frontier.
+            {HEADLINE_ACCENT}
+          </span>
+        </div>
+
+        <Subhead />
+
+        <div
+          style={{
+            marginTop: "auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingTop: 26,
+            borderTop: `1px solid ${HAIRLINE}`,
+          }}
+        >
+          <div style={{ display: "flex", fontSize: 20, fontWeight: 600, color: TEXT }}>
+            {FOOT_URL}
           </div>
           <div
             style={{
-              marginTop: 22,
               display: "flex",
-              fontSize: 26,
-              lineHeight: 1.35,
+              fontFamily: "JetBrains Mono",
+              fontSize: 15,
+              letterSpacing: "0.04em",
               color: MUTED,
-              maxWidth: 640,
             }}
           >
-            Read papers, blogs, and PDFs alongside a powerful, personalized AI
-            assistant. Build a journal that compounds with every insight.
+            {FOOT_TAG}
           </div>
         </div>
-
-        <PaperCard />
       </div>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingTop: 24,
-          marginTop: 32,
-          borderTop: `1px solid ${HAIRLINE}`,
-          fontSize: 20,
-          color: MUTED,
-        }}
-      >
-        <div style={{ display: "flex" }}>withartifact.com</div>
-        <div style={{ display: "flex" }}>
-          Open source · MIT licensed · Bring your own keys
-        </div>
-      </div>
-    </div>,
-    { ...size },
+    ),
+    {
+      ...size,
+      fonts: [
+        { name: "Inter", data: inter400, weight: 400, style: "normal" },
+        { name: "Inter", data: inter600, weight: 600, style: "normal" },
+        { name: "Inter", data: inter700, weight: 700, style: "normal" },
+        { name: "Inter", data: interItalic500, weight: 500, style: "italic" },
+        { name: "JetBrains Mono", data: mono500, weight: 500, style: "normal" },
+      ],
+    },
   );
 }
 
 function BrandRow() {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
       <div
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 12,
+          width: 42,
+          height: 42,
+          borderRadius: 11,
           background: INK,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 8px 24px -8px rgba(30, 43, 94, 0.45)",
+          boxShadow: "0 10px 26px -10px rgba(30, 43, 94, 0.55)",
         }}
       >
-        <BrandGlyphSvg color="#ffffff" size={22} />
+        <BrandGlyphSvg color="#ffffff" size={21} />
       </div>
       <div
         style={{
-          fontSize: 22,
+          display: "flex",
+          fontSize: 21,
           fontWeight: 600,
           letterSpacing: "-0.01em",
-          display: "flex",
         }}
       >
         Artifact
@@ -145,134 +212,38 @@ function BrandRow() {
   );
 }
 
-/// A stylized hint of the hero's paper card, simplified for the OG canvas.
-function PaperCard() {
+/// Reading-font subhead with a single italic accent on the closing phrase.
+/// Rendered as per-word spans so satori can wrap it inside a flex container.
+function Subhead() {
+  const words: { text: string; accent: boolean }[] = [
+    ...SUB_LEAD.split(" ").map((text) => ({ text, accent: false })),
+    ...SUB_ACCENT.split(" ").map((text) => ({ text, accent: true })),
+  ];
   return (
     <div
       style={{
+        marginTop: 30,
+        maxWidth: 770,
         display: "flex",
-        flexDirection: "column",
-        width: 360,
-        borderRadius: 18,
-        background: "#ffffff",
-        border: `1px solid ${HAIRLINE}`,
-        boxShadow: "0 30px 60px -30px rgba(30, 43, 94, 0.25)",
-        overflow: "hidden",
-        transform: "rotate(-1.5deg)",
+        flexWrap: "wrap",
+        columnGap: 9,
+        rowGap: 12,
+        fontSize: 26,
+        color: SUBTEXT,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "12px 16px",
-          background: "#fbfaf6",
-          borderBottom: `1px solid ${HAIRLINE}`,
-        }}
-      >
-        <Dot />
-        <Dot />
-        <Dot />
-      </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          padding: "22px 24px 24px",
-          gap: 14,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            color: INK,
-            background: "rgba(30, 43, 94, 0.10)",
-            padding: "4px 8px",
-            borderRadius: 6,
-            alignSelf: "flex-start",
-          }}
-        >
-          arXiv · 1706.03762
-        </div>
-        <div
-          style={{
-            display: "flex",
-            fontSize: 22,
-            fontWeight: 600,
-            lineHeight: 1.18,
-            letterSpacing: "-0.01em",
-            color: TEXT,
-          }}
-        >
-          Attention Is All You Need
-        </div>
-        <div
-          style={{
-            display: "flex",
-            fontSize: 14,
-            color: MUTED,
-          }}
-        >
-          Vaswani et al.
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            marginTop: 6,
-          }}
-        >
-          <SkeletonRow widthPercents={[100, 88]} />
-          <SkeletonRow widthPercents={[64, 28]} highlight />
-          <SkeletonRow widthPercents={[92]} />
-          <SkeletonRow widthPercents={[72]} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Dot() {
-  return (
-    <div
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: 999,
-        background: "rgba(55, 53, 47, 0.18)",
-      }}
-    />
-  );
-}
-
-function SkeletonRow({
-  widthPercents,
-  highlight = false,
-}: {
-  widthPercents: number[];
-  highlight?: boolean;
-}) {
-  return (
-    <div style={{ display: "flex", gap: 6 }}>
-      {widthPercents.map((w, i) => (
-        <div
+      {words.map((w, i) => (
+        <span
           key={i}
           style={{
-            height: 10,
-            borderRadius: 4,
-            width: `${w}%`,
-            background:
-              highlight && i === 0
-                ? "rgba(30, 43, 94, 0.18)"
-                : "rgba(55, 53, 47, 0.10)",
+            display: "flex",
+            ...(w.accent
+              ? { fontStyle: "italic", fontWeight: 500, color: INK }
+              : {}),
           }}
-        />
+        >
+          {w.text}
+        </span>
       ))}
     </div>
   );
