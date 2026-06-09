@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import { HttpError, errorResponse } from "@/server/api";
-import { resolveMeteredKey, charge } from "@/server/rate-limit";
+import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
 import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
 import type { GenerateRequest } from "@/lib/explore";
 
@@ -203,14 +203,21 @@ function parseSseEvent(eventBlock: string): { text: string; usage: number | null
   return { text, usage };
 }
 
-/** Total tokens processed = prompt (incl. cached) + completion. */
+/**
+ * Tokens charged for one usage report, cost-weighted: full-rate uncached input
+ * and completion, cache reads discounted (see `meteredTokens`). `prompt_tokens`
+ * includes the cached portion, so subtract it back out to get uncached input.
+ */
 function usageTotal(usage: {
   prompt_tokens?: number;
   completion_tokens?: number;
-  total_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
 }): number {
-  if (typeof usage.total_tokens === "number") return usage.total_tokens;
-  return (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0);
+  const prompt = usage.prompt_tokens ?? 0;
+  const completion = usage.completion_tokens ?? 0;
+  const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
+  const uncachedInput = Math.max(0, prompt - cached);
+  return meteredTokens(uncachedInput, cached, completion);
 }
 
 async function generate(
