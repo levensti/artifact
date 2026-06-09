@@ -123,10 +123,10 @@ export function OpenRouterKeyRow() {
             }}
           >
             {hasKey
-              ? `Using your key`
+              ? `Free daily allowance first, then your key`
               : usingPlatformKey
-                ? "Covered by Artifact during early access"
-                : "Add a key for higher usage limits"}
+                ? "Free daily allowance, covered by Artifact"
+                : "Add a key to run the AI"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

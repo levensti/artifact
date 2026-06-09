@@ -62,10 +62,10 @@ export default function SettingsDialog({
             }}
           >
             {status === "user"
-              ? "Using your OpenRouter key."
+              ? "Artifact's free daily allowance runs first, then your own key."
               : status === "platform"
-                ? "Artifact is covering AI costs while in early access."
-                : "Add your own OpenRouter key for higher usage limits."}
+                ? "Artifact covers a free daily allowance. Add your own key to keep going past it."
+                : "Add your own OpenRouter key to run the AI."}
           </DialogDescription>
         </DialogHeader>
 
