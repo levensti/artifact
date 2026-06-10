@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import {
   ArrowDown,
   ArrowLeft,
-  BookmarkPlus,
+  // BookmarkPlus,
   Loader2,
   MessageSquareQuote,
   PenLine,
@@ -865,7 +865,7 @@ export default function ChatPanel({
                   New chat
                 </button>
               )}
-              <button
+              {/* <button
                 type="button"
                 onClick={() => setCheckpointOpen(true)}
                 disabled={chat.isStreaming}
@@ -874,7 +874,7 @@ export default function ChatPanel({
               >
                 <BookmarkPlus className="size-2.5" strokeWidth={1.75} />
                 Jot a journal entry
-              </button>
+              </button> */}
             </div>
           )}
         <ChatInput
