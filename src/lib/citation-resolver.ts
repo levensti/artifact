@@ -78,19 +78,19 @@ export function resolveFigure(
     const match = findFigureInParsed(parsed.figures, figureNum);
     if (match) {
       const fromText = paperText
-        ? findFigureInText(paperText, figureNum)
+        ? findFigureInText(paperText, figureNum, mapped ?? match.page ?? undefined)
         : null;
       return {
-        page: mapped ?? match.page ?? fromText?.page,
+        page: fromText?.page ?? mapped ?? match.page,
         tooltip: shorten(match.caption, 200),
         anchorText: fromText?.anchorText ?? match.caption,
       };
     }
   }
   if (paperText) {
-    const fromText = findFigureInText(paperText, figureNum) ?? {};
+    const fromText = findFigureInText(paperText, figureNum, mapped) ?? {};
     return {
-      page: mapped ?? fromText.page,
+      page: fromText.page ?? mapped,
       tooltip: fromText.tooltip,
       anchorText: fromText.anchorText,
     };
@@ -108,18 +108,20 @@ export function resolveTable(
   if (parsed) {
     const match = findTableInParsed(parsed, num);
     if (match) {
-      const fromText = paperText ? findTableInText(paperText, num) : null;
+      const fromText = paperText
+        ? findTableInText(paperText, num, mapped ?? match.page ?? undefined)
+        : null;
       return {
-        page: mapped ?? match.page ?? fromText?.page,
+        page: fromText?.page ?? mapped ?? match.page,
         tooltip: shorten(match.caption, 200),
         anchorText: fromText?.anchorText ?? match.caption,
       };
     }
   }
   if (paperText) {
-    const fromText = findTableInText(paperText, num) ?? {};
+    const fromText = findTableInText(paperText, num, mapped) ?? {};
     return {
-      page: mapped ?? fromText.page,
+      page: fromText.page ?? mapped,
       tooltip: fromText.tooltip,
       anchorText: fromText.anchorText,
     };
@@ -318,69 +320,80 @@ function isSectionReference(text: string, pos: number): boolean {
 function findFigureInText(
   paperText: string,
   num: string,
+  preferredPage?: number,
 ): CitationResolution | null {
-  // Match "Figure 3:" / "Fig. 3:" / "Figure 3." typically used for captions
-  // (not in-text references). The colon/period after the number is a strong
-  // caption signal — distinguishes from "Figure 3 shows…" mentions.
-  const escNum = escapeRegex(num);
-  const re = new RegExp(
-    `(?:^|\\n|\\s)(?:Fig(?:ure)?\\.?\\s+)${escNum}[\\s.:](.{10,400})`,
-    "i",
-  );
-  const match = re.exec(paperText);
-  if (!match) {
-    // Last resort: any "Figure N" mention.
-    const fallbackRe = new RegExp(`(?:Fig(?:ure)?\\.?\\s+)${escNum}\\b`, "i");
-    const fallback = fallbackRe.exec(paperText);
-    if (fallback) {
-      return {
-        page: pageAt(paperText, fallback.index),
-        anchorText: anchorAt(paperText, fallback.index),
-      };
-    }
-    return null;
-  }
-
-  const caption = `Figure ${num}: ${match[1].trim().split(/(?<=[.])\s/)[0]}`;
-  return {
-    page: pageAt(paperText, match.index),
-    tooltip: shorten(caption, 200),
-    anchorText: anchorAt(paperText, match.index),
-  };
+  return findCaptionInText(paperText, `Fig(?:ure)?\\.?`, "Figure", num, preferredPage);
 }
 
 function findTableInText(
   paperText: string,
   num: string,
+  preferredPage?: number,
 ): CitationResolution | null {
-  // Match "Table 3:" / "Table 3." typically used for captions, not in-text
-  // references. The colon/period after the number distinguishes a caption
-  // from "Table 3 shows…" mentions.
+  return findCaptionInText(paperText, "Table", "Table", num, preferredPage);
+}
+
+/**
+ * Find a figure/table caption in the paper text. Captions punctuate right
+ * after the number ("Table 3: …", "Fig. 2. …") while in-text references
+ * don't ("in Table 3 rows (B)…", "table 3), step time…") — so require the
+ * colon/period. Among caption-shaped matches, prefer one on `preferredPage`
+ * (the page-map's answer) when given: a sentence ending in "…in Table 3."
+ * is caption-shaped too, and the page map is the more trustworthy signal
+ * for which page the element actually lives on.
+ */
+function findCaptionInText(
+  paperText: string,
+  labelPattern: string,
+  label: string,
+  num: string,
+  preferredPage?: number,
+): CitationResolution | null {
   const escNum = escapeRegex(num);
-  const re = new RegExp(
-    `(?:^|\\n|\\s)Table\\s+${escNum}[\\s.:](.{10,400})`,
-    "i",
-  );
-  const match = re.exec(paperText);
-  if (!match) {
-    // Last resort: any "Table N" mention.
-    const fallbackRe = new RegExp(`\\bTable\\s+${escNum}\\b`, "i");
-    const fallback = fallbackRe.exec(paperText);
-    if (fallback) {
-      return {
-        page: pageAt(paperText, fallback.index),
-        anchorText: anchorAt(paperText, fallback.index),
-      };
-    }
-    return null;
+  // Colon first: "Table 3: …" is the dominant caption style and prose never
+  // writes it. Period form ("Table 3. …") is a real style too, but it also
+  // matches sentence-final mentions ("…shown in Table 3. Next we…"), so it
+  // only gets a shot when no colon caption exists anywhere.
+  let candidates: RegExpExecArray[] = [];
+  for (const punct of [":", "\\."]) {
+    const captionRe = new RegExp(
+      `(?:^|\\s)${labelPattern}\\s+${escNum}\\s*${punct}\\s+(.{10,400})`,
+      "gi",
+    );
+    candidates = [...paperText.matchAll(captionRe)];
+    if (candidates.length > 0) break;
+  }
+  const chosen =
+    (preferredPage !== undefined
+      ? candidates.find((m) => pageAt(paperText, m.index) === preferredPage)
+      : undefined) ?? candidates[0];
+  if (chosen) {
+    const caption = `${label} ${num}: ${chosen[1].trim().split(/(?<=[.])\s/)[0]}`;
+    return {
+      page: pageAt(paperText, chosen.index),
+      tooltip: shorten(caption, 200),
+      anchorText: anchorAt(paperText, chosen.index),
+    };
   }
 
-  const caption = `Table ${num}: ${match[1].trim().split(/(?<=[.])\s/)[0]}`;
-  return {
-    page: pageAt(paperText, match.index),
-    tooltip: shorten(caption, 200),
-    anchorText: anchorAt(paperText, match.index),
-  };
+  // Last resort: any mention, with the same preferred-page bias.
+  const mentionRe = new RegExp(`(?:^|\\s)${labelPattern}\\s+${escNum}\\b`, "gi");
+  const mentions = [...paperText.matchAll(mentionRe)];
+  const mention =
+    (preferredPage !== undefined
+      ? mentions.find((m) => pageAt(paperText, m.index) === preferredPage)
+      : undefined) ?? mentions[0];
+  if (mention) {
+    // A bare mention is a weak page signal — keep the page map's answer
+    // when it has one. The anchor is still useful: if the mention isn't on
+    // the final page the text-layer search just misses and the viewer falls
+    // back to a page-level scroll.
+    return {
+      page: preferredPage ?? pageAt(paperText, mention.index),
+      anchorText: anchorAt(paperText, mention.index),
+    };
+  }
+  return null;
 }
 
 /**
