@@ -22,6 +22,12 @@ import type {
 export interface CitationResolution {
   page?: number;
   tooltip?: string;
+  /**
+   * Verbatim text at the match site (heading/caption start), used to locate
+   * the exact spot inside the rendered page's text layer. Absent when the
+   * resolution came from the page map alone.
+   */
+  anchorText?: string;
 }
 
 const PAGE_MARKER_RE = /\[Page (\d+)\]/g;
@@ -46,6 +52,7 @@ export function resolveSection(
       return {
         page: mapped ?? match.startPage ?? fromText?.page,
         tooltip: match.heading,
+        anchorText: fromText?.anchorText ?? match.heading,
       };
     }
   }
@@ -54,6 +61,7 @@ export function resolveSection(
     return {
       page: mapped ?? fromText.page,
       tooltip: fromText.tooltip,
+      anchorText: fromText.anchorText,
     };
   }
   return mapped ? { page: mapped } : {};
@@ -75,6 +83,7 @@ export function resolveFigure(
       return {
         page: mapped ?? match.page ?? fromText?.page,
         tooltip: shorten(match.caption, 200),
+        anchorText: fromText?.anchorText ?? match.caption,
       };
     }
   }
@@ -83,6 +92,7 @@ export function resolveFigure(
     return {
       page: mapped ?? fromText.page,
       tooltip: fromText.tooltip,
+      anchorText: fromText.anchorText,
     };
   }
   return mapped ? { page: mapped } : {};
@@ -102,6 +112,7 @@ export function resolveTable(
       return {
         page: mapped ?? match.page ?? fromText?.page,
         tooltip: shorten(match.caption, 200),
+        anchorText: fromText?.anchorText ?? match.caption,
       };
     }
   }
@@ -110,6 +121,7 @@ export function resolveTable(
     return {
       page: mapped ?? fromText.page,
       tooltip: fromText.tooltip,
+      anchorText: fromText.anchorText,
     };
   }
   return mapped ? { page: mapped } : {};
@@ -226,7 +238,11 @@ function findSectionInText(
   if (knownHeading) {
     const idx = paperText.indexOf(knownHeading);
     if (idx >= 0) {
-      return { page: pageAt(paperText, idx), tooltip: knownHeading };
+      return {
+        page: pageAt(paperText, idx),
+        tooltip: knownHeading,
+        anchorText: knownHeading,
+      };
     }
   }
 
@@ -256,6 +272,7 @@ function findSectionInText(
     return {
       page: pageAt(paperText, match.index),
       tooltip: heading,
+      anchorText: anchorAt(paperText, match.index),
     };
   }
 
@@ -316,13 +333,20 @@ function findFigureInText(
     const fallbackRe = new RegExp(`(?:Fig(?:ure)?\\.?\\s+)${escNum}\\b`, "i");
     const fallback = fallbackRe.exec(paperText);
     if (fallback) {
-      return { page: pageAt(paperText, fallback.index) };
+      return {
+        page: pageAt(paperText, fallback.index),
+        anchorText: anchorAt(paperText, fallback.index),
+      };
     }
     return null;
   }
 
   const caption = `Figure ${num}: ${match[1].trim().split(/(?<=[.])\s/)[0]}`;
-  return { page: pageAt(paperText, match.index), tooltip: shorten(caption, 200) };
+  return {
+    page: pageAt(paperText, match.index),
+    tooltip: shorten(caption, 200),
+    anchorText: anchorAt(paperText, match.index),
+  };
 }
 
 function findTableInText(
@@ -343,13 +367,20 @@ function findTableInText(
     const fallbackRe = new RegExp(`\\bTable\\s+${escNum}\\b`, "i");
     const fallback = fallbackRe.exec(paperText);
     if (fallback) {
-      return { page: pageAt(paperText, fallback.index) };
+      return {
+        page: pageAt(paperText, fallback.index),
+        anchorText: anchorAt(paperText, fallback.index),
+      };
     }
     return null;
   }
 
   const caption = `Table ${num}: ${match[1].trim().split(/(?<=[.])\s/)[0]}`;
-  return { page: pageAt(paperText, match.index), tooltip: shorten(caption, 200) };
+  return {
+    page: pageAt(paperText, match.index),
+    tooltip: shorten(caption, 200),
+    anchorText: anchorAt(paperText, match.index),
+  };
 }
 
 /**
@@ -383,6 +414,7 @@ function findReferenceInText(
       return {
         page: pageAt(paperText, refIndex),
         tooltip: shorten(text, 250),
+        anchorText: anchorAt(paperText, refIndex),
       };
     }
     return null;
@@ -398,6 +430,7 @@ function findReferenceInText(
       return {
         page: pageAt(paperText, refIndex),
         tooltip: shorten(snippet.trim(), 250),
+        anchorText: anchorAt(paperText, refIndex),
       };
     }
   }
@@ -440,6 +473,18 @@ function pageAt(paperText: string, pos: number): number | undefined {
     lastPage = parseInt(m[1], 10);
   }
   return lastPage;
+}
+
+/**
+ * Verbatim snippet of the paper text starting at `pos`, for locating the
+ * match inside the rendered page's text layer. Cut at the next `[Page N]`
+ * marker — the marker is an extraction artifact that never appears in the
+ * rendered page, and text past it lives on a different page anyway.
+ */
+function anchorAt(paperText: string, pos: number, len = 60): string {
+  const slice = paperText.slice(pos, pos + len);
+  const cut = slice.search(/\[Page \d+\]/);
+  return (cut >= 0 ? slice.slice(0, cut) : slice).trim();
 }
 
 function escapeRegex(s: string): string {

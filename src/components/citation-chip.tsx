@@ -52,12 +52,12 @@ export default function CitationChip({ href, children }: CitationChipProps) {
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    if (resolution.page) scrollToPage(resolution.page);
+    if (resolution.page) scrollToPage(resolution.page, resolution.anchorText);
   };
   // Keyboard fallback: Enter on a focused link should still navigate.
   const onClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (resolution.page) scrollToPage(resolution.page);
+    if (resolution.page) scrollToPage(resolution.page, resolution.anchorText);
   };
 
   return (
