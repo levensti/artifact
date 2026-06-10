@@ -49,15 +49,22 @@ export default function CitationChip({ href, children }: CitationChipProps) {
   // re-rendered the markdown and moved the chip out from under the cursor,
   // so mouseup lands on a different element and `click` never fires. Filter
   // to primary button so right/middle clicks don't navigate.
+  // Figure/table captions sit BELOW their content, so center them to keep
+  // the figure in view; section headings go to the top and read downward.
+  const anchorBlock =
+    info?.kind === "figure" || info?.kind === "table" ? "center" : "start";
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    if (resolution.page) scrollToPage(resolution.page);
+    if (resolution.page)
+      scrollToPage(resolution.page, resolution.anchorText, anchorBlock);
   };
   // Keyboard fallback: Enter on a focused link should still navigate.
   const onClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (resolution.page) scrollToPage(resolution.page);
+    if (resolution.page)
+      scrollToPage(resolution.page, resolution.anchorText, anchorBlock);
   };
 
   return (

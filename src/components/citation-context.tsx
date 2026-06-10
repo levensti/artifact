@@ -49,7 +49,11 @@ interface CitationContextValue {
    */
   pageMapError: string | null;
   /** Scroll the PDF viewer to the given (1-based) page. Falls back to no-op. */
-  scrollToPage: (page: number) => void;
+  scrollToPage: (
+    page: number,
+    anchorText?: string,
+    anchorBlock?: "start" | "center",
+  ) => void;
 }
 
 const noop = () => {};
@@ -278,17 +282,34 @@ export function CitationContextProvider({
     timedOutFor,
   ]);
 
-  const scrollToPage = useCallback((page: number) => {
-    const container = document.querySelector("[data-pdf-container]");
-    if (!container) return;
-    const target = container.querySelector(
-      `[data-page-number="${page}"]`,
-    ) as HTMLElement | null;
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-    target.classList.add("page-flash");
-    window.setTimeout(() => target.classList.remove("page-flash"), 1100);
-  }, []);
+  const scrollToPage = useCallback(
+    (page: number, anchorText?: string, anchorBlock: "start" | "center" = "start") => {
+      const container = document.querySelector("[data-pdf-container]");
+      if (!container) return;
+      const target = container.querySelector(
+        `[data-page-number="${page}"]`,
+      ) as HTMLElement | null;
+      if (!target) return;
+      // Prefer the exact spot: find the heading/caption text inside the page's
+      // text layer and scroll to that element. Falls back to centering the
+      // whole page when the text isn't found (text layer not rendered yet, or
+      // extraction/render mismatch).
+      const anchor = anchorText ? findAnchorElement(target, anchorText) : null;
+      // `anchorBlock` controls where the anchor lands: "start" for section
+      // headings (content reads downward from them, with a small margin so
+      // the heading isn't flush against the edge), "center" for figure/table
+      // captions (the content sits ABOVE the caption, so centering keeps it
+      // in view). Page-level fallback always centers.
+      if (anchor) anchor.style.scrollMarginTop = "19px";
+      (anchor ?? target).scrollIntoView({
+        behavior: "smooth",
+        block: anchor ? anchorBlock : "center",
+      });
+      target.classList.add("page-flash");
+      window.setTimeout(() => target.classList.remove("page-flash"), 1100);
+    },
+    [],
+  );
 
   const value = useMemo(
     () => ({
@@ -316,4 +337,35 @@ export function CitationContextProvider({
 
 export function useCitationContext(): CitationContextValue {
   return useContext(Ctx);
+}
+
+/**
+ * Find the element in `pageEl`'s text layer whose text contains
+ * `anchorText`. PDF text layers split a line into arbitrary spans (a heading
+ * may render as ["3.2", " Experimental", " Setup"]), so we match against the
+ * whitespace-stripped concatenation of all the layer's text nodes and map
+ * the hit back to the node holding its first character.
+ */
+function findAnchorElement(
+  pageEl: HTMLElement,
+  anchorText: string,
+): HTMLElement | null {
+  const layer = pageEl.querySelector(".textLayer");
+  if (!layer) return null;
+  const needle = anchorText.toLowerCase().replace(/\s+/g, "").slice(0, 60);
+  if (needle.length < 4) return null;
+
+  let haystack = "";
+  const owners: HTMLElement[] = [];
+  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = (node.textContent ?? "").toLowerCase().replace(/\s+/g, "");
+    const owner = node.parentElement;
+    if (!text || !owner) continue;
+    for (let i = 0; i < text.length; i++) owners.push(owner);
+    haystack += text;
+  }
+
+  const idx = haystack.indexOf(needle);
+  return idx >= 0 ? (owners[idx] ?? null) : null;
 }
