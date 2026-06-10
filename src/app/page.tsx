@@ -20,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
     return {
       title: { absolute: "Artifact: Explore the frontier" },
       description:
-        "Read papers, blogs, and PDFs alongside a powerful, personalized AI assistant. Build a personal journal that compounds with every insight. Open source and free to use.",
+        "Read papers, blogs, and PDFs alongside a powerful, personalized AI assistant. Discover what to read next and share your reviews. Open source, with free usage every day.",
     };
   }
   return { title: { absolute: "Artifact" } };

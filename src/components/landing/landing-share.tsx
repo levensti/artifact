@@ -1,91 +1,37 @@
-import { MonoLabel } from "@/components/folio";
+import { SectionHeader } from "@/components/landing/landing-section";
 
 /**
- * Share section. The journal section showed reading getting recorded;
- * this one shows it getting handed off.
+ * Share — one link hands a colleague the whole read. Copy on the left,
+ * the share card on the right.
  */
 export function LandingShare() {
   return (
-    <section id="share" className="py-14">
-      <div className="landing-spread">
-        <aside className="landing-marg">
-          <MonoLabel>Sharing</MonoLabel>
-        </aside>
-        <div>
-          <h2 className="landing-section-title">
-            Send a colleague your
-            <br />
-            read on a paper.
-          </h2>
-          <p
-            className="mt-[18px] max-w-[620px] text-[17px] leading-[1.65]"
-            style={{
-              fontFamily: "var(--font-reading)",
-              color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
-              textWrap: "pretty",
-            }}
-          >
-            One link delivers the whole download of your insights: every
-            highlight, every margin note, every chat thread you started. They
-            read it as-is, or import the bundle into their own workspace and
-            keep going.
-          </p>
+    <section id="share" style={{ background: "var(--reader-mat)" }}>
+      <div className="mx-auto grid max-w-[1120px] grid-cols-1 items-center gap-x-16 gap-y-12 px-6 py-20 sm:py-24 md:px-10 lg:grid-cols-[5fr_6fr]">
+        <SectionHeader
+          num="03"
+          kicker="Share"
+          title="Send a colleague your read on a paper."
+          lede="One link carries the whole bundle — every highlight, every margin note, every chat and deep dive. A colleague imports it into their own workspace and keeps going where you left off."
+        />
 
-          <div className="mt-9 max-w-[620px]">
-            <ShareSpecimen />
-          </div>
-
-          <ul
-            className="mt-7 grid max-w-[620px] grid-cols-1 gap-x-10 gap-y-4 sm:grid-cols-2"
-            style={{ listStyle: "none", padding: 0 }}
-          >
-            <ShareBullet
-              title="Reviews"
-              body="Share a paper review with all annotations, notes, and chat history."
-            />
-            <ShareBullet
-              title="Journal entries"
-              body="Share a session recap or a wiki page so others can see what you learned."
-            />
-          </ul>
-        </div>
+        <ShareCard />
       </div>
     </section>
   );
 }
 
-function ShareBullet({ title, body }: { title: string; body: string }) {
-  return (
-    <li>
-      <div
-        className="text-[14.5px] font-semibold tracking-[-0.01em] text-foreground"
-        style={{ fontFamily: "var(--font-sans)" }}
-      >
-        {title}
-      </div>
-      <div
-        className="mt-1 text-[13.5px] leading-[1.55]"
-        style={{
-          fontFamily: "var(--font-reading)",
-          color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
-        }}
-      >
-        {body}
-      </div>
-    </li>
-  );
-}
-
-function ShareSpecimen() {
+function ShareCard() {
   return (
     <div
-      className="overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-sm)]"
+      className="overflow-hidden rounded-xl border bg-card"
       style={{
-        borderColor: "color-mix(in srgb, var(--border) 75%, transparent)",
+        borderColor: "color-mix(in srgb, var(--border) 90%, transparent)",
+        boxShadow: "var(--shadow-md)",
       }}
     >
       <div
-        className="flex items-center gap-2 border-b px-3.5 py-2.5 font-mono text-[11px] text-muted-foreground"
+        className="flex items-center gap-2 border-b px-4 py-3 font-mono text-[11px] text-muted-foreground"
         style={{
           letterSpacing: "0.04em",
           borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
@@ -95,7 +41,7 @@ function ShareSpecimen() {
         <ShareIcon />
         <span>Share · SWE-bench review</span>
         <span
-          className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-sans text-[10px] font-medium"
           style={{
             background: "color-mix(in srgb, var(--success) 14%, transparent)",
             color: "color-mix(in srgb, var(--success) 90%, transparent)",
@@ -110,7 +56,7 @@ function ShareSpecimen() {
           Link ready
         </span>
       </div>
-      <div className="p-4">
+      <div className="p-5">
         <div
           className="flex items-center gap-2.5 rounded-md border px-3 py-2.5"
           style={{
@@ -119,22 +65,7 @@ function ShareSpecimen() {
               "color-mix(in srgb, var(--primary) 4%, var(--background))",
           }}
         >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-3.5"
-            aria-hidden
-            style={{
-              color: "color-mix(in srgb, var(--primary) 70%, transparent)",
-            }}
-          >
-            <path d="M6.5 8.5l3-3M5.5 10.5L4 12a2.5 2.5 0 1 1-3.5-3.5L2 7" />
-            <path d="M9.5 5.5L11 4a2.5 2.5 0 1 1 3.5 3.5L13 9" />
-          </svg>
+          <LinkIcon />
           <span
             className="truncate font-mono text-[12.5px]"
             style={{
@@ -144,7 +75,7 @@ function ShareSpecimen() {
             withartifact.com/share/r-7f3e9a2b
           </span>
           <span
-            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium"
+            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 font-sans text-[11px] font-medium"
             style={{
               background: "var(--primary)",
               color: "var(--primary-foreground)",
@@ -154,7 +85,8 @@ function ShareSpecimen() {
             Copy link
           </span>
         </div>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11.5px]">
+
+        <div className="mt-3.5 flex flex-wrap gap-x-4 gap-y-1.5 text-[11.5px]">
           <BundleStat>
             <Stat>14</Stat> highlights
           </BundleStat>
@@ -165,9 +97,44 @@ function ShareSpecimen() {
             <Stat>3</Stat> chat threads
           </BundleStat>
           <BundleStat>
-            <Stat>1</Stat> linked journal entry
+            <Stat>2</Stat> deep dives
           </BundleStat>
         </div>
+
+        <div
+          className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 border-t pt-4 sm:grid-cols-2"
+          style={{
+            borderColor: "color-mix(in srgb, var(--border) 60%, transparent)",
+          }}
+        >
+          <ShareBullet
+            title="Everything travels"
+            body="Annotations, notes, chats, and deep dives arrive intact."
+          />
+          <ShareBullet
+            title="Import and continue"
+            body="One click pulls the review into their own workspace."
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShareBullet({ title, body }: { title: string; body: string }) {
+  return (
+    <div>
+      <div className="font-sans text-[13px] font-semibold tracking-[-0.01em] text-foreground">
+        {title}
+      </div>
+      <div
+        className="mt-0.5 text-[12px] leading-[1.55]"
+        style={{
+          fontFamily: "var(--font-reading)",
+          color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
+        }}
+      >
+        {body}
       </div>
     </div>
   );
@@ -219,6 +186,27 @@ function ShareIcon() {
       <circle cx="12" cy="3.5" r="2" />
       <circle cx="12" cy="12.5" r="2" />
       <path d="M5.7 7.1l4.6-2.7M5.7 8.9l4.6 2.7" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-3.5 shrink-0"
+      aria-hidden
+      style={{
+        color: "color-mix(in srgb, var(--primary) 70%, transparent)",
+      }}
+    >
+      <path d="M6.5 8.5l3-3M5.5 10.5L4 12a2.5 2.5 0 1 1-3.5-3.5L2 7" />
+      <path d="M9.5 5.5L11 4a2.5 2.5 0 1 1 3.5 3.5L13 9" />
     </svg>
   );
 }

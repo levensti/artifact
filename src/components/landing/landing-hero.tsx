@@ -1,88 +1,84 @@
-import { ItalicAccent, MonoLabel } from "@/components/folio";
+import { MonoLabel } from "@/components/folio";
+import { LandingWorkspace } from "@/components/landing/landing-workspace";
+import { ArrowRight, GithubMark } from "@/components/landing/landing-icons";
 
 export interface LandingHeroProps {
   signupHref: string;
   githubUrl: string;
 }
 
+/**
+ * Cover: centered display type on the warm reader mat, with the workspace
+ * miniature as the single showpiece. The mat (plus its dot grid) ends
+ * mid-mockup — a white strip sits behind the lower half so the workspace
+ * appears to lift off the hero and into the page.
+ */
 export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
   return (
-    <section
-      id="cover"
-      className="relative px-16 pt-20 pb-14"
-      aria-labelledby="cover-title"
-    >
-      <MonoLabel>Open source · Free to use</MonoLabel>
-
-      <h1 id="cover-title" className="landing-cover-h1 mt-6">
-        Explore the
-        <span className="frontier">frontier.</span>
-      </h1>
-
-      <p
-        className="mt-9 max-w-160 text-[19px] leading-[1.6]"
+    <section id="cover" className="relative" aria-labelledby="cover-title">
+      {/* Mat + dot grid, fading in below the headline */}
+      <div
+        className="absolute inset-0"
+        style={{ background: "var(--reader-mat)" }}
+        aria-hidden
+      />
+      <div
+        className="landing-dots absolute inset-0"
         style={{
-          fontFamily: "var(--font-reading)",
-          color: "color-mix(in srgb, var(--foreground) 88%, transparent)",
-          textWrap: "pretty",
+          maskImage:
+            "linear-gradient(180deg, transparent 30%, black 75%, black 100%)",
         }}
-      >
-        Read papers, blogs, and arbitrary PDFs alongside a powerful AI
-        assistant. Every concept, every connection, every insight you find, kept
-        in{" "}
-        <ItalicAccent>
-          a personal journal that compounds with you over years
-        </ItalicAccent>
-        .
-      </p>
+        aria-hidden
+      />
+      {/* White strip behind the lower half of the workspace mock */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-44 sm:h-56"
+        style={{ background: "var(--background)" }}
+        aria-hidden
+      />
 
-      <div className="mt-10 flex flex-wrap items-center gap-2.5">
-        <a
-          href={signupHref}
-          className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4.5 text-[13.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
-        >
-          Get started
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-[13px]"
-            aria-hidden
-          >
-            <path d="M3 8h10" />
-            <path d="M9 4l4 4-4 4" />
-          </svg>
-        </a>
-        <a
-          href={githubUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-transparent px-[18px] text-[13.5px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
-        >
-          <GithubMark className="size-[13px]" />
-          View on GitHub
-        </a>
+      <div className="relative mx-auto max-w-280 px-6 md:px-10">
+        <div className="mx-auto max-w-210 pt-20 text-center sm:pt-24">
+          <MonoLabel>Open source · MIT licensed · Free to use</MonoLabel>
+
+          <h1 id="cover-title" className="landing-h1 mt-6">
+            Explore the <span className="frontier">frontier.</span>
+          </h1>
+
+          <p className="landing-lede mx-auto mt-7 max-w-150 text-[18px]">
+            A workspace for researchers. Discover what to read next, then read
+            it alongside an AI assistant that knows the whole text.
+          </p>
+
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-2.5">
+            <a
+              href={signupHref}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4.5 text-[13.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 active:translate-y-px"
+            >
+              Get started
+              <ArrowRight className="size-[13px]" />
+            </a>
+            <a
+              href={githubUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-[18px] text-[13.5px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
+            >
+              <GithubMark className="size-[13px]" />
+              View on GitHub
+            </a>
+          </div>
+
+          <p className="mt-5 text-[12.5px] text-muted-foreground/80">
+            Free usage every day · No key required to start · Self-host if you
+            like
+          </p>
+        </div>
+
+        <div className="relative mt-14 pb-16 sm:mt-16 sm:pb-20">
+          <LandingWorkspace />
+        </div>
       </div>
-
-      <p className="mt-6 text-[12.5px] text-muted-foreground/80">
-        Free · MIT licensed · Bring your own keys
-      </p>
     </section>
-  );
-}
-
-function GithubMark({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      aria-hidden
-      fill="currentColor"
-      className={className}
-    >
-      <path d="M8 0.5C3.9 0.5 0.5 3.9 0.5 8c0 3.3 2.1 6.1 5.1 7.1.4.1.5-.2.5-.4v-1.3c-2.1.4-2.6-.9-2.6-.9-.3-.9-.8-1.1-.8-1.1-.7-.5.1-.5.1-.5.7.1 1.1.8 1.1.8.7 1.2 1.8.9 2.3.6.1-.5.3-.9.5-1.1-1.7-.2-3.4-.8-3.4-3.7 0-.8.3-1.5.8-2-.1-.2-.3-1 .1-2.1 0 0 .6-.2 2.1.8.6-.2 1.3-.3 2-.3.7 0 1.4.1 2 .3 1.5-1 2.1-.8 2.1-.8.4 1.1.2 1.9.1 2.1.5.5.8 1.2.8 2 0 2.9-1.7 3.5-3.4 3.7.3.2.5.7.5 1.4v2c0 .2.1.5.6.4 3-1 5.1-3.8 5.1-7.1C15.5 3.9 12.1 0.5 8 0.5z" />
-    </svg>
   );
 }

@@ -791,96 +791,89 @@
   html { @apply font-sans; }
 }
 
-/* ── Landing page — folio reading layout ──────────────────────── */
+/* ── Landing page — ink & paper ────────────────────────────────── */
 
 /* Selection on the landing page uses the indigo accent. */
 .landing-root ::selection {
   background: color-mix(in srgb, var(--primary) 22%, transparent);
   color: var(--foreground);
 }
-
-/* The "folio" — a sheet of paper laid on the warm reader mat. */
-.landing-folio {
-  max-width: 1180px;
-  margin: 0 auto;
-  background: var(--background);
-  border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-}
-
-/* Two-column spread: 200px marginalia | body. */
-.landing-spread {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  column-gap: 56px;
-  padding: 0 64px;
-}
-
-.landing-marg {
-  padding-top: 6px;
-  color: var(--muted-foreground);
-  font-size: 11.5px;
-  line-height: 1.55;
-  font-feature-settings: "tnum";
-}
-.landing-marg .folio-no {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  color: color-mix(in srgb, var(--muted-foreground) 75%, transparent);
-  text-transform: uppercase;
-}
-.landing-marg .marg-note {
-  margin-top: 8px;
-  font-family: var(--font-reading);
-  font-style: italic;
-  font-size: 13px;
-  line-height: 1.55;
-  color: color-mix(in srgb, var(--muted-foreground) 95%, transparent);
-  text-wrap: pretty;
-}
-.landing-marg .marg-note::before {
-  content: "";
-  display: block;
-  width: 14px;
-  height: 1px;
-  background: color-mix(in srgb, var(--primary) 50%, transparent);
-  margin-bottom: 10px;
-}
-
-/* A clean hairline rule between sections. Draws in left-to-right when it
-   enters the viewport (see landing-comet-divider.tsx). */
-.landing-comet-rule {
-  grid-column: 1 / -1;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--border) 100%, transparent) 8%,
-    color-mix(in srgb, var(--border) 100%, transparent) 92%,
-    transparent 100%
-  );
-  position: relative;
-  transform-origin: 0 50%;
-  transform: scaleX(0);
-  transition: transform 1100ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.landing-comet-rule[data-shown="true"] {
-  transform: scaleX(1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .landing-comet-rule {
-    transform: none;
-    transition: none;
-  }
+/* On the ink bands, flip selection so it stays legible. */
+.landing-ink ::selection {
+  background: color-mix(in srgb, var(--primary-foreground) 30%, transparent);
+  color: var(--primary-foreground);
 }
 
 /* Anchor jumps land below the sticky nav with breathing room. */
 #landing-scroll {
-  scroll-padding-top: 96px;
+  scroll-padding-top: 88px;
 }
-.landing-folio section[id] {
-  scroll-margin-top: 96px;
+.landing-root section[id] {
+  scroll-margin-top: 88px;
+}
+
+/* Display type. */
+.landing-h1 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: clamp(54px, 8.2vw, 110px);
+  line-height: 0.96;
+  letter-spacing: -0.045em;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+.landing-h1 .frontier {
+  font-family: var(--font-reading);
+  font-style: italic;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--primary) 92%, transparent);
+  letter-spacing: -0.035em;
+}
+.landing-h2 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: clamp(32px, 4.2vw, 44px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+.landing-lede {
+  font-family: var(--font-reading);
+  font-size: 17px;
+  line-height: 1.65;
+  color: color-mix(in srgb, var(--foreground) 80%, transparent);
+  text-wrap: pretty;
+}
+
+/* Fine dot grid laid over the hero mat and the ink bands. */
+.landing-dots {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--foreground) 8%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+.landing-dots-inverse {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--primary-foreground) 10%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+/* Full-bleed "ink" band — the brand indigo as a surface. All text inside
+   derives from --primary-foreground so the band stays legible in both
+   light (deep ink, white type) and dark (light indigo, ink type) themes. */
+.landing-ink {
+  background:
+    radial-gradient(
+      110% 80% at 80% -15%,
+      color-mix(in srgb, var(--primary-foreground) 9%, transparent),
+      transparent 60%
+    ),
+    var(--primary);
+  color: var(--primary-foreground);
 }
 
 /* Live "in progress" pulsing dot — used in cover meta + journal margin. */
@@ -902,39 +895,6 @@
   animation: none;
   opacity: 1;
   transform: none;
-}
-
-/* Cover (hero). */
-.landing-cover-h1 {
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: clamp(56px, 9vw, 124px);
-  line-height: 0.94;
-  letter-spacing: -0.045em;
-  color: var(--foreground);
-  text-wrap: balance;
-}
-.landing-cover-h1 .frontier {
-  font-family: var(--font-reading);
-  font-style: italic;
-  font-weight: 500;
-  color: color-mix(in srgb, var(--primary) 92%, transparent);
-  letter-spacing: -0.035em;
-}
-
-/* Section anatomy. */
-.landing-section-title {
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 44px;
-  line-height: 1.05;
-  letter-spacing: -0.032em;
-  color: var(--foreground);
-  text-wrap: balance;
-}
-.landing-section-title .quiet {
-  color: color-mix(in srgb, var(--foreground) 50%, transparent);
-  font-weight: 600;
 }
 
 /* Specimen highlight glyphs (warning + indigo). */
@@ -967,61 +927,12 @@
   vertical-align: middle;
 }
 
-/* Journal entry "Journaling…" pill (uses the standard pulse dot). */
-.landing-marg-writing {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--primary) 5%, transparent);
-  font-size: 10.5px;
-  font-weight: 500;
-  color: color-mix(in srgb, var(--primary) 90%, transparent);
-  font-family: var(--font-sans);
-  letter-spacing: 0.01em;
-}
-
-/* Journal entry. */
-.landing-journal-entry {
-  border-left: 2px solid color-mix(in srgb, var(--primary) 30%, transparent);
-  padding: 4px 0 4px 28px;
-  margin-top: 36px;
-  max-width: 720px;
-}
-.landing-journal-entry .body {
-  margin-top: 16px;
-  font-family: var(--font-reading);
-  font-size: 16px;
-  line-height: 1.75;
-  color: color-mix(in srgb, var(--foreground) 88%, transparent);
-  text-wrap: pretty;
-}
-.landing-journal-entry .body p { margin: 0 0 14px; }
-.landing-journal-entry .body a.wiki {
-  color: var(--primary);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--primary) 30%, transparent);
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
-  transition: text-decoration-color 150ms;
-}
-.landing-journal-entry .body a.wiki:hover {
-  text-decoration-color: var(--primary);
-}
-
-/* Responsive — collapse marginalia on narrow viewports. */
-@media (max-width: 880px) {
-  .landing-spread { grid-template-columns: 1fr; padding: 0 24px; column-gap: 0; }
-  .landing-marg { padding-bottom: 16px; }
-  .landing-marg .marg-note::before { display: none; }
-  .landing-cover-h1 {
-    font-size: 56px;
-    line-height: 0.96;
+/* Responsive — pull the display type in on narrow viewports. */
+@media (max-width: 720px) {
+  .landing-h1 {
+    font-size: clamp(44px, 13vw, 56px);
     letter-spacing: -0.035em;
   }
-  .landing-section-title { font-size: 32px; }
 }
 
 /* Reduced motion: skip the scroll-reveal animation entirely. The Reveal

@@ -8,13 +8,8 @@ export interface LandingFooterProps {
 
 export function LandingFooter({ signupHref, githubUrl }: LandingFooterProps) {
   return (
-    <footer
-      className="mt-16 border-t px-16 py-10 font-sans text-[12px] text-muted-foreground"
-      style={{
-        borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
-      }}
-    >
-      <div className="grid grid-cols-1 gap-x-14 gap-y-6 md:grid-cols-[1fr_auto] md:items-center">
+    <footer className="bg-background py-10 font-sans text-[12px] text-muted-foreground">
+      <div className="mx-auto grid max-w-[1120px] grid-cols-1 gap-x-14 gap-y-6 px-6 md:grid-cols-[1fr_auto] md:items-center md:px-10">
         <div className="flex items-center gap-2.5">
           <Link
             href="/"

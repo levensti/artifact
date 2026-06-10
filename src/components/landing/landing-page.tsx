@@ -3,15 +3,13 @@ import { auth } from "@/server/auth";
 import { getAppOrigin } from "@/lib/app-origin";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { LandingHero } from "@/components/landing/landing-hero";
-import { LandingSurfaces } from "@/components/landing/landing-surfaces";
-import { LandingJournal } from "@/components/landing/landing-journal";
+import { LandingDiscover } from "@/components/landing/landing-discover";
+import { LandingReview } from "@/components/landing/landing-review";
 import { LandingShare } from "@/components/landing/landing-share";
-import { LandingPrinciples } from "@/components/landing/landing-principles";
-import { LandingCoda } from "@/components/landing/landing-coda";
-import { LandingInvitation } from "@/components/landing/landing-invitation";
+import { LandingOpenSource } from "@/components/landing/landing-open-source";
+import { LandingCta } from "@/components/landing/landing-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { Reveal } from "@/components/landing/landing-reveal";
-import { CometDivider } from "@/components/landing/landing-comet-divider";
 
 const GITHUB_URL =
   process.env.NEXT_PUBLIC_GITHUB_URL ?? "https://github.com/levensti/artifact";
@@ -20,10 +18,10 @@ const GITHUB_URL =
  * Marketing landing page. Rendered at the apex root (`withartifact.com/`)
  * via host discrimination in `app/page.tsx`. Not a route on its own.
  *
- * Layout: a "folio" — a sheet of paper laid on the warm reader mat.
- * Sections share a two-column grid (`landing-spread`): a 200px marginalia
- * column (folio numbers, italic margin notes) and a body column. Hairline
- * rules separate sections.
+ * Layout: "ink & paper" — the hero sits on the warm reader mat with the
+ * workspace miniature as the showpiece, product sections alternate between
+ * paper, mat, and two full-bleed bands of the brand indigo (Discover and
+ * the closing CTA).
  *
  * The wrapping div is the page's own scroll container: the root <body>
  * is `overflow-hidden` so the PDF reader stays pinned to the viewport.
@@ -51,53 +49,33 @@ export async function LandingPage() {
   return (
     <div
       id="landing-scroll"
-      className="landing-root h-full overflow-y-auto"
-      style={{
-        background: "var(--reader-mat)",
-        color: "var(--foreground)",
-      }}
+      className="landing-root h-full overflow-y-auto bg-background text-foreground"
     >
       <LandingNav signupHref={signupHref} />
       <main>
-        <article className="landing-folio">
-          <Reveal scrollGate={false}>
-            <LandingHero signupHref={signupHref} githubUrl={GITHUB_URL} />
-          </Reveal>
+        <Reveal scrollGate={false}>
+          <LandingHero signupHref={signupHref} githubUrl={GITHUB_URL} />
+        </Reveal>
 
-          <CometDivider topPx={64} bottomPx={56} />
+        <Reveal>
+          <LandingDiscover />
+        </Reveal>
 
-          <Reveal>
-            <LandingSurfaces />
-          </Reveal>
+        <Reveal>
+          <LandingReview />
+        </Reveal>
 
-          <CometDivider topPx={24} bottomPx={32} />
+        <Reveal>
+          <LandingShare />
+        </Reveal>
 
-          <Reveal>
-            <LandingJournal />
-          </Reveal>
+        <Reveal>
+          <LandingOpenSource githubUrl={GITHUB_URL} />
+        </Reveal>
 
-          <CometDivider topPx={32} bottomPx={32} />
+        <LandingCta signupHref={signupHref} />
 
-          <Reveal>
-            <LandingShare />
-          </Reveal>
-
-          <CometDivider topPx={32} bottomPx={40} />
-
-          <Reveal>
-            <LandingPrinciples />
-          </Reveal>
-
-          <Reveal>
-            <LandingCoda githubUrl={GITHUB_URL} />
-          </Reveal>
-
-          <Reveal>
-            <LandingInvitation signupHref={signupHref} />
-          </Reveal>
-
-          <LandingFooter signupHref={signupHref} githubUrl={GITHUB_URL} />
-        </article>
+        <LandingFooter signupHref={signupHref} githubUrl={GITHUB_URL} />
       </main>
     </div>
   );

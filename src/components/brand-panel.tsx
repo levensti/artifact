@@ -5,7 +5,7 @@
  * brand glyph, and footer chrome.
  */
 
-import { BookOpen, KeyRound, PenLine } from "lucide-react";
+import { BookOpen, Compass, Sparkles } from "lucide-react";
 
 export interface BrandPanelProps {
   /// Body of the panel — usually a `<SignupPitch />` or `<SigninWelcome />`.
@@ -64,8 +64,7 @@ export function SignupPitch() {
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
         Read papers, blogs, and arbitrary PDFs alongside a powerful AI
-        assistant. Build a personal journal that compounds with you, year after
-        year.
+        assistant that has the full text in context.
       </p>
 
       <ul className="mt-9 space-y-5">
@@ -77,18 +76,18 @@ export function SignupPitch() {
           passage to ask your assistant about it.
         </Feature>
         <Feature
-          icon={<PenLine strokeWidth={1.6} className="size-3.75" />}
-          title="A journal you can come back to"
+          icon={<Compass strokeWidth={1.6} className="size-3.75" />}
+          title="Discover what to read next"
         >
-          Snapshot a chat, draft an entry from your reading, or import a Claude
-          Code session. Look back on every concept and connection, weeks later.
+          Describe a topic and a research agent surfaces the strongest papers
+          and posts across the web, each with a reason to care.
         </Feature>
         <Feature
-          icon={<KeyRound strokeWidth={1.6} className="size-3.75" />}
-          title="Bring your own keys"
+          icon={<Sparkles strokeWidth={1.6} className="size-3.75" />}
+          title="Free usage every day"
         >
-          Anthropic, OpenAI, xAI, or any OpenAI-compatible API. Or run locally
-          with Ollama, LM Studio, or llama.cpp.
+          Start chatting immediately with a daily allowance on us. Bring your
+          own OpenRouter key when you need more.
         </Feature>
       </ul>
     </div>
@@ -102,7 +101,7 @@ export function SigninWelcome() {
         Welcome back.
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
-        Pick up where you left off. Your annotations, journal, and chats are
+        Pick up where you left off. Your reviews, annotations, and chats are
         right where you left them.
       </p>
     </div>

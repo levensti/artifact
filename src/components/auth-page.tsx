@@ -67,7 +67,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
               }}
             >
               {isSignup
-                ? "Use your email, or continue with Google. Bring your own API keys later if you want."
+                ? "Use your email, or continue with Google. Free usage every day — add an OpenRouter key later only if you need more."
                 : "Sign in to pick up where you left off."}
             </p>
           </header>
