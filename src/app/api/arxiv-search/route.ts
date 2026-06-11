@@ -79,9 +79,8 @@ async function searchExaArxiv(
       query,
       includeDomains: ["arxiv.org"],
       category: "research paper",
-      numResults: Math.min(100, Math.max(maxResults * 3, 20)),
-      type: "auto",
-      contents: { text: { maxCharacters: 800 } },
+      numResults: Math.min(100, Math.max(maxResults * 2, 16)),
+      type: "instant",
     }),
   });
 
@@ -210,10 +209,8 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ results: exaResults });
         }
       } catch (error) {
-        console.warn(
-          "Exa arXiv search failed; falling back to arXiv API:",
-          error instanceof Error ? error.message : error,
-        );
+        // Exa is an optional ranking layer; silently fall back to arXiv.
+        void error;
       }
     }
 
