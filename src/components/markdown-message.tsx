@@ -18,8 +18,10 @@ import {
 import WikiLinkHover from "./wiki-link-hover";
 import CitationChip from "./citation-chip";
 import MermaidDiagram from "./mermaid-diagram";
+import ChartBlock from "./chart-block";
 import { useSettingsOpenerOptional } from "./settings-opener-context";
 import {
+  isChartClass,
   isMermaidClass,
   mermaidSource,
 } from "@/lib/diagram/fence";
@@ -153,18 +155,29 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
               <table>{children}</table>
             </div>
           ),
-          // A ```mermaid block renders as a diagram (no code-block chrome);
-          // every other fenced block keeps the normal <pre> styling.
+          // A ```mermaid block renders as a diagram and a ```chart block as
+          // a native chart (no code-block chrome); every other fenced block
+          // keeps the normal <pre> styling.
           pre: ({ children }) => {
             const only = Array.isArray(children) ? children[0] : children;
             const cls =
               only && typeof only === "object" && "props" in only
                 ? (only as { props?: { className?: unknown } }).props?.className
                 : undefined;
-            if (isMermaidClass(cls)) return <>{children}</>;
+            if (isMermaidClass(cls) || isChartClass(cls)) {
+              return <>{children}</>;
+            }
             return <pre>{children}</pre>;
           },
           code: ({ className, children }) => {
+            if (isChartClass(className)) {
+              return (
+                <ChartBlock
+                  code={String(children ?? "").replace(/\n$/, "")}
+                  streaming={streaming}
+                />
+              );
+            }
             if (isMermaidClass(className)) {
               return (
                 <MermaidDiagram

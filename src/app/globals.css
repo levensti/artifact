@@ -138,6 +138,13 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
   --shadow-md: 0 4px 10px -2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 20px 40px -12px rgb(0 0 0 / 0.5);
+
+  /* Chart series colors, lifted/desaturated for dark surfaces. */
+  --chart-1: oklch(0.72 0.18 41);
+  --chart-2: oklch(0.7 0.12 185);
+  --chart-3: oklch(0.62 0.09 227);
+  --chart-4: oklch(0.84 0.16 84);
+  --chart-5: oklch(0.79 0.15 70);
 }
 
 @theme inline {
@@ -344,12 +351,43 @@
   font-size: 0.8125rem;
   color: var(--secondary-foreground);
 }
-.chat-mermaid-error {
-  margin: 0 0 0.4em;
+/* Native charts (the ```chart fence) share the diagram card chrome. */
+.chat-chart {
+  margin: 0.9em 0;
+  padding: 0.85em 0.95em;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+/* Friendly card shown when a diagram or chart can't be drawn. */
+.diagram-fallback-card {
+  margin: 0.9em 0;
+  padding: 0.6em 0.9em;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+.diagram-fallback-message {
+  margin: 0;
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--muted-foreground);
+}
+.diagram-fallback-card summary {
+  margin-top: 0.15em;
+  width: fit-content;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+}
+.diagram-fallback-card summary:hover {
+  color: var(--foreground);
+}
+.diagram-fallback-card .chat-mermaid-fallback {
+  margin: 0.5em 0 0.2em;
 }
 
 .chat-markdown blockquote {

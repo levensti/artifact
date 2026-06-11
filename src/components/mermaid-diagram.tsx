@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import ShimmerStatus from "./shimmer-status";
+import DiagramFallbackCard from "./diagram-fallback-card";
 import { diagramTypeName } from "@/lib/diagram/fence";
 import { repairMermaid } from "@/lib/diagram/mermaid-repair";
 
@@ -134,14 +135,7 @@ export default function MermaidDiagram({
   }
 
   if (!streaming && errMsg) {
-    return (
-      <div>
-        <p className="chat-mermaid-error">Couldn&rsquo;t render this diagram.</p>
-        <pre className="chat-mermaid-fallback">
-          <code>{code}</code>
-        </pre>
-      </div>
-    );
+    return <DiagramFallbackCard kind="diagram" source={code} />;
   }
 
   // Streaming, or the brief pre-render settle: show the shared in-progress

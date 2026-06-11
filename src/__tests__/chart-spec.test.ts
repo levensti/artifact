@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseChartSpec,
   formatValue,
+  niceTicks,
   MAX_POINTS,
 } from "@/lib/diagram/chart-spec";
 
@@ -220,6 +221,31 @@ describe("parseChartSpec — normalization", () => {
       }),
     );
     expect(chart.labels).toEqual(["A", "B"]);
+  });
+});
+
+describe("niceTicks", () => {
+  it("covers a simple 0..100 range", () => {
+    expect(niceTicks(0, 100)).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it("rounds to nice steps", () => {
+    expect(niceTicks(0, 950)).toEqual([0, 250, 500, 750]);
+  });
+
+  it("handles ranges crossing zero without negative zero", () => {
+    const ticks = niceTicks(-20, 80);
+    expect(ticks).toContain(0);
+    expect(ticks.every((t) => !Object.is(t, -0))).toBe(true);
+  });
+
+  it("handles a degenerate flat range", () => {
+    expect(niceTicks(5, 5).length).toBeGreaterThan(0);
+    expect(niceTicks(0, 0).length).toBeGreaterThan(0);
+  });
+
+  it("avoids float drift on fractional steps", () => {
+    expect(niceTicks(0, 1)).toEqual([0, 0.25, 0.5, 0.75, 1]);
   });
 });
 

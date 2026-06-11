@@ -116,6 +116,26 @@ export function parseChartSpec(raw: string): ChartParseResult {
   };
 }
 
+/**
+ * Evenly spaced "nice" axis ticks (1/2/2.5/5 × 10^k steps) covering as much
+ * of [min, max] as lands on a step multiple. Used for line-chart gridlines.
+ */
+export function niceTicks(min: number, max: number, count = 4): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [];
+  if (max < min) [min, max] = [max, min];
+  if (max === min) max = min === 0 ? 1 : min + Math.abs(min);
+  const rough = (max - min) / Math.max(1, count);
+  const pow = 10 ** Math.floor(Math.log10(rough));
+  const step =
+    [1, 2, 2.5, 5, 10].map((m) => m * pow).find((s) => s >= rough) ?? pow * 10;
+  const ticks: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step / 1e6; v += step) {
+    // `v === 0` also catches -0 so callers never see a negative zero.
+    ticks.push(v === 0 ? 0 : Number(v.toPrecision(12)));
+  }
+  return ticks;
+}
+
 /** Compact, unit-aware value formatting for chart annotations. */
 export function formatValue(value: number, unit?: string): string {
   const abs = Math.abs(value);
