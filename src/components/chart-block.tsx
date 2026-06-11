@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import ShimmerStatus from "./shimmer-status";
 import ChartRenderer from "./chart-renderer";
 import DiagramFallbackCard from "./diagram-fallback-card";
+import DiagramFrame from "./diagram-lightbox";
 import { parseChartSpec } from "@/lib/diagram/chart-spec";
 
 /**
@@ -32,8 +33,12 @@ export default function ChartBlock({
     return <DiagramFallbackCard kind="chart" source={code} />;
   }
   return (
-    <div className="chat-chart">
+    <DiagramFrame
+      title={result.chart.title ?? "chart"}
+      className="chat-chart"
+      expanded={<ChartRenderer chart={result.chart} />}
+    >
       <ChartRenderer chart={result.chart} />
-    </div>
+    </DiagramFrame>
   );
 }
