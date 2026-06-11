@@ -22,6 +22,12 @@ import {
  */
 export const PAGE_MAP_MAX_CHARS = LONG_PAPER_THRESHOLD_CHARS;
 
+export function hasPageMapAnchors(
+  map: PageMap | null | undefined,
+): map is PageMap & { anchors: NonNullable<PageMap["anchors"]> } {
+  return !!map?.anchors;
+}
+
 export async function getCachedPageMap(
   hash: string,
 ): Promise<PageMap | null> {
@@ -64,7 +70,7 @@ export async function fetchAndCachePageMap(
 ): Promise<PageMap> {
   const hash = await hashPaperText(paperText);
   const cached = await getCachedPageMap(hash);
-  if (cached) return cached;
+  if (hasPageMapAnchors(cached)) return cached;
 
   const response = await fetch("/api/papers/page-map", {
     method: "POST",

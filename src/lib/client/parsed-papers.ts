@@ -13,11 +13,11 @@ import { apiFetch } from "@/lib/client/api";
 /**
  * Token-count threshold above which we switch from "send full text" to
  * "parse + send L1 summary + ToC". Conservative — caching makes mid-size
- * papers fine to send in full, but somewhere around 30k tokens (~120k
+ * papers fine to send in full, but somewhere around 75k tokens (~300k
  * chars) the per-turn cost of always sending the full paper outweighs
  * the parse round-trip.
  */
-export const LONG_PAPER_THRESHOLD_CHARS = 120_000;
+export const LONG_PAPER_THRESHOLD_CHARS = 300_000;
 
 export function isLongPaper(paperText: string | null | undefined): boolean {
   return !!paperText && paperText.length >= LONG_PAPER_THRESHOLD_CHARS;
