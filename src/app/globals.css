@@ -36,11 +36,14 @@
   --info: #1e2b5e;
   --info-foreground: #ffffff;
 
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  /* Categorical series palette for charts/diagrams: a blue family anchored
+     on the ink-indigo brand, distinguished by lightness + hue lean (indigo →
+     periwinkle → steel → slate) so series stay tellable apart on-theme. */
+  --chart-1: #1e2b5e;
+  --chart-2: #7d90d9;
+  --chart-3: #3a6ea5;
+  --chart-4: #5e6a93;
+  --chart-5: #9db4d0;
 
   --border: #e9e8e3;
   --input: #e1e0db;
@@ -317,38 +320,288 @@
 .chat-markdown td[align="center"],
 .chat-markdown th[align="center"] { text-align: center; }
 
-/* Mermaid diagrams. The rendered SVG scales down to fit. */
-.chat-mermaid {
+/* ------------------------------------------------------------------ */
+/* GenUI diagrams (the ```diagram fence).                              */
+/* Card chrome + the dx-* design-system vocabulary the LLM composes    */
+/* with (see DIAGRAM_GUIDE in the chat route and diagram-html.ts).     */
+/* Everything reads from theme tokens, so visuals follow the palette.  */
+/* ------------------------------------------------------------------ */
+.chat-diagram {
   margin: 0.9em 0;
-  padding: 0.75em;
-  overflow-x: auto;
-  display: flex;
-  justify-content: center;
+  padding: 0.9em;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--card);
 }
-.chat-mermaid svg {
-  max-width: 100%;
-  height: auto;
+
+/* Expandable frame: hover reveals a lightbox button. */
+.diagram-frame {
+  position: relative;
 }
-/* Parse-error fallback — reuses the code-block styling to show the source. */
-.chat-mermaid-fallback {
+.diagram-frame-body {
+  min-width: 0;
+  max-width: 100%;
+  cursor: zoom-in;
+}
+.diagram-expand-btn {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+  cursor: pointer;
+}
+.diagram-frame:hover .diagram-expand-btn,
+.diagram-expand-btn:focus-visible {
+  opacity: 1;
+}
+.diagram-expand-btn:hover {
+  color: var(--foreground);
+}
+/* No hover on touch devices: keep the affordance faintly visible. */
+@media (hover: none) {
+  .diagram-expand-btn {
+    opacity: 0.7;
+  }
+}
+.diagram-expand-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Native charts (the ```chart fence) share the diagram card chrome. */
+.chat-chart {
+  margin: 0.9em 0;
+  padding: 0.85em 0.95em;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+/* Friendly card shown when a diagram or chart can't be drawn. */
+.diagram-fallback-card {
+  margin: 0.9em 0;
+  padding: 0.6em 0.9em;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+.diagram-fallback-message {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.diagram-fallback-card summary {
+  margin-top: 0.15em;
+  width: fit-content;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+}
+.diagram-fallback-card summary:hover {
+  color: var(--foreground);
+}
+/* The disclosed source reuses the code-block look. */
+.diagram-fallback-source {
   font-family: var(--font-mono);
   background: var(--secondary);
   padding: 0.875em 1em;
   border-radius: 8px;
   overflow-x: auto;
-  margin: 0.9em 0;
+  margin: 0.5em 0 0.2em;
   border: 1px solid var(--border);
   font-size: 0.8125rem;
   color: var(--secondary-foreground);
 }
-.chat-mermaid-error {
-  margin: 0 0 0.4em;
+
+/* --- dx-* vocabulary ---------------------------------------------- */
+.dx-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--foreground);
+  /* Containment: even sanitized markup can't paint outside its card. */
+  contain: layout paint;
+}
+/* Freeform SVG: scale to the card, inherit the app font, readable text
+   by default (CSS would beat an explicit fill attr, hence :not([fill])). */
+.dx-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+.dx-diagram svg text {
+  font-family: inherit;
+}
+.dx-diagram svg text:not([fill]) {
+  fill: var(--foreground);
+}
+/* Compact bordered grid for matrix-shaped diagrams. */
+.dx-diagram table {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.dx-diagram td,
+.dx-diagram th {
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  text-align: center;
+}
+/* Lightbox rendering of the same markup, a touch roomier. */
+.dx-diagram.dx-expanded {
+  font-size: 0.9rem;
+  gap: var(--space-3);
+}
+
+.dx-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Layout primitives. Boxes in a row share the width; arrows and badges
+   keep their natural size. */
+.dx-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.dx-row {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.dx-row > .dx-node,
+.dx-row > .dx-group,
+.dx-row > .dx-stack {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dx-node {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--secondary);
+  border: 1px solid var(--input);
+  border-radius: 8px;
+  text-align: center;
+  overflow-wrap: break-word;
+}
+.dx-node.dx-accent {
+  background: var(--badge-accent-bg);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  color: var(--primary-muted);
   font-weight: 500;
+}
+.dx-node.dx-soft {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  border-color: var(--border);
+  color: var(--muted-foreground);
+}
+.dx-node.dx-dashed {
+  background: transparent;
+  border-style: dashed;
+  color: var(--muted-foreground);
+}
+.dx-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+.dx-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  min-width: 0;
+}
+.dx-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+/* Connector between siblings: points down in a stack, right in a row.
+   The element's own text is the edge label. */
+.dx-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  align-self: center;
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+.dx-arrow::before {
+  content: "\2193"; /* down arrow */
+  font-size: 0.95rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+.dx-row > .dx-arrow::before {
+  content: "\2192"; /* right arrow */
+}
+.dx-arrow.dx-bi::before {
+  content: "\2195"; /* up-down arrow */
+}
+.dx-row > .dx-arrow.dx-bi::before {
+  content: "\2194"; /* left-right arrow */
+}
+.dx-arrow.dx-loop::before {
+  content: "\27F3"; /* clockwise loop arrow */
+}
+
+.dx-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--badge-accent-bg);
+  color: var(--badge-accent-fg);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.dx-note {
+  font-size: 0.72rem;
+  font-style: italic;
+  text-align: center;
   color: var(--muted-foreground);
 }
 

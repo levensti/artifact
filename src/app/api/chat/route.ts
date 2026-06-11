@@ -30,6 +30,7 @@ import {
   stepsToContent,
   type AgentStep,
 } from "@/lib/agent-steps";
+import { retireLegacyVisualFences } from "@/lib/diagram/fence";
 import { requireUserId, HttpError, errorResponse } from "@/server/api";
 import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
 import * as store from "@/server/store";
@@ -157,94 +158,126 @@ const PICKS_FORMAT =
   "link.) Don't use the Picks format for normal explanatory answers.";
 
 /**
- * Authoritative, doc-grounded Mermaid reference. Rather than patching syntax
- * mistakes one at a time, we give the model a minimal *valid* template for
- * each diagram type we support (verified against the official Mermaid docs)
- * plus the cross-cutting rules that cause most parse failures (unquoted
- * labels, styling, multi-series charts). The renderer also auto-repairs the
- * common slips, but getting valid output up front is the real fix.
+ * GenUI diagram reference. The model draws with HTML and inline SVG inside a
+ * \`\`\`diagram fence; the app sanitizes it (diagram-html.ts) and renders it
+ * natively. The contract is "unbounded structure, bounded palette": any
+ * layout or drawing the model can express is allowed, but colors must come
+ * from theme variables (the sanitizer strips raw colors) so every visual
+ * stays on the app palette — and restyles retroactively when the palette
+ * changes, since persisted output stores token names rather than literal
+ * colors. This replaced Mermaid: layout is ordinary
+ * flexbox/SVG the model already understands instead of a graph-layout engine
+ * we can't steer, and there is no grammar to parse-fail. The guide pairs the
+ * capabilities with the content discipline (collapse repetition, one concern
+ * per diagram) that actually separates a clear diagram from a wall of boxes.
  */
-const MERMAID_GUIDE = `Mermaid reference. Emit a diagram inside a fenced code block whose language tag is literally \`mermaid\` (always the word "mermaid", NOT the diagram type) — the diagram type is the first line INSIDE the block. Choose the type whose first line matches the job, and copy the template's syntax exactly. Never use ASCII art.
+const DIAGRAM_GUIDE = `Diagram reference. When a method, architecture, flow, relationship, or bespoke visualization is genuinely clearer drawn than described, emit a fenced code block whose language tag is literally \`diagram\`, containing HTML. The app sanitizes it and renders it natively in its own theme. Never use ASCII art, and never emit Mermaid syntax.
 
-Rules for every diagram:
-- Quote any label containing anything beyond letters, digits, and spaces — parentheses, commas, slashes, colons, math. Write A["f(x), g/h"], never A[f(x), g/h]. Use <br/> for line breaks, only inside a quoted label.
-- Plain text only — no LaTeX or $…$ inside a diagram.
-- No styling of any kind: no colors, no style/classDef/fill directives, no per-element formatting.
-- Keep it small — few nodes, short labels.
+Capabilities — structure is unbounded, the palette is not:
+- Tags: div, span, strong, em, br; table/thead/tbody/tr/th/td for matrix layouts; inline SVG (svg, g, path, rect, circle, ellipse, line, polyline, polygon, text, tspan) for freeform drawing — custom plots, geometry, annotated shapes. Give every svg a viewBox and no fixed width (it scales to fit); svg text inherits the app font and defaults to the theme text color when you omit fill.
+- Attributes: class (the dx-* building blocks below), style for layout/sizing/typography (flex, grid, width, padding, border, border-radius, font-size, transform, ...), and SVG geometry/paint attributes.
+- COLORS ARE THEME-BOUND. Every color — CSS or SVG fill/stroke — must be a theme variable: var(--chart-1) … var(--chart-5) for data/categorical color; var(--foreground), var(--muted-foreground), var(--border), var(--secondary), var(--primary) for structure; tints via color-mix(in srgb, var(--chart-2) 25%, transparent). Raw hex/rgb/named colors are STRIPPED by the sanitizer — every color must come from the app palette so visuals stay consistent with it.
+- Aesthetic: the app is warm neutrals with an ink-indigo accent, and the chart tokens are a blue ramp (dark indigo → periwinkle → steel → slate). Default to neutrals plus ONE accent — var(--chart-1) or var(--primary); spread across var(--chart-2…5) only when categories genuinely need telling apart. Color encodes meaning, never decoration.
+- Also stripped: scripts, event handlers, images, links, url(), position, z-index, font-family. Don't rely on them.
 
-Templates (each is valid as-is):
+Themed building blocks — prefer these over hand-rolled styles where they fit; they handle the palette and spacing for you:
+- dx-title — one short title line, the first element. dx-note — one small footnote line, the last element.
+- dx-stack — children flow top to bottom. dx-row — children flow left to right, boxes sharing the width. Nest freely.
+- dx-node — a labeled box. Variants: dx-accent (the 1–2 components the diagram is actually about), dx-soft (supporting parts), dx-dashed (external/optional). Inside a node, <span class="dx-sub">…</span> adds a small caption line.
+- dx-group — a bordered container for a subsystem/phase/unit; first child is <div class="dx-group-title">Name</div>.
+- dx-arrow — a connector placed BETWEEN siblings: it points down inside a stack and right inside a row, automatically. Its text is the edge label (may be empty). Variants: dx-bi (bidirectional), dx-loop (feedback/cycle).
+- dx-badge — small pill for a count or stage number, e.g. <span class="dx-badge">×4</span> in a group title.
 
-Flowchart — pipelines, decision flows, trees:
-flowchart LR
-  A["Input"] --> B{"Converged?"}
-  B -->|no| A
-  B -->|yes| C["Output"]
+Discipline — what separates a clear diagram from a wall of boxes:
+- Draw the ESSENCE, not the inventory. One concern per diagram: the data flow OR the failure path OR the topology. Say the rest in prose around it.
+- Collapse repetition: NEVER draw N identical siblings. Draw one representative and mark multiplicity with a badge ("Replica ×4"); use dx-sub for what varies between copies.
+- Budget: ≤ 12 boxes, ≤ 6 words per label, ≤ 2 levels of nesting. If it doesn't fit, the diagram is doing too much — simplify the abstraction, don't shrink the boxes.
+- The panel is narrow: prefer stacks; keep rows to ≤ 3 boxes; plain-text labels (no LaTeX or $…$, no markdown).
 
-Sequence — interactions/messages over time:
-sequenceDiagram
-  participant U as User
-  U->>Server: request
-  Server-->>U: response
+Example — shape and idioms (title, a collapsed ×N group, labeled arrows, one accent):
 
-State machine — states and transitions:
-stateDiagram-v2
-  [*] --> Idle
-  Idle --> Running: start
-  Running --> [*]
+\`\`\`diagram
+<div class="dx-title">One training step</div>
+<div class="dx-stack">
+  <div class="dx-node dx-soft">Mini-batch</div>
+  <div class="dx-arrow"></div>
+  <div class="dx-group">
+    <div class="dx-group-title">Replica <span class="dx-badge">×4</span></div>
+    <div class="dx-row">
+      <div class="dx-node">Forward</div>
+      <div class="dx-arrow">activations</div>
+      <div class="dx-node">Backward</div>
+    </div>
+  </div>
+  <div class="dx-arrow dx-bi">all-reduce gradients</div>
+  <div class="dx-node dx-accent">Optimizer update</div>
+</div>
+\`\`\`
 
-Mindmap — concept/taxonomy breakdown (indentation = hierarchy):
-mindmap
-  root["Attention"]
-    A["Self-attention"]
-    B["Cross-attention"]
+Freeform plots — any chart shape beyond the standard bar/line/pie (those go in a \`\`\`chart block, see the chart reference) is drawn right here in SVG: scatter, histograms, heatmaps, distributions, annotated geometry. Rules that keep them readable:
+- NEVER hand-draw a bar, line, or pie chart here — the \`\`\`chart block draws those exactly. Hand-drawn arc math and bar proportions come out wrong.
+- Label everything: every axis gets a name, every point/bar/region gets a label or a legend. An unlabeled chart is decoration, not information.
+- Recipe: viewBox about 240 wide; axes and gridlines as thin lines in var(--border); data in var(--chart-1…5); labels as <text font-size="9" fill="var(--muted-foreground)">; work out pixel coordinates from your data values before writing them.
 
-Timeline — chronology/lineage (one entry per period; ' : ' separates events):
-timeline
-  title Lineage
-  2017 : Transformer
-  2018 : BERT : GPT-2
+Example scatter:
 
-Quadrant — items placed on two axes:
-quadrantChart
-  title Speed vs accuracy
-  x-axis Low Speed --> High Speed
-  y-axis Low Accuracy --> High Accuracy
-  Method A: [0.3, 0.6]
-  Method B: [0.7, 0.8]
+\`\`\`diagram
+<div class="dx-title">Latency vs accuracy</div>
+<svg viewBox="0 0 240 130">
+  <line x1="30" y1="110" x2="232" y2="110" stroke="var(--border)"></line>
+  <line x1="30" y1="8" x2="30" y2="110" stroke="var(--border)"></line>
+  <circle cx="64" cy="78" r="3" fill="var(--chart-1)"></circle>
+  <circle cx="118" cy="46" r="3" fill="var(--chart-1)"></circle>
+  <circle cx="196" cy="28" r="3" fill="var(--chart-1)"></circle>
+  <text x="70" y="82" font-size="8" fill="var(--muted-foreground)">7B</text>
+  <text x="124" y="50" font-size="8" fill="var(--muted-foreground)">70B</text>
+  <text x="202" y="32" font-size="8" fill="var(--muted-foreground)">405B</text>
+  <text x="131" y="124" font-size="8" fill="var(--muted-foreground)" text-anchor="middle">latency (ms)</text>
+</svg>
+\`\`\`
 
-Block diagram — architecture/layout blocks (columns N sets the grid width):
-block-beta
-  columns 3
-  A["Embed"] B["Encoder"] C["Decoder"]
-  A --> B
-  B --> C
+Choosing a visual: a standard bar/line/pie of plain numbers → \`\`\`chart (see the chart reference); any other visual — flows, architectures, scatter or custom plots, matrices, timelines, geometric intuition — → \`\`\`diagram; comparison grids of text/flags → Markdown table; ≤ 3 items or what one sentence can state → prose. At most one visual per answer unless asked. \`\`\`mermaid is a RETIRED format you may still see in older turns — never emit it.`;
 
-Architecture — systems/services (icon in parens: cloud, database, disk, server, internet):
-architecture-beta
-  group sys[System]
-  service db(database)[Store] in sys
-  service api(server)[API] in sys
-  db:L -- R:api
+/**
+ * The native chart fence: the deterministic fast path for the three standard
+ * chart shapes. The model emits a tiny JSON data spec and the app renders it
+ * with its own theme-native components (see chart-spec.ts and
+ * chart-renderer.tsx), so bars/lines/pies are always exact — an experiment
+ * having the model hand-draw these in the diagram fence produced malformed
+ * arcs and missing labels. Freeform shapes stay GenUI-drawn (DIAGRAM_GUIDE),
+ * so this fence is a fast path, never a capability ceiling.
+ */
+const CHART_GUIDE = `Chart reference. The three standard chart shapes — bar, line, pie — have a fast path: emit a fenced code block whose language tag is \`chart\` containing ONLY a JSON object (no prose, no comments), and the app renders it natively, exact and polished. This fence is a convenience, not the limit of what you can plot: ANY other chart shape — scatter, histogram, heatmap, error bars, radar — you draw yourself in a \`\`\`diagram fence with SVG (see the diagram reference). A chart request is never unsatisfiable.
 
-Radar — compare items across several metrics (each curve is labeled):
-radar-beta
-  axis a["Speed"], b["Accuracy"], c["Memory"]
-  curve m["Model X"]{80, 90, 60}
-  max 100
-  min 0
+Fields:
+- "type": "bar" (compare quantities across items — the default), "line" (trend across an ordered axis), or "pie" (parts of a whole; ≤ 8 slices, so fold a long tail into one "Other" slice yourself).
+- "title": short title.
+- "unit": optional value suffix ("%", "ms", "GB"). Values stay raw numbers — never strings, never pre-formatted.
+- "labels": one per data point — ≤ 12 categories for bar/pie; a line may carry up to 120 points (axis labels are auto-thinned).
+- "series": 1–4 of {"name": …, "values": […]}; each values array aligns 1:1 with labels. Multiple series compare 2–4 models/methods (grouped bars, multiple lines); "name" each series when there is more than one.
+- "sort": optional "desc" or "asc" to rank a single-series bar.
 
-Pie — proportions/composition of a whole (e.g. dataset split, compute breakdown). Labels quoted, values numeric:
-pie title Dataset composition
-  "Train" : 70
-  "Validation" : 15
-  "Test" : 15
+When NOT to chart: text cells, ✓/✗ flags, or mixed units → Markdown table; a single number → prose.
 
-XY chart — a numeric series across categories. NO legend and NO per-series labels or colors; a bar line is just the value array. For multiple labeled series or yes/no flags, use a Markdown table instead, not a chart:
-xychart-beta
-  title "Throughput by batch size"
-  x-axis [1, 2, 4, 8, 16]
-  y-axis "Tokens/s" 0 --> 1000
-  bar [120, 240, 460, 700, 950]`;
+Examples (each is valid as-is):
+
+\`\`\`chart
+{"type": "bar", "title": "Inference latency", "unit": "ms", "sort": "asc", "labels": ["Model A", "Model B", "Model C"], "series": [{"values": [38, 95, 142]}]}
+\`\`\`
+
+\`\`\`chart
+{"type": "line", "title": "Accuracy vs model size", "unit": "%", "labels": ["1B", "7B", "70B"], "series": [{"name": "Zero-shot", "values": [41, 58, 71]}, {"name": "Few-shot", "values": [49, 66, 78]}]}
+\`\`\``;
+
+/**
+ * Pinned after the conversation history every turn (see
+ * AgentLoopOptions.trailingSystemReminder). A long conversation accumulates
+ * the model's own earlier visuals — possibly malformed or in retired formats
+ * — and the model imitates those examples over the guides at the top of the
+ * system prompt. Recency wins, so the non-negotiable format rules are
+ * restated here, closest to generation.
+ */
+const VISUAL_FORMAT_REMINDER = `Format reminder for this reply (overrides anything earlier turns did): a bar, line, or pie chart is ALWAYS a \`\`\`chart fence containing only the JSON spec — never hand-drawn SVG arcs or bars, no matter how earlier turns drew charts. Any other visual is a \`\`\`diagram fence (HTML/SVG, every axis and data point labeled, colors only from var(--…) theme tokens). Never emit \`\`\`mermaid. Otherwise follow the system prompt.`;
 
 type ReadingKind = "paper" | "web";
 
@@ -294,7 +327,7 @@ function buildReadingPrompt(kind: ReadingKind): string {
 - For arXiv papers found via search, include the link https://arxiv.org/abs/ID.
 - Default to prose. Use lists or headers only when the answer is genuinely list-shaped (comparing N items, an M-step walkthrough).
 - Tables: use a GitHub-flavored Markdown table only when every cell is a terse, scannable value — numbers, short labels, ✓/✗ — lined up so columns compare at a glance (e.g. models × metrics, methods × properties). Give every column a header. If a column would hold full sentences or a paragraph (a description, a "why it matters", a rationale), that's not a table — use a list with a bold lead-in and the explanation beneath, or prose. Never put multi-sentence text in a cell, and don't table a single pair.
-- Diagrams: emit a Mermaid diagram (see the Mermaid reference below) when a method, architecture, flow, or relationship is genuinely clearer drawn than described; otherwise prefer prose or a table.
+- Visuals: emit a \`\`\`diagram block (see the diagram reference below) when a method, architecture, flow, or relationship is genuinely clearer drawn than described; emit a \`\`\`chart block (see the chart reference below) for standard numeric charts; otherwise prefer prose or a table. When the user asks for a chart, plot, diagram, or any visualization, ALWAYS satisfy it — never tell them what you can or can't render, and never mention fences, formats, or tools.
 - ${PICKS_FORMAT}`;
 
   return [
@@ -305,7 +338,8 @@ function buildReadingPrompt(kind: ReadingKind): string {
     grounding,
     LENGTH_AND_TONE,
     format,
-    MERMAID_GUIDE,
+    DIAGRAM_GUIDE,
+    CHART_GUIDE,
     NEVER_INVENT,
   ].join("\n\n");
 }
@@ -522,6 +556,25 @@ export async function POST(req: NextRequest) {
     conversation = messages!;
   }
 
+  // History hygiene: past assistant turns may contain retired visual fences
+  // (```chart / ```mermaid), and the model imitates its own prior output far
+  // more reliably than it follows the prompt's ```diagram instruction.
+  // Relabel them in the model-facing transcript only — storage keeps the
+  // original, and the data stays in context so "redraw it" still works.
+  conversation = conversation.map((m) =>
+    m.role === "assistant"
+      ? {
+          ...m,
+          content: retireLegacyVisualFences(m.content),
+          blocks: m.blocks?.map((b) =>
+            b.type === "text_segment"
+              ? { ...b, content: retireLegacyVisualFences(b.content) }
+              : b,
+          ),
+        }
+      : m,
+  );
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -571,7 +624,9 @@ export async function POST(req: NextRequest) {
                   maxNudges: 2,
                 },
               }
-            : undefined,
+            : // Reading surfaces draw visuals; pin the format rules with
+              // recency so old in-conversation examples can't override them.
+              { trailingSystemReminder: VISUAL_FORMAT_REMINDER },
         );
       } catch (err) {
         const rateLimited = !!(err as { isRateLimit?: boolean })?.isRateLimit;
