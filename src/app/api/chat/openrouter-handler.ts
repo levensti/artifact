@@ -86,10 +86,15 @@ export async function runOpenRouterAgentLoop(
 
   // Seed from the normalized transcript so prior tool work replays as real
   // assistant `tool_calls` + `tool` messages, not just past answer text. The
-  // live loop appends new turns below in the same shapes.
+  // live loop appends new turns below in the same shapes. A trailing system
+  // reminder (when configured) lands after the history so its rules carry
+  // recency over the model's own earlier turns.
   const apiMessages: Array<Record<string, unknown>> = [
     { role: "system", content: systemContent },
     ...toOpenAIMessages(chatMessages),
+    ...(options?.trailingSystemReminder
+      ? [{ role: "system", content: options.trailingSystemReminder }]
+      : []),
   ];
 
   // Hold the latest turn's raw tool calls so appendAssistantTurn can persist

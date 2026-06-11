@@ -17,61 +17,15 @@ import {
 } from "@/lib/citation-transform";
 import WikiLinkHover from "./wiki-link-hover";
 import CitationChip from "./citation-chip";
-import MermaidDiagram from "./mermaid-diagram";
+import HtmlDiagram from "./html-diagram";
+import ChartBlock from "./chart-block";
+import DiagramFallbackCard from "./diagram-fallback-card";
 import { useSettingsOpenerOptional } from "./settings-opener-context";
-
-// Mermaid block languages: the model usually fences with `mermaid`, but it
-// sometimes uses the diagram type as the language (```xychart-beta, ```flowchart).
-// Treat those as mermaid too so the diagram still renders. Scoped to the
-// diagram types useful for reading research papers (see the system prompt's
-// Mermaid reference) — project-management / software-engineering types
-// (kanban, gantt, gitGraph, classDiagram, ER, etc.) are intentionally omitted.
-const MERMAID_LANGS = new Set([
-  "mermaid",
-  "flowchart",
-  "graph",
-  "sequencediagram",
-  "statediagram",
-  "statediagram-v2",
-  "mindmap",
-  "timeline",
-  "pie",
-  "quadrantchart",
-  "xychart",
-  "xychart-beta",
-  "block",
-  "block-beta",
-  "architecture",
-  "architecture-beta",
-  "radar",
-  "radar-beta",
-]);
-
-/** The mermaid language token from a code element's className, or null. */
-function mermaidLangFromClass(className: unknown): string | null {
-  if (typeof className !== "string") return null;
-  const m = /\blanguage-([\w-]+)/.exec(className);
-  if (!m) return null;
-  const lang = m[1].toLowerCase();
-  return MERMAID_LANGS.has(lang) ? lang : null;
-}
-
-function isMermaidClass(className: unknown): boolean {
-  return mermaidLangFromClass(className) !== null;
-}
-
-/**
- * Build the mermaid source to render. If the block was fenced with the
- * diagram type as the language (```xychart-beta) and the content doesn't
- * already begin with a diagram keyword, prepend it so the source parses.
- */
-function mermaidSource(className: unknown, children: unknown): string {
-  const src = String(children ?? "").replace(/\n$/, "");
-  const lang = mermaidLangFromClass(className);
-  if (!lang || lang === "mermaid") return src;
-  const firstWord = src.trimStart().split(/[\s\n]/)[0]?.toLowerCase() ?? "";
-  return MERMAID_LANGS.has(firstWord) ? src : `${lang}\n${src}`;
-}
+import {
+  isChartClass,
+  isDiagramClass,
+  isLegacyMermaidClass,
+} from "@/lib/diagram/fence";
 
 // Fenced blocks (```…``` / ~~~…~~~, incl. an unterminated trailing fence
 // while streaming) and inline `code`. Captured so split() keeps them.
@@ -80,9 +34,9 @@ const CODE_SEGMENT_RE =
 
 /**
  * Apply a text transform everywhere EXCEPT inside code. Citation/wiki-link
- * rewriting must not touch fenced or inline code — otherwise a Mermaid node
- * label like "Fig. 1" or "Section 3" gets turned into a markdown link inside
- * the diagram source and the diagram no longer parses.
+ * rewriting must not touch fenced or inline code — otherwise a diagram label
+ * like "Fig. 1" or "Section 3" gets turned into a markdown link inside the
+ * ```diagram / ```chart source and the block no longer renders.
  */
 function transformOutsideCode(
   content: string,
@@ -96,9 +50,9 @@ function transformOutsideCode(
 
 /**
  * Signals that the markdown being rendered is still streaming in. Diagrams
- * read this to show a placeholder instead of trying to render a half-written
- * (and therefore broken) Mermaid block on every token. The streaming chat
- * bubble wraps its content in <MarkdownStreamingBoundary>.
+ * and charts read this to show a placeholder instead of trying to render a
+ * half-written block on every token. The streaming chat bubble wraps its
+ * content in <MarkdownStreamingBoundary>.
  */
 const MarkdownStreamingContext = createContext(false);
 
@@ -202,23 +156,47 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
               <table>{children}</table>
             </div>
           ),
-          // A ```mermaid block renders as a diagram (no code-block chrome);
-          // every other fenced block keeps the normal <pre> styling.
+          // A ```diagram block renders as a native GenUI diagram and a
+          // ```chart block as a native chart (no code-block chrome); a
+          // legacy ```mermaid block degrades to the fallback card; every
+          // other fenced block keeps the normal <pre> styling.
           pre: ({ children }) => {
             const only = Array.isArray(children) ? children[0] : children;
             const cls =
               only && typeof only === "object" && "props" in only
                 ? (only as { props?: { className?: unknown } }).props?.className
                 : undefined;
-            if (isMermaidClass(cls)) return <>{children}</>;
+            if (
+              isDiagramClass(cls) ||
+              isChartClass(cls) ||
+              isLegacyMermaidClass(cls)
+            ) {
+              return <>{children}</>;
+            }
             return <pre>{children}</pre>;
           },
           code: ({ className, children }) => {
-            if (isMermaidClass(className)) {
+            if (isDiagramClass(className)) {
               return (
-                <MermaidDiagram
-                  code={mermaidSource(className, children)}
+                <HtmlDiagram
+                  code={String(children ?? "").replace(/\n$/, "")}
                   streaming={streaming}
+                />
+              );
+            }
+            if (isChartClass(className)) {
+              return (
+                <ChartBlock
+                  code={String(children ?? "").replace(/\n$/, "")}
+                  streaming={streaming}
+                />
+              );
+            }
+            if (isLegacyMermaidClass(className)) {
+              return (
+                <DiagramFallbackCard
+                  kind="diagram"
+                  source={String(children ?? "").replace(/\n$/, "")}
                 />
               );
             }

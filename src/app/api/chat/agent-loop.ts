@@ -81,6 +81,13 @@ export interface AgentLoopOptions {
    *  with stray text, or repeatedly missing the call. Used by discover mode
    *  to guarantee `submit_picks` whenever candidates exist. */
   requiredFinalTool?: { name: string; nudge: string; maxNudges?: number };
+  /** When set, appended as a system message AFTER the replayed conversation,
+   *  immediately before the live turn. Recency is the point: rules placed
+   *  here reliably beat the model's tendency to imitate its own earlier
+   *  turns, which a long conversation full of (possibly outdated or
+   *  malformed) examples otherwise wins over the top-of-prompt instructions.
+   *  Used by the reading surfaces to pin the visual-format rules. */
+  trailingSystemReminder?: string;
 }
 
 /**
