@@ -141,7 +141,7 @@ function searchCount(output: string, kind: "papers" | "web results"): string | n
 
 function humanToolLine(c: Extract<AgentStep, { kind: "tool_call" }>): string {
   const query = typeof c.input.query === "string" ? c.input.query : "";
-  const arxivId = typeof c.input.arxivId === "string" ? c.input.arxivId : "";
+  const paperId = typeof c.input.arxivId === "string" ? c.input.arxivId : "";
   const out = (c.output ?? "").trim();
 
   switch (c.name) {
@@ -160,9 +160,9 @@ function humanToolLine(c: Extract<AgentStep, { kind: "tool_call" }>): string {
     }
     case "paper_details": {
       if (/^Failed to fetch/i.test(out) || /^No details found/i.test(out)) {
-        return `- Couldn’t open ${arxivId || "a paper"}`;
+        return `- Couldn’t open ${paperId || "a paper"}`;
       }
-      return `- Read ${arxivId || "a paper"}`;
+      return `- Read ${paperId || "a paper"}`;
     }
     case "submit_picks":
       return "";
