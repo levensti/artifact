@@ -18,6 +18,7 @@ import {
 import {
   fetchAndCachePageMap,
   getCachedPageMap,
+  hasPageMapAnchors,
   PAGE_MAP_MAX_CHARS,
 } from "@/lib/client/page-maps";
 import { resolveModelCredentials } from "@/lib/keys";
@@ -51,7 +52,7 @@ interface CitationContextValue {
   /** Scroll the PDF viewer to the given (1-based) page. Falls back to no-op. */
   scrollToPage: (
     page: number,
-    anchorText?: string,
+    anchorText?: string | string[],
     anchorBlock?: "start" | "center",
   ) => void;
 }
@@ -127,6 +128,19 @@ export function CitationContextProvider({
     return () => window.clearTimeout(id);
   }, [paperText]);
 
+  // Debug: paper length and page-map/full-parse mode.
+  // useEffect(() => {
+  //   if (!paperText || process.env.NODE_ENV !== "development") return;
+  //   const threshold = PAGE_MAP_MAX_CHARS;
+  //   const mode =
+  //     paperText.length >= threshold
+  //       ? "parsed-paper path; page-map skipped"
+  //       : "LLM page-map path";
+  //   console.log(
+  //     `[citations] extracted paper length: ${paperText.length.toLocaleString()} chars; threshold: ${threshold.toLocaleString()}; mode: ${mode}`,
+  //   );
+  // }, [paperText]);
+
   // Notify the host when a non-empty title becomes available — long papers
   // get it from the full parse, short papers from the page-map call. The
   // substring check against the first 1000 chars of paper text is a cheap
@@ -200,10 +214,14 @@ export function CitationContextProvider({
       try {
         const hash = await hashPaperText(paperText);
         const cached = await getCachedPageMap(hash);
-        if (cached) {
+        if (cached && (hasPageMapAnchors(cached) || !selectedModel)) {
           if (!cancelled) {
             setPageMap(cached);
             setPageMapProgress(null);
+            // Debug: inspect cached page map.
+            // if (process.env.NODE_ENV === "development") {
+            //   console.log("[citations] loaded cached LLM page map", cached);
+            // }
           }
           return;
         }
@@ -219,6 +237,10 @@ export function CitationContextProvider({
         if (!cancelled) {
           setPageMap(fresh);
           setPageMapProgress(null);
+          // Debug: inspect freshly generated page map.
+          // if (process.env.NODE_ENV === "development") {
+          //   console.log("[citations] fetched LLM page map", fresh);
+          // }
         }
       } catch (err) {
         // Chip resolution falls back to regex / parsed paper, but we surface
@@ -283,7 +305,7 @@ export function CitationContextProvider({
   ]);
 
   const scrollToPage = useCallback(
-    (page: number, anchorText?: string, anchorBlock: "start" | "center" = "start") => {
+    (page: number, anchorText?: string | string[], anchorBlock: "start" | "center" = "start") => {
       const container = document.querySelector("[data-pdf-container]");
       if (!container) return;
       const target = container.querySelector(
@@ -348,12 +370,14 @@ export function useCitationContext(): CitationContextValue {
  */
 function findAnchorElement(
   pageEl: HTMLElement,
-  anchorText: string,
+  anchorText: string | string[],
 ): HTMLElement | null {
   const layer = pageEl.querySelector(".textLayer");
   if (!layer) return null;
-  const needle = anchorText.toLowerCase().replace(/\s+/g, "").slice(0, 60);
-  if (needle.length < 4) return null;
+  const needles = (Array.isArray(anchorText) ? anchorText : [anchorText])
+    .map((candidate) => candidate.toLowerCase().replace(/\s+/g, "").slice(0, 60))
+    .filter((candidate) => candidate.length >= 4);
+  if (needles.length === 0) return null;
 
   let haystack = "";
   const owners: HTMLElement[] = [];
@@ -366,6 +390,9 @@ function findAnchorElement(
     haystack += text;
   }
 
-  const idx = haystack.indexOf(needle);
-  return idx >= 0 ? (owners[idx] ?? null) : null;
+  for (const needle of needles) {
+    const idx = haystack.indexOf(needle);
+    if (idx >= 0) return owners[idx] ?? null;
+  }
+  return null;
 }

@@ -104,12 +104,18 @@ export interface ParsedPaper {
  * small LLM call that runs on every paper open (independent of the full
  * `ParsedPaper`). Keys are the citation token as it appears in chat
  * (e.g. "3.2" for a section, "1" for "Figure 1"); values are PDF page
- * numbers.
+ * numbers. Newer maps also carry short evidence snippets copied from the
+ * mapped page; the citation resolver uses those as precise scroll anchors.
  */
 export interface PageMap {
   sections: Record<string, number>;
   figures: Record<string, number>;
   tables: Record<string, number>;
+  anchors?: {
+    sections: Record<string, string>;
+    figures: Record<string, string>;
+    tables: Record<string, string>;
+  };
   /**
    * The paper's title, as the model read it off the first page. Optional —
    * older cached page maps predate this field. Used to write the real

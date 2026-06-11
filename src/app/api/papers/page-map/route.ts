@@ -6,7 +6,8 @@
  * per page in parallel. Each call returns the numbered sections, figures,
  * and tables whose heading/caption text actually sits on that page. The
  * server then merges results into a single { sections, figures, tables }
- * map, keeping the lowest page number per element number.
+ * map. Duplicates prefer the page whose text has the stronger heading or
+ * caption shape, falling back to the lowest page number on ties.
  *
  * Per-page fan-out keeps each prompt tiny and removes the "find the page"
  * burden from the model (the page is an input, not something to discover),
@@ -46,8 +47,17 @@ Worked example. If the page contains "we report per-class accuracy in Table 2 be
 
 Skip unnumbered headings such as "Abstract", "References", "Acknowledgements". When in doubt, omit — it is better to leave an element out than to guess.
 
+For every item you record, copy a short exact evidence snippet from this page:
+- For sections, copy the section heading text.
+- For figures and tables, copy the beginning of the caption.
+- Keep snippets short, usually 5-20 words. Do not paraphrase.
+
 Return ONLY a JSON object with this exact shape:
-{ "sections": ["<num>", ...], "figures": ["<num>", ...], "tables": ["<num>", ...] }
+{
+  "sections": [{ "num": "<num>", "evidence": "<exact heading snippet>" }, ...],
+  "figures": [{ "num": "<num>", "evidence": "<exact caption snippet>" }, ...],
+  "tables": [{ "num": "<num>", "evidence": "<exact caption snippet>" }, ...]
+}
 
 Each entry is the element's number as a string (e.g. "1", "3.2", "A.1"). Use an empty array for any category with nothing on this page. No prose, no markdown fences — just the JSON.`;
 
@@ -98,6 +108,12 @@ export async function POST(req: NextRequest) {
   }
 
   const pages = splitByPage(paperText);
+  // Debug: server-side page-map build size.
+  // if (process.env.NODE_ENV === "development") {
+  //   console.log(
+  //     `[page-map] building map for ${paperText.length.toLocaleString()} chars across ${pages.length.toLocaleString()} pages`,
+  //   );
+  // }
 
   const dispatch = (systemPrompt: string, userPrompt: string): Promise<string> =>
     callOpenRouter(resolvedApiKey, systemPrompt, userPrompt);
@@ -131,7 +147,20 @@ export async function POST(req: NextRequest) {
 
       write({ type: "init", total });
 
-      const result: PageMap = { sections: {}, figures: {}, tables: {} };
+      const anchors: NonNullable<PageMap["anchors"]> = {
+        sections: {},
+        figures: {},
+        tables: {},
+      };
+      const result: PageMap = {
+        sections: {},
+        figures: {},
+        tables: {},
+        anchors,
+      };
+      const sectionScores: Record<string, number> = {};
+      const figureScores: Record<string, number> = {};
+      const tableScores: Record<string, number> = {};
       let done = 0;
       let firstError: string | null = null;
 
@@ -141,9 +170,32 @@ export async function POST(req: NextRequest) {
             const raw = await callOne(p.text);
             const parsed = extractAndValidateJson(raw);
             if (parsed) {
-              mergeList(result.sections, parsed.sections, p.page);
-              mergeList(result.figures, parsed.figures, p.page);
-              mergeList(result.tables, parsed.tables, p.page);
+              mergeSectionList(
+                result.sections,
+                anchors.sections,
+                sectionScores,
+                parsed.sections,
+                p.page,
+                p.text,
+              );
+              mergeCaptionList(
+                result.figures,
+                anchors.figures,
+                figureScores,
+                parsed.figures,
+                p.page,
+                p.text,
+                "figure",
+              );
+              mergeCaptionList(
+                result.tables,
+                anchors.tables,
+                tableScores,
+                parsed.tables,
+                p.page,
+                p.text,
+                "table",
+              );
             }
           } catch (e) {
             if (!firstError) {
@@ -173,6 +225,10 @@ export async function POST(req: NextRequest) {
       if (firstError && !anyResults) {
         write({ type: "error", error: firstError });
       } else {
+        // Debug: inspect final merged page map.
+        // if (process.env.NODE_ENV === "development") {
+        //   console.log("[page-map] result", result);
+        // }
         write({ type: "result", map: result });
       }
       controller.close();
@@ -247,9 +303,6 @@ async function callOpenRouter(
       // Output is just three small dictionaries — a few hundred tokens is
       // plenty for even a 50-section paper.
       max_tokens: 8000,
-      // Page mapping is mechanical extraction — skip the reasoning pass on
-      // models that support it. Models without reasoning ignore this.
-      reasoning_effort: "low",
     }),
   });
 
@@ -311,36 +364,211 @@ function extractAndValidateJson(raw: string): Record<string, unknown> | null {
 }
 
 /**
- * Merge the per-page model output into `target`. Accepts the expected
- * `["1", "3.2", ...]` array shape; also tolerates an object shape (some
- * models return `{ "1": ..., "3.2": ... }` despite the prompt). Keeps
- * the lowest page seen per key — relevant when a caption straddles a
- * page boundary and shows up in two per-page responses.
+ * Merge section output. Duplicate section candidates prefer pages where the
+ * number appears in a stronger heading shape, then earliest page.
  */
-function mergeList(
+function mergeSectionList(
   target: Record<string, number>,
+  anchors: Record<string, string>,
+  scores: Record<string, number>,
   value: unknown,
   page: number,
+  pageText: string,
 ): void {
-  const keys: string[] = [];
+  const entries = listEntries(value);
+  for (const entry of entries) {
+    const score = sectionHeadingScore(entry.num, pageText);
+    const currentScore = scores[entry.num] ?? -1;
+    const currentPage = target[entry.num];
+    const shouldReplace =
+      currentPage == null ||
+      score > currentScore ||
+      (score === currentScore && page < currentPage);
+    if (shouldReplace) {
+      target[entry.num] = page;
+      scores[entry.num] = score;
+      if (entry.evidence) anchors[entry.num] = entry.evidence;
+      else delete anchors[entry.num];
+    }
+  }
+}
+
+type PageMapEntry = {
+  num: string;
+  evidence?: string;
+};
+
+function mergeCaptionList(
+  target: Record<string, number>,
+  anchors: Record<string, string>,
+  scores: Record<string, number>,
+  value: unknown,
+  page: number,
+  pageText: string,
+  kind: "figure" | "table",
+): void {
+  const entries = listEntries(value);
+  for (const entry of entries) {
+    const score = captionShapeScore(kind, entry.num, pageText);
+    const currentScore = scores[entry.num] ?? -1;
+    const currentPage = target[entry.num];
+    const shouldReplace =
+      currentPage == null ||
+      score > currentScore ||
+      (score === currentScore && page < currentPage);
+    if (shouldReplace) {
+      target[entry.num] = page;
+      scores[entry.num] = score;
+      if (entry.evidence) anchors[entry.num] = entry.evidence;
+      else delete anchors[entry.num];
+    }
+  }
+}
+
+function listEntries(value: unknown): PageMapEntry[] {
+  const entries: PageMapEntry[] = [];
   if (Array.isArray(value)) {
     for (const v of value) {
-      const k = stringKey(v);
-      if (k) keys.push(k);
+      const entry = mapEntry(v);
+      if (entry) entries.push(entry);
     }
   } else if (value && typeof value === "object") {
     for (const k of Object.keys(value as Record<string, unknown>)) {
       const trimmed = k.trim();
-      if (trimmed) keys.push(trimmed);
+      if (trimmed) entries.push({ num: trimmed });
     }
   }
-  for (const k of keys) {
-    if (target[k] == null || page < target[k]) target[k] = page;
-  }
+  return entries;
 }
 
-function stringKey(v: unknown): string | null {
-  if (typeof v === "string") return v.trim() || null;
-  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+function mapEntry(v: unknown): PageMapEntry | null {
+  if (typeof v === "string") return v.trim() ? { num: v.trim() } : null;
+  if (typeof v === "number" && Number.isFinite(v)) return { num: String(v) };
+  if (v && typeof v === "object" && "num" in v) {
+    const raw = v as { num?: unknown; evidence?: unknown };
+    const num =
+      typeof raw.num === "string"
+        ? raw.num.trim()
+        : typeof raw.num === "number" && Number.isFinite(raw.num)
+          ? String(raw.num)
+          : "";
+    if (!num) return null;
+    const evidence =
+      typeof raw.evidence === "string" ? raw.evidence.trim() : "";
+    return evidence ? { num, evidence } : { num };
+  }
   return null;
+}
+
+function captionShapeScore(
+  kind: "figure" | "table",
+  num: string,
+  pageText: string,
+): number {
+  const label =
+    kind === "figure" ? String.raw`(?:Fig(?:ure)?\.?)` : String.raw`(?:Table|Tab\.)`;
+  const numPattern = escapeRegex(num).replace(/\\\./g, String.raw`\s*\.\s*`);
+  const prefix = String.raw`(?:^|[\s(\[{])${label}\s*${numPattern}`;
+  let best = 0;
+
+  best = Math.max(
+    best,
+    bestCaptionMatchScore(
+      new RegExp(`${prefix}\\s*[:：]`, "gi"),
+      pageText,
+      400,
+    ),
+  );
+  best = Math.max(
+    best,
+    bestCaptionMatchScore(
+      new RegExp(`${prefix}\\s*(?:[.．]|[-–—])\\s+\\S`, "gi"),
+      pageText,
+      300,
+    ),
+  );
+  best = Math.max(
+    best,
+    bestCaptionMatchScore(
+      new RegExp(`${prefix}\\s+[A-Z][A-Za-z0-9]`, "gi"),
+      pageText,
+      200,
+    ),
+  );
+  best = Math.max(
+    best,
+    bestCaptionMatchScore(new RegExp(prefix, "gi"), pageText, 50),
+  );
+  return best;
+}
+
+const CAPTION_REFERENCE_LEAD_INS = [
+  /\bas\s+shown\s+in\s*$/i,
+  /\bas\s+illustrated\s+in\s*$/i,
+  /\bshown\s+in\s*$/i,
+  /\billustrated\s+in\s*$/i,
+  /\bsee\s+also\s*$/i,
+  /\bsee\s*$/i,
+  /\bdescribed\s+in\s*$/i,
+  /\bpresented\s+in\s*$/i,
+  /\breported\s+in\s*$/i,
+  /\bsummarized\s+in\s*$/i,
+  /\baccording\s+to\s*$/i,
+  /\bcompared\s+(?:with|to)\s*$/i,
+  /\bfrom\s*$/i,
+  /\bin\s*$/i,
+  /\bof\s*$/i,
+];
+
+function bestCaptionMatchScore(
+  re: RegExp,
+  pageText: string,
+  baseScore: number,
+): number {
+  let best = 0;
+  for (const match of pageText.matchAll(re)) {
+    const index = match.index ?? 0;
+    const before = pageText.slice(Math.max(0, index - 80), index);
+    const penalty = CAPTION_REFERENCE_LEAD_INS.some((leadIn) =>
+      leadIn.test(before),
+    )
+      ? 250
+      : 0;
+    best = Math.max(best, Math.max(0, baseScore - penalty));
+  }
+  return best;
+}
+
+function sectionHeadingScore(num: string, pageText: string): number {
+  const numPattern = escapeRegex(num).replace(/\\\./g, String.raw`\s*\.\s*`);
+  const title = String.raw`[A-Z][A-Za-z0-9,;:'"()\-–—/]+`;
+  const words = String.raw`${title}(?:\s+${title}){0,10}`;
+
+  if (new RegExp(String.raw`(?:^|\n)\s*${numPattern}\s+${words}`, "i").test(pageText)) {
+    return 400;
+  }
+  if (
+    new RegExp(
+      String.raw`(?:^|[\s([{])(?:Section|Sec\.?)\s+${numPattern}\s*[:.\-–—]?\s+${words}`,
+      "i",
+    ).test(pageText)
+  ) {
+    return 300;
+  }
+  if (
+    new RegExp(
+      String.raw`(?:^|[\s([{])${numPattern}\s*[:.\-–—]\s+${words}`,
+      "i",
+    ).test(pageText)
+  ) {
+    return 250;
+  }
+  if (new RegExp(String.raw`(?:^|[\s([{])${numPattern}(?![\d.])`, "i").test(pageText)) {
+    return 50;
+  }
+  return 0;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

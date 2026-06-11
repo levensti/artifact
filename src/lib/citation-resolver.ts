@@ -23,11 +23,11 @@ export interface CitationResolution {
   page?: number;
   tooltip?: string;
   /**
-   * Verbatim text at the match site (heading/caption start), used to locate
-   * the exact spot inside the rendered page's text layer. Absent when the
-   * resolution came from the page map alone.
+   * Verbatim text candidates at the match site (heading/caption start), used
+   * to locate the exact spot inside the rendered page's text layer. The first
+   * candidate is preferred; later candidates are fallbacks.
    */
-  anchorText?: string;
+  anchorText?: string | string[];
 }
 
 const PAGE_MARKER_RE = /\[Page (\d+)\]/g;
@@ -43,6 +43,7 @@ export function resolveSection(
   pageMap: PageMap | null = null,
 ): CitationResolution {
   const mapped = pageMap?.sections?.[sectionNum];
+  const mappedAnchor = pageMap?.anchors?.sections?.[sectionNum];
   if (parsed) {
     const match = findSectionInParsed(parsed.sections, sectionNum);
     if (match) {
@@ -52,7 +53,11 @@ export function resolveSection(
       return {
         page: mapped ?? match.startPage ?? fromText?.page,
         tooltip: match.heading,
-        anchorText: fromText?.anchorText ?? match.heading,
+        anchorText: anchorCandidates(
+          mappedAnchor,
+          fromText?.anchorText,
+          match.heading,
+        ),
       };
     }
   }
@@ -61,10 +66,10 @@ export function resolveSection(
     return {
       page: mapped ?? fromText.page,
       tooltip: fromText.tooltip,
-      anchorText: fromText.anchorText,
+      anchorText: anchorCandidates(mappedAnchor, fromText.anchorText),
     };
   }
-  return mapped ? { page: mapped } : {};
+  return mapped ? { page: mapped, anchorText: mappedAnchor } : {};
 }
 
 export function resolveFigure(
@@ -74,6 +79,7 @@ export function resolveFigure(
   pageMap: PageMap | null = null,
 ): CitationResolution {
   const mapped = pageMap?.figures?.[figureNum];
+  const mappedAnchor = pageMap?.anchors?.figures?.[figureNum];
   if (parsed) {
     const match = findFigureInParsed(parsed.figures, figureNum);
     if (match) {
@@ -83,7 +89,11 @@ export function resolveFigure(
       return {
         page: fromText?.page ?? mapped ?? match.page,
         tooltip: shorten(match.caption, 200),
-        anchorText: fromText?.anchorText ?? match.caption,
+        anchorText: anchorCandidates(
+          mappedAnchor,
+          fromText?.anchorText,
+          match.caption,
+        ),
       };
     }
   }
@@ -92,10 +102,10 @@ export function resolveFigure(
     return {
       page: fromText.page ?? mapped,
       tooltip: fromText.tooltip,
-      anchorText: fromText.anchorText,
+      anchorText: anchorCandidates(mappedAnchor, fromText.anchorText),
     };
   }
-  return mapped ? { page: mapped } : {};
+  return mapped ? { page: mapped, anchorText: mappedAnchor } : {};
 }
 
 export function resolveTable(
@@ -105,6 +115,7 @@ export function resolveTable(
   pageMap: PageMap | null = null,
 ): CitationResolution {
   const mapped = pageMap?.tables?.[num];
+  const mappedAnchor = pageMap?.anchors?.tables?.[num];
   if (parsed) {
     const match = findTableInParsed(parsed, num);
     if (match) {
@@ -114,7 +125,11 @@ export function resolveTable(
       return {
         page: fromText?.page ?? mapped ?? match.page,
         tooltip: shorten(match.caption, 200),
-        anchorText: fromText?.anchorText ?? match.caption,
+        anchorText: anchorCandidates(
+          mappedAnchor,
+          fromText?.anchorText,
+          match.caption,
+        ),
       };
     }
   }
@@ -123,10 +138,10 @@ export function resolveTable(
     return {
       page: fromText.page ?? mapped,
       tooltip: fromText.tooltip,
-      anchorText: fromText.anchorText,
+      anchorText: anchorCandidates(mappedAnchor, fromText.anchorText),
     };
   }
-  return mapped ? { page: mapped } : {};
+  return mapped ? { page: mapped, anchorText: mappedAnchor } : {};
 }
 
 export function resolveReference(
@@ -511,4 +526,19 @@ function normalizeKey(s: string): string {
 function shorten(s: string, max: number): string {
   if (s.length <= max) return s;
   return `${s.slice(0, max - 1)}…`;
+}
+
+function anchorCandidates(
+  ...values: Array<string | string[] | undefined>
+): string | string[] | undefined {
+  const out: string[] = [];
+  for (const value of values) {
+    const candidates = Array.isArray(value) ? value : [value];
+    for (const candidate of candidates) {
+      const trimmed = candidate?.trim();
+      if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+    }
+  }
+  if (out.length === 0) return undefined;
+  return out.length === 1 ? out[0] : out;
 }
