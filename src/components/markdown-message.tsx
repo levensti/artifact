@@ -19,59 +19,10 @@ import WikiLinkHover from "./wiki-link-hover";
 import CitationChip from "./citation-chip";
 import MermaidDiagram from "./mermaid-diagram";
 import { useSettingsOpenerOptional } from "./settings-opener-context";
-
-// Mermaid block languages: the model usually fences with `mermaid`, but it
-// sometimes uses the diagram type as the language (```xychart-beta, ```flowchart).
-// Treat those as mermaid too so the diagram still renders. Scoped to the
-// diagram types useful for reading research papers (see the system prompt's
-// Mermaid reference) — project-management / software-engineering types
-// (kanban, gantt, gitGraph, classDiagram, ER, etc.) are intentionally omitted.
-const MERMAID_LANGS = new Set([
-  "mermaid",
-  "flowchart",
-  "graph",
-  "sequencediagram",
-  "statediagram",
-  "statediagram-v2",
-  "mindmap",
-  "timeline",
-  "pie",
-  "quadrantchart",
-  "xychart",
-  "xychart-beta",
-  "block",
-  "block-beta",
-  "architecture",
-  "architecture-beta",
-  "radar",
-  "radar-beta",
-]);
-
-/** The mermaid language token from a code element's className, or null. */
-function mermaidLangFromClass(className: unknown): string | null {
-  if (typeof className !== "string") return null;
-  const m = /\blanguage-([\w-]+)/.exec(className);
-  if (!m) return null;
-  const lang = m[1].toLowerCase();
-  return MERMAID_LANGS.has(lang) ? lang : null;
-}
-
-function isMermaidClass(className: unknown): boolean {
-  return mermaidLangFromClass(className) !== null;
-}
-
-/**
- * Build the mermaid source to render. If the block was fenced with the
- * diagram type as the language (```xychart-beta) and the content doesn't
- * already begin with a diagram keyword, prepend it so the source parses.
- */
-function mermaidSource(className: unknown, children: unknown): string {
-  const src = String(children ?? "").replace(/\n$/, "");
-  const lang = mermaidLangFromClass(className);
-  if (!lang || lang === "mermaid") return src;
-  const firstWord = src.trimStart().split(/[\s\n]/)[0]?.toLowerCase() ?? "";
-  return MERMAID_LANGS.has(firstWord) ? src : `${lang}\n${src}`;
-}
+import {
+  isMermaidClass,
+  mermaidSource,
+} from "@/lib/diagram/fence";
 
 // Fenced blocks (```…``` / ~~~…~~~, incl. an unterminated trailing fence
 // while streaming) and inline `code`. Captured so split() keeps them.
