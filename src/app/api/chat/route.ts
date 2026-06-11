@@ -157,94 +157,104 @@ const PICKS_FORMAT =
   "link.) Don't use the Picks format for normal explanatory answers.";
 
 /**
- * Authoritative, doc-grounded Mermaid reference. Rather than patching syntax
- * mistakes one at a time, we give the model a minimal *valid* template for
- * each diagram type we support (verified against the official Mermaid docs)
- * plus the cross-cutting rules that cause most parse failures (unquoted
- * labels, styling, multi-series charts). The renderer also auto-repairs the
+ * Authoritative, doc-grounded Mermaid reference, scoped to the graph-shaped
+ * types that need Mermaid's auto-layout (flow, sequence, state, mindmap,
+ * timeline). Rather than patching syntax mistakes one at a time, we give the
+ * model a minimal *valid* template per type plus the cross-cutting rules that
+ * cause most parse failures, stated up front. Numeric data goes through the
+ * native ```chart fence (CHART_GUIDE) instead of Mermaid's beta chart
+ * grammars, which models reliably broke. The renderer also auto-repairs the
  * common slips, but getting valid output up front is the real fix.
  */
-const MERMAID_GUIDE = `Mermaid reference. Emit a diagram inside a fenced code block whose language tag is literally \`mermaid\` (always the word "mermaid", NOT the diagram type) — the diagram type is the first line INSIDE the block. Choose the type whose first line matches the job, and copy the template's syntax exactly. Never use ASCII art.
+const DIAGRAM_GUIDE = `Mermaid reference. Emit a diagram inside a fenced code block whose language tag is literally \`mermaid\` (always the word "mermaid", NOT the diagram type) — the diagram type is the first line INSIDE the block. Never use ASCII art.
 
-Rules for every diagram:
-- Quote any label containing anything beyond letters, digits, and spaces — parentheses, commas, slashes, colons, math. Write A["f(x), g/h"], never A[f(x), g/h]. Use <br/> for line breaks, only inside a quoted label.
-- Plain text only — no LaTeX or $…$ inside a diagram.
-- No styling of any kind: no colors, no style/classDef/fill directives, no per-element formatting.
-- Keep it small — few nodes, short labels.
+Choosing a type:
+- flowchart — a method/pipeline, decision flow, or architecture (subgraphs as components).
+- sequenceDiagram — messages/interactions between parties over time.
+- stateDiagram-v2 — states and transitions.
+- mindmap — concept/taxonomy breakdown.
+- timeline — chronology or lineage.
+When NOT to draw: numeric data goes in a \`\`\`chart block (see the chart reference), comparison grids in a Markdown table, and anything with ≤ 3 items or that one sentence can state stays prose. At most one diagram per answer unless asked.
+
+Budget — a diagram that needs more is doing too much; draw the core and say the rest in prose:
+- ≤ 12 nodes/participants/states, ≤ 5 words per label, ≤ 2 levels of subgraph nesting, ≤ 8 timeline periods.
+
+Layout — answers render in a narrow panel:
+- Default to \`flowchart TD\` (vertical); use \`LR\` only for a short linear pipeline of ≤ 5 nodes.
+- Architecture/system diagrams are a flowchart TD with subgraphs:
+flowchart TD
+  subgraph Encoder
+    A["Embed"] --> B["Self-attention"]
+  end
+  B --> C["Decoder"]
+
+Pitfalls (these cause most parse failures):
+- Quote any label containing anything beyond letters, digits, and spaces — parentheses, commas, slashes, colons, math. Write A["f(x), g/h"], never A[f(x), g/h].
+- Plain-text labels only: no LaTeX or $…$, no **bold**, straight quotes only, <br/> (never <br>) for line breaks and only inside a quoted label.
+- No styling of any kind: no style/classDef/linkStyle/click lines, no %%{init}%% directives, no colors.
+- Node ids are plain alphanumerics (A, step1); display text goes in the label.
 
 Templates (each is valid as-is):
 
-Flowchart — pipelines, decision flows, trees:
-flowchart LR
+Flowchart:
+flowchart TD
   A["Input"] --> B{"Converged?"}
   B -->|no| A
   B -->|yes| C["Output"]
 
-Sequence — interactions/messages over time:
+Sequence:
 sequenceDiagram
   participant U as User
   U->>Server: request
   Server-->>U: response
 
-State machine — states and transitions:
+State machine:
 stateDiagram-v2
   [*] --> Idle
   Idle --> Running: start
   Running --> [*]
 
-Mindmap — concept/taxonomy breakdown (indentation = hierarchy):
+Mindmap (indentation = hierarchy):
 mindmap
   root["Attention"]
     A["Self-attention"]
     B["Cross-attention"]
 
-Timeline — chronology/lineage (one entry per period; ' : ' separates events):
+Timeline (one entry per period; ' : ' separates events):
 timeline
   title Lineage
   2017 : Transformer
-  2018 : BERT : GPT-2
+  2018 : BERT : GPT-2`;
 
-Quadrant — items placed on two axes:
-quadrantChart
-  title Speed vs accuracy
-  x-axis Low Speed --> High Speed
-  y-axis Low Accuracy --> High Accuracy
-  Method A: [0.3, 0.6]
-  Method B: [0.7, 0.8]
+/**
+ * The native chart fence: the model emits a tiny JSON data spec and the app
+ * renders it with its own theme-native components (see chart-spec.ts and
+ * chart-renderer.tsx). Replaces Mermaid's xychart/pie/radar/etc., whose beta
+ * grammars were the main source of broken visuals — JSON is the one format
+ * the model essentially never fumbles, and presentation stays fully under
+ * app control.
+ */
+const CHART_GUIDE = `Chart reference. For numeric data — comparing quantities, a trend, proportions — emit a fenced code block whose language tag is \`chart\` containing ONLY a JSON object (no prose, no comments). The app renders it natively. NEVER use Mermaid chart types (xychart, pie, radar, quadrantChart, block, architecture) — they are not supported.
 
-Block diagram — architecture/layout blocks (columns N sets the grid width):
-block-beta
-  columns 3
-  A["Embed"] B["Encoder"] C["Decoder"]
-  A --> B
-  B --> C
+Fields:
+- "type": "bar" (compare quantities across items — the default), "line" (trend across an ordered axis), or "pie" (parts of a whole, ≤ 8 slices).
+- "title": short title.
+- "unit": optional value suffix ("%", "ms", "GB"). Values stay raw numbers — never strings, never pre-formatted.
+- "labels": ≤ 12 category names, one per data point.
+- "series": 1–4 of {"name": …, "values": […]}; each values array aligns 1:1 with labels. Multiple series compare 2–4 models/methods (grouped bars, multiple lines); "name" each series when there is more than one.
+- "sort": optional "desc" or "asc" to rank a single-series bar.
 
-Architecture — systems/services (icon in parens: cloud, database, disk, server, internet):
-architecture-beta
-  group sys[System]
-  service db(database)[Store] in sys
-  service api(server)[API] in sys
-  db:L -- R:api
+When NOT to chart: text cells, ✓/✗ flags, or mixed units → Markdown table; a single number → prose.
 
-Radar — compare items across several metrics (each curve is labeled):
-radar-beta
-  axis a["Speed"], b["Accuracy"], c["Memory"]
-  curve m["Model X"]{80, 90, 60}
-  max 100
-  min 0
+Examples (each is valid as-is):
 
-Pie — proportions/composition of a whole (e.g. dataset split, compute breakdown). Labels quoted, values numeric:
-pie title Dataset composition
-  "Train" : 70
-  "Validation" : 15
-  "Test" : 15
+\`\`\`chart
+{"type": "bar", "title": "Inference latency", "unit": "ms", "sort": "asc", "labels": ["Model A", "Model B", "Model C"], "series": [{"values": [38, 95, 142]}]}
+\`\`\`
 
-XY chart — a numeric series across categories. NO legend and NO per-series labels or colors; a bar line is just the value array. For multiple labeled series or yes/no flags, use a Markdown table instead, not a chart:
-xychart-beta
-  title "Throughput by batch size"
-  x-axis [1, 2, 4, 8, 16]
-  y-axis "Tokens/s" 0 --> 1000
-  bar [120, 240, 460, 700, 950]`;
+\`\`\`chart
+{"type": "line", "title": "Accuracy vs model size", "unit": "%", "labels": ["1B", "7B", "70B"], "series": [{"name": "Zero-shot", "values": [41, 58, 71]}, {"name": "Few-shot", "values": [49, 66, 78]}]}
+\`\`\``;
 
 type ReadingKind = "paper" | "web";
 
@@ -294,7 +304,7 @@ function buildReadingPrompt(kind: ReadingKind): string {
 - For arXiv papers found via search, include the link https://arxiv.org/abs/ID.
 - Default to prose. Use lists or headers only when the answer is genuinely list-shaped (comparing N items, an M-step walkthrough).
 - Tables: use a GitHub-flavored Markdown table only when every cell is a terse, scannable value — numbers, short labels, ✓/✗ — lined up so columns compare at a glance (e.g. models × metrics, methods × properties). Give every column a header. If a column would hold full sentences or a paragraph (a description, a "why it matters", a rationale), that's not a table — use a list with a bold lead-in and the explanation beneath, or prose. Never put multi-sentence text in a cell, and don't table a single pair.
-- Diagrams: emit a Mermaid diagram (see the Mermaid reference below) when a method, architecture, flow, or relationship is genuinely clearer drawn than described; otherwise prefer prose or a table.
+- Visuals: emit a Mermaid diagram (see the Mermaid reference below) when a method, architecture, flow, or relationship is genuinely clearer drawn than described; emit a \`\`\`chart block (see the chart reference below) for numeric comparisons, trends, or proportions; otherwise prefer prose or a table.
 - ${PICKS_FORMAT}`;
 
   return [
@@ -305,7 +315,8 @@ function buildReadingPrompt(kind: ReadingKind): string {
     grounding,
     LENGTH_AND_TONE,
     format,
-    MERMAID_GUIDE,
+    DIAGRAM_GUIDE,
+    CHART_GUIDE,
     NEVER_INVENT,
   ].join("\n\n");
 }
