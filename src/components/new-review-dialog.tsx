@@ -601,24 +601,29 @@ export default function NewReviewDialog({
                           type="button"
                           onClick={() => handleSelectSearchResult(r)}
                           disabled={loading}
-                          className="w-full px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--badge-accent-bg)] disabled:opacity-50"
+                          className="block w-full px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--badge-accent-bg)] disabled:opacity-50"
                         >
                           <div className="line-clamp-2 text-[12.5px] font-semibold leading-[1.4] tracking-[-0.005em] text-foreground">
                             {r.title}
                           </div>
                           <div
-                            className="mt-0.5 line-clamp-1 text-[11px]"
+                            className="mt-1 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 text-[11px] leading-none"
                             style={{
                               fontFamily: "var(--font-reading)",
                               color:
                                 "color-mix(in srgb, var(--muted-foreground) 90%, transparent)",
                             }}
                           >
-                            {r.authors.slice(0, 3).join(", ")}
-                            {r.authors.length > 3 ? " et al." : ""}
-                            {r.publishedDate
-                              ? ` · ${r.publishedDate.slice(0, 4)}`
-                              : ""}
+                            <span className="font-mono text-[10px] tabular-nums leading-none">
+                              arXiv:{r.arxivId}
+                            </span>
+                            <span className="min-w-0 truncate leading-none">
+                              {r.authors.slice(0, 3).join(", ")}
+                              {r.authors.length > 3 ? " et al." : ""}
+                              {r.publishedDate
+                                ? ` · ${r.publishedDate.slice(0, 4)}`
+                                : ""}
+                            </span>
                           </div>
                         </button>
                       </li>
