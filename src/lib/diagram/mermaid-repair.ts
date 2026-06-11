@@ -9,6 +9,58 @@
  * individually for unit tests and composed in order by `repairMermaid`.
  */
 
+/** Curly quotes parse differently from straight ones inside labels. */
+export function normalizeSmartQuotes(src: string): string {
+  return src.replace(/[“”„]/g, '"').replace(/[‘’]/g, "'");
+}
+
+/** Mermaid only accepts the self-closing form of a label line break. */
+export function fixBrTags(src: string): string {
+  return src.replace(/<br\s*>/gi, "<br/>");
+}
+
+/**
+ * Strip LaTeX the model sneaks into labels despite the no-math rule: drop
+ * `$...$` / `\(...\)` delimiters (keeping the inner text), unwrap `\text{x}`
+ * and friends, and drop remaining `\macro` names' backslashes. Conservative:
+ * every pattern is single-line, so prose containing a lone `$` is untouched.
+ */
+export function stripLatex(src: string): string {
+  return src
+    .replace(/\$([^$\n]+)\$/g, "$1")
+    .replace(/\\\(([^)\n]*)\\\)/g, "$1")
+    .replace(/\\(?:text|mathrm|mathbf|mathit)\{([^}\n]*)\}/g, "$1")
+    .replace(/\\([a-zA-Z]+)/g, "$1");
+}
+
+/**
+ * Delete styling/interaction directives the system prompt forbids anyway —
+ * `style`/`classDef`/`linkStyle`/`class`/`click` statements and `%%{init}%%`
+ * blocks. They're the most common source of "almost valid" diagrams, and
+ * removing whole lines can only lose decoration, never structure.
+ */
+export function stripStyleDirectives(src: string): string {
+  return src
+    .split("\n")
+    .filter(
+      (line) =>
+        !/^\s*(?:style|classDef|linkStyle|class|click)\s/.test(line) &&
+        !/^\s*%%\{.*\}%%\s*$/.test(line),
+    )
+    .join("\n");
+}
+
+/**
+ * Drop markdown emphasis — `**bold**` renders literally (or breaks parsing)
+ * in Mermaid labels, and `**`/`__` pairs are never structural Mermaid syntax,
+ * so this is safe to apply to the whole source.
+ */
+export function stripMarkdownEmphasis(src: string): string {
+  return src
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1");
+}
+
 /**
  * Quote node labels containing risky characters, e.g. `A[Encoder (repeated)]`
  * — Mermaid reads the `(` as a shape token and throws.
@@ -58,6 +110,11 @@ export function stripXychartTrailing(src: string): string {
 }
 
 const PASSES: Array<(src: string) => string> = [
+  normalizeSmartQuotes,
+  fixBrTags,
+  stripLatex,
+  stripStyleDirectives,
+  stripMarkdownEmphasis,
   quoteUnsafeLabels,
   stripXychartTrailing,
 ];
