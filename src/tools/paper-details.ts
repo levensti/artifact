@@ -220,8 +220,10 @@ export const paperDetailsTool: ToolDefinition = {
       }
       if (detail.tldr?.text) lines.push(`TLDR: ${detail.tldr.text}`);
       if (detail.abstract) lines.push(`Abstract: ${detail.abstract}`);
-      const arxivId = detail.externalIds?.ArXiv?.replace(/v\d+$/i, "");
-      lines.push(`URL: ${arxivId ? `https://arxiv.org/abs/${arxivId}` : detail.url}`);
+      const detailArxivId = detail.externalIds?.ArXiv?.replace(/v\d+$/i, "");
+      lines.push(
+        `URL: ${detailArxivId ? `https://arxiv.org/abs/${detailArxivId}` : detail.url}`,
+      );
       return lines.join("\n\n");
     } catch (err) {
       if (arxivId) {
