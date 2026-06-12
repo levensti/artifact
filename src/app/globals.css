@@ -997,12 +997,17 @@
 /* Active wins over the :hover / :focus-visible warm fill above (equal
    specificity, declared later) so a focused active row keeps its white card. */
 .sb-row-active,
-.sb-row-active:hover,
 .sb-row-active:focus-visible {
   background-color: var(--card);
   box-shadow:
     var(--shadow-sm),
     inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+.sb-row-active:hover {
+  background-color: color-mix(in srgb, var(--card) 74%, var(--sidebar-accent));
+  box-shadow:
+    var(--shadow-md),
+    inset 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-row {

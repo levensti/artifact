@@ -24,6 +24,7 @@ import { useDiscoverChat } from "@/hooks/use-discover-chat";
 import { useSettingsOpener } from "./settings-opener-context";
 import PageHeader from "./page-header";
 import { cn } from "@/lib/utils";
+import { DISCOVER_HOME_EVENT } from "@/lib/storage-events";
 
 /* ------------------------------------------------------------------ */
 /*  Composer — the research kickoff card                               */
@@ -180,6 +181,13 @@ export default function DiscoverPanel() {
     if (!chat.liveQueryId) return;
     setFocusedId(chat.liveQueryId);
   }, [chat.liveQueryId]);
+
+  useEffect(() => {
+    const handleDiscoverHome = () => setFocusedId(null);
+    window.addEventListener(DISCOVER_HOME_EVENT, handleDiscoverHome);
+    return () =>
+      window.removeEventListener(DISCOVER_HOME_EVENT, handleDiscoverHome);
+  }, []);
 
   const handleSubmit = useCallback(
     (text: string) => {

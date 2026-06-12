@@ -27,7 +27,7 @@ import {
   type PaperReview,
 } from "@/lib/reviews";
 import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
-import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
+import { DISCOVER_HOME_EVENT, WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import { useSettingsOpener } from "@/components/settings-opener-context";
 import {
   getWikiIngestError,
@@ -167,6 +167,14 @@ export default function Sidebar({
     setShowNewReview(false);
     router.push(`/review/${reviewId}`);
   };
+
+  const handleDiscoverClick = useCallback(() => {
+    if (pathname === "/discover") {
+      window.dispatchEvent(new Event(DISCOVER_HOME_EVENT));
+      return;
+    }
+    router.push("/discover");
+  }, [pathname, router]);
 
   const startRenaming = useCallback((id: string, currentTitle: string) => {
     setRenamingId(id);
@@ -314,7 +322,8 @@ export default function Sidebar({
           </button>
           <button
             type="button"
-            onClick={() => router.push("/discover")}
+            onClick={handleDiscoverClick}
+            aria-label="Discover"
             className={cn(
               "sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px]",
               pathname === "/discover"
