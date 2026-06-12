@@ -49,6 +49,31 @@ export const submitPicksTool: ToolDefinition = {
               description:
                 "arXiv id like '2401.12345' for arXiv papers ONLY. Omit entirely for web picks.",
             },
+            authors: {
+              type: "string",
+              description:
+                "Optional comma-separated paper authors when known from search or verification.",
+            },
+            publishedDate: {
+              type: "string",
+              description:
+                "Optional exact publication/release date as YYYY-MM-DD when known.",
+            },
+            publishedYear: {
+              type: "number",
+              description:
+                "Optional publication/release year when known from search or verification.",
+            },
+            venue: {
+              type: "string",
+              description:
+                "Optional publication venue or conference name when known.",
+            },
+            citationCount: {
+              type: "number",
+              description:
+                "Optional citation count when known from search or verification.",
+            },
           },
           required: ["url", "title", "rationale"],
         },

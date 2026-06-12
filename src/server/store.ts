@@ -852,6 +852,11 @@ interface RecommendationRow {
   title: string;
   rationale: string;
   arxivId: string | null;
+  authors: string | null;
+  publishedDate: string | null;
+  publishedYear: number | null;
+  venue: string | null;
+  citationCount: number | null;
   dismissedAt: Date | null;
   createdAt: Date;
 }
@@ -875,6 +880,11 @@ function rowToRecommendation(r: RecommendationRow): Recommendation {
     title: r.title,
     rationale: r.rationale,
     arxivId: r.arxivId,
+    authors: r.authors,
+    publishedDate: r.publishedDate,
+    publishedYear: r.publishedYear,
+    venue: r.venue,
+    citationCount: r.citationCount,
     dismissedAt: r.dismissedAt ? r.dismissedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
   };
@@ -964,6 +974,11 @@ export async function finalizeDiscoverQuery(
           // Prefer the agent-provided arxiv id (from submit_picks); fall
           // back to URL extraction for the markdown-parser path.
           arxivId: pick.arxivId ?? arxivIdFromUrl(pick.url),
+          authors: pick.authors ?? null,
+          publishedDate: pick.publishedDate ?? null,
+          publishedYear: pick.publishedYear ?? null,
+          venue: pick.venue ?? null,
+          citationCount: pick.citationCount ?? null,
           createdAt: now,
         },
       });
@@ -1079,4 +1094,3 @@ export async function openRecommendation(
   );
   return { review, alreadyInLibrary: false };
 }
-

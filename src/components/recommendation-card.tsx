@@ -79,6 +79,20 @@ function classifySource(rec: Recommendation): SourceKind {
   return "Web";
 }
 
+function authorsLabel(authors: string): string {
+  const list = authors
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (list.length <= 3) return list.join(", ");
+  return `${list.slice(0, 3).join(", ")} et al.`;
+}
+
+function yearLabel(rec: Recommendation): string | null {
+  if (rec.publishedYear) return String(rec.publishedYear);
+  return rec.publishedDate?.slice(0, 4) ?? null;
+}
+
 const KIND_STYLE: Record<SourceKind, string> = {
   Paper: "border-primary/30 bg-primary/[0.06] text-primary/85",
   Blog: "border-amber-400/30 bg-amber-400/[0.08] text-amber-700 dark:text-amber-400",
@@ -146,6 +160,7 @@ export default function RecommendationCard({
 
   const kind = classifySource(rec);
   const isTop = rec.rank === 1;
+  const year = yearLabel(rec);
 
   return (
     <article
@@ -189,6 +204,16 @@ export default function RecommendationCard({
         {rec.title}
       </h3>
 
+      {rec.authors ? (
+        <p
+          className="mt-1 truncate text-[12px] leading-snug text-foreground/60"
+          title={rec.authors}
+          style={{ fontFamily: "var(--font-reading)" }}
+        >
+          {authorsLabel(rec.authors)}
+        </p>
+      ) : null}
+
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
         <span
           className={cn(
@@ -201,6 +226,12 @@ export default function RecommendationCard({
         <span className="font-mono">
           {rec.arxivId ? `arXiv:${rec.arxivId}` : sourceLabel(rec.url)}
         </span>
+        {year ? (
+          <>
+            <span aria-hidden>·</span>
+            <span className="font-mono tabular-nums">{year}</span>
+          </>
+        ) : null}
         {inLibraryReview ? (
           <>
             <span aria-hidden>·</span>

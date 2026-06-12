@@ -24,6 +24,13 @@ export interface ParsedPick {
    *  the `submit_picks` tool). When not set, the server derives it from
    *  the URL. */
   arxivId?: string;
+  /** Optional paper metadata, present when structured submit_picks output
+   *  is enriched from the search-result pool before persistence. */
+  authors?: string | null;
+  publishedDate?: string | null;
+  publishedYear?: number | null;
+  venue?: string | null;
+  citationCount?: number | null;
 }
 
 export interface ParsedPicksText {

@@ -12,11 +12,7 @@
  */
 
 import MarkdownMessage from "./markdown-message";
-import {
-  PaperCard,
-  parseArxivSearchOutput,
-  type PaperMeta,
-} from "./discover-arxiv-cards";
+import { PaperCard } from "./discover-arxiv-cards";
 import {
   arxivIdFromUrl,
   parsePicks,
@@ -24,106 +20,29 @@ import {
 } from "@/lib/picks-parser";
 import type { AgentStep } from "@/hooks/use-chat";
 import type { ChatAssistantBlock } from "@/lib/review-types";
+import {
+  buildPaperMetadataPool,
+  canonicalUrl,
+  type MetadataPool,
+  type PaperMeta,
+} from "@/lib/discover-paper-metadata";
 
 /* ------------------------------------------------------------------ */
 /*  Metadata pool                                                      */
 /* ------------------------------------------------------------------ */
 
-export interface MetadataPool {
-  byUrl: Map<string, PaperMeta>;
-  byArxivId: Map<string, PaperMeta>;
-}
-
-export const EMPTY_POOL: MetadataPool = {
-  byUrl: new Map(),
-  byArxivId: new Map(),
-};
-
-function canonicalUrl(url: string): string {
-  if (!url) return "";
-  return url.replace(/[?#].*$/, "").replace(/\/+$/, "").trim().toLowerCase();
-}
-
-function addToPool(pool: MetadataPool, p: PaperMeta) {
-  const urlKey = canonicalUrl(p.url);
-  if (urlKey && !pool.byUrl.has(urlKey)) pool.byUrl.set(urlKey, p);
-  if (p.arxivId && !pool.byArxivId.has(p.arxivId))
-    pool.byArxivId.set(p.arxivId, p);
-}
-
-/**
- * Parses the fixed plain-text format emitted by `web_search` (Exa) into
- * minimal `PaperMeta` shells so web-recommended links get cards too.
- */
-function parseWebSearchOutput(output: string): PaperMeta[] {
-  const trimmed = output.trim();
-  if (!trimmed) return [];
-  const firstIdx = trimmed.search(/^\[1\] /m);
-  if (firstIdx < 0) return [];
-  const body = trimmed.slice(firstIdx);
-  const entries = body
-    .split(/\n\n(?=\[\d+\] )/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const out: PaperMeta[] = [];
-  for (const entry of entries) {
-    const lines = entry.split("\n");
-    const titleMatch = lines[0]?.match(/^\[\d+\] (.+)$/);
-    if (!titleMatch) continue;
-    const title = titleMatch[1].trim();
-
-    let url = "";
-    const descLines: string[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].replace(/^\s{4}/, "").trimEnd();
-      if (!line) continue;
-      if (line.startsWith("URL: ")) url = line.slice(5).trim();
-      else descLines.push(line);
-    }
-
-    out.push({
-      title,
-      url,
-      arxivId: arxivIdFromUrl(url),
-      year: null,
-      venue: null,
-      citations: null,
-      authors: "",
-      abstract: descLines.join(" ").trim(),
-    });
-  }
-  return out;
-}
-
-function ingestToolOutput(pool: MetadataPool, name: string, output: string) {
-  if (!output) return;
-  if (name === "arxiv_search") {
-    const { papers } = parseArxivSearchOutput(output);
-    for (const p of papers) addToPool(pool, p);
-  } else if (name === "web_search") {
-    for (const p of parseWebSearchOutput(output)) addToPool(pool, p);
-  }
-}
-
 export function buildPoolFromSteps(steps: AgentStep[]): MetadataPool {
-  const pool: MetadataPool = { byUrl: new Map(), byArxivId: new Map() };
-  for (const step of steps) {
-    if (step.kind === "tool_call" && step.output) {
-      ingestToolOutput(pool, step.name, step.output);
-    }
-  }
-  return pool;
+  return buildPaperMetadataPool(steps);
 }
 
 export function buildPoolFromBlocks(blocks: ChatAssistantBlock[]): MetadataPool {
-  const pool: MetadataPool = { byUrl: new Map(), byArxivId: new Map() };
-  for (const block of blocks) {
-    if (block.type === "tool_call" && block.output) {
-      ingestToolOutput(pool, block.name, block.output);
-    }
-  }
-  return pool;
+  return buildPaperMetadataPool(
+    blocks.map((block) => ({
+      kind: block.type,
+      name: block.type === "tool_call" ? block.name : undefined,
+      output: block.type === "tool_call" ? block.output : undefined,
+    })),
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -154,6 +73,7 @@ export function PicksList({
             title: pick.title,
             url: pick.url,
             arxivId: aid,
+            publishedDate: null,
             year: null,
             venue: null,
             citations: null,
@@ -164,6 +84,7 @@ export function PicksList({
             title: pick.title,
             url: "",
             arxivId: null,
+            publishedDate: null,
             year: null,
             venue: null,
             citations: null,

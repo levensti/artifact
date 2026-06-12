@@ -115,9 +115,10 @@ async function fetchArxiv(arxivId: string): Promise<ArxivDetail | null> {
 }
 
 function formatArxivDetail(detail: ArxivDetail): string {
+  const publishedDate = detail.published ? detail.published.slice(0, 10) : null;
   return [
     `Title: ${detail.title}`,
-    detail.published ? `Meta: ${new Date(detail.published).getUTCFullYear()}` : null,
+    publishedDate ? `Meta: ${publishedDate}` : null,
     detail.authors.length > 0 ? `Authors: ${detail.authors.join(", ")}` : null,
     `Abstract: ${detail.abstract}`,
     `URL: ${detail.url}`,
