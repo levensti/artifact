@@ -357,18 +357,23 @@ model DiscoverQuery {
 /// existence of a Review with `fromRecommendationId = this.id` for
 /// in-library, neither for queued.
 model Recommendation {
-  id          String    @id @default(uuid())
-  queryId     String
+  id            String    @id @default(uuid())
+  queryId       String
   /// 1-indexed position in the agent's submit_picks list — its own
   /// best-to-acceptable ordering. Surfaced in the queue UI so the user
   /// sees what the agent considered the strongest match.
-  rank        Int       @default(0)
-  url         String
-  title       String
-  rationale   String
-  arxivId     String?
-  dismissedAt DateTime?
-  createdAt   DateTime
+  rank          Int       @default(0)
+  url           String
+  title         String
+  rationale     String
+  arxivId       String?
+  authors       String?
+  publishedDate String?
+  publishedYear Int?
+  venue         String?
+  citationCount Int?
+  dismissedAt   DateTime?
+  createdAt     DateTime
 
   query  DiscoverQuery @relation(fields: [queryId], references: [id], onDelete: Cascade)
   review Review?

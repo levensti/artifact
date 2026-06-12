@@ -14,7 +14,7 @@ import { MonoLabel } from "./folio";
 import { cn } from "@/lib/utils";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
-import type { PaperMeta } from "./discover-arxiv-cards";
+import type { PaperMeta } from "@/lib/discover-paper-metadata";
 import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 

@@ -15,6 +15,7 @@ interface PaperResult {
   abstract: string;
   authors: string[];
   year: number | null;
+  publishedDate: string | null;
   arxivId: string | null;
   paperId: string;
   venue: string | null;
@@ -130,6 +131,7 @@ async function searchSemanticScholar(query: string, limit: number): Promise<Pape
       abstract: p.abstract ?? "",
       authors: p.authors.map((a) => a.name),
       year: p.year,
+      publishedDate: null,
       arxivId: p.externalIds?.ArXiv ?? null,
       paperId: p.paperId,
       venue: p.venue || null,
@@ -178,11 +180,13 @@ async function searchArxivFallback(query: string, maxResults: number): Promise<P
       const entry = `<entry>${part}`;
       const idRaw = extractTag(entry, "id") ?? "";
       const arxivId = (idRaw.match(/\/abs\/([^v<\s]+)/)?.[1] ?? "").trim();
+      const publishedDate = extractTag(entry, "published")?.slice(0, 10) ?? null;
       return {
         title: (extractTag(entry, "title") ?? "").replace(/\s+/g, " ").trim(),
         abstract: (extractTag(entry, "summary") ?? "").replace(/\s+/g, " ").trim(),
         authors: extractAll(entry, /<name>([\s\S]*?)<\/name>/g),
-        year: null,
+        year: publishedDate ? Number(publishedDate.slice(0, 4)) : null,
+        publishedDate,
         arxivId: arxivId || null,
         paperId: arxivId,
         venue: null,
@@ -286,7 +290,7 @@ export const arxivSearchTool: ToolDefinition = {
         r.authors.slice(0, 4).join(", ") +
         (r.authors.length > 4 ? " et al." : "");
       const meta = [
-        r.year ? String(r.year) : null,
+        r.publishedDate ?? (r.year ? String(r.year) : null),
         r.venue ? r.venue : null,
         r.citationCount != null ? `${r.citationCount} citations` : null,
       ]

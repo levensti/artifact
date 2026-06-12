@@ -11,6 +11,11 @@ const pickSchema = z.object({
   title: z.string().min(1),
   rationale: z.string().default(""),
   arxivId: z.string().optional(),
+  authors: z.string().nullable().optional(),
+  publishedDate: z.string().nullable().optional(),
+  publishedYear: z.number().int().nullable().optional(),
+  venue: z.string().nullable().optional(),
+  citationCount: z.number().int().nullable().optional(),
 });
 
 const finalizeSchema = z.object({
@@ -41,6 +46,11 @@ export const POST = authedRoute(
         title: p.title,
         rationale: p.rationale,
         arxivId: p.arxivId,
+        authors: p.authors ?? null,
+        publishedDate: p.publishedDate ?? null,
+        publishedYear: p.publishedYear ?? null,
+        venue: p.venue ?? null,
+        citationCount: p.citationCount ?? null,
       }));
     } else if (body.text) {
       // Fallback: parse Markdown picks from the agent text. Kept as a

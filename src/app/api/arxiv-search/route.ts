@@ -203,8 +203,18 @@ export async function GET(request: NextRequest) {
     const exaApiKey = await resolveExaApiKey();
     if (exaApiKey) {
       try {
+        // const exaStart = Date.now();
         const exaRankedIds = await searchExaArxiv(query, maxResults, exaApiKey);
+        // const exaMs = Date.now() - exaStart;
+
+        // const hydrateStart = Date.now();
         const exaResults = await fetchArxivMetadataByIds(exaRankedIds);
+        // const hydrateMs = Date.now() - hydrateStart;
+
+        // console.info(
+        //   `[arxiv-search] query="${query}" exa=${exaMs}ms hydration=${hydrateMs}ms ids=${exaRankedIds.length} results=${exaResults.length}`,
+        // );
+
         if (exaResults.length > 0) {
           return NextResponse.json({ results: exaResults });
         }
@@ -214,7 +224,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // const arxivStart = Date.now();
     const results = await searchArxivApi(query, maxResults);
+    // console.info(
+    //   `[arxiv-search] query="${query}" fallback_arxiv=${Date.now() - arxivStart}ms`,
+    // );
     if (results instanceof NextResponse) return results;
     return NextResponse.json({ results });
   } catch {

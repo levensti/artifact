@@ -26,6 +26,11 @@ export interface Recommendation {
   title: string;
   rationale: string;
   arxivId: string | null;
+  authors: string | null;
+  publishedDate: string | null;
+  publishedYear: number | null;
+  venue: string | null;
+  citationCount: number | null;
   dismissedAt: string | null;
   createdAt: string;
 }

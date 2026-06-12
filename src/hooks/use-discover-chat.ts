@@ -14,6 +14,11 @@ import {
 } from "@/lib/keys";
 import type { StreamEvent } from "@/lib/stream-types";
 import { processStreamEvent, type AgentStep } from "@/hooks/use-chat";
+import {
+  buildPaperMetadataPool,
+  canonicalUrl,
+} from "@/lib/discover-paper-metadata";
+import { arxivIdFromUrl } from "@/lib/picks-parser";
 
 /* ------------------------------------------------------------------ */
 /*  NDJSON parser (mirrors use-chat.ts)                                */
@@ -141,7 +146,7 @@ function searchCount(output: string, kind: "papers" | "web results"): string | n
 
 function humanToolLine(c: Extract<AgentStep, { kind: "tool_call" }>): string {
   const query = typeof c.input.query === "string" ? c.input.query : "";
-  const arxivId = typeof c.input.arxivId === "string" ? c.input.arxivId : "";
+  const paperId = typeof c.input.arxivId === "string" ? c.input.arxivId : "";
   const out = (c.output ?? "").trim();
 
   switch (c.name) {
@@ -160,9 +165,9 @@ function humanToolLine(c: Extract<AgentStep, { kind: "tool_call" }>): string {
     }
     case "paper_details": {
       if (/^Failed to fetch/i.test(out) || /^No details found/i.test(out)) {
-        return `- Couldn’t open ${arxivId || "a paper"}`;
+        return `- Couldn’t open ${paperId || "a paper"}`;
       }
-      return `- Read ${arxivId || "a paper"}`;
+      return `- Read ${paperId || "a paper"}`;
     }
     case "submit_picks":
       return "";
@@ -176,6 +181,11 @@ interface StructuredPick {
   title: string;
   rationale: string;
   arxivId?: string;
+  authors?: string | null;
+  publishedDate?: string | null;
+  publishedYear?: number | null;
+  venue?: string | null;
+  citationCount?: number | null;
 }
 
 /**
@@ -203,11 +213,61 @@ function extractStructuredPicks(steps: AgentStep[]): StructuredPick[] | null {
         title,
         rationale,
         arxivId: typeof p.arxivId === "string" ? p.arxivId.trim() : undefined,
+        authors: typeof p.authors === "string" ? p.authors.trim() : null,
+        publishedDate:
+          typeof p.publishedDate === "string" ? p.publishedDate.trim() : null,
+        publishedYear:
+          typeof p.publishedYear === "number" &&
+          Number.isInteger(p.publishedYear)
+            ? p.publishedYear
+            : null,
+        venue: typeof p.venue === "string" ? p.venue.trim() : null,
+        citationCount:
+          typeof p.citationCount === "number" &&
+          Number.isInteger(p.citationCount)
+            ? p.citationCount
+            : null,
       });
     }
     return picks;
   }
   return null;
+}
+
+function parseYear(year: string | null): number | null {
+  if (!year) return null;
+  const n = Number(year);
+  return Number.isInteger(n) ? n : null;
+}
+
+function parseCitationCount(citations: string | null): number | null {
+  if (!citations) return null;
+  const m = citations.match(/\d+/);
+  return m ? Number(m[0]) : null;
+}
+
+function enrichStructuredPicks(
+  picks: StructuredPick[],
+  steps: AgentStep[],
+): StructuredPick[] {
+  const pool = buildPaperMetadataPool(steps);
+  return picks.map((pick) => {
+    const aid = pick.arxivId || arxivIdFromUrl(pick.url);
+    const meta =
+      (aid ? pool.byArxivId.get(aid) : undefined) ??
+      pool.byUrl.get(canonicalUrl(pick.url)) ??
+      null;
+    if (!meta) return pick;
+    return {
+      ...pick,
+      arxivId: pick.arxivId ?? meta.arxivId ?? undefined,
+      authors: pick.authors ?? (meta.authors || null),
+      publishedDate: pick.publishedDate ?? meta.publishedDate,
+      publishedYear: pick.publishedYear ?? parseYear(meta.year),
+      venue: pick.venue ?? meta.venue,
+      citationCount: pick.citationCount ?? parseCitationCount(meta.citations),
+    };
+  });
 }
 
 export function useDiscoverChat({
@@ -323,9 +383,16 @@ export function useDiscoverChat({
         // (errored, no results, etc.); the row still persists with status
         // and notes for history.
         if (queryId) {
+          let finalText = "";
+          let structuredPickCount = 0;
           try {
-            const finalText = stepsToFinalText(steps);
+            finalText = stepsToFinalText(steps);
             const structured = extractStructuredPicks(steps);
+            const enrichedStructured = structured
+              ? enrichStructuredPicks(structured, steps)
+              : null;
+            structuredPickCount =
+              enrichedStructured?.length ?? structured?.length ?? 0;
             // When picks aren't submitted, append a tool-activity summary
             // to notes — both so a no-picks run shows whether the agent
             // actually searched, AND so a successful brief retains its
@@ -338,13 +405,21 @@ export function useDiscoverChat({
 
             await finalizeDiscoverQuery(queryId, {
               status: streamSucceeded ? "complete" : "errored",
-              ...(structured && structured.length > 0
-                ? { picks: structured, notes: enrichedText || null }
+              ...(enrichedStructured && enrichedStructured.length > 0
+                ? { picks: enrichedStructured, notes: enrichedText || null }
                 : { text: enrichedText }),
             });
-          } catch {
-            // Finalize failure is non-fatal — the in-flight UI is already
-            // gone; the query row will just be stuck in "running" state.
+          } catch (finalizeErr) {
+            // Finalize failure is non-fatal for the live stream, but it is
+            // exactly the kind of persistence issue that leaves a finished
+            // brief looking empty after reload.
+            console.error("Failed to finalize discover query", {
+              queryId,
+              stepCount: steps.length,
+              structuredPickCount,
+              finalTextLength: finalText.length,
+              error: finalizeErr,
+            });
           }
         }
         setIsStreaming(false);
