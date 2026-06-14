@@ -206,23 +206,20 @@
   user-select: text !important;
   -webkit-user-select: text !important;
 }
-.react-pdf__Page__textContent span {
-  opacity: 0.12 !important;
-}
+/* Text-layer spans render transparent text over the canvas (see TextLayer.css);
+   we must NOT dim them with opacity, since `opacity` is not honored inside
+   ::selection and an element-level opacity would also fade the selection
+   highlight, leaving only the faint browser-default gray. */
 .react-pdf__Page__textContent span::selection,
 .react-pdf__Page__textContent span::-moz-selection {
-  /* Strong enough to read on white PDF; still clearly “selected” */
-  background: color-mix(in srgb, var(--primary) 62%, white) !important;
-  color: var(--foreground) !important;
-  opacity: 1 !important;
+  /* Clear, immediate highlight on the white PDF — matches the native feel of
+     selecting text in the HTML reader. Only the background is set: the glyphs
+     must stay transparent so the canvas text underneath isn't doubled. */
+  background: color-mix(in srgb, var(--primary) 30%, transparent) !important;
 }
 
-/* The text-layer span is normally dimmed (0.12) so the canvas underneath
-   shows through. When it contains a search match, bump opacity to 1 so the
-   highlight is visible. Text stays transparent (TextLayer.css default). */
-.react-pdf__Page__textContent span:has(mark.paper-search-match) {
-  opacity: 1 !important;
-}
+/* Search matches get a visible highlight; text stays transparent so the
+   canvas underneath shows through (TextLayer.css default). */
 .react-pdf__Page__textContent mark.paper-search-match {
   background: color-mix(in srgb, #facc15 80%, transparent);
   color: transparent;
