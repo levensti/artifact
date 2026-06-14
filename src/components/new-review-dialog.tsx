@@ -391,7 +391,7 @@ export default function NewReviewDialog({
 
         <form
           onSubmit={handleSubmit}
-          className="mt-4 border-t border-border/40 pt-4"
+          className="mt-4 min-w-0 border-t border-border/40 pt-4"
         >
             {/* Fixed-height primary input area — keeps footer stable across tabs */}
             <div className="h-[68px] flex items-center">
@@ -485,7 +485,7 @@ export default function NewReviewDialog({
                     }}
                   >
                     {selectedFile ? (
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex min-w-0 max-w-full items-center justify-center gap-2">
                         <FileText
                           size={15}
                           className="shrink-0"
