@@ -5,7 +5,6 @@
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
-import { getToolByName } from "@/tools/registry";
 import { normalizeToolResult } from "@/tools/types";
 import type { ToolControl, ToolDefinition } from "@/tools/types";
 import { wrapToolResult } from "@/lib/transcript";
@@ -111,7 +110,7 @@ async function executeToolCalls(
   const results = await Promise.all(
     toolCalls.map(async (tc) => {
       try {
-        const tool = getToolByName(tc.name);
+        const tool = tools.find((t) => t.name === tc.name);
         if (!tool) {
           return {
             content: `Unknown tool "${tc.name}". Available tools: ${tools.map((t) => t.name).join(", ")}`,
