@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
 import { MonoLabel } from "@/components/folio";
 import { ExaKeyRow } from "@/components/exa-key-row";
 import { OpenRouterKeyRow } from "@/components/openrouter-key-row";
+import { UsageAllowanceRow } from "@/components/usage-allowance-row";
 import {
   hasAnySavedApiKey,
   hasPlatformOpenRouterKey,
@@ -28,6 +29,7 @@ export default function SettingsDialog({
 }: SettingsDialogProps) {
   // Header copy reflects current key state and updates on key changes.
   const [status, setStatus] = useState<"user" | "platform" | "none">("none");
+  const [tab, setTab] = useState<"keys" | "usage">("usage");
   useEffect(() => {
     const recompute = () => {
       setStatus(
@@ -52,7 +54,7 @@ export default function SettingsDialog({
         <DialogHeader className="shrink-0 border-b border-border/50 px-6 pt-6 pb-5 text-left">
           <MonoLabel>Settings</MonoLabel>
           <DialogTitle className="mt-2.5 text-[24px] font-bold leading-[1.1] tracking-[-0.025em]">
-            Your API keys
+            Account settings
           </DialogTitle>
           <DialogDescription
             className="mt-2 text-[13.5px] leading-[1.55]"
@@ -69,21 +71,75 @@ export default function SettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <div
+          role="tablist"
+          aria-label="Settings sections"
+          className="flex shrink-0 gap-1 border-b border-border/50 bg-muted/25 px-4 py-2"
+        >
+          <SettingsTab
+            active={tab === "usage"}
+            onClick={() => setTab("usage")}
+          >
+            Usage
+          </SettingsTab>
+          <SettingsTab
+            active={tab === "keys"}
+            onClick={() => setTab("keys")}
+          >
+            API keys
+          </SettingsTab>
+        </div>
+
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="space-y-2.5 px-4 py-4">
-            <h3 className="px-1 pb-0.5">
-              <MonoLabel>Model provider</MonoLabel>
-            </h3>
-            <OpenRouterKeyRow />
-            <div className="pt-3">
-              <h3 className="px-1 pb-2.5">
-                <MonoLabel>Search &amp; external tools</MonoLabel>
+          {tab === "keys" ? (
+            <div className="space-y-2.5 px-4 py-4">
+              <h3 className="px-1 pb-0.5">
+                <MonoLabel>Model provider</MonoLabel>
               </h3>
-              <ExaKeyRow />
+              <OpenRouterKeyRow />
+              <div className="pt-3">
+                <h3 className="px-1 pb-2.5">
+                  <MonoLabel>Search &amp; external tools</MonoLabel>
+                </h3>
+                <ExaKeyRow />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-2.5 px-4 py-4">
+              <h3 className="px-1 pb-0.5">
+                <MonoLabel>Allowance</MonoLabel>
+              </h3>
+              <UsageAllowanceRow active={open && tab === "usage"} />
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SettingsTab({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={
+        active
+          ? "rounded-md bg-background px-3 py-1.5 text-[12.5px] font-medium text-foreground shadow-sm"
+          : "rounded-md px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+      }
+    >
+      {children}
+    </button>
   );
 }

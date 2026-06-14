@@ -147,6 +147,33 @@ if hourLvl > 0 and dayLvl > 0 then return 1 else return 0 end
 `;
 
 /**
+ * Read-only usage status: refill both buckets from elapsed time and return
+ * their current levels. This mirrors CHECK_LUA without reducing the balance.
+ *
+ * KEYS[1]=hourKey KEYS[2]=dayKey
+ * ARGV: hourCap hourRate dayCap dayRate
+ * Returns: {hourLvl, dayLvl}.
+ */
+const STATUS_LUA = `
+local now = redis.call('TIME')
+local nowf = tonumber(now[1]) + tonumber(now[2]) / 1000000
+
+local function level(key, cap, rate)
+  local d = redis.call('HMGET', key, 'tokens', 'ts')
+  local t = tonumber(d[1])
+  local ts = tonumber(d[2])
+  if t == nil or ts == nil then return cap end
+  local lvl = t + (nowf - ts) * rate
+  if lvl > cap then lvl = cap end
+  return lvl
+end
+
+local hourLvl = level(KEYS[1], tonumber(ARGV[1]), tonumber(ARGV[2]))
+local dayLvl = level(KEYS[2], tonumber(ARGV[3]), tonumber(ARGV[4]))
+return {hourLvl, dayLvl}
+`;
+
+/**
  * Debit `amount` real tokens from both buckets, after applying the lazy refill
  * for elapsed time. Clamped to [-cap, cap]: a bucket may go negative (the user
  * overran their allowance) but no further than one full capacity, bounding the
@@ -223,6 +250,55 @@ export async function charge(userId: string, actualTokens: number): Promise<void
   } catch (err) {
     console.error("[rate-limit] charge failed (best-effort):", err);
   }
+}
+
+export type UsageStatus =
+  | {
+      enabled: false;
+      hourlyLimit: number;
+      dailyLimit: number;
+    }
+  | {
+      enabled: true;
+      hourly: { remaining: number; limit: number };
+      daily: { remaining: number; limit: number };
+      effectiveRemaining: number;
+      available: boolean;
+    };
+
+/**
+ * Current platform allowance for one user. The effective balance is the lower
+ * of the hourly and daily buckets because both are enforced.
+ */
+export async function getUsageStatus(userId: string): Promise<UsageStatus> {
+  const client = getClient();
+  if (!client) {
+    return {
+      enabled: false,
+      hourlyLimit: HOURLY_LIMIT,
+      dailyLimit: DAILY_LIMIT,
+    };
+  }
+
+  const res = await client.eval(
+    STATUS_LUA,
+    [hourKey(userId), dayKey(userId)],
+    bucketArgs(),
+  );
+  const levels = Array.isArray(res) ? res : [];
+  const hourLevel = Number(levels[0] ?? HOURLY_LIMIT);
+  const dayLevel = Number(levels[1] ?? DAILY_LIMIT);
+  const hourlyRemaining = Math.max(0, Math.floor(hourLevel));
+  const dailyRemaining = Math.max(0, Math.floor(dayLevel));
+  const effectiveRemaining = Math.min(hourlyRemaining, dailyRemaining);
+
+  return {
+    enabled: true,
+    hourly: { remaining: hourlyRemaining, limit: HOURLY_LIMIT },
+    daily: { remaining: dailyRemaining, limit: DAILY_LIMIT },
+    effectiveRemaining,
+    available: hourLevel > 0 && dayLevel > 0,
+  };
 }
 
 /* ------------------------------------------------------------------ */

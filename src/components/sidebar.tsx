@@ -13,7 +13,7 @@ import {
   FilePen,
   FilePlus,
   AlertCircle,
-  KeyRound,
+  Settings2,
   Pencil,
   Share2,
   Compass,
@@ -396,12 +396,12 @@ export default function Sidebar({
             type="button"
             onClick={() => openSettings()}
             className="sb-row mt-0.5 flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px] text-foreground/80 hover:text-foreground"
-            aria-label="Manage API keys"
+            aria-label="Open settings"
           >
             <span className="relative flex w-6 shrink-0 items-center justify-center">
-              <KeyRound className="size-[18px] opacity-80" strokeWidth={1.75} />
+              <Settings2 className="size-[18px] opacity-80" strokeWidth={1.75} />
             </span>
-            <span className="truncate">API keys</span>
+            <span className="truncate">Settings</span>
           </button>
         </div>
 
