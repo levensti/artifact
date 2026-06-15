@@ -9,7 +9,11 @@ import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
 import type { ParsedPaper } from "@/lib/review-types";
-import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
+import {
+  OPENROUTER_BASE_URL,
+  OPENROUTER_MODEL,
+  type OpenRouterUsage,
+} from "@/lib/openrouter";
 import { toOpenAITools } from "@/tools/registry";
 import type { ToolContext, ToolDefinition } from "@/tools/types";
 import { toOpenAIMessages, type TranscriptMessage } from "@/lib/transcript";
@@ -50,16 +54,9 @@ interface OpenAIStreamChoice {
   delta?: OpenAIStreamDelta;
 }
 
-interface OpenAIUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  prompt_tokens_details?: { cached_tokens?: number };
-}
-
 interface OpenAIStreamEvent {
   choices?: OpenAIStreamChoice[];
-  usage?: OpenAIUsage;
+  usage?: OpenRouterUsage;
 }
 
 export async function runOpenRouterAgentLoop(
@@ -223,12 +220,12 @@ async function parseOpenAISSE(
   textContent: string;
   toolCalls: OpenAIToolCall[];
   finishReason: string;
-  usage?: OpenAIUsage;
+  usage?: OpenRouterUsage;
 }> {
   let textContent = "";
   const toolCallMap = new Map<number, OpenAIToolCall>();
   let finishReason = "stop";
-  let usage: OpenAIUsage | undefined;
+  let usage: OpenRouterUsage | undefined;
 
   await readSSEStream<OpenAIStreamEvent>(body, (event) => {
     // Final chunk: choices is empty array, usage is populated.

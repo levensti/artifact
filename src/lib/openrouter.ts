@@ -29,3 +29,15 @@ export const FIXED_MODEL: Model = {
   id: OPENROUTER_MODEL,
   modelId: OPENROUTER_MODEL,
 };
+
+/**
+ * Token usage as reported by OpenRouter's OpenAI-compatible chat-completions
+ * API. Shared by every caller that meters spend; the caller decides how to
+ * weight it. `total_tokens` is provided by the API but unused by our metering.
+ */
+export interface OpenRouterUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
