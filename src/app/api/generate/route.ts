@@ -1,18 +1,14 @@
 import { NextRequest } from "next/server";
-import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
+import { jsonError } from "@/lib/api-utils";
 import { HttpError, errorResponse } from "@/server/api";
 import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
-import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
+import {
+  generate,
+  openStream,
+  transformSseToText,
+  type OpenRouterUsage,
+} from "@/server/generate";
 import type { GenerateRequest } from "@/lib/explore";
-
-const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
-
-const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
-
-When asked to output JSON:
-- Return valid JSON only
-- Do not include markdown fences
-- Do not include extra commentary`;
 
 export async function POST(req: NextRequest) {
   let body: GenerateRequest;
@@ -67,9 +63,9 @@ export async function POST(req: NextRequest) {
       // chunk it emits last. Awaited before the stream closes (not fire-and-
       // forget) so the charge reliably lands on serverless, where post-close
       // work can be dropped; the cost is one Redis call after the last byte.
-      const responseBody = transformSseToText(upstream, async (usageTokens) => {
+      const responseBody = transformSseToText(upstream, async (usage) => {
         if (meter && meterUserId) {
-          await charge(meterUserId, usageTokens);
+          await charge(meterUserId, usage ? usageTotal(usage) : 0);
         }
       });
       return new Response(responseBody, {
@@ -86,13 +82,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { content, usageTokens } = await generate(
-      resolvedApiKey,
-      prompt,
-      paperContext,
-    );
+    const { content, usage } = await generate(resolvedApiKey, prompt, paperContext);
     if (meter && meterUserId) {
-      await charge(meterUserId, usageTokens);
+      await charge(meterUserId, usage ? usageTotal(usage) : 0);
     }
     return new Response(JSON.stringify({ content }), {
       headers: { "Content-Type": "application/json" },
@@ -103,155 +95,15 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function systemContentFor(paperContext?: string): string {
-  return paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
-    : SYSTEM_PROMPT;
-}
-
-async function openStream(
-  apiKey: string,
-  prompt: string,
-  paperContext?: string,
-): Promise<ReadableStream<Uint8Array>> {
-  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      messages: [
-        { role: "system", content: systemContentFor(paperContext) },
-        { role: "user", content: prompt },
-      ],
-      stream: true,
-      // Ask for the final usage chunk so the caller can reconcile real spend.
-      stream_options: { include_usage: true },
-    }),
-  });
-  if (!response.ok) throw await parseError(response);
-  if (!response.body) throw new Error("OpenRouter returned no stream body.");
-  return response.body;
-}
-
-/**
- * Read SSE chunks from OpenRouter and emit just the text deltas as plain
- * UTF-8 to the client. Closes when the upstream stream ends. `onComplete`
- * fires once at the end with the total tokens from the usage chunk (0 if the
- * upstream never reported usage) so the caller can reconcile metered spend.
- */
-function transformSseToText(
-  upstream: ReadableStream<Uint8Array>,
-  onComplete?: (usageTokens: number) => void,
-): ReadableStream<Uint8Array> {
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let usageTokens = 0;
-
-  const handle = (evt: string, controller: ReadableStreamDefaultController<Uint8Array>) => {
-    const { text, usage } = parseSseEvent(evt);
-    if (text) controller.enqueue(encoder.encode(text));
-    if (usage != null) usageTokens = usage;
-  };
-
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const reader = upstream.getReader();
-      let buffer = "";
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          // SSE events are separated by blank lines.
-          const events = buffer.split("\n\n");
-          buffer = events.pop() ?? "";
-          for (const evt of events) handle(evt, controller);
-        }
-        if (buffer.trim()) handle(buffer, controller);
-      } catch (err) {
-        controller.error(err);
-        return;
-      } finally {
-        reader.releaseLock();
-      }
-      onComplete?.(usageTokens);
-      controller.close();
-    },
-  });
-}
-
-/** Extract the text delta and (when present) the usage total from one SSE event. */
-function parseSseEvent(eventBlock: string): { text: string; usage: number | null } {
-  let text = "";
-  let usage: number | null = null;
-  for (const line of eventBlock.split("\n")) {
-    if (!line.startsWith("data:")) continue;
-    const payload = line.slice(5).trim();
-    if (!payload || payload === "[DONE]") continue;
-    try {
-      const data = JSON.parse(payload);
-      const delta = data?.choices?.[0]?.delta?.content;
-      if (typeof delta === "string") text += delta;
-      if (data?.usage) usage = usageTotal(data.usage);
-    } catch {
-      /* ignore malformed events */
-    }
-  }
-  return { text, usage };
-}
-
 /**
  * Tokens charged for one usage report, cost-weighted: full-rate uncached input
  * and completion, cache reads discounted (see `meteredTokens`). `prompt_tokens`
  * includes the cached portion, so subtract it back out to get uncached input.
  */
-function usageTotal(usage: {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  prompt_tokens_details?: { cached_tokens?: number };
-}): number {
+function usageTotal(usage: OpenRouterUsage): number {
   const prompt = usage.prompt_tokens ?? 0;
   const completion = usage.completion_tokens ?? 0;
   const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
   const uncachedInput = Math.max(0, prompt - cached);
   return meteredTokens(uncachedInput, cached, completion);
-}
-
-async function generate(
-  apiKey: string,
-  prompt: string,
-  paperContext?: string,
-): Promise<{ content: string; usageTokens: number }> {
-  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      messages: [
-        { role: "system", content: systemContentFor(paperContext) },
-        { role: "user", content: prompt },
-      ],
-      stream: false,
-    }),
-  });
-
-  if (!response.ok) throw await parseError(response);
-
-  const data = await response.json();
-  return {
-    content: data?.choices?.[0]?.message?.content ?? "",
-    usageTokens: data?.usage ? usageTotal(data.usage) : 0,
-  };
-}
-
-async function parseError(response: Response) {
-  const errorText = await response.text();
-  const fallback = `OpenRouter API error: ${response.status}`;
-  return new Error(parseApiErrorMessage(errorText, fallback));
 }
