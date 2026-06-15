@@ -2,12 +2,8 @@ import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/api-utils";
 import { HttpError, errorResponse } from "@/server/api";
 import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
-import {
-  generate,
-  openStream,
-  transformSseToText,
-  type OpenRouterUsage,
-} from "@/server/generate";
+import { generate, openStream, transformSseToText } from "@/server/generate";
+import type { OpenRouterUsage } from "@/lib/openrouter";
 import type { GenerateRequest } from "@/lib/explore";
 
 export async function POST(req: NextRequest) {

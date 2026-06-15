@@ -16,9 +16,23 @@
  */
 
 import { parseApiErrorMessage } from "@/lib/api-utils";
-import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
+import {
+  OPENROUTER_BASE_URL,
+  OPENROUTER_MODEL,
+  type OpenRouterUsage,
+} from "@/lib/openrouter";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+
+/**
+ * Ceiling for a non-streaming generation, which returns only once the whole
+ * completion is ready. Generous (a long answer over a big paper is fine) but
+ * bounded, so a hung connection fails fast instead of parking the request — or,
+ * in the eval, a worker — forever. Streaming has no such cap: a long stream is
+ * legitimate and aborting mid-response would truncate it.
+ */
+const GENERATE_TIMEOUT_MS = 120_000;
 
 const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
 
@@ -27,13 +41,6 @@ When asked to output JSON:
 - Do not include markdown fences
 - Do not include extra commentary`;
 
-/** Raw token usage as reported by OpenRouter; the caller decides how to bill it. */
-export interface OpenRouterUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  prompt_tokens_details?: { cached_tokens?: number };
-}
-
 export function systemContentFor(paperContext?: string): string {
   return paperContext
     ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
@@ -41,15 +48,17 @@ export function systemContentFor(paperContext?: string): string {
 }
 
 /**
- * Non-streaming generation. Returns the completion text plus the raw provider
- * usage (when present) so the caller can meter it however it likes.
+ * The single chat-completions request both paths send — identical body except
+ * for streaming. Keeping it in one place means a change to headers, model, or
+ * message wrapping can't drift between the streaming and non-streaming calls.
  */
-export async function generate(
+function chatRequestInit(
   apiKey: string,
   prompt: string,
-  paperContext?: string,
-): Promise<{ content: string; usage?: OpenRouterUsage }> {
-  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
+  paperContext: string | undefined,
+  opts: { stream: boolean },
+): RequestInit {
+  return {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -61,9 +70,27 @@ export async function generate(
         { role: "system", content: systemContentFor(paperContext) },
         { role: "user", content: prompt },
       ],
-      stream: false,
+      stream: opts.stream,
+      // Ask for the final usage chunk so a streaming caller can reconcile spend.
+      ...(opts.stream ? { stream_options: { include_usage: true } } : {}),
     }),
-  });
+  };
+}
+
+/**
+ * Non-streaming generation. Returns the completion text plus the raw provider
+ * usage (when present) so the caller can meter it however it likes.
+ */
+export async function generate(
+  apiKey: string,
+  prompt: string,
+  paperContext?: string,
+): Promise<{ content: string; usage?: OpenRouterUsage }> {
+  const response = await fetchWithTimeout(
+    OPENROUTER_CHAT_COMPLETIONS_URL,
+    chatRequestInit(apiKey, prompt, paperContext, { stream: false }),
+    GENERATE_TIMEOUT_MS,
+  );
 
   if (!response.ok) throw await parseError(response);
 
@@ -82,23 +109,10 @@ export async function openStream(
   prompt: string,
   paperContext?: string,
 ): Promise<ReadableStream<Uint8Array>> {
-  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      messages: [
-        { role: "system", content: systemContentFor(paperContext) },
-        { role: "user", content: prompt },
-      ],
-      stream: true,
-      // Ask for the final usage chunk so the caller can reconcile real spend.
-      stream_options: { include_usage: true },
-    }),
-  });
+  const response = await fetch(
+    OPENROUTER_CHAT_COMPLETIONS_URL,
+    chatRequestInit(apiKey, prompt, paperContext, { stream: true }),
+  );
   if (!response.ok) throw await parseError(response);
   if (!response.body) throw new Error("OpenRouter returned no stream body.");
   return response.body;

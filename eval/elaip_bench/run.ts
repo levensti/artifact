@@ -16,8 +16,8 @@
  * key.
  *
  * Usage:
- *   npm run eval:elaip -- --api-key sk-or-...        # or set OPENROUTER_API_KEY
- *   npm run eval:elaip -- --limit 20 --workers 4     # quick smoke test
+ *   npm run eval:elaip_bench -- --api-key sk-or-...     # or set OPENROUTER_API_KEY
+ *   npm run eval:elaip_bench -- --limit 20 --workers 4  # quick smoke test
  *
  * Reference points from the ELAIPBench paper: best LLM 39.95%, human 48.14%.
  */
@@ -39,24 +39,7 @@ import {
 const DATASET = "KangKang625/ELAIPBench";
 const DATA_FILE = "elabench.jsonl";
 
-/**
- * tsx, unlike the Next dev server, does not auto-load `.env`. The app keeps its
- * OpenRouter key there, so load the repo-root `.env` as a fallback to keep the
- * same ergonomics. Explicit shell env and `--api-key` still win: we only fill
- * the key when nothing already set it, and never clobber an existing value.
- */
-function loadDotenvFallback(): void {
-  if (process.env.OPENROUTER_API_KEY) return;
-  const proc = process as typeof process & { loadEnvFile?: (path?: string) => void };
-  if (typeof proc.loadEnvFile !== "function") return;
-  try {
-    proc.loadEnvFile(join(import.meta.dirname, "..", "..", ".env"));
-  } catch {
-    /* no .env present — rely on real env / --api-key */
-  }
-}
-
-interface ElaipRow {
+interface ElaipBenchRow {
   paper_id?: string;
   question_type?: string;
   question: string;
@@ -97,7 +80,7 @@ function buildPrompt(question: string, questionType: string): string {
 }
 
 async function evaluate(
-  rows: ElaipRow[],
+  rows: ElaipBenchRow[],
   client: GenerateClient,
   workers: number,
 ): Promise<RowResult[]> {
@@ -212,13 +195,11 @@ async function main(): Promise<void> {
     },
   });
 
-  loadDotenvFallback();
-
   const limit = values.limit ? Number(values.limit) : undefined;
   const workers = Number(values.workers);
 
   console.log(`Loading ${DATASET} ...`);
-  const rows = (await loadHfJsonl(DATASET, DATA_FILE, { limit })) as unknown as ElaipRow[];
+  const rows = (await loadHfJsonl(DATASET, DATA_FILE, { limit })) as unknown as ElaipBenchRow[];
   console.log(`Loaded ${rows.length} questions. Calling generate() with ${workers} workers.`);
 
   const client = new GenerateClient({ apiKey: values["api-key"] });
