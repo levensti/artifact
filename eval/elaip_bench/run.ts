@@ -1,5 +1,5 @@
 /**
- * Run the ELAIPBench eval against Artifact's generate() entrypoint.
+ * Run the ELAIPBench eval against Artifact's full reading agent.
  *
  * ELAIPBench (https://huggingface.co/datasets/KangKang625/ELAIPBench) is 403
  * expert-written multiple-choice questions over 137 AI papers. Each row is
@@ -9,11 +9,13 @@
  * with no partial credit (the dataset's own protocol).
  *
  * We feed `paper_content` as Artifact's `paperContext` and send only the
- * question + answer-format instruction as the prompt, so the run measures
- * Artifact's actual prompt/paper wrapping rather than a reimplementation. The
- * harness calls the app's `generate()` entrypoint in-process (see utils.ts), so
- * there's no dev server, auth, or rate limiter in the loop — just an OpenRouter
- * key.
+ * question + answer-format instruction as the prompt, then run the SAME agentic
+ * loop the `/api/chat` reading surface runs — tools included — via
+ * `runReadingAgent()` in-process (see ReadingAgentClient in utils.ts). So the
+ * run measures the whole harness a user talks to, not a reimplementation, with
+ * no dev server, auth, or rate limiter in the loop — just an OpenRouter key.
+ * (Note: the agent may call `arxiv_search` / `web_search` mid-answer, so a full
+ * run makes real network calls beyond the model itself.)
  *
  * Usage:
  *   npm run eval:elaip_bench -- --api-key sk-or-...     # or set OPENROUTER_API_KEY
@@ -24,8 +26,10 @@
 
 import { parseArgs } from "node:util";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import {
-  GenerateClient,
+  ReadingAgentClient,
+  type EvalClient,
   loadHfJsonl,
   mapConcurrent,
   parseChoiceLetters,
@@ -35,9 +39,19 @@ import {
   writeJson,
   writeJsonl,
 } from "../utils.ts";
+import { createEvalPrisma } from "../db.ts";
+import {
+  EvalRunRecorder,
+  outcomeFor,
+  type PersistItem,
+  type PersistMetric,
+} from "../persistence.ts";
+import { OPENROUTER_MODEL } from "@/lib/openrouter";
+import { readingAgentRecipe } from "@/recipes/reading-agent";
 
 const DATASET = "KangKang625/ELAIPBench";
 const DATA_FILE = "elabench.jsonl";
+const DATASET_REVISION = "main";
 
 interface ElaipBenchRow {
   paper_id?: string;
@@ -81,19 +95,20 @@ function buildPrompt(question: string, questionType: string): string {
 
 async function evaluate(
   rows: ElaipBenchRow[],
-  client: GenerateClient,
+  client: EvalClient,
   workers: number,
+  onResult?: (result: RowResult, row: ElaipBenchRow, index: number) => Promise<void>,
 ): Promise<RowResult[]> {
   return mapConcurrent(
     rows,
     workers,
-    async (row): Promise<RowResult> => {
+    async (row, index): Promise<RowResult> => {
       const questionType = row.question_type ?? "SA-MCQ";
       const prompt = buildPrompt(row.question, questionType);
       const res = await client.generate(prompt, row.paper_content);
       const pred = parseChoiceLetters(res.content);
       const gold = parseGold(row.answer);
-      return {
+      const result: RowResult = {
         paper_id: row.paper_id,
         question_type: questionType,
         gold: lettersToString(gold),
@@ -104,9 +119,52 @@ async function evaluate(
         note: res.error,
         response: res.content,
       };
+      // Persist this question as soon as it finishes (incremental write).
+      if (onResult) await onResult(result, row, index);
+      return result;
     },
     (done, total) => process.stdout.write(`\r  ${done}/${total} done`),
   );
+}
+
+/**
+ * Stable per-question identity for cross-run comparison: the paper id plus a
+ * short hash of the question text, so it survives reordering and `--limit`
+ * (a bare row index would not).
+ */
+function itemKeyFor(row: ElaipBenchRow): string {
+  const hash = createHash("sha1").update(row.question).digest("hex").slice(0, 12);
+  return `${row.paper_id ?? "unknown"}:${hash}`;
+}
+
+/** Map a scored row to the DB item shape (raw response + note kept for audit). */
+function toPersistItem(result: RowResult, row: ElaipBenchRow): PersistItem {
+  return {
+    itemKey: itemKeyFor(row),
+    target: result.gold,
+    targetMetadata: {
+      question_type: result.question_type,
+      paper_id: result.paper_id ?? null,
+    },
+    prediction: result.pred,
+    predictionMetadata: { response: result.response, note: result.note ?? null },
+    predictionOutcome: outcomeFor(result.api_ok, result.unparsed, result.correct),
+  };
+}
+
+/** Overall + per-question-type accuracy as one metric row each. */
+function toMetrics(summary: ReturnType<typeof summarize>): PersistMetric[] {
+  const metrics: PersistMetric[] = [
+    { metric: "accuracy", score: summary.overall.accuracy, breakdown: summary.overall },
+  ];
+  for (const [type, bucket] of Object.entries(summary.by_question_type)) {
+    metrics.push({
+      metric: `accuracy:${type}`,
+      score: bucket.accuracy,
+      breakdown: bucket,
+    });
+  }
+  return metrics;
 }
 
 interface Bucket {
@@ -192,6 +250,7 @@ async function main(): Promise<void> {
       limit: { type: "string" },
       workers: { type: "string", default: "8" },
       out: { type: "string", default: join(import.meta.dirname, "results") },
+      "no-persist": { type: "boolean", default: false },
     },
   });
 
@@ -199,19 +258,85 @@ async function main(): Promise<void> {
   const workers = Number(values.workers);
 
   console.log(`Loading ${DATASET} ...`);
-  const rows = (await loadHfJsonl(DATASET, DATA_FILE, { limit })) as unknown as ElaipBenchRow[];
-  console.log(`Loaded ${rows.length} questions. Calling generate() with ${workers} workers.`);
+  const rows = (await loadHfJsonl(DATASET, DATA_FILE, {
+    revision: DATASET_REVISION,
+    limit,
+  })) as unknown as ElaipBenchRow[];
+  console.log(`Loaded ${rows.length} questions. Running the reading agent with ${workers} workers.`);
 
-  const client = new GenerateClient({ apiKey: values["api-key"] });
-  const results = await evaluate(rows, client, workers);
-  const summary = summarize(results);
+  // Open a DB-backed run unless --no-persist (or there's no DATABASE_URL). The
+  // recipe captured is the reading agent's, since that's the system under test;
+  // its metadata pins the model + prompts so the run is reproducible.
+  const { prisma, recorder } = await maybeStartRun(values["no-persist"]);
+  if (recorder) console.log(`Persisting to eval run ${recorder.runId}`);
 
-  const outDir = values.out!;
-  await writeJsonl(join(outDir, "results.jsonl"), results);
-  await writeJson(join(outDir, "summary.json"), summary);
-  printSummary(summary);
-  printErrorHints(results);
-  console.log(`\nWrote ${join(outDir, "results.jsonl")} and ${join(outDir, "summary.json")}`);
+  const client = new ReadingAgentClient({ apiKey: values["api-key"] });
+  const onResult = recorder
+    ? (result: RowResult, row: ElaipBenchRow) =>
+        recorder.recordItem(toPersistItem(result, row))
+    : undefined;
+
+  try {
+    const results = await evaluate(rows, client, workers, onResult);
+    const summary = summarize(results);
+
+    const outDir = values.out!;
+    await writeJsonl(join(outDir, "results.jsonl"), results);
+    await writeJson(join(outDir, "summary.json"), summary);
+    printSummary(summary);
+    printErrorHints(results);
+    console.log(`\nWrote ${join(outDir, "results.jsonl")} and ${join(outDir, "summary.json")}`);
+
+    if (recorder) {
+      await recorder.complete(toMetrics(summary));
+      console.log(`Persisted run ${recorder.runId} (status COMPLETED).`);
+    }
+  } catch (err) {
+    if (recorder) await recorder.fail();
+    throw err;
+  } finally {
+    if (prisma) await prisma.$disconnect();
+  }
+}
+
+/**
+ * Start a DB-backed run, or return empty handles when persistence is off or
+ * unavailable. Never throws: a missing DATABASE_URL or a DB that's down logs a
+ * note and the eval proceeds writing only its JSON output.
+ */
+async function maybeStartRun(noPersist: boolean | undefined) {
+  if (noPersist) return { prisma: null, recorder: null };
+  if (!(process.env.DATABASE_URL ?? process.env.DIRECT_URL)) {
+    console.log("(persistence skipped: no DATABASE_URL; pass --no-persist to silence)");
+    return { prisma: null, recorder: null };
+  }
+  const prisma = createEvalPrisma();
+  try {
+    const recorder = await EvalRunRecorder.start(prisma, {
+      benchmark: {
+        name: "ELAIPBench",
+        description:
+          "403 expert-written multiple-choice questions over 137 AI papers; " +
+          "exact-match scoring, no partial credit.",
+      },
+      recipe: {
+        name: readingAgentRecipe.name,
+        description: readingAgentRecipe.description,
+        metadata: {
+          model: OPENROUTER_MODEL,
+          source: "src/recipes/reading-agent.ts",
+          prompts: readingAgentRecipe.prompts,
+        },
+      },
+    });
+    return { prisma, recorder };
+  } catch (err) {
+    console.error(
+      `(persistence disabled: ${err instanceof Error ? err.message : err}); continuing without DB`,
+    );
+    await prisma.$disconnect();
+    return { prisma: null, recorder: null };
+  }
 }
 
 main().catch((err) => {

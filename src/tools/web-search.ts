@@ -62,7 +62,7 @@ async function exaSearch(
     throw new Error(`Exa Search API error ${response.status}: ${text.slice(0, 200)}`);
   }
 
-  const data: ExaSearchResponse = await response.json();
+  const data = (await response.json()) as ExaSearchResponse;
   const results = data.results ?? [];
   return results.map((r) => ({
     title: (r.title ?? r.url).trim(),

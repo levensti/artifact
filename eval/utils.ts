@@ -3,13 +3,18 @@
  *
  * Every eval under `eval/<name>/` reuses three things from here:
  *
- *   1. `GenerateClient` — a thin wrapper over the app's real generation
- *      entrypoint, `generate()` in `src/server/generate.ts`. The eval calls
- *      that function DIRECTLY, in-process, so it exercises Artifact's actual
- *      system prompt and `<paper>` wrapping with nothing re-implemented and
- *      nothing to drift — but WITHOUT the `/api/generate` HTTP route's proxy
- *      auth, session, and per-user rate-limit metering, none of which is part
- *      of the agent. All you need is an OpenRouter key (`--api-key` or
+ *   1. An in-process client over one of the app's real agent entrypoints. The
+ *      eval calls the entrypoint DIRECTLY, so it exercises Artifact's actual
+ *      prompt + paper wrapping with nothing re-implemented and nothing to
+ *      drift — but WITHOUT the HTTP route's proxy auth, session, and per-user
+ *      rate-limit metering, none of which is part of the agent. Two clients,
+ *      same `generate(prompt, paperContext)` contract (see {@link EvalClient}):
+ *        - `ReadingAgentClient` — the FULL agentic harness `runReadingAgent()`
+ *          (`src/server/reading-agent.ts`): the tool-using ReAct loop a user
+ *          actually talks to. This is what evaluates the whole harness.
+ *        - `GenerateClient` — the bare `generate()` entrypoint (no tools), for
+ *          measuring just the model + prompt without the agent loop.
+ *      All either needs is an OpenRouter key (`--api-key` or
  *      `OPENROUTER_API_KEY`); no dev server, no login.
  *
  *   2. Multiple-choice answer parsing/scoring — turning free-form model text
@@ -18,13 +23,20 @@
  *   3. A Hugging Face dataset loader, a promise pool, and small IO helpers
  *      shared by every runner.
  *
- * Pure Node built-ins (fetch, fs) plus the app's own `generate()` — no
+ * Pure Node built-ins (fetch, fs) plus the app's own agent code — no
  * third-party runtime deps.
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { generate } from "@/server/generate";
+import { runReadingAgent } from "@/server/reading-agent";
+import {
+  processStreamEvent,
+  stepsToContent,
+  type AgentStep,
+} from "@/lib/agent-steps";
+import type { StreamEvent } from "@/lib/stream-types";
 
 // --------------------------------------------------------------------------- //
 //  Config                                                                      //
@@ -38,7 +50,7 @@ import { generate } from "@/server/generate";
 export const PAPER_CONTEXT_HARD_LIMIT = 500_000;
 
 // --------------------------------------------------------------------------- //
-//  Generate client                                                             //
+//  In-process agent clients                                                    //
 // --------------------------------------------------------------------------- //
 
 export interface GenerateResult {
@@ -54,17 +66,88 @@ export interface GenerateClientOptions {
   maxPaperChars?: number;
 }
 
+/**
+ * The contract a runner targets: take a prompt + optional paper context and
+ * return the model's text (or an error). Both clients implement it, so a runner
+ * can switch between the full agent and the bare model with one line.
+ */
+export interface EvalClient {
+  generate(prompt: string, paperContext?: string): Promise<GenerateResult>;
+}
+
 /** Error messages worth retrying: transient provider/network conditions. */
 const TRANSIENT_RE =
   /\b429\b|rate.?limit|timeout|temporar|overloaded|\b50[0-9]\b|fetch failed|network|ECONN/i;
 
+/** 1s, 2s, 4s, 8s ... capped at 30s. */
+function backoff(attempt: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, Math.min(2 ** attempt, 30) * 1000));
+}
+
 /**
- * Calls the app's `generate()` entrypoint in-process — the same function the
- * `/api/generate` route calls, so the eval sees Artifact's real prompt + paper
- * wrapping. Transient failures (timeouts, 429, 5xx) are retried with
+ * Paper-context truncation + transient-error retry, shared by both clients.
+ * `call` performs the actual in-process model invocation and returns the
+ * response text; it receives the resolved key and the (possibly truncated)
+ * paper context. Transient failures (timeouts, 429, 5xx) retry with
  * exponential backoff; other errors (e.g. a bad key) fail fast.
  */
-export class GenerateClient {
+async function runWithRetry(
+  apiKey: string | null,
+  paperContext: string | undefined,
+  maxPaperChars: number,
+  maxRetries: number,
+  call: (apiKey: string, paperContext?: string) => Promise<string>,
+): Promise<GenerateResult> {
+  if (!apiKey) {
+    return {
+      content: "",
+      ok: false,
+      error: "No OpenRouter key. Pass --api-key or set OPENROUTER_API_KEY.",
+    };
+  }
+
+  let truncated = false;
+  if (paperContext && paperContext.length > maxPaperChars) {
+    paperContext = paperContext.slice(0, maxPaperChars);
+    truncated = true;
+  }
+
+  let lastErr = "unknown error";
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const content = await call(apiKey, paperContext);
+      return {
+        content,
+        ok: true,
+        error: truncated ? "paper truncated to fit model context" : undefined,
+      };
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
+      if (TRANSIENT_RE.test(lastErr) && attempt < maxRetries - 1) {
+        await backoff(attempt);
+        continue;
+      }
+      return { content: "", ok: false, error: lastErr };
+    }
+  }
+
+  return { content: "", ok: false, error: `giving up after retries: ${lastErr}` };
+}
+
+/**
+ * Drives the FULL agentic reading harness — `runReadingAgent()`, the same
+ * tool-using ReAct loop the `/api/chat` route runs — in-process. The paper text
+ * is fed as `paperContext` (so the agent works off the full source, no
+ * `parsedPaper` → the paper-internal tools self-disable) and the answer is the
+ * concatenated text the agent produced, assembled with the exact same
+ * `stepsToContent` logic the app persists and renders.
+ *
+ * The agent's `arxiv_search` / `web_search` tools stay registered, matching a
+ * real reading session: the model MAY hit the network mid-answer, and with no
+ * Exa key `web_search` returns its configure-key sentinel (same as a user
+ * without a key). That is part of the harness being measured.
+ */
+export class ReadingAgentClient implements EvalClient {
   private readonly apiKey: string | null;
   private readonly maxRetries: number;
   private readonly maxPaperChars: number;
@@ -75,47 +158,59 @@ export class GenerateClient {
     this.maxPaperChars = opts.maxPaperChars ?? PAPER_CONTEXT_HARD_LIMIT - 1;
   }
 
-  async generate(prompt: string, paperContext?: string): Promise<GenerateResult> {
-    if (!this.apiKey) {
-      return {
-        content: "",
-        ok: false,
-        error: "No OpenRouter key. Pass --api-key or set OPENROUTER_API_KEY.",
-      };
-    }
-
-    let truncated = false;
-    if (paperContext && paperContext.length > this.maxPaperChars) {
-      paperContext = paperContext.slice(0, this.maxPaperChars);
-      truncated = true;
-    }
-
-    let lastErr = "unknown error";
-    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
-      try {
-        const { content } = await generate(this.apiKey, prompt, paperContext);
-        return {
-          content,
-          ok: true,
-          error: truncated ? "paper truncated to fit model context" : undefined,
+  generate(prompt: string, paperContext?: string): Promise<GenerateResult> {
+    return runWithRetry(
+      this.apiKey,
+      paperContext,
+      this.maxPaperChars,
+      this.maxRetries,
+      async (apiKey, paper) => {
+        let steps: AgentStep[] = [];
+        let errorMessage: string | null = null;
+        const emit = (event: StreamEvent) => {
+          steps = processStreamEvent(steps, event);
+          // The loop usually THROWS provider errors (caught by runWithRetry),
+          // but guard against an emitted error event too so a failed turn never
+          // scores as an empty (wrong) answer.
+          if (event.type === "error") errorMessage = event.message ?? "agent error";
         };
-      } catch (err) {
-        lastErr = err instanceof Error ? err.message : String(err);
-        if (TRANSIENT_RE.test(lastErr) && attempt < this.maxRetries - 1) {
-          await backoff(attempt);
-          continue;
-        }
-        return { content: "", ok: false, error: lastErr };
-      }
-    }
-
-    return { content: "", ok: false, error: `giving up after retries: ${lastErr}` };
+        await runReadingAgent({
+          conversation: [{ role: "user", content: prompt }],
+          apiKey,
+          paperContext: paper,
+          emit,
+        });
+        if (errorMessage) throw new Error(errorMessage);
+        return stepsToContent(steps);
+      },
+    );
   }
 }
 
-/** 1s, 2s, 4s, 8s ... capped at 30s. */
-function backoff(attempt: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, Math.min(2 ** attempt, 30) * 1000));
+/**
+ * Drives the bare `generate()` entrypoint (no tools, no loop) in-process — for
+ * measuring just the model + prompt + paper wrapping, without the agent.
+ */
+export class GenerateClient implements EvalClient {
+  private readonly apiKey: string | null;
+  private readonly maxRetries: number;
+  private readonly maxPaperChars: number;
+
+  constructor(opts: GenerateClientOptions = {}) {
+    this.apiKey = opts.apiKey || process.env.OPENROUTER_API_KEY || null;
+    this.maxRetries = opts.maxRetries ?? 4;
+    this.maxPaperChars = opts.maxPaperChars ?? PAPER_CONTEXT_HARD_LIMIT - 1;
+  }
+
+  generate(prompt: string, paperContext?: string): Promise<GenerateResult> {
+    return runWithRetry(
+      this.apiKey,
+      paperContext,
+      this.maxPaperChars,
+      this.maxRetries,
+      async (apiKey, paper) => (await generate(apiKey, prompt, paper)).content,
+    );
+  }
 }
 
 // --------------------------------------------------------------------------- //
