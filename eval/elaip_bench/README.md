@@ -17,12 +17,22 @@ option letter(s) — single-answer (SA-MCQ) and multi-answer (MA-MCQ, e.g.
 
 The harness feeds each row's `paper_content` as Artifact's `paperContext` and
 sends only the question plus an answer-format instruction as the prompt, then
-calls the app's real generation entrypoint — `generate()` in
-[`src/server/generate.ts`](../../src/server/generate.ts) — **directly,
-in-process**. That's the same function `POST /api/generate` calls, so a run
-exercises Artifact's actual system prompt and `<paper>` wrapping with nothing
-re-implemented and nothing to drift — but without the HTTP route's proxy auth,
-session, and per-user rate-limit metering, none of which is part of the agent.
+runs the app's **full reading agent** — `runReadingAgent()` in
+[`src/server/reading-agent.ts`](../../src/server/reading-agent.ts) — **directly,
+in-process**. That's the same tool-using ReAct loop the `/api/chat` reading
+surface runs, so a run exercises the whole harness a user actually talks to (the
+real system prompt, `<paper>` wrapping, and tools) with nothing re-implemented
+and nothing to drift — but without the HTTP route's proxy auth, session,
+transcript persistence, and per-user rate-limit metering, none of which is part
+of the agent. The scored answer is the exact text the agent produced, assembled
+with the same `stepsToContent` logic the app persists and renders.
+
+Because it's the real agent, the model may call `arxiv_search` / `web_search`
+mid-answer: **a full run makes real network calls beyond the model itself**, and
+with no Exa key `web_search` returns its configure-key sentinel (the same thing a
+user without a key sees). To measure just the model + prompt without the loop,
+swap `ReadingAgentClient` for `GenerateClient` in `run.ts` (the bare
+[`generate()`](../../src/server/generate.ts) entrypoint).
 
 The only thing it needs is an OpenRouter key. It reads `OPENROUTER_API_KEY` from
 the environment, falling back to the repo-root `.env` (the same file the app
@@ -43,7 +53,7 @@ npm run eval:elaip_bench                  # full 403
 | ------------- | ------------------------------------- | ------------------------------------------- |
 | `--api-key`   | `OPENROUTER_API_KEY` env, then `.env` | OpenRouter key used for the run             |
 | `--limit N`   | all 403                               | Only run the first N questions (smoke test) |
-| `--workers N` | 8                                     | Concurrent `generate()` calls in flight     |
+| `--workers N` | 8                                     | Concurrent agent runs in flight             |
 | `--out DIR`   | `eval/elaip_bench/results`            | Output directory                            |
 
 Outputs land in `results/` (gitignored): `results.jsonl` (one row per question,

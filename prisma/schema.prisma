@@ -380,3 +380,98 @@ model Recommendation {
 
   @@index([queryId, rank])
 }
+
+// ── Evals ───────────────────────────────────────────────────────
+model EvalBenchmark {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  createdAt   DateTime @default(now())
+
+  runs EvalBenchmarkRun[]
+}
+
+model Recipe {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  metadata    Json
+  createdAt   DateTime @default(now())
+
+  runs EvalBenchmarkRun[]
+}
+
+enum EvalRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model EvalBenchmarkRun {
+  id              String        @id @default(uuid())
+  evalBenchmarkId String
+  recipeId        String
+  status          EvalRunStatus @default(RUNNING)
+  startedAt       DateTime      @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime      @default(now())
+
+  benchmark EvalBenchmark            @relation(fields: [evalBenchmarkId], references: [id], onDelete: Cascade)
+  recipe    Recipe                   @relation(fields: [recipeId], references: [id], onDelete: Restrict)
+  results   EvalBenchmarkRunResult[]
+  items     EvalBenchmarkRunItem[]
+
+  @@index([evalBenchmarkId, createdAt])
+  @@index([recipeId])
+}
+
+/// One scored metric for a run. Modeled as a row-per-metric (rather than a
+/// single score column) so an eval can report several metrics for the same
+/// run — for ELAIPBench: `accuracy` overall plus `accuracy:SA-MCQ` /
+/// `accuracy:MA-MCQ`. `breakdown` (Json) holds the metric's supporting
+/// detail (counts, per-slice numbers, unparsed/api_error tallies).
+model EvalBenchmarkRunResult {
+  id                 String   @id @default(uuid())
+  evalBenchmarkRunId String
+  metric             String
+  score              Float
+  breakdown          Json?
+  createdAt          DateTime @default(now())
+
+  run EvalBenchmarkRun @relation(fields: [evalBenchmarkRunId], references: [id], onDelete: Cascade)
+
+  @@unique([evalBenchmarkRunId, metric])
+}
+
+/// Outcome of a single prediction. UNPARSED (no answer could be extracted)
+/// and ERROR (the provider call failed) are kept distinct from INCORRECT so
+/// a broken harness or throttled provider can't quietly deflate the score.
+enum EvalPredictionOutcome {
+  CORRECT
+  INCORRECT
+  UNPARSED
+  ERROR
+}
+
+/// One per-question prediction within a run. `itemKey` is the benchmark's
+/// stable question identifier (e.g. paper_id + question index) so the same
+/// question can be compared across runs and recipes. `target` /
+/// `prediction` hold the scored values (e.g. gold "ABD" vs pred "AB"); the
+/// `*Metadata` Json columns carry everything else (question type, the raw
+/// model response, token usage, latency).
+model EvalBenchmarkRunItem {
+  id                 String                @id @default(uuid())
+  evalBenchmarkRunId String
+  itemKey            String
+  target             String
+  targetMetadata     Json?
+  prediction         String
+  predictionMetadata Json?
+  predictionOutcome  EvalPredictionOutcome
+  createdAt          DateTime              @default(now())
+
+  run EvalBenchmarkRun @relation(fields: [evalBenchmarkRunId], references: [id], onDelete: Cascade)
+
+  @@index([evalBenchmarkRunId, predictionOutcome])
+  @@unique([evalBenchmarkRunId, itemKey])
+}

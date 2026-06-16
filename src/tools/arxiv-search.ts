@@ -121,7 +121,7 @@ async function searchSemanticScholar(query: string, limit: number): Promise<Pape
     throw new Error(`Semantic Scholar API returned ${response.status}`);
   }
 
-  const data: { data?: S2Paper[] } = await response.json();
+  const data = (await response.json()) as { data?: S2Paper[] };
   if (!data.data) return [];
 
   return data.data

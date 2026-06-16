@@ -17,6 +17,7 @@ import {
   Pencil,
   Share2,
   Compass,
+  FlaskConical,
 } from "lucide-react";
 import { canShareReview } from "@/lib/client/sharing/share-links";
 import {
@@ -26,8 +27,13 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
-import { DISCOVER_HOME_EVENT, WIKI_UPDATED_EVENT } from "@/lib/storage-events";
+import { getCurrentUser, getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
+import {
+  DISCOVER_HOME_EVENT,
+  USER_UPDATED_EVENT,
+  WIKI_UPDATED_EVENT,
+} from "@/lib/storage-events";
+import { isAdminEmail } from "@/lib/admin";
 import { useSettingsOpener } from "@/components/settings-opener-context";
 import {
   getWikiIngestError,
@@ -50,6 +56,17 @@ function subscribeReviews(onStoreChange: () => void) {
     window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
     window.removeEventListener(WIKI_UPDATED_EVENT, onStoreChange);
   };
+}
+
+// Whether the signed-in user may see the Evals tab. Server routes enforce the
+// same check; this only governs nav visibility.
+function subscribeUser(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(USER_UPDATED_EVENT, onStoreChange);
+  return () => window.removeEventListener(USER_UPDATED_EVENT, onStoreChange);
+}
+function isAdminSnapshot() {
+  return isAdminEmail(getCurrentUser()?.email);
 }
 
 function reviewsSnapshot() {
@@ -135,6 +152,11 @@ export default function Sidebar({
     subscribeWikiStatus,
     getWikiIngestError,
     () => null,
+  );
+  const isAdmin = useSyncExternalStore(
+    subscribeUser,
+    isAdminSnapshot,
+    () => false,
   );
   const ingestActive = activeIngests.length > 0;
   const ingestLabel = useMemo(() => {
@@ -390,6 +412,27 @@ export default function Sidebar({
                 ×
               </button>
             </div>
+          ) : null}
+
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => router.push("/evals")}
+              className={cn(
+                "sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px]",
+                pathname === "/evals"
+                  ? "sb-row-active text-foreground font-medium"
+                  : "text-foreground/80 hover:text-foreground",
+              )}
+            >
+              <span className="flex w-6 shrink-0 items-center justify-center">
+                <FlaskConical
+                  className="size-[18px] opacity-80"
+                  strokeWidth={1.75}
+                />
+              </span>
+              <span className="truncate">Evals</span>
+            </button>
           ) : null}
 
           <button

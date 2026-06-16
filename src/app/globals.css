@@ -1031,6 +1031,29 @@
   to { opacity: 1; }
 }
 
+/* Status-dot pulse for in-flight eval runs (Evals dashboard). */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Thin scrollbar used by the Evals dashboard panes. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 28%, transparent) transparent;
+}
+.scroll-thin::-webkit-scrollbar { width: 9px; height: 9px; }
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 26%, transparent);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 42%, transparent);
+  background-clip: padding-box;
+}
+
 @keyframes subtlePulseGlow {
   0%, 100% { box-shadow: 0 0 15px 2px color-mix(in srgb, var(--primary) 18%, transparent); }
   50% { box-shadow: 0 0 25px 6px color-mix(in srgb, var(--primary) 28%, transparent); }

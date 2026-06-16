@@ -22,6 +22,11 @@ import {
   type OpenRouterUsage,
 } from "@/lib/openrouter";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
+import { promptFromRecipe } from "@/recipes/types";
+import {
+  RESEARCH_ASSISTANT_PROMPTS,
+  researchAssistantRecipe,
+} from "@/recipes/research-assistant";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
 
@@ -34,12 +39,10 @@ const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions
  */
 const GENERATE_TIMEOUT_MS = 120_000;
 
-const SYSTEM_PROMPT = `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
-
-When asked to output JSON:
-- Return valid JSON only
-- Do not include markdown fences
-- Do not include extra commentary`;
+const SYSTEM_PROMPT = promptFromRecipe(
+  researchAssistantRecipe,
+  RESEARCH_ASSISTANT_PROMPTS.system,
+);
 
 export function systemContentFor(paperContext?: string): string {
   return paperContext
