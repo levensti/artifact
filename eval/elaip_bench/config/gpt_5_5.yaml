@@ -1,0 +1,4 @@
+experiment_name: gpt_5_5
+model: openai/gpt-5.5
+limit: all
+num_workers: 32
