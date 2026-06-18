@@ -1,4 +1,0 @@
-experiment_name: deepseek-v4-flash
-model: deepseek/deepseek-v4-flash
-limit: all
-num_workers: 8
