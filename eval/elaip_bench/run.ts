@@ -145,6 +145,7 @@ function toPersistItem(result: RowResult, row: ElaipBenchRow): PersistItem {
     targetMetadata: {
       question_type: result.question_type,
       paper_id: result.paper_id ?? null,
+      question: row.question,
     },
     prediction: result.pred,
     predictionMetadata: { response: result.response, note: result.note ?? null },

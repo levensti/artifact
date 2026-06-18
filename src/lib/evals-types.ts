@@ -5,8 +5,8 @@
  *
  * Everything here is derived from the persisted eval tables (see
  * prisma/schema.prisma) — there are no invented fields. Notably absent, because
- * they aren't stored: benchmark reference scores (human / best-LLM), question
- * text and answer options, and per-item latency/token counts.
+ * they aren't stored: benchmark reference scores (human / best-LLM), and
+ * per-item latency/token counts.
  */
 
 export type EvalOutcome = "CORRECT" | "INCORRECT" | "UNPARSED" | "ERROR";
@@ -58,6 +58,8 @@ export interface RunItem {
   paperId: string | null;
   /** From targetMetadata.question_type, when present (e.g. "SA-MCQ"). */
   type: string | null;
+  /** Raw benchmark question text, including embedded answer options when stored. */
+  question: string | null;
   gold: string;
   pred: string;
   outcome: EvalOutcome;

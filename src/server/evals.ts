@@ -188,6 +188,7 @@ export async function getRunDetail(runId: string): Promise<RunDetail | null> {
     itemKey: it.itemKey,
     paperId: metaString(it.targetMetadata, "paper_id"),
     type: metaString(it.targetMetadata, "question_type"),
+    question: metaString(it.targetMetadata, "question"),
     gold: it.target,
     pred: it.prediction,
     outcome: it.predictionOutcome as EvalOutcome,

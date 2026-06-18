@@ -6,6 +6,37 @@ import MarkdownMessage from "@/components/markdown-message";
 import type { ItemResponse, RunItem } from "@/lib/evals-types";
 import { OUTCOME_META, typeBadge } from "./eval-format";
 
+function splitQuestionOptions(raw: string | null): {
+  stem: string | null;
+  options: Array<{ label: string; text: string }>;
+} {
+  if (!raw) return { stem: null, options: [] };
+  const lines = raw.split(/\r?\n/);
+  const options: Array<{ label: string; text: string }> = [];
+  const stem: string[] = [];
+  let current: { label: string; parts: string[] } | null = null;
+
+  for (const line of lines) {
+    const match = line.match(/^\s*(?:\(?([A-D])\)?[.)]|([A-D])[:：])\s+(.+)$/);
+    if (match) {
+      if (current) {
+        options.push({ label: current.label, text: current.parts.join("\n").trim() });
+      }
+      current = { label: match[1] ?? match[2], parts: [match[3]] };
+    } else if (current) {
+      current.parts.push(line);
+    } else {
+      stem.push(line);
+    }
+  }
+  if (current) {
+    options.push({ label: current.label, text: current.parts.join("\n").trim() });
+  }
+
+  if (options.length < 2) return { stem: raw.trim(), options: [] };
+  return { stem: stem.join("\n").trim() || null, options };
+}
+
 /**
  * Per-question inspector. Shows what's actually stored for an item — target,
  * prediction, outcome, and the model's raw response (fetched on open). The
@@ -52,25 +83,20 @@ export default function Inspector({
   const m = OUTCOME_META[item.outcome];
   const tb = item.type ? typeBadge(item.type) : null;
   const ok = item.outcome === "CORRECT";
+  const question = splitQuestionOptions(item.question);
 
   return (
     <>
-      <div
-        onClick={onClose}
-        className="fixed inset-0 z-40"
-        style={{ background: "rgba(20,18,14,0.18)", animation: "fadeIn 150ms ease" }}
-      />
       <aside
-        className="fixed inset-y-0 right-0 z-50 flex w-[520px] max-w-[92vw] flex-col"
+        className="fixed inset-0 z-50 flex flex-col"
         style={{
           background: "var(--card)",
-          borderLeft: "1px solid var(--border)",
           boxShadow: "var(--shadow-lg)",
-          animation: "slideInRight 220ms var(--ease-out)",
+          animation: "fadeIn 150ms ease",
         }}
       >
         <div
-          className="flex items-start gap-3 px-5 pb-3.5 pt-[18px]"
+          className="flex items-start gap-3 px-7 pb-3.5 pt-[18px]"
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <div className="min-w-0 flex-1">
@@ -124,9 +150,10 @@ export default function Inspector({
           </button>
         </div>
 
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-[18px]">
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-7 pb-10 pt-[22px]">
+          <div className="mx-auto max-w-[1180px]">
           {/* target vs prediction */}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-3.5">
             <div
               className="rounded-[10px] px-[15px] py-[13px]"
               style={{
@@ -178,6 +205,55 @@ export default function Inspector({
             </div>
           </div>
 
+          {/* question + options */}
+          {question.stem ? (
+            <div className="mt-5">
+              <div
+                className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Question
+              </div>
+              <div
+                className="rounded-[11px] px-[18px] py-4 text-[14px]"
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--reader-mat)",
+                  lineHeight: 1.6,
+                }}
+              >
+                <div className="whitespace-pre-wrap">{question.stem}</div>
+                {question.options.length ? (
+                  <div className="mt-4 grid gap-2.5">
+                    {question.options.map((option) => (
+                      <div
+                        key={option.label}
+                        className="grid grid-cols-[30px_minmax(0,1fr)] gap-2.5 rounded-[9px] px-3 py-2.5"
+                        style={{
+                          border: "1px solid var(--border)",
+                          background: "var(--background)",
+                        }}
+                      >
+                        <span
+                          className="flex size-[24px] items-center justify-center rounded-full font-mono text-[12px] font-semibold"
+                          style={{
+                            background: "var(--secondary)",
+                            color: "var(--secondary-foreground)",
+                          }}
+                        >
+                          {option.label}
+                        </span>
+                        <span className="whitespace-pre-wrap pt-px">
+                          {option.text}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           {/* model response */}
           <div className="mt-5">
             <div className="mb-2.5 flex items-center justify-between">
@@ -197,7 +273,7 @@ export default function Inspector({
               ) : null}
             </div>
             <div
-              className="rounded-[11px] px-[18px] py-4 text-[14px]"
+              className="rounded-[11px] px-[22px] py-5 text-[14px]"
               style={{
                 border: "1px solid var(--border)",
                 background: "var(--background)",
@@ -214,6 +290,7 @@ export default function Inspector({
                 </span>
               )}
             </div>
+          </div>
           </div>
         </div>
       </aside>
