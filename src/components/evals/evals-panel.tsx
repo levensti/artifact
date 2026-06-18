@@ -19,9 +19,9 @@ import RunDetailView from "./run-detail";
 import CompareView from "./compare-view";
 import Inspector from "./inspector";
 
-/** First completed run, else the first run, else null. */
+/** Most recent run; the server returns runs newest-first. */
 function defaultRun(runs: RunSummary[]): RunSummary | null {
-  return runs.find((r) => r.status === "COMPLETED") ?? runs[0] ?? null;
+  return runs[0] ?? null;
 }
 
 export default function EvalsPanel() {
