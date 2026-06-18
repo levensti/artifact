@@ -69,6 +69,7 @@ export async function runOpenRouterAgentLoop(
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
   options?: AgentLoopOptions,
+  model = OPENROUTER_MODEL,
 ) {
   const paperBlock = buildPaperBlock(paperContext, parsedPaper);
   const baseSystem = systemPrompt + TOOL_RESULT_GUARDRAIL;
@@ -105,7 +106,7 @@ export async function runOpenRouterAgentLoop(
         method: "POST",
         headers,
         body: JSON.stringify({
-          model: OPENROUTER_MODEL,
+          model,
           messages: apiMessages,
           tools: openaiTools,
           stream: true,

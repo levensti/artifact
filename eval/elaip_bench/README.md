@@ -43,18 +43,33 @@ install.
 ## Run it
 
 ```bash
-npm run eval:elaip_bench -- --limit 10   # smoke test
-npm run eval:elaip_bench                  # full 403
+npm run eval:elaip_bench -- --config default
 ```
+
+Each run reads a YAML config from [`config/`](./config):
+
+```yaml
+experiment_name: deepseek-v4-flash
+model: deepseek/deepseek-v4-flash
+limit: all
+num_workers: 8
+```
+
+`experiment_name` determines the output folder under `results/`, so the default
+config writes to `results/deepseek-v4-flash/`. `model` is the OpenRouter model
+ID sent upstream. `limit` is optional (`all` runs the full 403 questions), and
+`num_workers` controls concurrency.
 
 ### Flags
 
-| Flag          | Default                               | Meaning                                     |
-| ------------- | ------------------------------------- | ------------------------------------------- |
-| `--api-key`   | `OPENROUTER_API_KEY` env, then `.env` | OpenRouter key used for the run             |
-| `--limit N`   | all 403                               | Only run the first N questions (smoke test) |
-| `--workers N` | 8                                     | Concurrent agent runs in flight             |
-| `--out DIR`   | `eval/elaip_bench/results`            | Output directory                            |
+| Flag              | Default                               | Meaning                                      |
+| ----------------- | ------------------------------------- | -------------------------------------------- |
+| `--config NAME`   | `default`                             | Config file in `config/`, or a YAML path     |
+| `--api-key`       | `OPENROUTER_API_KEY` env, then `.env` | OpenRouter key used for the run              |
+| `--limit N`       | config `limit`                        | Override how many questions to run           |
+| `--workers N`     | config `num_workers`                  | Override concurrent agent runs in flight     |
+| `--num-workers N` | config `num_workers`                  | Alias for `--workers`                        |
+| `--out DIR`       | `results/<experiment_name>`           | Override output directory                    |
 
 Outputs land in `results/` (gitignored): `results.jsonl` (one row per question,
 including the raw model response) and `summary.json` (overall + per-question-type

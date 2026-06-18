@@ -53,6 +53,8 @@ export interface ReadingAgentParams {
   conversation: TranscriptMessage[];
   /** Resolved OpenRouter key. */
   apiKey: string;
+  /** Optional model override for offline evals; app traffic uses the fixed model. */
+  model?: string;
   /** Full paper/page text (short-source mode). */
   paperContext?: string;
   /** Structured paper (long-source mode); enables the paper-internal tools. */
@@ -97,6 +99,7 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
   const {
     conversation,
     apiKey,
+    model,
     paperContext,
     parsedPaper,
     paperTitle,
@@ -140,5 +143,6 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
       : // Reading surfaces draw visuals; pin the format rules with recency so
         // old in-conversation examples can't override them.
         { trailingSystemReminder: visualFormatReminder() },
+    model,
   );
 }

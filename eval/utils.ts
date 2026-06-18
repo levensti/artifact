@@ -62,6 +62,7 @@ export interface GenerateResult {
 
 export interface GenerateClientOptions {
   apiKey?: string | null;
+  model?: string;
   maxRetries?: number;
   maxPaperChars?: number;
 }
@@ -149,11 +150,13 @@ async function runWithRetry(
  */
 export class ReadingAgentClient implements EvalClient {
   private readonly apiKey: string | null;
+  private readonly model: string | undefined;
   private readonly maxRetries: number;
   private readonly maxPaperChars: number;
 
   constructor(opts: GenerateClientOptions = {}) {
     this.apiKey = opts.apiKey || process.env.OPENROUTER_API_KEY || null;
+    this.model = opts.model;
     this.maxRetries = opts.maxRetries ?? 4;
     this.maxPaperChars = opts.maxPaperChars ?? PAPER_CONTEXT_HARD_LIMIT - 1;
   }
@@ -177,6 +180,7 @@ export class ReadingAgentClient implements EvalClient {
         await runReadingAgent({
           conversation: [{ role: "user", content: prompt }],
           apiKey,
+          model: this.model,
           paperContext: paper,
           emit,
         });
@@ -193,11 +197,13 @@ export class ReadingAgentClient implements EvalClient {
  */
 export class GenerateClient implements EvalClient {
   private readonly apiKey: string | null;
+  private readonly model: string | undefined;
   private readonly maxRetries: number;
   private readonly maxPaperChars: number;
 
   constructor(opts: GenerateClientOptions = {}) {
     this.apiKey = opts.apiKey || process.env.OPENROUTER_API_KEY || null;
+    this.model = opts.model;
     this.maxRetries = opts.maxRetries ?? 4;
     this.maxPaperChars = opts.maxPaperChars ?? PAPER_CONTEXT_HARD_LIMIT - 1;
   }
@@ -208,7 +214,7 @@ export class GenerateClient implements EvalClient {
       paperContext,
       this.maxPaperChars,
       this.maxRetries,
-      async (apiKey, paper) => (await generate(apiKey, prompt, paper)).content,
+      async (apiKey, paper) => (await generate(apiKey, prompt, paper, this.model)).content,
     );
   }
 }

@@ -25,7 +25,8 @@
  */
 
 import { parseArgs } from "node:util";
-import { join } from "node:path";
+import { basename, extname, join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import {
   ReadingAgentClient,
@@ -46,12 +47,19 @@ import {
   type PersistItem,
   type PersistMetric,
 } from "../persistence.ts";
-import { OPENROUTER_MODEL } from "@/lib/openrouter";
 import { readingAgentRecipe } from "@/recipes/reading-agent";
 
 const DATASET = "KangKang625/ELAIPBench";
 const DATA_FILE = "elabench.jsonl";
 const DATASET_REVISION = "main";
+const CONFIG_DIR = join(import.meta.dirname, "config");
+
+interface EvalConfig {
+  experimentName: string;
+  model: string;
+  limit?: number;
+  numWorkers: number;
+}
 
 interface ElaipBenchRow {
   paper_id?: string;
@@ -71,6 +79,73 @@ interface RowResult {
   api_ok: boolean;
   note?: string;
   response: string;
+}
+
+function parseScalar(value: string): string | number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "~" || trimmed === "all") {
+    return undefined;
+  }
+  const unquoted = trimmed.replace(/^['"]|['"]$/g, "");
+  const n = Number(unquoted);
+  return Number.isFinite(n) && String(n) === unquoted ? n : unquoted;
+}
+
+function parseConfigYaml(text: string): Record<string, string | number | undefined> {
+  const out: Record<string, string | number | undefined> = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+#.*$/, "").trim();
+    if (!line) continue;
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+    if (!match) throw new Error(`Unsupported config line: ${rawLine}`);
+    out[match[1]] = parseScalar(match[2]);
+  }
+  return out;
+}
+
+function configPathFor(nameOrPath: string): string {
+  if (nameOrPath.includes("/") || nameOrPath.endsWith(".yaml") || nameOrPath.endsWith(".yml")) {
+    return nameOrPath;
+  }
+  return join(CONFIG_DIR, `${nameOrPath}.yaml`);
+}
+
+function asPositiveInt(value: unknown, field: string): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`Config field '${field}' must be a positive integer.`);
+  }
+  return value;
+}
+
+function asNonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Config field '${field}' must be a non-empty string.`);
+  }
+  return value.trim();
+}
+
+function slugifyExperimentName(name: string): string {
+  return name
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function loadConfig(configNameOrPath: string): Promise<EvalConfig> {
+  const path = configPathFor(configNameOrPath);
+  const raw = parseConfigYaml(await readFile(path, "utf8"));
+  const experimentName = asNonEmptyString(
+    raw.experiment_name ?? raw.experimentName ?? basename(path, extname(path)),
+    "experiment_name",
+  );
+  const model = asNonEmptyString(raw.model, "model");
+  return {
+    experimentName,
+    model,
+    limit: asPositiveInt(raw.limit, "limit"),
+    numWorkers: asPositiveInt(raw.num_workers ?? raw.numWorkers ?? raw.workers, "num_workers") ?? 8,
+  };
 }
 
 /**
@@ -248,16 +323,34 @@ async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       "api-key": { type: "string" },
+      config: { type: "string", default: "default" },
       limit: { type: "string" },
-      workers: { type: "string", default: "8" },
-      out: { type: "string", default: join(import.meta.dirname, "results") },
+      workers: { type: "string" },
+      "num-workers": { type: "string" },
+      out: { type: "string" },
       "no-persist": { type: "boolean", default: false },
     },
   });
 
-  const limit = values.limit ? Number(values.limit) : undefined;
-  const workers = Number(values.workers);
+  const config = await loadConfig(values.config!);
+  const limit = values.limit ? Number(values.limit) : config.limit;
+  const workers = values["num-workers"]
+    ? Number(values["num-workers"])
+    : values.workers
+      ? Number(values.workers)
+      : config.numWorkers;
+  const experimentDir = slugifyExperimentName(config.experimentName);
+  if (!experimentDir) throw new Error("Config experiment_name must contain a path-safe character.");
+  const outDir = values.out ?? join(import.meta.dirname, "results", experimentDir);
+  if (limit != null && (!Number.isInteger(limit) || limit <= 0)) {
+    throw new Error("--limit/config limit must be a positive integer.");
+  }
+  if (!Number.isInteger(workers) || workers <= 0) {
+    throw new Error("--workers/config num_workers must be a positive integer.");
+  }
 
+  console.log(`Experiment: ${config.experimentName}`);
+  console.log(`Model: ${config.model}`);
   console.log(`Loading ${DATASET} ...`);
   const rows = (await loadHfJsonl(DATASET, DATA_FILE, {
     revision: DATASET_REVISION,
@@ -268,10 +361,10 @@ async function main(): Promise<void> {
   // Open a DB-backed run unless --no-persist (or there's no DATABASE_URL). The
   // recipe captured is the reading agent's, since that's the system under test;
   // its metadata pins the model + prompts so the run is reproducible.
-  const { prisma, recorder } = await maybeStartRun(values["no-persist"]);
+  const { prisma, recorder } = await maybeStartRun(values["no-persist"], config);
   if (recorder) console.log(`Persisting to eval run ${recorder.runId}`);
 
-  const client = new ReadingAgentClient({ apiKey: values["api-key"] });
+  const client = new ReadingAgentClient({ apiKey: values["api-key"], model: config.model });
   const onResult = recorder
     ? (result: RowResult, row: ElaipBenchRow) =>
         recorder.recordItem(toPersistItem(result, row))
@@ -281,7 +374,6 @@ async function main(): Promise<void> {
     const results = await evaluate(rows, client, workers, onResult);
     const summary = summarize(results);
 
-    const outDir = values.out!;
     await writeJsonl(join(outDir, "results.jsonl"), results);
     await writeJson(join(outDir, "summary.json"), summary);
     printSummary(summary);
@@ -305,7 +397,7 @@ async function main(): Promise<void> {
  * unavailable. Never throws: a missing DATABASE_URL or a DB that's down logs a
  * note and the eval proceeds writing only its JSON output.
  */
-async function maybeStartRun(noPersist: boolean | undefined) {
+async function maybeStartRun(noPersist: boolean | undefined, config?: EvalConfig) {
   if (noPersist) return { prisma: null, recorder: null };
   if (!(process.env.DATABASE_URL ?? process.env.DIRECT_URL)) {
     console.log("(persistence skipped: no DATABASE_URL; pass --no-persist to silence)");
@@ -313,6 +405,8 @@ async function maybeStartRun(noPersist: boolean | undefined) {
   }
   const prisma = createEvalPrisma();
   try {
+    const experimentName = config?.experimentName ?? "default";
+    const model = config?.model ?? "unknown";
     const recorder = await EvalRunRecorder.start(prisma, {
       benchmark: {
         name: "ELAIPBench",
@@ -321,10 +415,13 @@ async function maybeStartRun(noPersist: boolean | undefined) {
           "exact-match scoring, no partial credit.",
       },
       recipe: {
-        name: readingAgentRecipe.name,
-        description: readingAgentRecipe.description,
+        name: `${readingAgentRecipe.name}:${experimentName}`,
+        description: `${readingAgentRecipe.description} Experiment: ${experimentName}.`,
         metadata: {
-          model: OPENROUTER_MODEL,
+          experimentName,
+          model,
+          limit: config?.limit ?? null,
+          numWorkers: config?.numWorkers ?? null,
           source: "src/recipes/reading-agent.ts",
           prompts: readingAgentRecipe.prompts,
         },

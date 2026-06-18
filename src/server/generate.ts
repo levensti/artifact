@@ -59,7 +59,7 @@ function chatRequestInit(
   apiKey: string,
   prompt: string,
   paperContext: string | undefined,
-  opts: { stream: boolean },
+  opts: { stream: boolean; model?: string },
 ): RequestInit {
   return {
     method: "POST",
@@ -68,7 +68,7 @@ function chatRequestInit(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: opts.model ?? OPENROUTER_MODEL,
       messages: [
         { role: "system", content: systemContentFor(paperContext) },
         { role: "user", content: prompt },
@@ -88,10 +88,11 @@ export async function generate(
   apiKey: string,
   prompt: string,
   paperContext?: string,
+  model?: string,
 ): Promise<{ content: string; usage?: OpenRouterUsage }> {
   const response = await fetchWithTimeout(
     OPENROUTER_CHAT_COMPLETIONS_URL,
-    chatRequestInit(apiKey, prompt, paperContext, { stream: false }),
+    chatRequestInit(apiKey, prompt, paperContext, { stream: false, model }),
     GENERATE_TIMEOUT_MS,
   );
 
@@ -111,10 +112,11 @@ export async function openStream(
   apiKey: string,
   prompt: string,
   paperContext?: string,
+  model?: string,
 ): Promise<ReadableStream<Uint8Array>> {
   const response = await fetch(
     OPENROUTER_CHAT_COMPLETIONS_URL,
-    chatRequestInit(apiKey, prompt, paperContext, { stream: true }),
+    chatRequestInit(apiKey, prompt, paperContext, { stream: true, model }),
   );
   if (!response.ok) throw await parseError(response);
   if (!response.body) throw new Error("OpenRouter returned no stream body.");
