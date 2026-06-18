@@ -38,10 +38,8 @@ function splitQuestionOptions(raw: string | null): {
 }
 
 /**
- * Per-question inspector. Shows what's actually stored for an item — target,
- * prediction, outcome, and the model's raw response (fetched on open). The
- * design's A–D option list and latency/token stats are omitted because the
- * harness doesn't persist the question options or per-item timing.
+ * Per-question inspector. Shows the scored item, benchmark question/options,
+ * paper text, and the model's raw response. Heavy fields are fetched on open.
  */
 export default function Inspector({
   item,
@@ -253,6 +251,46 @@ export default function Inspector({
               </div>
             </div>
           ) : null}
+
+          {/* paper */}
+          <div className="mt-5">
+            <div className="mb-2.5 flex items-center justify-between">
+              <span
+                className="text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Paper
+              </span>
+              {resp?.paperContent ? (
+                <span
+                  className="text-[11px] tabular-nums"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  {resp.paperContent.length.toLocaleString()} chars
+                </span>
+              ) : null}
+            </div>
+            <div
+              className="scroll-thin h-[calc(100vh-330px)] min-h-[560px] overflow-y-auto rounded-[11px] px-[18px] py-4 font-mono text-[12px]"
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--background)",
+                lineHeight: 1.55,
+              }}
+            >
+              {loading ? (
+                <span style={{ color: "var(--muted-foreground)" }}>Loading…</span>
+              ) : resp?.paperContent ? (
+                <pre className="m-0 whitespace-pre-wrap font-inherit">
+                  {resp.paperContent}
+                </pre>
+              ) : (
+                <span style={{ color: "var(--muted-foreground)" }}>
+                  Paper text was not available for this item.
+                </span>
+              )}
+            </div>
+          </div>
 
           {/* model response */}
           <div className="mt-5">

@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { auth } from "./auth";
 import { prisma } from "./db";
@@ -27,6 +28,16 @@ import type {
  */
 
 const OUTCOMES: EvalOutcome[] = ["CORRECT", "INCORRECT", "UNPARSED", "ERROR"];
+const ELAIP_BENCH_DATASET_URL =
+  "https://huggingface.co/datasets/KangKang625/ELAIPBench/resolve/main/elabench.jsonl";
+
+interface ElaipBenchRow {
+  paper_id?: string;
+  question: string;
+  paper_content?: string;
+}
+
+let elaipRowsPromise: Promise<Map<string, ElaipBenchRow>> | null = null;
 
 /** Throw 403 unless the caller is the admin. */
 async function requireAdmin(): Promise<void> {
@@ -74,6 +85,33 @@ function metaString(metadata: unknown, key: string): string | null {
 
 function emptyCounts(): Record<EvalOutcome, number> {
   return { CORRECT: 0, INCORRECT: 0, UNPARSED: 0, ERROR: 0 };
+}
+
+function elaipItemKey(row: ElaipBenchRow): string {
+  const hash = createHash("sha1").update(row.question).digest("hex").slice(0, 12);
+  return `${row.paper_id ?? "unknown"}:${hash}`;
+}
+
+async function loadElaipRowsByItemKey(): Promise<Map<string, ElaipBenchRow>> {
+  elaipRowsPromise ??= fetch(ELAIP_BENCH_DATASET_URL)
+    .then(async (resp) => {
+      if (!resp.ok) {
+        throw new Error(`HF fetch ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+      }
+      const byKey = new Map<string, ElaipBenchRow>();
+      for (const line of (await resp.text()).split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const row = JSON.parse(trimmed) as ElaipBenchRow;
+        byKey.set(elaipItemKey(row), row);
+      }
+      return byKey;
+    })
+    .catch((err) => {
+      elaipRowsPromise = null;
+      throw err;
+    });
+  return elaipRowsPromise;
 }
 
 /**
@@ -236,7 +274,7 @@ export async function getRunDetail(runId: string): Promise<RunDetail | null> {
   };
 }
 
-/** The model response (+ any note) for one item, for the inspector drawer. */
+/** Heavy item payload for the inspector: model response and paper text. */
 export async function getItemResponse(
   itemId: string,
 ): Promise<ItemResponse | null> {
@@ -246,9 +284,16 @@ export async function getItemResponse(
   });
   if (!row) return null;
   const md = row.predictionMetadata;
+  let paperContent: string | null = null;
+  try {
+    paperContent = (await loadElaipRowsByItemKey()).get(row.itemKey)?.paper_content ?? null;
+  } catch {
+    paperContent = null;
+  }
   return {
     itemKey: row.itemKey,
     response: metaString(md, "response"),
     note: metaString(md, "note"),
+    paperContent,
   };
 }

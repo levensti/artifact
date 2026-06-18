@@ -98,4 +98,5 @@ export interface ItemResponse {
   itemKey: string;
   response: string | null;
   note: string | null;
+  paperContent: string | null;
 }
