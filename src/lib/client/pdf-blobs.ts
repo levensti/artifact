@@ -23,6 +23,27 @@ export async function savePdfBlob(file: File): Promise<string> {
   return id;
 }
 
+/**
+ * Ingests a remote PDF by URL. The server fetches the bytes (sidestepping
+ * browser CORS) and stores them like an uploaded file, returning the blob id.
+ */
+export async function savePdfBlobFromUrl(url: string): Promise<string> {
+  const res = await fetch("/api/pdf-blobs", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const message =
+      (await res.json().then((d) => d?.error).catch(() => null)) ||
+      `PDF fetch failed (${res.status})`;
+    throw new Error(message);
+  }
+  const { id } = (await res.json()) as { id: string };
+  return id;
+}
+
 export async function loadPdfBlob(id: string): Promise<Blob | null> {
   const res = await fetch(`/api/pdf-blobs/${encodeURIComponent(id)}`, {
     credentials: "same-origin",

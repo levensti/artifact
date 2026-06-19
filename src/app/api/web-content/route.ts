@@ -71,9 +71,15 @@ export async function GET(req: NextRequest) {
       !contentType.includes("text/html") &&
       !contentType.includes("application/xhtml")
     ) {
+      // PDFs reach the Web tab too. Signal the client so it can hand off
+      // to the PDF ingestion path instead of surfacing a dead end.
+      const isPdf = contentType.includes("application/pdf");
       return NextResponse.json(
         {
-          error: `Unsupported content type: ${contentType}. Only HTML pages are supported.`,
+          error: isPdf
+            ? "This URL points to a PDF."
+            : `Unsupported content type: ${contentType}. Only HTML pages are supported.`,
+          isPdf,
         },
         { status: 400 },
       );
