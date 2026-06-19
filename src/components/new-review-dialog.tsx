@@ -28,7 +28,7 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import { savePdfBlob } from "@/lib/client/pdf-blobs";
+import { savePdfBlob, savePdfBlobFromUrl } from "@/lib/client/pdf-blobs";
 import { extractArxivId } from "@/lib/utils";
 import type { ArxivSearchResult } from "@/lib/explore";
 
@@ -239,31 +239,56 @@ export default function NewReviewDialog({
 
     setLoading(true);
     try {
-      // Fetch page metadata to get the title
+      // Probe the URL: grab the title for HTML pages, or detect a PDF so we
+      // can hand off to the PDF pipeline. A network failure here is non-fatal;
+      // we fall back to creating a web review with a hostname title.
       let pageTitle = parsed.hostname;
+      let probe:
+        | { title?: string }
+        | { error?: string; isPdf?: boolean }
+        | null = null;
+      let probeOk = false;
       try {
         const res = await fetch(
           `/api/web-content?url=${encodeURIComponent(trimmed)}`,
         );
-        if (res.ok) {
-          const data: { title?: string } = await res.json();
-          if (typeof data.title === "string" && data.title.trim()) {
-            pageTitle = data.title.trim();
-          }
-        } else {
-          const data = await res
-            .json()
-            .catch(() => ({ error: "Failed to fetch" }));
-          setError(data.error || "Could not load this page");
+        probeOk = res.ok;
+        probe = await res.json().catch(() => null);
+      } catch {
+        /* network error — treat as a plain web page below */
+      }
+
+      if (probe && !probeOk) {
+        const data = probe as { error?: string; isPdf?: boolean };
+        // A PDF link in the Web tab: hand off to the PDF pipeline so the
+        // user still gets a review instead of a dead-end error.
+        if (data.isPdf) {
+          const blobId = await savePdfBlobFromUrl(trimmed);
+          const fileName = decodeURIComponent(
+            parsed.pathname.split("/").pop() || "",
+          ).replace(/\.pdf$/i, "");
+          const pdfTitle = fileName.trim() || parsed.hostname;
+          const review = await createLocalPdfReview(blobId, pdfTitle);
+          setWebUrl("");
+          onCreated(review.id);
           return;
         }
-      } catch {
-        /* keep fallback title */
+        setError(data.error || "Could not load this page");
+        return;
+      }
+
+      if (probeOk && probe) {
+        const { title } = probe as { title?: string };
+        if (typeof title === "string" && title.trim()) {
+          pageTitle = title.trim();
+        }
       }
 
       const review = await createWebReview(trimmed, pageTitle);
       setWebUrl("");
       onCreated(review.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start review");
     } finally {
       setLoading(false);
     }
