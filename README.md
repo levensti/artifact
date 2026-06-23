@@ -10,19 +10,39 @@ We offer a free-to-use hosted version at [withartifact.com](https://withartifact
 
 Have a domain in mind and want to get a lay of the land? Tell Artifact what you'd like to go deep on and it performs web search, reads the papers it finds, and synthesizes a list of papers (in order of importance) for you to explore.
 
-![Discover feed of recommended papers](docs/screenshots/discovery.png)
+![Discover feed of recommended papers](docs/demo_screenshots/discovery.png)
 
 ### Read with an AI assistant that knows the paper
 
 The assistant has the full text in context, so you can ask questions, request derivations, pull side-by-side definitions, or highlight a passage to dive deeper. Margin notes and AI threads live in a notes rail next to the page.
 
-![Paper review: PDF with AI assistant and notes rail](docs/screenshots/paper-review.png)
+![Paper review: PDF with AI assistant and notes rail](docs/demo_screenshots/paper-review.png)
 
 ### Share a review with a colleague
 
 Generate a link that your colleagues can use to import your paper review, including your chats, notes, and deep dives.
 
-<img src="docs/screenshots/share-review-init.png" alt="Share dialog with copy link" width="49%" />
+<img src="docs/demo_screenshots/share-review-init.png" alt="Share dialog with copy link" width="49%" />
+
+## Support
+
+We are grateful for the support of the following organizations that make it possible for us to offer a hosted version of Artifact with generous inference usage for free for our users.
+
+**Open source programs**
+
+<a href="https://vercel.com/open-source-program">
+  <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge-2026.svg" />
+</a>
+&nbsp;&nbsp;
+<a href="https://www.anthropic.com">
+  <img alt="Claude" src="docs/supporters/claude_code_logo.svg" height="44" />
+</a>
+
+**Inference credits**
+
+<a href="https://fireworks.ai">
+  <img alt="Fireworks AI" src="docs/supporters/fireworks_logo.png" height="44" />
+</a>
 
 ## Contributing
 
