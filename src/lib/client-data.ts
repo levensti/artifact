@@ -7,7 +7,12 @@
  * the same way they did when the data lived in IndexedDB.
  */
 
-import type { PaperReview, ChatMessage } from "@/lib/review-types";
+import type {
+  PaperReview,
+  ChatMessage,
+  CompactionRecord,
+  ContextUsage,
+} from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
@@ -228,6 +233,46 @@ export async function loadMessages(reviewId: string): Promise<ChatMessage[]> {
   );
   messagesCache.set(reviewId, messages);
   return messages;
+}
+
+/**
+ * Load messages plus the conversation's derived `contextUsage` (measured size +
+ * window + compaction verdict) in one request. Used by the chat hook on mount
+ * so the usage meter is seeded from server-authoritative state — surviving a
+ * page refresh. Always hits the network (the meter must be fresh) while priming
+ * the messages cache.
+ */
+export async function loadConversation(reviewId: string): Promise<{
+  messages: ChatMessage[];
+  contextUsage: ContextUsage | null;
+}> {
+  if (!reviewId?.trim()) return { messages: [], contextUsage: null };
+  const res = await apiFetch<{
+    messages: ChatMessage[];
+    contextUsage: ContextUsage | null;
+  }>(`/api/reviews/${encodeURIComponent(reviewId)}/messages`);
+  messagesCache.set(reviewId, res.messages);
+  return { messages: res.messages, contextUsage: res.contextUsage ?? null };
+}
+
+/**
+ * Compact older turns of a conversation into a recap (server-side, metered,
+ * idempotent). Returns the new compaction record and an estimated post-compaction
+ * usage view for the meter. The raw messages are unchanged, so the cache stays
+ * valid.
+ */
+export async function compactConversation(
+  reviewId: string,
+  apiKey?: string,
+): Promise<{
+  status: "compacted" | "already" | "noop";
+  compaction: CompactionRecord | null;
+  contextUsage: ContextUsage | null;
+}> {
+  return apiFetch(`/api/chat/compact`, {
+    method: "POST",
+    body: { reviewId, apiKey },
+  });
 }
 
 export async function saveMessages(

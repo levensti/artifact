@@ -78,6 +78,30 @@ export const TOKEN_RESERVE = {
 } as const;
 
 /**
+ * Fraction of the usable history budget (window minus the RESPONSE/SAFETY
+ * reserves) at which the chat should compact older turns into a recap. Crossing
+ * this is a soft signal surfaced to the client, which auto-compacts — well below
+ * the point where `fitTranscriptToBudget` would start silently dropping turns.
+ */
+export const COMPACT_THRESHOLD = 0.8;
+
+/**
+ * Whether a measured/estimated context size has crossed the compaction
+ * threshold, against the usable history budget (window minus the response and
+ * safety reserves). Single source of truth shared by the chat stream, the
+ * messages GET, and the compaction endpoint so the client never needs the
+ * threshold constants.
+ */
+export function computeShouldCompact(
+  usedTokens: number,
+  windowTokens: number,
+): boolean {
+  const usableBudget =
+    windowTokens - TOKEN_RESERVE.RESPONSE - TOKEN_RESERVE.SAFETY;
+  return usableBudget > 0 && usedTokens >= COMPACT_THRESHOLD * usableBudget;
+}
+
+/**
  * Token usage as reported by OpenRouter's OpenAI-compatible chat-completions
  * API. Shared by every caller that meters spend; the caller decides how to
  * weight it. `total_tokens` is provided by the API but unused by our metering.

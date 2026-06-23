@@ -25,6 +25,20 @@ export type StreamEvent =
       outputTokens: number;
     }
   | {
+      /**
+       * Measured context-window usage for one tool round, so the client can
+       * render a usage meter and decide whether to auto-compact. Emitted once
+       * per round (each tool call is another model call); the final round of a
+       * turn reflects the fullest context. `usedTokens` is the real
+       * `prompt_tokens` from the provider, not an estimate. `shouldCompact` is
+       * the server's verdict (window stays server-only).
+       */
+      type: "context_usage";
+      usedTokens: number;
+      windowTokens: number;
+      shouldCompact: boolean;
+    }
+  | {
       type: "error";
       message: string;
       /** Set when the upstream provider rejected the turn for hitting a usage

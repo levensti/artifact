@@ -16,6 +16,7 @@ import {
   // BookmarkPlus,
   Loader2,
   MessageSquareQuote,
+  Minimize2,
   PenLine,
   Send,
   X,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { hasUsableProvider } from "@/lib/keys";
 import type { Annotation } from "@/lib/annotations";
+import type { ContextUsage } from "@/lib/review-types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSettingsOpener } from "./settings-opener-context";
@@ -300,6 +302,92 @@ function ChatInput({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Context-usage meter                                                */
+/* ------------------------------------------------------------------ */
+
+/** Compact token count: 980 → "980", 1_250 → "1.3k", 128_000 → "128k". */
+function formatTokens(n: number): string {
+  if (n < 1000) return `${n}`;
+  const k = n / 1000;
+  return `${k < 10 ? k.toFixed(1) : Math.round(k)}k`;
+}
+
+/**
+ * Thin running indicator of how full the model context is, with a manual
+ * "Compact now" lever. The chat auto-compacts at the threshold; this just makes
+ * usage visible and lets the user compact early. Hidden until usage is known.
+ */
+function ContextMeter({
+  usage,
+  isCompacting,
+  note,
+  onCompact,
+  disabled,
+}: {
+  usage: ContextUsage | null;
+  isCompacting: boolean;
+  note: string | null;
+  onCompact: () => void;
+  disabled: boolean;
+}) {
+  if (isCompacting) {
+    return (
+      <div className="flex items-center justify-center gap-1.5 px-4 pb-1 pt-0.5 text-[10.5px] text-muted-foreground">
+        <Loader2 className="size-2.5 animate-spin" aria-hidden />
+        Compacting earlier messages…
+      </div>
+    );
+  }
+  // No usage yet (fresh chat): still surface a compaction note if one just fired.
+  if (!usage || usage.usedTokens <= 0 || usage.windowTokens <= 0) {
+    return note ? (
+      <div className="px-4 pb-1 pt-0.5 text-center text-[10.5px] text-muted-foreground">
+        {note}
+      </div>
+    ) : null;
+  }
+  const pct = Math.min(
+    100,
+    Math.round((usage.usedTokens / usage.windowTokens) * 100),
+  );
+  const near = usage.shouldCompact;
+  return (
+    <div className="flex items-center gap-2 px-4 pb-1 pt-0.5 text-[10.5px] text-muted-foreground">
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-border">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width] duration-300 ease-out",
+            near ? "bg-amber-500/80" : "bg-foreground/35",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {note ? (
+        <span className="text-foreground/70">{note}</span>
+      ) : (
+        <span
+          className="tabular-nums"
+          title={`${usage.usedTokens.toLocaleString()} / ${usage.windowTokens.toLocaleString()} tokens`}
+        >
+          {formatTokens(usage.usedTokens)}/{formatTokens(usage.windowTokens)} ·{" "}
+          {pct}%
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onCompact}
+        disabled={disabled}
+        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+        title="Compact older messages into a summary to free up context"
+      >
+        <Minimize2 className="size-2.5" strokeWidth={1.75} aria-hidden />
+        Compact
+      </button>
     </div>
   );
 }
@@ -875,6 +963,13 @@ export default function ChatPanel({
               </button> */}
             </div>
           )}
+        <ContextMeter
+          usage={chat.contextUsage}
+          isCompacting={chat.isCompacting}
+          note={chat.compactionNote}
+          onCompact={() => void chat.compact()}
+          disabled={chat.isStreaming || !modelReady}
+        />
         <ChatInput
           input={chat.input}
           setInput={chat.setInput}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getExaApiKey,
   hasUsableProvider,
@@ -8,7 +8,8 @@ import {
   resolveModelCredentials,
 } from "@/lib/keys";
 import {
-  loadMessages,
+  loadConversation,
+  compactConversation,
   saveMessages,
   primeMessagesCache,
   type ChatMessage,
@@ -20,7 +21,7 @@ import {
   isLongPaper,
   parseAndCachePaper,
 } from "@/lib/client/parsed-papers";
-import type { ParsedPaper } from "@/lib/review-types";
+import type { ContextUsage, ParsedPaper } from "@/lib/review-types";
 import { streamingStore } from "@/lib/streaming-store";
 import {
   processStreamEvent,
@@ -135,6 +136,14 @@ export interface UseChatReturn {
   input: string;
   setInput: (v: string) => void;
   isStreaming: boolean;
+  /** Measured context-window usage for the running meter (null until known). */
+  contextUsage: ContextUsage | null;
+  /** True while a compaction request is in flight. */
+  isCompacting: boolean;
+  /** Transient result of the last compaction (success / no-op / error), or null. */
+  compactionNote: string | null;
+  /** Manually compact older turns into a recap (the "Compact now" affordance). */
+  compact: () => Promise<void>;
   error: string | null;
   /** "rate_limit" when the last failure was an upstream usage-limit rejection,
    *  so the UI can prompt for the user's own key instead of a generic error. */
@@ -191,12 +200,40 @@ export function useChat({
    *  failure indicator/retry button on the message itself. Cleared on the
    *  next successful submit. */
   const [failedUserMsgId, setFailedUserMsgId] = useState<string | null>(null);
+  /** Measured context-window usage for the running meter. Seeded from the
+   *  server on load and refreshed by `context_usage` stream events. */
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
+  const [isCompacting, setIsCompacting] = useState(false);
+  /** Transient one-line result of the last compaction, shown by the meter so a
+   *  manual "Compact" click always has visible feedback (even a no-op). */
+  const [compactionNote, setCompactionNote] = useState<string | null>(null);
+  // Guards so an in-flight compaction never double-fires, and so a compaction
+  // that can't reduce usage (e.g. a huge paper dominates the window) doesn't
+  // auto-loop — we only retry once usage climbs past the last attempt.
+  const isCompactingRef = useRef(false);
+  const lastCompactAttemptTokens = useRef(0);
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashNote = useCallback((msg: string) => {
+    setCompactionNote(msg);
+    if (noteTimer.current) clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(() => setCompactionNote(null), 4000);
+  }, []);
+  useEffect(
+    () => () => {
+      if (noteTimer.current) clearTimeout(noteTimer.current);
+    },
+    [],
+  );
 
-  // Load messages on review change
+  // Load messages + context usage on review change
   useEffect(() => {
     let cancelled = false;
-    void loadMessages(reviewId).then((rows) => {
-      if (!cancelled) setMessages(rows);
+    setContextUsage(null);
+    lastCompactAttemptTokens.current = 0;
+    void loadConversation(reviewId).then(({ messages: rows, contextUsage: cu }) => {
+      if (cancelled) return;
+      setMessages(rows);
+      setContextUsage(cu);
     });
     return () => {
       cancelled = true;
@@ -378,6 +415,15 @@ export function useChat({
             const e = new Error(event.message);
             if (event.code) (e as { code?: string }).code = event.code;
             throw e;
+          }
+          if (event.type === "context_usage") {
+            // Not a render step — drives the usage meter / auto-compaction.
+            setContextUsage({
+              usedTokens: event.usedTokens,
+              windowTokens: event.windowTokens,
+              shouldCompact: event.shouldCompact,
+            });
+            return;
           }
           steps = processStreamEvent(steps, event);
           // Batch state flushes to one per animation frame. Without this,
@@ -656,6 +702,8 @@ export function useChat({
     setLastFailedRequest(null);
     streamingStore.set([]);
     setStreamingMsgId(null);
+    setContextUsage(null);
+    lastCompactAttemptTokens.current = 0;
     await saveMessages(reviewId, []);
   }, [isStreaming, reviewId]);
 
@@ -692,11 +740,53 @@ export function useChat({
     submitChat,
   ]);
 
+  // Compact older turns into a recap (Claude Code-style). Idempotent + guarded:
+  // never overlaps a stream or another compaction, and records the usage level
+  // it ran at so it can't auto-loop when compaction can't reduce the window
+  // (e.g. a large paper dominates context).
+  const compact = useCallback(async () => {
+    if (isCompactingRef.current || isStreaming) return;
+    isCompactingRef.current = true;
+    setIsCompacting(true);
+    lastCompactAttemptTokens.current = contextUsage?.usedTokens ?? 0;
+    try {
+      const { status, contextUsage: cu } = await compactConversation(
+        reviewId,
+        resolveModelCredentials().apiKey || undefined,
+      );
+      if (cu) setContextUsage(cu);
+      flashNote(
+        status === "compacted"
+          ? "Compacted earlier messages."
+          : status === "already"
+            ? "Already compact — nothing new to summarize."
+            : "Nothing old enough to compact yet.",
+      );
+    } catch {
+      flashNote("Couldn't compact — please try again.");
+    } finally {
+      isCompactingRef.current = false;
+      setIsCompacting(false);
+    }
+  }, [reviewId, isStreaming, contextUsage, flashNote]);
+
+  // Auto-compact at the threshold, the moment the chat is idle. Only re-fires
+  // once usage climbs past the last attempt, so a no-op compaction can't loop.
+  useEffect(() => {
+    if (!contextUsage?.shouldCompact || isStreaming || isCompacting) return;
+    if (contextUsage.usedTokens <= lastCompactAttemptTokens.current) return;
+    void compact();
+  }, [contextUsage, isStreaming, isCompacting, compact]);
+
   return {
     messages,
     input,
     setInput,
     isStreaming,
+    contextUsage,
+    isCompacting,
+    compactionNote,
+    compact,
     error,
     errorCode,
     failedUserMsgId,

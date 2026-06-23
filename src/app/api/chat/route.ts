@@ -15,6 +15,7 @@
 
 import { NextRequest } from "next/server";
 import {
+  computeShouldCompact,
   getOpenRouterContextWindow,
   TOKEN_RESERVE,
 } from "@/lib/openrouter";
@@ -37,7 +38,11 @@ import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
 import * as store from "@/server/store";
 import { buildPaperBlock } from "./paper-block";
 import { getReadingSystemPrompt, runReadingAgent } from "@/server/reading-agent";
-import type { ChatMessage, ParsedPaper } from "@/lib/review-types";
+import type {
+  ChatMessage,
+  ContextMetadata,
+  ParsedPaper,
+} from "@/lib/review-types";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -121,6 +126,33 @@ const NDJSON_HEADERS = {
   "Transfer-Encoding": "chunked",
   "Cache-Control": "no-cache",
 } as const;
+
+/**
+ * Build the model-facing transcript from the full history given a compaction
+ * record. Drops the leading `coveredCount` messages the recap subsumes and
+ * prepends the summary as a single context message. Returns the input
+ * unchanged when there's no compaction or the boundary no longer lines up
+ * (e.g. history was cleared), so a stale record can never strip live turns.
+ * Non-destructive: the caller still persists the untouched full history.
+ */
+function applyCompaction(
+  base: ChatMessage[],
+  compaction: ContextMetadata["compaction"],
+): ChatMessage[] {
+  if (!compaction || compaction.coveredCount <= 0) return base;
+  if (compaction.coveredCount >= base.length) return base;
+  // Sanity-check the boundary still points at the message it summarized.
+  if (base[compaction.coveredCount - 1]?.id !== compaction.coveredThroughId) {
+    return base;
+  }
+  const summaryMsg: ChatMessage = {
+    id: `compaction-${compaction.coveredThroughId}`,
+    role: "user",
+    content: `Summary of earlier conversation (for context):\n\n${compaction.summary}`,
+    timestamp: compaction.createdAt,
+  };
+  return [summaryMsg, ...base.slice(compaction.coveredCount)];
+}
 
 /**
  * Reject a request that exceeded the platform token budget. Emits the same
@@ -221,14 +253,21 @@ export async function POST(req: NextRequest) {
   // only pre-stream cost is auth + one history read — nothing blocks
   // time-to-first-token. Legacy path: the client supplied the transcript.
   let conversation: TranscriptMessage[];
-  let persist: { userId: string; reviewId: string; base: ChatMessage[] } | null =
-    null;
+  let persist: {
+    userId: string;
+    reviewId: string;
+    base: ChatMessage[];
+    priorMeta: ContextMetadata | null;
+  } | null = null;
+  // Context window; the emit loop reuses it for `context_usage` events.
+  const windowTokens = getOpenRouterContextWindow();
   if (isStateful) {
     try {
       // Reuse the user already resolved during metered key resolution to avoid
       // a second session read on the pre-stream path.
       const userId = meterUserId ?? (await requireUserId());
-      const history = await store.getMessages(userId, reviewId!);
+      const { messages: history, contextMetadata: priorMeta } =
+        await store.getConversation(userId, reviewId!);
       const last = history[history.length - 1];
       let base: ChatMessage[];
       if (resume || (last?.role === "user" && last.id === userMessageId)) {
@@ -244,7 +283,13 @@ export async function POST(req: NextRequest) {
         };
         base = [...history, userMsg];
       }
-      persist = { userId, reviewId: reviewId!, base };
+      // `base` is the full history we persist (never mutated by compaction).
+      persist = { userId, reviewId: reviewId!, base, priorMeta };
+
+      // Compaction (non-destructive): if older turns were folded into a recap,
+      // build the MODEL-facing transcript by dropping those covered messages
+      // and prepending the summary. Storage keeps `base` intact.
+      const modelBase = applyCompaction(base, priorMeta?.compaction);
 
       // Budget the conversation to fit the model's context window. Storage
       // keeps the full history; this only shapes what's sent to the model.
@@ -253,12 +298,9 @@ export async function POST(req: NextRequest) {
       const paperBlock = buildPaperBlock(paperContext, parsedPaper) ?? "";
       const overhead = estimateTokens(systemPrompt) + estimateTokens(paperBlock);
       const historyBudget =
-        getOpenRouterContextWindow() -
-        overhead -
-        TOKEN_RESERVE.RESPONSE -
-        TOKEN_RESERVE.SAFETY;
+        windowTokens - overhead - TOKEN_RESERVE.RESPONSE - TOKEN_RESERVE.SAFETY;
       conversation = fitTranscriptToBudget(
-        base,
+        modelBase,
         Math.max(TOKEN_RESERVE.HISTORY_FLOOR, historyBudget),
       ).messages;
     } catch (err) {
@@ -297,6 +339,9 @@ export async function POST(req: NextRequest) {
       let steps: AgentStep[] = [];
       // Sum real token usage across every tool round for the reconcile below.
       let actualTokens = 0;
+      // Largest measured context size this turn (the last round is fullest),
+      // persisted so the client meter is accurate after a refresh.
+      let lastContextTokens = persist?.priorMeta?.lastContextTokens ?? 0;
       const emit = (event: StreamEvent) => {
         try {
           controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
@@ -315,6 +360,19 @@ export async function POST(req: NextRequest) {
             event.cacheReadTokens,
             event.outputTokens,
           );
+          // Surface the real context size (prompt tokens = uncached + cached)
+          // so the client can render a usage meter and auto-compact. Only the
+          // server-owned path has a conversation to compact.
+          if (persist) {
+            const used = event.inputTokens + event.cacheReadTokens;
+            lastContextTokens = Math.max(lastContextTokens, used);
+            emit({
+              type: "context_usage",
+              usedTokens: used,
+              windowTokens,
+              shouldCompact: computeShouldCompact(used, windowTokens),
+            });
+          }
         }
       };
 
@@ -370,11 +428,19 @@ export async function POST(req: NextRequest) {
           };
           finalMessages = [...persist.base, assistantMsg];
         }
+        // Preserve any existing compaction record; refresh the measured
+        // context size + window so the meter survives a reload.
+        const nextMeta: ContextMetadata = {
+          ...(persist.priorMeta ?? {}),
+          lastContextTokens,
+          windowTokens,
+        };
         try {
           await store.setMessages(
             persist.userId,
             persist.reviewId,
             finalMessages,
+            nextMeta,
           );
         } catch (e) {
           // Non-fatal: the client already has the turn on screen. Worst case
