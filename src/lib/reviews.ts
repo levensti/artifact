@@ -6,6 +6,8 @@ import {
   getReviewsSnapshot,
   areReviewsHydrated,
   loadMessages,
+  loadConversation,
+  compactConversation,
   saveMessages,
   primeMessagesCache,
   updateReviewTitle as updateReviewTitleRemote,
@@ -77,4 +79,10 @@ export async function updateReviewTitle(
   return updateReviewTitleRemote(id, title);
 }
 
-export { loadMessages, saveMessages, primeMessagesCache };
+export {
+  loadMessages,
+  loadConversation,
+  compactConversation,
+  saveMessages,
+  primeMessagesCache,
+};

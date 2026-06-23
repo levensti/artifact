@@ -119,6 +119,11 @@ model ReviewMessages {
   id       String @id @default(uuid())
   reviewId String @unique
   messages Json
+  /// Per-conversation context state (see `ContextMetadata` in review-types):
+  /// the compaction record (recap summary + boundary) and the last measured
+  /// context size, written atomically with `messages`. Nullable: a fresh
+  /// conversation has none until it grows or is compacted.
+  contextMetadata Json?
   review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 }
 

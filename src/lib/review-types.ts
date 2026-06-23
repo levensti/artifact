@@ -34,6 +34,56 @@ export interface ChatMessage {
   blocks?: ChatAssistantBlock[];
 }
 
+/**
+ * A compaction record: an LLM recap of the oldest stretch of a conversation,
+ * folded in so the model keeps the gist without paying the full token cost.
+ * Non-destructive — the raw messages it covers stay in `ReviewMessages.messages`;
+ * only the model-facing transcript drops them in favour of `summary`.
+ */
+export interface CompactionRecord {
+  /** Recap markdown of every message up to and including `coveredThroughId`. */
+  summary: string;
+  /** Id of the last `ChatMessage` folded into `summary`. */
+  coveredThroughId: string;
+  /** How many leading messages `summary` replaces in the model transcript. */
+  coveredCount: number;
+  createdAt: string;
+}
+
+/**
+ * Per-conversation context state persisted alongside the messages
+ * (`ReviewMessages.contextMetadata`). Server-authoritative so the usage meter
+ * and auto-compaction survive a page refresh.
+ */
+export interface ContextMetadata {
+  compaction?: CompactionRecord;
+  /** Measured `prompt_tokens` of the most recent turn (real, not estimated). */
+  lastContextTokens?: number;
+  /** Snapshot of the model context window, surfaced to the client meter. */
+  windowTokens?: number;
+  /** Estimated paper-block footprint in context (the uncompactable paper cost). */
+  paperTokens?: number;
+  /** Estimated fixed overhead: paper + system prompt. Conversation tokens are
+   *  `lastContextTokens − overheadTokens`. */
+  overheadTokens?: number;
+}
+
+/**
+ * The slice of context state the client needs for the usage meter and
+ * auto-compaction. Derived server-side (the compaction threshold lives in
+ * server-only config) so the browser never gets the recap text or the
+ * threshold logic — just numbers and a verdict.
+ */
+export interface ContextUsage {
+  usedTokens: number;
+  windowTokens: number;
+  shouldCompact: boolean;
+  /** Estimated paper-block footprint in context (uncompactable). */
+  paperTokens?: number;
+  /** Estimated fixed overhead (paper + system prompt). */
+  overheadTokens?: number;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Structured paper representation                                    */
 /* ------------------------------------------------------------------ */

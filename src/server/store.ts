@@ -3,7 +3,11 @@ import { prisma } from "./db";
 import { Prisma } from "@prisma/client";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
-import type { ChatMessage, PaperReview } from "@/lib/review-types";
+import type {
+  ChatMessage,
+  ContextMetadata,
+  PaperReview,
+} from "@/lib/review-types";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import type {
   DiscoverQuery,
@@ -172,10 +176,51 @@ export async function getMessages(
   return (row?.messages as unknown as ChatMessage[] | undefined) ?? [];
 }
 
+/**
+ * Load a conversation's messages plus its `contextMetadata` (compaction record
+ * + last measured context size) in one read. Use this on paths that need the
+ * context state — the usage meter, compaction-aware transcript build, and the
+ * compaction endpoint.
+ */
+export async function getConversation(
+  userId: string,
+  reviewId: string,
+): Promise<{ messages: ChatMessage[]; contextMetadata: ContextMetadata | null }> {
+  await assertReviewOwned(userId, reviewId);
+  const row = await prisma.reviewMessages.findUnique({ where: { reviewId } });
+  return {
+    messages: (row?.messages as unknown as ChatMessage[] | undefined) ?? [],
+    contextMetadata:
+      (row?.contextMetadata as unknown as ContextMetadata | null | undefined) ??
+      null,
+  };
+}
+
+/**
+ * Update only the `contextMetadata` column, leaving `messages` untouched.
+ * Used by the compaction endpoint, which records a recap without mutating the
+ * raw history. No-ops with a 404 if the conversation row doesn't exist yet
+ * (nothing to compact).
+ */
+export async function setContextMetadata(
+  userId: string,
+  reviewId: string,
+  contextMetadata: ContextMetadata,
+): Promise<void> {
+  await assertReviewOwned(userId, reviewId);
+  await prisma.reviewMessages.update({
+    where: { reviewId },
+    data: {
+      contextMetadata: contextMetadata as unknown as Prisma.InputJsonValue,
+    },
+  });
+}
+
 export async function setMessages(
   userId: string,
   reviewId: string,
   messages: ChatMessage[],
+  contextMetadata?: ContextMetadata,
 ): Promise<void> {
   const review = await prisma.review.findFirst({
     where: { id: reviewId, userId },
@@ -188,10 +233,23 @@ export async function setMessages(
   });
   const priorMsgs =
     (prior?.messages as unknown as ChatMessage[] | undefined) ?? [];
+  // Only touch the metadata column when the caller supplies it, so callers
+  // that just persist messages don't clobber an existing compaction record.
+  const metaData =
+    contextMetadata !== undefined
+      ? { contextMetadata: contextMetadata as unknown as Prisma.InputJsonValue }
+      : {};
   await prisma.reviewMessages.upsert({
     where: { reviewId },
-    create: { reviewId, messages: messages as unknown as Prisma.InputJsonValue },
-    update: { messages: messages as unknown as Prisma.InputJsonValue },
+    create: {
+      reviewId,
+      messages: messages as unknown as Prisma.InputJsonValue,
+      ...metaData,
+    },
+    update: {
+      messages: messages as unknown as Prisma.InputJsonValue,
+      ...metaData,
+    },
   });
   // Fire when a new user-authored message has appeared in this save.
   // Persistence happens after streaming, so by the time we see it the

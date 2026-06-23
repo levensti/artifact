@@ -78,6 +78,26 @@ export const TOKEN_RESERVE = {
 } as const;
 
 /**
+ * Fraction of the FULL context window at which the chat offers/auto-runs
+ * compaction. Measured against the raw window (matching the usage the meter
+ * shows), so "≥90%" means the same thing the user sees.
+ */
+export const COMPACT_THRESHOLD = 0.9;
+
+/**
+ * Whether a measured/estimated context size has crossed the compaction
+ * threshold (a share of the full window). Single source of truth shared by the
+ * chat stream, the messages GET, and the compaction endpoint so the client
+ * never needs the threshold constant.
+ */
+export function computeShouldCompact(
+  usedTokens: number,
+  windowTokens: number,
+): boolean {
+  return windowTokens > 0 && usedTokens >= COMPACT_THRESHOLD * windowTokens;
+}
+
+/**
  * Token usage as reported by OpenRouter's OpenAI-compatible chat-completions
  * API. Shared by every caller that meters spend; the caller decides how to
  * weight it. `total_tokens` is provided by the API but unused by our metering.
