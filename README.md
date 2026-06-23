@@ -47,8 +47,8 @@ We are grateful for the support of the following organizations that make it poss
     </td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Vercel</b><br/>Open source program — hosting</sub></td>
-    <td align="center"><sub><b>Claude</b><br/>Open source program — model credits</sub></td>
+    <td align="center"><sub><b>Vercel</b><br/>OSS program</sub></td>
+    <td align="center"><sub><b>Claude</b><br/>OSS program</sub></td>
     <td align="center"><sub><b>Fireworks AI</b><br/>Inference credits</sub></td>
   </tr>
 </table>
