@@ -9,7 +9,7 @@ import JournalCard, { type JournalEntry } from "@/components/journal-card";
 import JournalEntryModal from "@/components/journal-entry-modal";
 import JournalComposerModal from "@/components/journal-composer-modal";
 import {
-  getSavedSelectedModel,
+  hasUsableProvider,
   hydrateClientStore,
   loadWikiPages,
   saveWikiPage,
@@ -244,7 +244,7 @@ function JournalPageInner() {
 
         {composerOpen ? (
           <JournalComposerModal
-            selectedModel={getSavedSelectedModel()}
+            modelReady={hasUsableProvider()}
             onClose={() => setComposerOpen(false)}
             onCreated={(slug) => {
               void refreshPages();
@@ -345,7 +345,7 @@ function JournalPageInner() {
 
       {composerOpen ? (
         <JournalComposerModal
-          selectedModel={getSavedSelectedModel()}
+          modelReady={hasUsableProvider()}
           onClose={() => setComposerOpen(false)}
           onCreated={(slug) => {
             void refreshPages();

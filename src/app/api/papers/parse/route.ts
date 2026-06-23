@@ -10,7 +10,7 @@
 import { NextRequest } from "next/server";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import { resolveOpenRouterKey } from "@/server/provider-env";
-import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
+import { OPENROUTER_BASE_URL, getOpenRouterModel } from "@/lib/openrouter";
 import type { ParsedPaper } from "@/lib/review-types";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       tables: Array.isArray(parsed.tables) ? parsed.tables : [],
       summary: typeof parsed.summary === "string" ? parsed.summary : "",
       parsedAt: new Date().toISOString(),
-      parsedWith: { modelId: OPENROUTER_MODEL },
+      parsedWith: { modelId: getOpenRouterModel() },
     };
 
     return new Response(JSON.stringify(result), {
@@ -126,7 +126,7 @@ async function callOpenRouter(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: getOpenRouterModel(),
       messages: [
         { role: "system", content: PARSE_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },

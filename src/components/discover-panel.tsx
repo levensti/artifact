@@ -9,11 +9,9 @@ import {
   type KeyboardEvent,
 } from "react";
 import { ArrowLeft, ArrowUp, KeyRound } from "lucide-react";
-import type { Model } from "@/lib/models";
 import { hasUsableProvider } from "@/lib/keys";
 import {
   ensureDiscoverLoaded,
-  getSavedSelectedModel,
   hydrateClientStore,
 } from "@/lib/client-data";
 import { useDiscoverBriefs, RecentBriefsList } from "./discover-queue";
@@ -146,7 +144,7 @@ function EmptyHeading() {
 
 export default function DiscoverPanel() {
   const [hydrated, setHydrated] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
+  const [modelReady, setModelReady] = useState(false);
   // The brief currently in focus (a root query id). null = browse view.
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const { openSettings } = useSettingsOpener();
@@ -159,7 +157,7 @@ export default function DiscoverPanel() {
         // lazy-loaded here so it's never in the app-wide bootstrap.
         await Promise.all([hydrateClientStore(), ensureDiscoverLoaded()]);
         if (cancelled) return;
-        if (hasUsableProvider()) setSelectedModel(getSavedSelectedModel());
+        setModelReady(hasUsableProvider());
       } finally {
         if (!cancelled) setHydrated(true);
       }
@@ -169,8 +167,8 @@ export default function DiscoverPanel() {
     };
   }, []);
 
-  const chat = useDiscoverChat({ selectedModel });
-  const canSubmit = !!selectedModel && chat.hasKeyForModel;
+  const chat = useDiscoverChat({ modelReady });
+  const canSubmit = modelReady && chat.hasKeyForModel;
   const { threads, hasExaKey } = useDiscoverBriefs(
     chat.liveQueryId,
     chat.liveSteps,
@@ -291,7 +289,7 @@ export default function DiscoverPanel() {
                 onSubmit={handleSubmit}
               />
 
-              {hydrated && !selectedModel ? (
+              {hydrated && !modelReady ? (
                 <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
                   <div className="flex items-start gap-3">
                     <KeyRound

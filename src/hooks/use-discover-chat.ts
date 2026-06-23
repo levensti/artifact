@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Model } from "@/lib/models";
 import {
   createDiscoverQuery,
   finalizeDiscoverQuery,
@@ -70,7 +69,7 @@ async function parseNDJSONStream(
 /* ------------------------------------------------------------------ */
 
 interface UseDiscoverChatOptions {
-  selectedModel: Model | null;
+  modelReady: boolean;
 }
 
 export interface UseDiscoverChatReturn {
@@ -271,7 +270,7 @@ function enrichStructuredPicks(
 }
 
 export function useDiscoverChat({
-  selectedModel,
+  modelReady,
 }: UseDiscoverChatOptions): UseDiscoverChatReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
@@ -299,7 +298,7 @@ export function useDiscoverChat({
     promptText?: string;
   } | null>(null);
 
-  const hasKeyForModel = selectedModel != null && hasUsableProvider();
+  const hasKeyForModel = modelReady && hasUsableProvider();
 
   const submit = useCallback(
     async (
@@ -307,7 +306,7 @@ export function useDiscoverChat({
       opts?: { skipWebSearch?: boolean; promptText?: string },
     ) => {
       const trimmed = text.trim();
-      if (!trimmed || isStreaming || !selectedModel) return;
+      if (!trimmed || isStreaming || !modelReady) return;
       if (!hasUsableProvider()) return;
 
       lastSubmitRef.current = { text: trimmed, promptText: opts?.promptText };
@@ -428,7 +427,7 @@ export function useDiscoverChat({
         setLiveQueryText(null);
       }
     },
-    [isStreaming, selectedModel],
+    [isStreaming, modelReady],
   );
 
   const resumeAfterExaDecision = useCallback(

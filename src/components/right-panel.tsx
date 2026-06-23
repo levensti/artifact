@@ -6,7 +6,6 @@ import {
   Sparkles,
   StickyNote,
 } from "lucide-react";
-import type { Model } from "@/lib/models";
 import type { Annotation } from "@/lib/annotations";
 import { cn } from "@/lib/utils";
 import ChatPanel from "./chat-panel";
@@ -23,8 +22,7 @@ interface RightPanelProps {
   chatThreadAnnotationId: string | null;
   onChatThreadChange: (id: string | null) => void;
   onAnnotationsPersist: () => void;
-  selectedModel: Model | null;
-  onModelChange: (model: Model | null) => void;
+  modelReady: boolean;
   sourceUrl?: string | null;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
@@ -55,8 +53,7 @@ export default function RightPanel({
   chatThreadAnnotationId,
   onChatThreadChange,
   onAnnotationsPersist,
-  selectedModel,
-  onModelChange,
+  modelReady,
   sourceUrl,
   collapsed = false,
   onToggleCollapsed,
@@ -168,8 +165,7 @@ export default function RightPanel({
             onChatThreadChange={onChatThreadChange}
             onAnnotationsPersist={onAnnotationsPersist}
             hideHeader
-            selectedModel={selectedModel}
-            onModelChange={onModelChange}
+            modelReady={modelReady}
             sourceUrl={sourceUrl}
           />
         </div>

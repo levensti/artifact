@@ -11,7 +11,7 @@ import { readSSEStream } from "@/lib/sse";
 import type { ParsedPaper } from "@/lib/review-types";
 import {
   OPENROUTER_BASE_URL,
-  OPENROUTER_MODEL,
+  getOpenRouterModel,
   type OpenRouterUsage,
 } from "@/lib/openrouter";
 import { toOpenAITools } from "@/tools/registry";
@@ -69,7 +69,7 @@ export async function runOpenRouterAgentLoop(
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
   options?: AgentLoopOptions,
-  model = OPENROUTER_MODEL,
+  model = getOpenRouterModel(),
 ) {
   const paperBlock = buildPaperBlock(paperContext, parsedPaper);
   const baseSystem = systemPrompt + TOOL_RESULT_GUARDRAIL;
