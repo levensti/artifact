@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Sparkles, X } from "lucide-react";
-import type { Model } from "@/lib/models";
 import { resolveModelCredentials } from "@/lib/keys";
 import {
   loadWikiPages,
@@ -22,13 +21,13 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface JournalComposerModalProps {
-  selectedModel: Model | null;
+  modelReady: boolean;
   onClose: () => void;
   onCreated?: (slug: string) => void;
 }
 
 export default function JournalComposerModal({
-  selectedModel,
+  modelReady,
   onClose,
   onCreated,
 }: JournalComposerModalProps) {
@@ -47,7 +46,7 @@ export default function JournalComposerModal({
   const handleDraft = useCallback(async () => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
-    if (!selectedModel) {
+    if (!modelReady) {
       setValidationErr("Add an OpenRouter API key in Settings first.");
       return;
     }
@@ -87,7 +86,7 @@ export default function JournalComposerModal({
       prompt: trimmed,
       apiKey: creds.apiKey,
     });
-  }, [onClose, onCreated, prompt, selectedModel]);
+  }, [onClose, onCreated, prompt, modelReady]);
 
   return (
     <div

@@ -7,8 +7,6 @@
  * the same way they did when the data lived in IndexedDB.
  */
 
-import type { Model } from "@/lib/models";
-import { FIXED_MODEL } from "@/lib/openrouter";
 import type { PaperReview, ChatMessage } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
@@ -737,15 +735,6 @@ export async function setExaApiKey(key: string): Promise<void> {
 
 export async function clearExaApiKey(): Promise<void> {
   await patchSettings({ exaApiKey: null });
-}
-
-/**
- * The model used everywhere. The app uses one fixed model; there is no
- * picker. Returns the fixed model unconditionally — readiness (whether a key
- * exists) is a separate concern, see `hasUsableProvider()`.
- */
-export function getSavedSelectedModel(): Model {
-  return FIXED_MODEL;
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {

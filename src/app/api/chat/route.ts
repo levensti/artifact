@@ -14,7 +14,10 @@
  */
 
 import { NextRequest } from "next/server";
-import { OPENROUTER_CONTEXT_WINDOW } from "@/lib/openrouter";
+import {
+  getOpenRouterContextWindow,
+  TOKEN_RESERVE,
+} from "@/lib/openrouter";
 import type { StreamEvent } from "@/lib/stream-types";
 import { jsonError } from "@/lib/api-utils";
 import {
@@ -245,14 +248,18 @@ export async function POST(req: NextRequest) {
 
       // Budget the conversation to fit the model's context window. Storage
       // keeps the full history; this only shapes what's sent to the model.
+      // Window minus the prompt/paper overhead and fixed reserves is what's
+      // left for history; never send less than the floor.
       const paperBlock = buildPaperBlock(paperContext, parsedPaper) ?? "";
-      const overhead =
-        estimateTokens(systemPrompt) + estimateTokens(paperBlock) + 2_000;
+      const overhead = estimateTokens(systemPrompt) + estimateTokens(paperBlock);
       const historyBudget =
-        OPENROUTER_CONTEXT_WINDOW - 16_384 - overhead - 2_000;
+        getOpenRouterContextWindow() -
+        overhead -
+        TOKEN_RESERVE.RESPONSE -
+        TOKEN_RESERVE.SAFETY;
       conversation = fitTranscriptToBudget(
         base,
-        Math.max(4_000, historyBudget),
+        Math.max(TOKEN_RESERVE.HISTORY_FLOOR, historyBudget),
       ).messages;
     } catch (err) {
       if (err instanceof HttpError) return errorResponse(err);

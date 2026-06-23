@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import { resolveOpenRouterKey } from "@/server/provider-env";
-import { OPENROUTER_BASE_URL, OPENROUTER_MODEL } from "@/lib/openrouter";
+import { OPENROUTER_BASE_URL, getOpenRouterModel } from "@/lib/openrouter";
 import type { PageMap } from "@/lib/review-types";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
@@ -293,7 +293,7 @@ async function callOpenRouter(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: getOpenRouterModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookmarkPlus, X } from "lucide-react";
-import type { Model } from "@/lib/models";
 import { resolveModelCredentials } from "@/lib/keys";
 import type { Annotation } from "@/lib/annotations";
 import { loadMessages } from "@/lib/reviews";
@@ -31,7 +30,7 @@ interface JournalCheckpointModalProps {
   arxivId: string;
   paperTitle: string;
   annotations: Annotation[];
-  selectedModel: Model | null;
+  modelReady: boolean;
   onClose: () => void;
 }
 
@@ -42,7 +41,7 @@ export default function JournalCheckpointModal({
   arxivId,
   paperTitle,
   annotations,
-  selectedModel,
+  modelReady,
   onClose,
 }: JournalCheckpointModalProps) {
   const [angle, setAngle] = useState("");
@@ -78,7 +77,7 @@ export default function JournalCheckpointModal({
   const hasExisting = pages.length > 0;
 
   const handleSave = useCallback(async () => {
-    if (!selectedModel) {
+    if (!modelReady) {
       setValidationErr("Add an OpenRouter API key in Settings first.");
       return;
     }
@@ -178,7 +177,7 @@ export default function JournalCheckpointModal({
     onClose,
     paperTitle,
     reviewId,
-    selectedModel,
+    modelReady,
     targetSlug,
   ]);
 

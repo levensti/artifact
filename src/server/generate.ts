@@ -18,7 +18,7 @@
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
   OPENROUTER_BASE_URL,
-  OPENROUTER_MODEL,
+  getOpenRouterModel,
   type OpenRouterUsage,
 } from "@/lib/openrouter";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
@@ -68,7 +68,7 @@ function chatRequestInit(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: opts.model ?? OPENROUTER_MODEL,
+      model: opts.model ?? getOpenRouterModel(),
       messages: [
         { role: "system", content: systemContentFor(paperContext) },
         { role: "user", content: prompt },

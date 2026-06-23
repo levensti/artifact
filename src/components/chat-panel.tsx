@@ -28,8 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { type Model } from "@/lib/models";
-import { getSavedSelectedModel } from "@/lib/keys";
+import { hasUsableProvider } from "@/lib/keys";
 import type { Annotation } from "@/lib/annotations";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -64,8 +63,7 @@ interface ChatPanelProps {
   hideHeader?: boolean;
   externalPrompt?: string | null;
   onExternalPromptConsumed?: () => void;
-  selectedModel?: Model | null;
-  onModelChange?: (model: Model | null) => void;
+  modelReady?: boolean;
   sourceUrl?: string | null;
 }
 
@@ -148,7 +146,7 @@ function ChatInput({
   setInput,
   sendMessage,
   isStreaming,
-  selectedModel,
+  modelReady,
   isPreparingPaper,
   chatThreadAnnotationId,
   focusToken,
@@ -157,7 +155,7 @@ function ChatInput({
   setInput: (v: string) => void;
   sendMessage: () => Promise<void>;
   isStreaming: boolean;
-  selectedModel: Model | null;
+  modelReady: boolean;
   /** Paper parse hasn't finished yet — disable input with a preparing state. */
   isPreparingPaper: boolean;
   chatThreadAnnotationId: string | null;
@@ -242,16 +240,16 @@ function ChatInput({
           size="icon"
           className={cn(
             "size-8 m-1.5 rounded-lg transition-all duration-200",
-            input.trim() && !inputLocked && selectedModel && !isStreaming
+            input.trim() && !inputLocked && modelReady && !isStreaming
               ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
               : "bg-primary/10 text-primary hover:bg-primary/20",
           )}
           onClick={sendMessage}
           disabled={
-            inputLocked || !selectedModel || !input.trim() || isStreaming
+            inputLocked || !modelReady || !input.trim() || isStreaming
           }
           aria-label={
-            !selectedModel
+            !modelReady
               ? "Choose a model to send"
               : isStreaming
                 ? "Sending..."
@@ -322,23 +320,23 @@ export default function ChatPanel({
   hideHeader,
   externalPrompt,
   onExternalPromptConsumed,
-  selectedModel: externalModel,
+  modelReady: externalReady,
   sourceUrl,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const { parseReady } = useCitationContext();
 
-  // The app uses one fixed model. When no model is passed in, fall back to it
-  // so a standalone chat panel still works.
-  const selectedModel =
-    externalModel !== undefined ? externalModel : getSavedSelectedModel();
+  // Readiness can be supplied by a parent; a standalone panel derives it from
+  // whether a usable provider key is configured.
+  const modelReady =
+    externalReady !== undefined ? externalReady : hasUsableProvider();
 
   const chat = useChat({
     reviewId,
     arxivId,
     paperTitle,
     paperContext,
-    selectedModel,
+    modelReady,
     chatThreadAnnotationId,
     onAnnotationsPersist,
     sourceUrl,
@@ -346,7 +344,7 @@ export default function ChatPanel({
 
   // Only surface the "preparing" gate when the user could otherwise send —
   // i.e. a model is selected. Chat itself is available by default.
-  const isPreparingPaper = !parseReady && !!selectedModel;
+  const isPreparingPaper = !parseReady && modelReady;
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
@@ -772,7 +770,7 @@ export default function ChatPanel({
                   {chat.messages.length === 0 && (
                     <ChatEmptyState
                       canSend={
-                        !!selectedModel && !chat.isStreaming && !isPreparingPaper
+                        modelReady && !chat.isStreaming && !isPreparingPaper
                       }
                       onSend={chat.submitChat}
                     />
@@ -882,7 +880,7 @@ export default function ChatPanel({
           setInput={chat.setInput}
           sendMessage={sendWithQuote}
           isStreaming={chat.isStreaming}
-          selectedModel={selectedModel}
+          modelReady={modelReady}
           isPreparingPaper={isPreparingPaper}
           chatThreadAnnotationId={chatThreadAnnotationId}
           focusToken={composerFocusToken}
@@ -899,7 +897,7 @@ export default function ChatPanel({
             arxivId={arxivId}
             paperTitle={paperTitle}
             annotations={annotations}
-            selectedModel={selectedModel}
+            modelReady={modelReady}
             onClose={() => setCheckpointOpen(false)}
           />
         ) : null}

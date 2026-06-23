@@ -32,8 +32,7 @@ import { arxivPdfUrl, BREAKPOINTS } from "@/lib/utils";
 const ASSISTANT_COLLAPSED_KEY = "artifact-assistant-panel-collapsed";
 const ASSISTANT_WIDTH_KEY = "artifact-assistant-panel-width";
 
-import { getSavedSelectedModel } from "@/lib/keys";
-import type { Model } from "@/lib/models";
+import { hasUsableProvider } from "@/lib/keys";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
 
 /**
@@ -238,7 +237,7 @@ export default function ReviewPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, [narrowViewport, assistantOpen]);
 
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
+  const [modelReady, setModelReady] = useState(false);
   /** Passage threads (Dive deeper) / selection: which annotation thread is open in chat */
   const [chatThreadAnnotationId, setChatThreadAnnotationId] = useState<
     string | null
@@ -247,16 +246,9 @@ export default function ReviewPage() {
   useEffect(() => {
     if (!clientReady) return;
     void hydrateClientStore().then(() => {
-      const saved = getSavedSelectedModel();
-      if (saved) setSelectedModel(saved);
+      setModelReady(hasUsableProvider());
     });
   }, [clientReady]);
-
-  // The app uses one fixed model; this just keeps local state in sync with
-  // the (single) model passed down from child components.
-  const handleModelChange = useCallback((model: Model | null) => {
-    setSelectedModel(model);
-  }, []);
 
   const [annotationVersion, setAnnotationVersion] = useState(0);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -587,7 +579,7 @@ export default function ReviewPage() {
             >
               <CitationContextProvider
                 paperText={paperText}
-                selectedModel={selectedModel}
+                modelReady={modelReady}
                 onResolvedTitle={handleResolvedTitle}
                 paperLoading={!paperText}
               >
@@ -600,8 +592,7 @@ export default function ReviewPage() {
                   chatThreadAnnotationId={effectiveChatThreadAnnotationId}
                   onChatThreadChange={setChatThreadAnnotationId}
                   onAnnotationsPersist={refreshAnnotations}
-                  selectedModel={selectedModel}
-                  onModelChange={handleModelChange}
+                  modelReady={modelReady}
                   sourceUrl={review.sourceUrl}
                   collapsed={assistantCollapsed}
                   onToggleCollapsed={toggleAssistantCollapsed}
@@ -669,7 +660,7 @@ export default function ReviewPage() {
             </button>
             <CitationContextProvider
               paperText={paperText}
-              selectedModel={selectedModel}
+              modelReady={modelReady}
               onResolvedTitle={handleResolvedTitle}
               paperLoading={!paperText}
             >
@@ -682,8 +673,7 @@ export default function ReviewPage() {
                 chatThreadAnnotationId={effectiveChatThreadAnnotationId}
                 onChatThreadChange={setChatThreadAnnotationId}
                 onAnnotationsPersist={refreshAnnotations}
-                selectedModel={selectedModel}
-                onModelChange={handleModelChange}
+                modelReady={modelReady}
                 sourceUrl={review.sourceUrl}
                 activeTab={assistantTab}
                 onTabChange={setAssistantTab}

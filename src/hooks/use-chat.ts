@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Model } from "@/lib/models";
 import {
   getExaApiKey,
   hasUsableProvider,
@@ -125,7 +124,7 @@ interface UseChatOptions {
   arxivId: string;
   paperTitle: string;
   paperContext: string;
-  selectedModel: Model | null;
+  modelReady: boolean;
   chatThreadAnnotationId: string | null;
   onAnnotationsPersist: () => void;
   sourceUrl?: string | null;
@@ -166,7 +165,7 @@ export function useChat({
   arxivId,
   paperTitle,
   paperContext,
-  selectedModel,
+  modelReady,
   chatThreadAnnotationId,
   onAnnotationsPersist,
   sourceUrl,
@@ -233,7 +232,7 @@ export function useChat({
   // fallback. Drives the chat input lock; a fresh user with a fallback
   // is not locked out.
   const hasSavedKeys = hasUsableProvider();
-  const hasKeyForModel = selectedModel != null && hasUsableProvider();
+  const hasKeyForModel = modelReady && hasUsableProvider();
 
   /**
    * Decide what paper payload to send to /api/chat. Short papers go in as
@@ -251,7 +250,7 @@ export function useChat({
     }> => {
       if (!paperContext) return {};
       if (!isLongPaper(paperContext)) return { paperContext };
-      if (!selectedModel) return { paperContext };
+      if (!modelReady) return { paperContext };
 
       const creds = resolveModelCredentials();
 
@@ -266,7 +265,7 @@ export function useChat({
         return { paperContext };
       }
     },
-    [paperContext, selectedModel],
+    [paperContext, modelReady],
   );
 
   /* ---------------------------------------------------------------- */
@@ -289,7 +288,7 @@ export function useChat({
       },
     ) => {
       const trimmed = text.trim();
-      if (!trimmed || isStreaming || !selectedModel) return;
+      if (!trimmed || isStreaming || !modelReady) return;
 
       // No client-side key gate: the platform key covers chat by default, and
       // if a send genuinely can't be served (e.g. rate limit) the failure
@@ -433,7 +432,7 @@ export function useChat({
     },
     [
       isStreaming,
-      selectedModel,
+      modelReady,
       buildPaperPayload,
       paperTitle,
       arxivId,
@@ -491,7 +490,7 @@ export function useChat({
   const submitThreadChat = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || isStreaming || !selectedModel || !chatThreadAnnotationId)
+      if (!trimmed || isStreaming || !modelReady || !chatThreadAnnotationId)
         return;
 
       const ann = await getAnnotation(reviewId, chatThreadAnnotationId);
@@ -636,7 +635,7 @@ export function useChat({
     },
     [
       isStreaming,
-      selectedModel,
+      modelReady,
       chatThreadAnnotationId,
       reviewId,
       arxivId,

@@ -22,7 +22,6 @@ import {
   PAGE_MAP_MAX_CHARS,
 } from "@/lib/client/page-maps";
 import { resolveModelCredentials } from "@/lib/keys";
-import type { Model } from "@/lib/models";
 import type { PageMap, ParsedPaper } from "@/lib/review-types";
 
 interface CitationContextValue {
@@ -82,11 +81,11 @@ const Ctx = createContext<CitationContextValue>({
 interface ProviderProps {
   paperText: string | null | undefined;
   /**
-   * The selected chat model — needed to call the page-map LLM endpoint.
-   * Optional: when absent, we still serve cached page maps but won't
+   * Whether a usable provider is configured — needed to call the page-map LLM
+   * endpoint. Optional: when false, we still serve cached page maps but won't
    * trigger a fresh fetch (chip clicks just degrade to the regex fallback).
    */
-  selectedModel?: Model | null;
+  modelReady?: boolean;
   /**
    * Fires once the parsed paper resolves with a non-empty title — used by
    * the review page to replace a placeholder title (e.g. `arXiv:<id>` when
@@ -104,7 +103,7 @@ interface ProviderProps {
 
 export function CitationContextProvider({
   paperText,
-  selectedModel,
+  modelReady,
   onResolvedTitle,
   paperLoading,
   children,
@@ -214,7 +213,7 @@ export function CitationContextProvider({
       try {
         const hash = await hashPaperText(paperText);
         const cached = await getCachedPageMap(hash);
-        if (cached && (hasPageMapAnchors(cached) || !selectedModel)) {
+        if (cached && (hasPageMapAnchors(cached) || !modelReady)) {
           if (!cancelled) {
             setPageMap(cached);
             setPageMapProgress(null);
@@ -225,7 +224,7 @@ export function CitationContextProvider({
           }
           return;
         }
-        if (!selectedModel) return;
+        if (!modelReady) return;
         const creds = resolveModelCredentials();
         const fresh = await fetchAndCachePageMap(
           paperText,
@@ -259,7 +258,7 @@ export function CitationContextProvider({
     return () => {
       cancelled = true;
     };
-  }, [paperText, selectedModel]);
+  }, [paperText, modelReady]);
 
   // Eagerly kick off the full parse for long papers when the paper text and
   // credentials are available. Without this the parse only fires lazily on
@@ -267,7 +266,7 @@ export function CitationContextProvider({
   useEffect(() => {
     if (!paperText || !isLongPaper(paperText)) return;
     if (parsedPaper) return;
-    if (!selectedModel) return;
+    if (!modelReady) return;
     const creds = resolveModelCredentials();
 
     let cancelled = false;
@@ -281,12 +280,12 @@ export function CitationContextProvider({
     return () => {
       cancelled = true;
     };
-  }, [paperText, selectedModel, parsedPaper]);
+  }, [paperText, modelReady, parsedPaper]);
 
   const parseReady = useMemo(() => {
     if (paperLoading) return false;
     if (!paperText) return true;
-    if (!selectedModel) return true;
+    if (!modelReady) return true;
     if (timedOutFor === paperText) return true;
     if (isLongPaper(paperText)) return parsedPaper !== null;
     // Page-map failure is terminal: unlock chat in degraded mode rather than
@@ -297,7 +296,7 @@ export function CitationContextProvider({
   }, [
     paperLoading,
     paperText,
-    selectedModel,
+    modelReady,
     parsedPaper,
     pageMap,
     pageMapError,

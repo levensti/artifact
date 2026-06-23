@@ -1,10 +1,8 @@
-import type { Model } from "@/lib/models";
 import {
   clearExaApiKey as clearExaApiKeyRemote,
   clearOpenRouterKey as clearOpenRouterKeyRemote,
   getExaApiKey as getExaApiKeyCached,
   getOpenRouterKey as getOpenRouterKeyCached,
-  getSavedSelectedModel as getSavedSelectedModelCached,
   hasAnySavedApiKey as hasAnySavedApiKeyCached,
   hasExaApiKey as hasExaApiKeyCached,
   hasPlatformExaKey as hasPlatformExaKeyCached,
@@ -86,8 +84,4 @@ export async function setExaApiKey(key: string): Promise<void> {
 
 export async function clearExaApiKey(): Promise<void> {
   return clearExaApiKeyRemote();
-}
-
-export function getSavedSelectedModel(): Model {
-  return getSavedSelectedModelCached();
 }
