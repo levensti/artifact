@@ -28,21 +28,30 @@ Generate a link that your colleagues can use to import your paper review, includ
 
 We are grateful for the support of the following organizations that make it possible for us to offer a hosted version of Artifact with generous inference usage for free for our users.
 
-**Open source programs**
-
-<a href="https://vercel.com/open-source-program">
-  <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge-2026.svg" />
-</a>
-&nbsp;&nbsp;
-<a href="https://www.anthropic.com">
-  <img alt="Claude" src="docs/supporters/claude_code_logo.svg" height="44" />
-</a>
-
-**Inference credits**
-
-<a href="https://fireworks.ai">
-  <img alt="Fireworks AI" src="docs/supporters/fireworks_logo.png" height="44" />
-</a>
+<table>
+  <tr>
+    <td align="center" valign="middle" width="240" height="80">
+      <a href="https://vercel.com/open-source-program">
+        <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge-2026.svg" height="42" />
+      </a>
+    </td>
+    <td align="center" valign="middle" width="240" height="80">
+      <a href="https://www.anthropic.com">
+        <img alt="Claude" src="docs/supporters/claude_code_logo.svg" height="26" />
+      </a>
+    </td>
+    <td align="center" valign="middle" width="240" height="80">
+      <a href="https://fireworks.ai">
+        <img alt="Fireworks AI" src="docs/supporters/fireworks_logo.png" height="34" />
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Vercel</b><br/>Open source program — hosting</sub></td>
+    <td align="center"><sub><b>Claude</b><br/>Open source program — model credits</sub></td>
+    <td align="center"><sub><b>Fireworks AI</b><br/>Inference credits</sub></td>
+  </tr>
+</table>
 
 ## Contributing
 
