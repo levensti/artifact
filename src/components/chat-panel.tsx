@@ -10,10 +10,12 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import {
   ArrowDown,
   ArrowLeft,
   // BookmarkPlus,
+  Info,
   Loader2,
   MessageSquareQuote,
   Minimize2,
@@ -128,7 +130,9 @@ function ChatQuotePopover({
         <MessageSquareQuote
           className="size-3.5"
           strokeWidth={2}
-          style={{ color: "color-mix(in srgb, var(--primary) 72%, transparent)" }}
+          style={{
+            color: "color-mix(in srgb, var(--primary) 72%, transparent)",
+          }}
         />
         Quote in reply
       </button>
@@ -247,9 +251,7 @@ function ChatInput({
               : "bg-primary/10 text-primary hover:bg-primary/20",
           )}
           onClick={sendMessage}
-          disabled={
-            inputLocked || !modelReady || !input.trim() || isStreaming
-          }
+          disabled={inputLocked || !modelReady || !input.trim() || isStreaming}
           aria-label={
             !modelReady
               ? "Choose a model to send"
@@ -318,9 +320,108 @@ function formatTokens(n: number): string {
 }
 
 /**
- * Thin running indicator of how full the model context is, with a manual
- * "Compact now" lever. The chat auto-compacts at the threshold; this just makes
- * usage visible and lets the user compact early. Hidden until usage is known.
+ * Split the measured total into its parts: the paper's footprint in context
+ * (fixed, can't be compacted), the system instructions, and the chat
+ * back-and-forth (what compaction reduces). Returns null until the breakdown
+ * numbers are known. Approximate — the total is measured, the parts estimated.
+ */
+function buildUsageBreakdown(
+  usage: ContextUsage,
+): { paper: number; conversation: number; instructions: number } | null {
+  if (usage.paperTokens == null || usage.overheadTokens == null) return null;
+  return {
+    paper: usage.paperTokens,
+    instructions: Math.max(0, usage.overheadTokens - usage.paperTokens),
+    conversation: Math.max(0, usage.usedTokens - usage.overheadTokens),
+  };
+}
+
+/** One labelled row in the context-breakdown tooltip. */
+function BreakdownRow({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-5">
+      <span className="text-muted-foreground">
+        {label}
+        {hint ? (
+          <span className="ml-1 text-[10px] opacity-70">({hint})</span>
+        ) : null}
+      </span>
+      <span className="tabular-nums text-foreground">
+        ~{formatTokens(value)}
+      </span>
+    </div>
+  );
+}
+
+/** Styled hover breakdown anchored on an info icon next to the token readout. */
+function ContextBreakdownTooltip({
+  breakdown,
+}: {
+  breakdown: { paper: number; conversation: number; instructions: number };
+}) {
+  return (
+    <TooltipPrimitive.Root>
+      <TooltipPrimitive.Trigger
+        aria-label="Context usage breakdown"
+        render={<span className="inline-flex cursor-default" />}
+      >
+        <Info className="size-2.5 opacity-60" strokeWidth={2} aria-hidden />
+      </TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Positioner
+          side="top"
+          align="end"
+          sideOffset={8}
+          className="z-100"
+        >
+          <TooltipPrimitive.Popup
+            className={cn(
+              "w-56 origin-(--transform-origin) rounded-lg border border-border/80 bg-popover px-3 py-2.5 text-[11px] leading-relaxed text-popover-foreground shadow-md ring-1 ring-foreground/5",
+              "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-open:duration-100",
+              "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:duration-75",
+            )}
+          >
+            <div className="mb-1.5 font-medium text-foreground">
+              What&rsquo;s in context
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <BreakdownRow
+                label="Instructions"
+                value={breakdown.instructions}
+              />
+              <BreakdownRow label="Paper" value={breakdown.paper} />
+              <BreakdownRow
+                label="Conversation"
+                value={breakdown.conversation}
+                hint="compactable"
+              />
+            </div>
+          </TooltipPrimitive.Popup>
+        </TooltipPrimitive.Positioner>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
+  );
+}
+
+/**
+ * Percent of the window at which the manual "Compact" lever appears. Below the
+ * auto-compaction threshold (`COMPACT_THRESHOLD`, ~90%) so the user can compact
+ * early; auto-compaction is the safety net once usage gets critical.
+ */
+const COMPACT_LEVER_PCT = 75;
+
+/**
+ * Running token-usage readout. Shows the number of tokens currently in context;
+ * the manual "Compact" lever appears from ~75% (early lever) and turns urgent
+ * once auto-compaction would also kick in. Hidden until usage is known.
  */
 function ContextMeter({
   usage,
@@ -343,51 +444,50 @@ function ContextMeter({
       </div>
     );
   }
-  // No usage yet (fresh chat): still surface a compaction note if one just fired.
-  if (!usage || usage.usedTokens <= 0 || usage.windowTokens <= 0) {
-    return note ? (
-      <div className="px-4 pb-1 pt-0.5 text-center text-[10.5px] text-muted-foreground">
-        {note}
-      </div>
-    ) : null;
-  }
-  const pct = Math.min(
-    100,
-    Math.round((usage.usedTokens / usage.windowTokens) * 100),
-  );
-  const near = usage.shouldCompact;
+  // Until a real measurement exists, render nothing — no skeleton, no
+  // placeholder. The meter is invisible while usage is loading (and on fresh
+  // chats), surfacing only once there's an actual number to show.
+  if (!usage || usage.usedTokens <= 0 || usage.windowTokens <= 0) return null;
+  const pct = Math.round((usage.usedTokens / usage.windowTokens) * 100);
+  const showCompact = pct >= COMPACT_LEVER_PCT;
+  // Urgent once auto-compaction would also fire (server verdict, ~90%).
+  const urgent = usage.shouldCompact;
+  // Breakdown of the fixed (uncompactable) overhead vs the chat back-and-forth.
+  // Approximate — the total is measured, the parts are estimated.
+  const breakdown = buildUsageBreakdown(usage);
   return (
-    <div className="flex items-center gap-2 px-4 pb-1 pt-0.5 text-[10.5px] text-muted-foreground">
-      <div className="h-1 flex-1 overflow-hidden rounded-full bg-border">
-        <div
-          className={cn(
-            "h-full rounded-full transition-[width] duration-300 ease-out",
-            near ? "bg-amber-500/80" : "bg-foreground/35",
-          )}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+    <div className="flex items-center justify-between gap-2 px-4 pb-1 pt-0.5 text-[10.5px] text-muted-foreground">
       {note ? (
         <span className="text-foreground/70">{note}</span>
       ) : (
-        <span
-          className="tabular-nums"
-          title={`${usage.usedTokens.toLocaleString()} / ${usage.windowTokens.toLocaleString()} tokens`}
-        >
-          {formatTokens(usage.usedTokens)}/{formatTokens(usage.windowTokens)} ·{" "}
-          {pct}%
+        <span className="inline-flex items-center gap-1">
+          <span
+            className="tabular-nums"
+            title={`${usage.usedTokens.toLocaleString()} / ${usage.windowTokens.toLocaleString()} tokens in context`}
+          >
+            {formatTokens(usage.usedTokens)}/{formatTokens(usage.windowTokens)}{" "}
+            tokens
+          </span>
+          {breakdown && <ContextBreakdownTooltip breakdown={breakdown} />}
         </span>
       )}
-      <button
-        type="button"
-        onClick={onCompact}
-        disabled={disabled}
-        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
-        title="Compact older messages into a summary to free up context"
-      >
-        <Minimize2 className="size-2.5" strokeWidth={1.75} aria-hidden />
-        Compact
-      </button>
+      {showCompact && !note && (
+        <button
+          type="button"
+          onClick={onCompact}
+          disabled={disabled}
+          className={cn(
+            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-muted disabled:opacity-40",
+            urgent
+              ? "text-amber-600 hover:text-amber-700"
+              : "hover:text-foreground",
+          )}
+          title="Compact older messages into a summary to free up context"
+        >
+          <Minimize2 className="size-2.5" strokeWidth={1.75} aria-hidden />
+          Compact
+        </button>
+      )}
     </div>
   );
 }
@@ -758,7 +858,10 @@ export default function ChatPanel({
           error: chat.error,
           canRetry: chat.canRetry,
           onRetry: handleRetry,
-          kind: chat.errorCode === "rate_limit" ? ("rate_limit" as const) : undefined,
+          kind:
+            chat.errorCode === "rate_limit"
+              ? ("rate_limit" as const)
+              : undefined,
           onAddKey: openKeysForChat,
         }
       : null;
@@ -768,25 +871,20 @@ export default function ChatPanel({
   /* ---------------------------------------------------------------- */
 
   return (
-    <ExaKeyResumeProvider
-      resumeAfterExaDecision={chat.resumeAfterExaDecision}
-    >
+    <ExaKeyResumeProvider resumeAfterExaDecision={chat.resumeAfterExaDecision}>
       <div className="flex flex-col h-full min-h-0 bg-background">
         {!hideHeader && (
           <div
             className="flex h-14 shrink-0 items-center justify-between border-b px-4"
             style={{
-              borderColor:
-                "color-mix(in srgb, var(--border) 80%, transparent)",
+              borderColor: "color-mix(in srgb, var(--border) 80%, transparent)",
               background:
                 "linear-gradient(90deg, var(--background), color-mix(in srgb, var(--primary) 3%, var(--background)))",
             }}
           >
             <div className="flex flex-col gap-0.5">
               <MonoLabel>Assistant</MonoLabel>
-              <span
-                className="text-[15px] font-semibold tracking-[-0.018em] text-foreground"
-              >
+              <span className="text-[15px] font-semibold tracking-[-0.018em] text-foreground">
                 Ask the paper
               </span>
             </div>
@@ -799,84 +897,84 @@ export default function ChatPanel({
             className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain"
           >
             <ChatScrollContext.Provider value={scrollIfPinned}>
-            <div className="space-y-5 px-4 pb-5 pt-5">
-              {chatThreadAnnotationId && activeThreadAnn ? (
-                <>
-                  <div className="flex flex-col gap-2.5 border-b border-border/60 pb-4">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      className="-ml-2 self-start gap-1.5 text-muted-foreground hover:text-foreground"
-                      onClick={() => onChatThreadChange(null)}
-                      aria-label="Back to whole-paper assistant chat"
-                    >
-                      <ArrowLeft className="size-3" strokeWidth={2.5} />
-                      Main thread
-                    </Button>
-
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
-                        From the paper
-                      </span>
-                      <blockquote
-                        className="line-clamp-4 border-l-2 pl-3 text-[13px] italic leading-relaxed"
-                        style={{
-                          fontFamily: "var(--font-reading)",
-                          borderColor:
-                            "color-mix(in srgb, var(--primary) 35%, transparent)",
-                          color:
-                            "color-mix(in srgb, var(--foreground) 80%, transparent)",
-                        }}
+              <div className="space-y-5 px-4 pb-5 pt-5">
+                {chatThreadAnnotationId && activeThreadAnn ? (
+                  <>
+                    <div className="flex flex-col gap-2.5 border-b border-border/60 pb-4">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className="-ml-2 self-start gap-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() => onChatThreadChange(null)}
+                        aria-label="Back to whole-paper assistant chat"
                       >
-                        &ldquo;{activeThreadAnn.highlightText}&rdquo;
-                      </blockquote>
+                        <ArrowLeft className="size-3" strokeWidth={2.5} />
+                        Main thread
+                      </Button>
+
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                          From the paper
+                        </span>
+                        <blockquote
+                          className="line-clamp-4 border-l-2 pl-3 text-[13px] italic leading-relaxed"
+                          style={{
+                            fontFamily: "var(--font-reading)",
+                            borderColor:
+                              "color-mix(in srgb, var(--primary) 35%, transparent)",
+                            color:
+                              "color-mix(in srgb, var(--foreground) 80%, transparent)",
+                          }}
+                        >
+                          &ldquo;{activeThreadAnn.highlightText}&rdquo;
+                        </blockquote>
+                      </div>
                     </div>
-                  </div>
 
-                  {displayThread.length === 0 && (
-                    <div className="space-y-2 py-6 text-center px-1">
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Ask a question about this passage below.
-                      </p>
-                    </div>
-                  )}
+                    {displayThread.length === 0 && (
+                      <div className="space-y-2 py-6 text-center px-1">
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          Ask a question about this passage below.
+                        </p>
+                      </div>
+                    )}
 
-                  {displayThread.map((msg) => (
-                    <ChatMessageBubble
-                      key={msg.id}
-                      msg={msg}
-                      isCurrentlyStreaming={
-                        msg.id === chat.streamingMsgId && chat.isStreaming
-                      }
-                      failure={buildFailure(msg.id)}
-                    />
-                  ))}
-                </>
-              ) : (
-                <>
-                  {chat.messages.length === 0 && (
-                    <ChatEmptyState
-                      canSend={
-                        modelReady && !chat.isStreaming && !isPreparingPaper
-                      }
-                      onSend={chat.submitChat}
-                    />
-                  )}
+                    {displayThread.map((msg) => (
+                      <ChatMessageBubble
+                        key={msg.id}
+                        msg={msg}
+                        isCurrentlyStreaming={
+                          msg.id === chat.streamingMsgId && chat.isStreaming
+                        }
+                        failure={buildFailure(msg.id)}
+                      />
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {chat.messages.length === 0 && (
+                      <ChatEmptyState
+                        canSend={
+                          modelReady && !chat.isStreaming && !isPreparingPaper
+                        }
+                        onSend={chat.submitChat}
+                      />
+                    )}
 
-                  {chat.messages.map((msg) => (
-                    <ChatMessageBubble
-                      key={msg.id}
-                      msg={msg}
-                      isCurrentlyStreaming={
-                        msg.id === chat.streamingMsgId && chat.isStreaming
-                      }
-                      failure={buildFailure(msg.id)}
-                    />
-                  ))}
-                </>
-              )}
-            </div>
+                    {chat.messages.map((msg) => (
+                      <ChatMessageBubble
+                        key={msg.id}
+                        msg={msg}
+                        isCurrentlyStreaming={
+                          msg.id === chat.streamingMsgId && chat.isStreaming
+                        }
+                        failure={buildFailure(msg.id)}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
             </ChatScrollContext.Provider>
           </div>
           {chat.isStreaming && !atBottom && (
@@ -892,15 +990,13 @@ export default function ChatPanel({
           )}
         </div>
 
-
         {pendingQuote && (
           <div
             className="mx-3 mb-2 rounded-lg border px-3 py-2.5"
             style={{
               borderColor:
                 "color-mix(in srgb, var(--primary) 22%, transparent)",
-              background:
-                "color-mix(in srgb, var(--primary) 5%, transparent)",
+              background: "color-mix(in srgb, var(--primary) 5%, transparent)",
             }}
           >
             <div className="flex items-start gap-2">
@@ -908,8 +1004,7 @@ export default function ChatPanel({
                 className="mt-0.5 size-4 shrink-0"
                 strokeWidth={2}
                 style={{
-                  color:
-                    "color-mix(in srgb, var(--primary) 72%, transparent)",
+                  color: "color-mix(in srgb, var(--primary) 72%, transparent)",
                 }}
               />
               <p

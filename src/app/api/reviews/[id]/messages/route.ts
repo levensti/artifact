@@ -23,6 +23,8 @@ export const GET = authedRoute(async (userId, _req: Request, { params }: Ctx) =>
       usedTokens,
       windowTokens,
       shouldCompact: computeShouldCompact(usedTokens, windowTokens),
+      paperTokens: contextMetadata.paperTokens,
+      overheadTokens: contextMetadata.overheadTokens,
     };
   }
   return NextResponse.json({ messages, contextUsage });

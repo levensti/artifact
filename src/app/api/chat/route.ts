@@ -261,6 +261,11 @@ export async function POST(req: NextRequest) {
   } | null = null;
   // Context window; the emit loop reuses it for `context_usage` events.
   const windowTokens = getOpenRouterContextWindow();
+  // Fixed (uncompactable) overhead, split out for the usage breakdown: the
+  // paper block's footprint in context, plus the system prompt. Conversation
+  // tokens are the measured total minus this.
+  const paperTokens = estimateTokens(buildPaperBlock(paperContext, parsedPaper) ?? "");
+  const overheadTokens = paperTokens + estimateTokens(systemPrompt);
   if (isStateful) {
     try {
       // Reuse the user already resolved during metered key resolution to avoid
@@ -295,10 +300,11 @@ export async function POST(req: NextRequest) {
       // keeps the full history; this only shapes what's sent to the model.
       // Window minus the prompt/paper overhead and fixed reserves is what's
       // left for history; never send less than the floor.
-      const paperBlock = buildPaperBlock(paperContext, parsedPaper) ?? "";
-      const overhead = estimateTokens(systemPrompt) + estimateTokens(paperBlock);
       const historyBudget =
-        windowTokens - overhead - TOKEN_RESERVE.RESPONSE - TOKEN_RESERVE.SAFETY;
+        windowTokens -
+        overheadTokens -
+        TOKEN_RESERVE.RESPONSE -
+        TOKEN_RESERVE.SAFETY;
       conversation = fitTranscriptToBudget(
         modelBase,
         Math.max(TOKEN_RESERVE.HISTORY_FLOOR, historyBudget),
@@ -371,6 +377,8 @@ export async function POST(req: NextRequest) {
               usedTokens: used,
               windowTokens,
               shouldCompact: computeShouldCompact(used, windowTokens),
+              paperTokens,
+              overheadTokens,
             });
           }
         }
@@ -434,6 +442,8 @@ export async function POST(req: NextRequest) {
           ...(persist.priorMeta ?? {}),
           lastContextTokens,
           windowTokens,
+          paperTokens,
+          overheadTokens,
         };
         try {
           await store.setMessages(

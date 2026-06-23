@@ -78,27 +78,23 @@ export const TOKEN_RESERVE = {
 } as const;
 
 /**
- * Fraction of the usable history budget (window minus the RESPONSE/SAFETY
- * reserves) at which the chat should compact older turns into a recap. Crossing
- * this is a soft signal surfaced to the client, which auto-compacts — well below
- * the point where `fitTranscriptToBudget` would start silently dropping turns.
+ * Fraction of the FULL context window at which the chat offers/auto-runs
+ * compaction. Measured against the raw window (matching the usage the meter
+ * shows), so "≥90%" means the same thing the user sees.
  */
-export const COMPACT_THRESHOLD = 0.8;
+export const COMPACT_THRESHOLD = 0.9;
 
 /**
  * Whether a measured/estimated context size has crossed the compaction
- * threshold, against the usable history budget (window minus the response and
- * safety reserves). Single source of truth shared by the chat stream, the
- * messages GET, and the compaction endpoint so the client never needs the
- * threshold constants.
+ * threshold (a share of the full window). Single source of truth shared by the
+ * chat stream, the messages GET, and the compaction endpoint so the client
+ * never needs the threshold constant.
  */
 export function computeShouldCompact(
   usedTokens: number,
   windowTokens: number,
 ): boolean {
-  const usableBudget =
-    windowTokens - TOKEN_RESERVE.RESPONSE - TOKEN_RESERVE.SAFETY;
-  return usableBudget > 0 && usedTokens >= COMPACT_THRESHOLD * usableBudget;
+  return windowTokens > 0 && usedTokens >= COMPACT_THRESHOLD * windowTokens;
 }
 
 /**

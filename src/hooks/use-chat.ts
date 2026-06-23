@@ -229,6 +229,7 @@ export function useChat({
   useEffect(() => {
     let cancelled = false;
     setContextUsage(null);
+    setCompactionNote(null);
     lastCompactAttemptTokens.current = 0;
     void loadConversation(reviewId).then(({ messages: rows, contextUsage: cu }) => {
       if (cancelled) return;
@@ -422,6 +423,8 @@ export function useChat({
               usedTokens: event.usedTokens,
               windowTokens: event.windowTokens,
               shouldCompact: event.shouldCompact,
+              paperTokens: event.paperTokens,
+              overheadTokens: event.overheadTokens,
             });
             return;
           }
@@ -750,18 +753,13 @@ export function useChat({
     setIsCompacting(true);
     lastCompactAttemptTokens.current = contextUsage?.usedTokens ?? 0;
     try {
-      const { status, contextUsage: cu } = await compactConversation(
+      const { contextUsage: cu } = await compactConversation(
         reviewId,
         resolveModelCredentials().apiKey || undefined,
       );
       if (cu) setContextUsage(cu);
-      flashNote(
-        status === "compacted"
-          ? "Compacted earlier messages."
-          : status === "already"
-            ? "Already compact — nothing new to summarize."
-            : "Nothing old enough to compact yet.",
-      );
+      // Stay silent on success / no-op. Compaction is meant to be largely
+      // invisible — the meter dropping is the only feedback a user needs.
     } catch {
       flashNote("Couldn't compact — please try again.");
     } finally {

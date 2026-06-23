@@ -61,6 +61,11 @@ export interface ContextMetadata {
   lastContextTokens?: number;
   /** Snapshot of the model context window, surfaced to the client meter. */
   windowTokens?: number;
+  /** Estimated paper-block footprint in context (the uncompactable paper cost). */
+  paperTokens?: number;
+  /** Estimated fixed overhead: paper + system prompt. Conversation tokens are
+   *  `lastContextTokens − overheadTokens`. */
+  overheadTokens?: number;
 }
 
 /**
@@ -73,6 +78,10 @@ export interface ContextUsage {
   usedTokens: number;
   windowTokens: number;
   shouldCompact: boolean;
+  /** Estimated paper-block footprint in context (uncompactable). */
+  paperTokens?: number;
+  /** Estimated fixed overhead (paper + system prompt). */
+  overheadTokens?: number;
 }
 
 /* ------------------------------------------------------------------ */

@@ -32,8 +32,12 @@ import type {
   ContextUsage,
 } from "@/lib/review-types";
 
-/** Most recent messages always kept verbatim; everything older is summarized. */
-const KEEP_RECENT = 6;
+/**
+ * Most recent messages always kept verbatim; everything older is summarized.
+ * Just the latest exchange — compaction availability is driven by context
+ * usage (see `computeShouldCompact`), not by a minimum turn count.
+ */
+const KEEP_RECENT = 2;
 
 export async function POST(req: NextRequest) {
   let body: { reviewId?: string; apiKey?: string };
@@ -106,6 +110,8 @@ export async function POST(req: NextRequest) {
                 usedTokens: measured,
                 windowTokens,
                 shouldCompact: computeShouldCompact(measured, windowTokens),
+                paperTokens: contextMetadata?.paperTokens,
+                overheadTokens: contextMetadata?.overheadTokens,
               }
             : null,
       });
@@ -140,14 +146,18 @@ export async function POST(req: NextRequest) {
     return Response.json({
       status: "compacted",
       compaction,
-      contextUsage: estimatedUsage(
-        messages,
-        compaction,
-        prior?.summary,
-        priorCount,
-        contextMetadata?.lastContextTokens,
-        windowTokens,
-      ),
+      contextUsage: {
+        ...estimatedUsage(
+          messages,
+          compaction,
+          prior?.summary,
+          priorCount,
+          contextMetadata?.lastContextTokens,
+          windowTokens,
+        ),
+        paperTokens: contextMetadata?.paperTokens,
+        overheadTokens: contextMetadata?.overheadTokens,
+      },
     });
   } catch (err) {
     if (err instanceof HttpError) return errorResponse(err);

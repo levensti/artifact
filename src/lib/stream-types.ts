@@ -37,6 +37,10 @@ export type StreamEvent =
       usedTokens: number;
       windowTokens: number;
       shouldCompact: boolean;
+      /** Estimated fixed (uncompactable) overhead, for the usage breakdown:
+       *  the paper block's footprint, and paper + system prompt combined. */
+      paperTokens: number;
+      overheadTokens: number;
     }
   | {
       type: "error";
