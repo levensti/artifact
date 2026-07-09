@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ContextMetadata,
   PaperReview,
+  Project,
 } from "@/lib/review-types";
 import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import type {
@@ -140,6 +141,7 @@ function rowToReview(r: {
   importedAt: Date | null;
   importedFromShareToken?: string | null;
   importedFromName?: string | null;
+  projectId?: string | null;
 }): PaperReview {
   return {
     id: r.id,
@@ -149,6 +151,7 @@ function rowToReview(r: {
     sourceUrl: r.sourceUrl,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
+    projectId: r.projectId ?? null,
     ...(r.importedAt ? { importedAt: r.importedAt.toISOString() } : {}),
     ...(r.importedFromShareToken
       ? { importedFromShareToken: r.importedFromShareToken }
@@ -1151,4 +1154,81 @@ export async function openRecommendation(
     recId,
   );
   return { review, alreadyInLibrary: false };
+}
+
+/* ── Projects ─────────────────────────────────────────────────── */
+
+function rowToProject(r: {
+  id: string;
+  name: string;
+  createdAt: Date;
+}): Project {
+  return {
+    id: r.id,
+    name: r.name,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+export async function listProjects(userId: string): Promise<Project[]> {
+  const rows = await prisma.project.findMany({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(rowToProject);
+}
+
+export async function createProject(
+  userId: string,
+  data: { name: string },
+): Promise<Project> {
+  const row = await prisma.project.create({
+    data: {
+      id: crypto.randomUUID(),
+      userId,
+      name: data.name,
+    },
+  });
+  return rowToProject(row);
+}
+
+export async function updateProject(
+  userId: string,
+  id: string,
+  patch: { name?: string },
+): Promise<Project> {
+  const existing = await prisma.project.findFirst({ where: { id, userId } });
+  if (!existing) throw new HttpError(404, `Project not found: ${id}`);
+  const row = await prisma.project.update({
+    where: { id },
+    data: {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+    },
+  });
+  return rowToProject(row);
+}
+
+export async function deleteProject(userId: string, id: string): Promise<void> {
+  const existing = await prisma.project.findFirst({ where: { id, userId } });
+  if (!existing) throw new HttpError(404, `Project not found: ${id}`);
+  // SetNull on Review.projectId is handled by the DB constraint — papers survive.
+  await prisma.project.delete({ where: { id } });
+}
+
+export async function assignReviewToProject(
+  userId: string,
+  reviewId: string,
+  projectId: string | null,
+): Promise<PaperReview> {
+  const review = await prisma.review.findFirst({ where: { id: reviewId, userId } });
+  if (!review) throw new HttpError(404, `Review not found: ${reviewId}`);
+  if (projectId !== null) {
+    const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
+    if (!project) throw new HttpError(404, `Project not found: ${projectId}`);
+  }
+  const updated = await prisma.review.update({
+    where: { id: reviewId },
+    data: { projectId },
+  });
+  return rowToReview(updated);
 }

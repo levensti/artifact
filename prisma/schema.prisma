@@ -40,6 +40,7 @@ model User {
   pageMaps          PageMap[]
   shares            Share[]
   discoverQueries   DiscoverQuery[]
+  projects          Project[]
 }
 
 model Account {
@@ -102,6 +103,9 @@ model Review {
   /// rec→review action only fires once). SetNull preserves the review when
   /// the underlying recommendation is purged.
   fromRecommendationId   String?   @unique
+  /// Project this review belongs to. Null = ungrouped. SetNull so deleting
+  /// a project ungroups its papers without deleting them.
+  projectId              String?
 
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages           ReviewMessages?
@@ -110,6 +114,7 @@ model Review {
   wikiSources        WikiPageSource[]
   shares             Share[]
   fromRecommendation Recommendation?    @relation(fields: [fromRecommendationId], references: [id], onDelete: SetNull)
+  project            Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([userId, arxivId])
@@ -384,6 +389,21 @@ model Recommendation {
   review Review?
 
   @@index([queryId, rank])
+}
+
+/// A named group of reviews. One-to-many: each review belongs to at most
+/// one project. Deleting a project sets projectId = null on its reviews
+/// (ungroup), rather than cascading deletes.
+model Project {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews Review[]
+
+  @@index([userId])
 }
 
 // ── Evals ───────────────────────────────────────────────────────
