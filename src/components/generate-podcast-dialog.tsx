@@ -14,18 +14,6 @@ import { Button } from "@/components/ui/button";
 import { MonoLabel } from "@/components/folio";
 import { PODCAST_INSTRUCTIONS_MAX } from "@/lib/podcast";
 
-/**
- * Preset steers. Selecting one prefills the box (the user can still edit it).
- * "No specific focus" clears the box for the default episode — it exists so a
- * user who just wants the default isn't forced to type in this required step.
- */
-const PRESETS: Array<{ label: string; value: string }> = [
-  { label: "No specific focus", value: "" },
-  { label: "Skip the math", value: "Skip the math and heavy notation; explain the intuition." },
-  { label: "Focus on results", value: "Focus on the experiments, results, and what they mean." },
-  { label: "Beginner-friendly", value: "Assume I'm new to this field; define terms and go slow." },
-];
-
 interface GeneratePodcastDialogProps {
   open: boolean;
   onClose: () => void;
@@ -44,13 +32,11 @@ export default function GeneratePodcastDialog({
   onConfirm,
 }: GeneratePodcastDialogProps) {
   const [instructions, setInstructions] = useState("");
-  const [activePreset, setActivePreset] = useState<string | null>(null);
 
   // Reset on close so a prior draft never lingers into the next open. (Done
   // here rather than in an effect to avoid a synchronous in-effect setState.)
   const reset = () => {
     setInstructions("");
-    setActivePreset(null);
   };
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -71,7 +57,7 @@ export default function GeneratePodcastDialog({
         <DialogHeader className="space-y-2">
           <MonoLabel>New episode</MonoLabel>
           <DialogTitle className="flex items-center gap-2 text-[20px] font-semibold leading-[1.15] tracking-[-0.022em]">
-            <Podcast className="size-[18px]" strokeWidth={2} aria-hidden />
+            <Podcast className="size-4.5" strokeWidth={2} aria-hidden />
             Generate a podcast
           </DialogTitle>
           <DialogDescription
@@ -81,41 +67,19 @@ export default function GeneratePodcastDialog({
               color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
             }}
           >
-            A single host walks through this paper as a short audio episode. Tell
-            us what to focus on, or pick a starting point.
+            Walk through the paper with a short audio episode.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {PRESETS.map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              onClick={() => {
-                setInstructions(preset.value);
-                setActivePreset(preset.label);
-              }}
-              aria-pressed={activePreset === preset.label}
-              className={
-                "rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors " +
-                (activePreset === preset.label
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/60")
-              }
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
 
         <div className="mt-3">
           <textarea
             value={instructions}
             onChange={(e) => {
-              setInstructions(e.target.value.slice(0, PODCAST_INSTRUCTIONS_MAX));
-              setActivePreset(null);
+              setInstructions(
+                e.target.value.slice(0, PODCAST_INSTRUCTIONS_MAX),
+              );
             }}
-            placeholder="Optional: what should this episode focus on?"
+            placeholder="Any stylistic preferences for the episode? (optional)"
             rows={3}
             autoFocus
             className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-[13px] leading-[1.5] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
