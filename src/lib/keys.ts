@@ -7,6 +7,7 @@ import {
   hasExaApiKey as hasExaApiKeyCached,
   hasPlatformExaKey as hasPlatformExaKeyCached,
   hasPlatformOpenRouterKey as hasPlatformOpenRouterKeyCached,
+  hasPodcastTts as hasPodcastTtsCached,
   hasUsableProvider as hasUsableProviderCached,
   isSettingsHydrated as isSettingsHydratedCached,
   setExaApiKey as setExaApiKeyRemote,
@@ -71,6 +72,11 @@ export function hasExaApiKey(): boolean {
 /** True when the server has EXA_API_KEY in env (booleans-only signal). */
 export function hasPlatformExaKey(): boolean {
   return hasPlatformExaKeyCached();
+}
+
+/** Server has PODCAST_TTS_MODEL configured — podcast generation is available. */
+export function hasPodcastTts(): boolean {
+  return hasPodcastTtsCached();
 }
 
 /** Web search is usable: either the user has a key or the platform has one. */

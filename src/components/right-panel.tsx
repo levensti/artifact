@@ -3,15 +3,32 @@
 import {
   PanelRightClose,
   PanelRightOpen,
+  Podcast,
   Sparkles,
   StickyNote,
 } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import type { Annotation } from "@/lib/annotations";
 import { cn } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/client-data";
+import { USER_UPDATED_EVENT } from "@/lib/storage-events";
+import { isAdminEmail } from "@/lib/admin";
 import ChatPanel from "./chat-panel";
 import AnnotationList from "./annotation-list";
+import MediaPanel from "./media-panel";
 
-export type RightPanelTab = "chat" | "notes";
+export type RightPanelTab = "chat" | "notes" | "media";
+
+// The Media (podcast) tab is an admin-only prototype. This governs nav
+// visibility; the /api/podcasts routes enforce the same check server-side.
+function subscribeUser(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(USER_UPDATED_EVENT, onChange);
+  return () => window.removeEventListener(USER_UPDATED_EVENT, onChange);
+}
+function isAdminSnapshot() {
+  return isAdminEmail(getCurrentUser()?.email);
+}
 
 interface RightPanelProps {
   reviewId: string;
@@ -67,6 +84,11 @@ export default function RightPanel({
   onAnnotationDeactivate,
 }: RightPanelProps) {
   const noteCount = annotations.length;
+  const showMedia = useSyncExternalStore(
+    subscribeUser,
+    isAdminSnapshot,
+    isAdminSnapshot,
+  );
 
   if (collapsed && onToggleCollapsed) {
     return (
@@ -109,6 +131,20 @@ export default function RightPanel({
             </span>
           ) : null}
         </button>
+        {showMedia ? (
+          <button
+            type="button"
+            onClick={() => {
+              onTabChange("media");
+              onToggleCollapsed();
+            }}
+            title="Media"
+            aria-label="Open media"
+            className="flex h-11 w-full shrink-0 items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          >
+            <Podcast className="size-[15px]" strokeWidth={2} aria-hidden />
+          </button>
+        ) : null}
       </aside>
     );
   }
@@ -138,6 +174,17 @@ export default function RightPanel({
           >
             Notes
           </TabButton>
+          {showMedia ? (
+            <TabButton
+              active={activeTab === "media"}
+              onClick={() => onTabChange("media")}
+              icon={
+                <Podcast className="size-[14px]" strokeWidth={2} aria-hidden />
+              }
+            >
+              Media
+            </TabButton>
+          ) : null}
         </div>
         {onToggleCollapsed ? (
           <button
@@ -182,6 +229,16 @@ export default function RightPanel({
             onAnnotationDeactivate={onAnnotationDeactivate}
           />
         </div>
+        {showMedia ? (
+          <div className={cn("absolute inset-0 flex flex-col", activeTab === "media" ? "" : "hidden")}>
+            <MediaPanel
+              key={reviewId}
+              reviewId={reviewId}
+              paperTitle={paperTitle}
+              paperContext={paperContext}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

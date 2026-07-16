@@ -22,6 +22,10 @@ function pathFor(userId: string, id: string): string {
   return `${userId}/${id}.pdf`;
 }
 
+function audioPathFor(userId: string, id: string): string {
+  return `${userId}/podcasts/${id}.wav`;
+}
+
 export async function uploadPdf(
   userId: string,
   id: string,
@@ -50,4 +54,36 @@ export async function downloadPdf(path: string): Promise<Blob> {
 export async function deletePdf(path: string): Promise<void> {
   const { error } = await client().storage.from(bucket()).remove([path]);
   if (error) throw new Error(`pdf delete failed: ${error.message}`);
+}
+
+/* ── Podcast audio ────────────────────────────────────────────── */
+
+export async function uploadAudio(
+  userId: string,
+  id: string,
+  body: Blob | ArrayBuffer | Buffer | Uint8Array,
+  contentType = "audio/wav",
+): Promise<string> {
+  const path = audioPathFor(userId, id);
+  const { error } = await client()
+    .storage.from(bucket())
+    .upload(path, body, { contentType, upsert: true });
+  if (error) {
+    const detail = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    throw new Error(
+      `audio upload failed (bucket=${bucket()}): ${error.message} :: ${detail}`,
+    );
+  }
+  return path;
+}
+
+export async function downloadAudio(path: string): Promise<Blob> {
+  const { data, error } = await client().storage.from(bucket()).download(path);
+  if (error) throw new Error(`audio download failed: ${error.message}`);
+  return data;
+}
+
+export async function deleteAudio(path: string): Promise<void> {
+  const { error } = await client().storage.from(bucket()).remove([path]);
+  if (error) throw new Error(`audio delete failed: ${error.message}`);
 }

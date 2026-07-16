@@ -36,6 +36,7 @@ model User {
   inferenceProfiles InferenceProfile[]
   preferences       UserPreferences?
   pdfBlobs          PdfBlob[]
+  podcasts          Podcast[]
   parsedPapers      ParsedPaper[]
   pageMaps          PageMap[]
   shares            Share[]
@@ -111,6 +112,7 @@ model Review {
   messages           ReviewMessages?
   annotations        ReviewAnnotations?
   deepDives          DeepDive[]
+  podcasts           Podcast[]
   wikiSources        WikiPageSource[]
   shares             Share[]
   fromRecommendation Recommendation?    @relation(fields: [fromRecommendationId], references: [id], onDelete: SetNull)
@@ -154,6 +156,46 @@ model DeepDive {
 
   @@index([userId, createdAt])
   @@index([userId, reviewId])
+}
+
+/// A user-initiated audio episode generated from a paper: an LLM-written
+/// single-host script plus the synthesized audio (stored as a blob, path in
+/// `audioPath`). One review can have many episodes (regeneration keeps
+/// history), each optionally steered by the user's `instructions`. The row is
+/// created up front in GENERATING so a page refresh mid-run still reflects
+/// progress; it flips to READY (audio available) or FAILED (with `error`).
+model Podcast {
+  id           String        @id @default(uuid())
+  userId       String
+  reviewId     String
+  status       PodcastStatus @default(GENERATING)
+  title        String?
+  /// Optional free-text steer from the pre-generation dialog (e.g. "focus on
+  /// the experiments"). Persisted so it can be shown on the episode card and
+  /// reused on regenerate.
+  instructions String?
+  /// Full narrator script. Null until the script step completes.
+  transcript   String?
+  /// Supabase storage path of the WAV audio. Null until synthesis completes.
+  audioPath    String?
+  /// Audio length in seconds, computed from the synthesized sample count.
+  durationSec  Int?
+  /// Failure reason surfaced on the card when status is FAILED.
+  error        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId, createdAt])
+  @@index([userId])
+}
+
+enum PodcastStatus {
+  GENERATING
+  READY
+  FAILED
 }
 
 model WikiPage {

@@ -45,6 +45,32 @@ export function getOpenRouterModel(): string {
 }
 
 /**
+ * The OpenRouter model id used for podcast text-to-speech, from the required
+ * `PODCAST_TTS_MODEL` env var. No fallback and no hardcoded model — a missing
+ * value throws so the misconfiguration surfaces immediately rather than
+ * silently routing to a wrong or unintended TTS model. Kept out of code so the
+ * chosen model is a deploy-time decision, swappable like `OPENROUTER_MODEL`.
+ * Server-only; never reaches the browser.
+ */
+export function getPodcastTtsModel(): string {
+  const raw = process.env.PODCAST_TTS_MODEL?.trim();
+  if (!raw) {
+    throw new Error("Missing required env var PODCAST_TTS_MODEL");
+  }
+  return raw;
+}
+
+/**
+ * Whether a podcast TTS model is configured. Safe to send to the client —
+ * leaks existence only, never the value. The Media tab uses this to gate the
+ * Generate action so an unconfigured deploy shows a disabled state instead of
+ * failing at generation time.
+ */
+export function podcastTtsAvailable(): boolean {
+  return !!process.env.PODCAST_TTS_MODEL?.trim();
+}
+
+/**
  * Conservative context-window estimate (tokens) for the configured model, used
  * by the server's history-budgeting pass. Erring small only trims history a
  * little sooner, never an overflow. From the required `OPENROUTER_CONTEXT_WINDOW`
