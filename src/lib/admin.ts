@@ -3,11 +3,14 @@
  * client-side to gate the nav item's visibility and server-side (the real
  * enforcement) to gate the eval API routes. Not a secret — it's just an email,
  * and the server check is what actually protects the data.
+ *
+ * TODO: Refactor this to feature flags.
  */
 export const ADMIN_EMAILS = [
   "levensti+test@gmail.com",
   "levensti@gmail.com",
   "tobyzliang@gmail.com",
+  "calvinwang202@gmail.com",
 ];
 
 export function isAdminEmail(email: string | null | undefined): boolean {

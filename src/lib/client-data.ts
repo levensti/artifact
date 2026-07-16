@@ -56,6 +56,12 @@ export interface CurrentUser {
 let platformOpenRouterCache = false;
 
 /**
+ * Whether the server has PODCAST_TTS_MODEL configured. Boolean only — the value
+ * never reaches the browser. Gates the Media tab's Generate action.
+ */
+let podcastTtsCache = false;
+
+/**
  * Tool-key counterpart to `platformProvidersCache`. Booleans only — the
  * env key never reaches the browser. Lets the UI suppress the "add an
  * Exa key" prompt when the server already has one in env.
@@ -107,6 +113,7 @@ export async function hydrateClientStore(): Promise<void> {
       settings: SettingsCache;
       platformOpenRouter?: boolean;
       platformTools?: PlatformToolsCache;
+      podcastTts?: boolean;
       deepDives: DeepDiveSession[];
       projects: Project[];
       user: CurrentUser | null;
@@ -116,6 +123,7 @@ export async function hydrateClientStore(): Promise<void> {
     settingsCache = boot.settings;
     settingsHydrated = true;
     platformOpenRouterCache = boot.platformOpenRouter ?? false;
+    podcastTtsCache = boot.podcastTts ?? false;
     platformToolsCache = boot.platformTools ?? {};
     deepDivesCache = boot.deepDives;
     projectsCache = boot.projects ?? [];
@@ -785,6 +793,11 @@ export function hasPlatformOpenRouterKey(): boolean {
 /** True when the server has EXA_API_KEY set in env. Booleans only. */
 export function hasPlatformExaKey(): boolean {
   return platformToolsCache.exa === true;
+}
+
+/** True when the server has PODCAST_TTS_MODEL configured. Booleans only. */
+export function hasPodcastTts(): boolean {
+  return podcastTtsCache;
 }
 
 /** Literal: the user has saved their own OpenRouter key. */
