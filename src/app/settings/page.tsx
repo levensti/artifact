@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 const OPEN_SETTINGS_FLAG = "artifact-open-settings";
 
 /**
- * Legacy /settings URL: hand off to home and open Manage API keys.
+ * Legacy /settings URL: hand off to home and open Settings.
  */
 export default function SettingsRedirectPage() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function SettingsRedirectPage() {
 
   return (
     <div className="h-full w-full flex items-center justify-center bg-background text-muted-foreground text-sm">
-      Opening API keys…
+      Opening Settings...
     </div>
   );
 }
