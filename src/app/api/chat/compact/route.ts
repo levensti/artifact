@@ -21,7 +21,7 @@ import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
 import { generate } from "@/server/generate";
 import {
   computeShouldCompact,
-  getOpenRouterContextWindow,
+  getFireworksContextWindow,
   type OpenRouterUsage,
 } from "@/lib/openrouter";
 import { estimateTokens } from "@/lib/transcript";
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     if (!outcome.ok) {
       if (outcome.reason === "rate_limited") {
         return jsonError(
-          "You've reached the current usage limit. Add your own OpenRouter key for higher limits.",
+          "You've reached the current usage limit. Add your own API key for higher limits.",
           429,
         );
       }
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       reviewId,
     );
 
-    const windowTokens = getOpenRouterContextWindow();
+    const windowTokens = getFireworksContextWindow();
     const coveredCount = messages.length - KEEP_RECENT;
 
     // Nothing old enough to fold in yet.

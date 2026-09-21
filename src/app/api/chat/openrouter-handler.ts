@@ -1,5 +1,5 @@
 /**
- * OpenRouter agentic loop. OpenRouter speaks the OpenAI Chat Completions
+ * Fireworks agentic loop. Fireworks speaks the OpenAI Chat Completions
  * shape, so this is the OpenAI-compatible adapter — HTTP call, SSE parser,
  * tool/role message format. The round/watchdog/tool-execution logic lives in
  * `agent-loop.ts`; this file just supplies a `ProviderAdapter`.
@@ -10,8 +10,8 @@ import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
 import type { ParsedPaper } from "@/lib/review-types";
 import {
-  OPENROUTER_BASE_URL,
-  getOpenRouterModel,
+  FIREWORKS_BASE_URL,
+  getFireworksModel,
   type OpenRouterUsage,
 } from "@/lib/openrouter";
 import { toOpenAITools } from "@/tools/registry";
@@ -28,7 +28,7 @@ import {
   type TurnResult,
 } from "./agent-loop";
 
-const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+const FIREWORKS_CHAT_COMPLETIONS_URL = `${FIREWORKS_BASE_URL}/chat/completions`;
 
 /* ------------------------------------------------------------------ */
 /*  OpenAI-compatible API types                                        */
@@ -59,7 +59,7 @@ interface OpenAIStreamEvent {
   usage?: OpenRouterUsage;
 }
 
-export async function runOpenRouterAgentLoop(
+export async function runFireworksAgentLoop(
   chatMessages: TranscriptMessage[],
   apiKey: string,
   systemPrompt: string,
@@ -69,7 +69,7 @@ export async function runOpenRouterAgentLoop(
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
   options?: AgentLoopOptions,
-  model = getOpenRouterModel(),
+  model = getFireworksModel(),
 ) {
   const paperBlock = buildPaperBlock(paperContext, parsedPaper);
   const baseSystem = systemPrompt + TOOL_RESULT_GUARDRAIL;
@@ -102,7 +102,7 @@ export async function runOpenRouterAgentLoop(
 
   const adapter: ProviderAdapter = {
     async request(): Promise<TurnResult> {
-      const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
+      const response = await fetch(FIREWORKS_CHAT_COMPLETIONS_URL, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -120,7 +120,7 @@ export async function runOpenRouterAgentLoop(
       if (!response.ok) {
         const errText = await response.text();
         const err = new Error(
-          parseApiErrorMessage(errText, `OpenRouter API error: ${response.status}`),
+          parseApiErrorMessage(errText, `Fireworks API error: ${response.status}`),
         );
         // Tag rate-limit (429) so the client can prompt for the user's own key
         // instead of showing a generic error. 402 = out of credits behaves the
@@ -130,7 +130,7 @@ export async function runOpenRouterAgentLoop(
         }
         throw err;
       }
-      if (!response.body) throw new Error("No response body from OpenRouter");
+      if (!response.body) throw new Error("No response body from Fireworks");
 
       const parsed = await parseOpenAISSE(response.body, emit);
       const { textContent, toolCalls: rawToolCalls, finishReason, usage } = parsed;
@@ -140,8 +140,8 @@ export async function runOpenRouterAgentLoop(
         const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
         emit({
           type: "cache_stats",
-          // OpenRouter reports the *total* prompt_tokens including the cached
-          // portion. Surface non-cached input separately.
+          // The provider reports the *total* prompt_tokens including the
+          // cached portion. Surface non-cached input separately.
           inputTokens: Math.max(0, promptTokens - cached),
           cacheReadTokens: cached,
           cacheCreationTokens: 0,

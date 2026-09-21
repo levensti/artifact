@@ -16,7 +16,7 @@
 import { NextRequest } from "next/server";
 import {
   computeShouldCompact,
-  getOpenRouterContextWindow,
+  getFireworksContextWindow,
   TOKEN_RESERVE,
 } from "@/lib/openrouter";
 import type { StreamEvent } from "@/lib/stream-types";
@@ -74,7 +74,7 @@ interface ChatRequest {
   /** Re-run the last stored user message without appending a new one. Used by
    *  the Exa-key resume flow after the turn paused waiting on a key decision. */
   resume?: boolean;
-  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  /** Optional per-user Fireworks key override. Server falls back to env. */
   apiKey?: string;
   /**
    * Full paper text. For short papers (<~30k tokens) the browser sends this
@@ -157,7 +157,7 @@ function applyCompaction(
 /**
  * Reject a request that exceeded the platform token budget. Emits the same
  * in-stream `rate_limit` error the client already handles for upstream 429s,
- * so the UI shows its "add your own OpenRouter key" prompt with no client
+ * so the UI shows its "add your own API key" prompt with no client
  * changes. Returned with HTTP 200 (the payload is the NDJSON stream) so the
  * client parses events rather than treating it as a transport failure.
  */
@@ -167,7 +167,7 @@ function rateLimitedResponse(): Response {
       type: "error",
       code: "rate_limit",
       message:
-        "You've reached the current usage limit. Add your own OpenRouter key for higher limits.",
+        "You've reached the current usage limit. Add your own API key for higher limits.",
     },
     { type: "done" },
   ];
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
     return jsonError("Messages array is required and must not be empty.", 400);
   }
 
-  // Resolve the OpenRouter key, spending the user's free platform allowance
+  // Resolve the Fireworks key, spending the user's free platform allowance
   // before falling back to their own key. `meter` is true only while we're on
   // the platform key — usage is charged to the user's buckets after the stream
   // (see the cache_stats accumulation below). This gates both the assistant and
@@ -260,7 +260,7 @@ export async function POST(req: NextRequest) {
     priorMeta: ContextMetadata | null;
   } | null = null;
   // Context window; the emit loop reuses it for `context_usage` events.
-  const windowTokens = getOpenRouterContextWindow();
+  const windowTokens = getFireworksContextWindow();
   // Fixed (uncompactable) overhead, split out for the usage breakdown: the
   // paper block's footprint in context, plus the system prompt. Conversation
   // tokens are the measured total minus this.
@@ -358,7 +358,7 @@ export async function POST(req: NextRequest) {
         if (event.type === "cache_stats") {
           // Cost-weighted: cache reads count at 10% (see meteredTokens).
           // cacheCreationTokens is omitted because it's always 0 for the
-          // current provider (OpenRouter/DeepSeek); revisit if an
+          // current provider (Fireworks/DeepSeek); revisit if an
           // Anthropic-style provider that reports cache-write tokens is ever
           // routed through this event.
           actualTokens += meteredTokens(
@@ -407,7 +407,7 @@ export async function POST(req: NextRequest) {
                 type: "error",
                 code: "rate_limit",
                 message:
-                  "You've reached the current usage limit. Add your own OpenRouter key for higher limits.",
+                  "You've reached the current usage limit. Add your own API key for higher limits.",
               }
             : {
                 type: "error",

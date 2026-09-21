@@ -102,7 +102,7 @@ npm run db:migrate    # applies prisma/migrations/* to the local Postgres
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000) and sign in with Google. Set `OPENROUTER_API_KEY` in `.env` so users can start chatting immediately, or have each user add their own OpenRouter key under Settings.
+Open [localhost:3000](http://localhost:3000) and sign in with Google. Set `FIREWORKS_API_KEY` in `.env` so users can start chatting immediately, or have each user add their own Fireworks key under Settings. (`OPENROUTER_API_KEY` is only needed for podcast TTS.)
 
 ### Relevant commands
 
@@ -133,7 +133,7 @@ Artifact can be self-hosted on any platform that runs a Next.js app. You'll need
 
 Copy [`.env.example`](./.env.example) to `.env` and fill in the required values. Every variable is documented inline: what it does, where to get the value, and which are local vs. production-only.
 
-For a deployed instance you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`, plus the multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`). Optionally set `OPENROUTER_API_KEY` to give keyless users a working model out of the box (see the platform-key note above).
+For a deployed instance you'll need: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`, `ENCRYPTION_KEY`, plus the multi-host routing variables (`APEX_HOSTS`, `APP_HOST`, `AUTH_URL`, `AUTH_COOKIE_DOMAIN`). Optionally set `FIREWORKS_API_KEY` to give keyless users a working model out of the box (see the platform-key note above), and `OPENROUTER_API_KEY` if you want podcast TTS.
 
 ### 3. Build and run
 
@@ -143,4 +143,4 @@ npm run build:deploy   # runs prisma migrate deploy + next build
 npm start
 ```
 
-Sign in with Google, then add your OpenRouter key under Settings (or rely on the platform `OPENROUTER_API_KEY`).
+Sign in with Google, then add your Fireworks key under Settings (or rely on the platform `FIREWORKS_API_KEY`).

@@ -1,12 +1,17 @@
 /**
- * Single source of truth for the LLM provider + model.
+ * Single source of truth for the LLM providers + model.
  *
- * The app talks to exactly one inference provider (OpenRouter, via its
- * OpenAI-compatible Chat Completions API) and one fixed model chosen by the
- * platform. Users don't pick a model: a fixed, vetted model keeps agent
- * quality attributable to Artifact rather than to whatever the user happened
- * to select. The OpenRouter API key comes from the `OPENROUTER_API_KEY` env
- * var, with an optional per-user override entered in Settings.
+ * The app talks to two inference providers, both via the OpenAI-compatible
+ * API shapes:
+ *   - Fireworks serves every chat completion (chat, generate, paper parsing,
+ *     podcast scripts), with one fixed model chosen by the platform. Users
+ *     don't pick a model: a fixed, vetted model keeps agent quality
+ *     attributable to Artifact rather than to whatever the user happened to
+ *     select. The platform key comes from `FIREWORKS_API_KEY`, with an
+ *     optional per-user override entered in Settings.
+ *   - OpenRouter serves ONLY podcast text-to-speech (its `/audio/speech`
+ *     endpoint fronts Gemini-class TTS models Fireworks doesn't offer), always
+ *     on the platform `OPENROUTER_API_KEY`.
  *
  * The model and its context window come from the environment, with no code
  * fallback: a misconfigured deploy fails loudly rather than silently routing
@@ -14,10 +19,10 @@
  * server-only (no `NEXT_PUBLIC_` prefix) and read lazily through the getters
  * below, so they throw at request time on the server and never force the
  * client bundle to carry the value:
- *   - `OPENROUTER_MODEL` is the model id. It drives routing on the server,
- *     where chat/generate paths default to `getOpenRouterModel()`, so a client
+ *   - `FIREWORKS_MODEL` is the model id. It drives routing on the server,
+ *     where chat/generate paths default to `getFireworksModel()`, so a client
  *     never dictates the upstream model.
- *   - `OPENROUTER_CONTEXT_WINDOW` is the token budget for history trimming.
+ *   - `FIREWORKS_MODEL_CONTEXT_WINDOW` is the token budget for history trimming.
  * Set both together when swapping models so the budget matches the new window.
  *
  * This module is server-only: it reads/validates secrets-adjacent config and
@@ -28,18 +33,22 @@
 
 import "server-only";
 
-/** OpenRouter's OpenAI-compatible base URL (no trailing slash). */
+/** Fireworks' OpenAI-compatible base URL (no trailing slash). Chat only. */
+export const FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1";
+
+/** OpenRouter's OpenAI-compatible base URL (no trailing slash). TTS only. */
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 /**
- * The OpenRouter model id every server surface routes to, from the required
- * `OPENROUTER_MODEL` env var. No fallback — a missing value throws so the
- * misconfiguration surfaces immediately. Server-only; never reaches the browser.
+ * The Fireworks model id every chat-completions surface routes to, from the
+ * required `FIREWORKS_MODEL` env var. No fallback — a missing value throws so
+ * the misconfiguration surfaces immediately. Server-only; never reaches the
+ * browser.
  */
-export function getOpenRouterModel(): string {
-  const raw = process.env.OPENROUTER_MODEL?.trim();
+export function getFireworksModel(): string {
+  const raw = process.env.FIREWORKS_MODEL?.trim();
   if (!raw) {
-    throw new Error("Missing required env var OPENROUTER_MODEL");
+    throw new Error("Missing required env var FIREWORKS_MODEL");
   }
   return raw;
 }
@@ -61,27 +70,31 @@ export function getPodcastTtsModel(): string {
 }
 
 /**
- * Whether a podcast TTS model is configured. Safe to send to the client —
- * leaks existence only, never the value. The Media tab uses this to gate the
- * Generate action so an unconfigured deploy shows a disabled state instead of
- * failing at generation time.
+ * Whether podcast TTS is configured: a TTS model AND the platform OpenRouter
+ * key that pays for it (TTS never uses a per-user key). Safe to send to the
+ * client — leaks existence only, never the values. The Media tab uses this to
+ * gate the Generate action so an unconfigured deploy shows a disabled state
+ * instead of failing at generation time.
  */
 export function podcastTtsAvailable(): boolean {
-  return !!process.env.PODCAST_TTS_MODEL?.trim();
+  return (
+    !!process.env.PODCAST_TTS_MODEL?.trim() &&
+    !!process.env.OPENROUTER_API_KEY?.trim()
+  );
 }
 
 /**
  * Conservative context-window estimate (tokens) for the configured model, used
  * by the server's history-budgeting pass. Erring small only trims history a
- * little sooner, never an overflow. From the required `OPENROUTER_CONTEXT_WINDOW`
+ * little sooner, never an overflow. From the required `FIREWORKS_MODEL_CONTEXT_WINDOW`
  * env var; no fallback — a missing or non-positive value throws.
  */
-export function getOpenRouterContextWindow(): number {
-  const raw = process.env.OPENROUTER_CONTEXT_WINDOW?.trim();
+export function getFireworksContextWindow(): number {
+  const raw = process.env.FIREWORKS_MODEL_CONTEXT_WINDOW?.trim();
   const n = raw ? Number(raw) : NaN;
   if (!Number.isFinite(n) || n <= 0) {
     throw new Error(
-      "Missing or invalid env var OPENROUTER_CONTEXT_WINDOW (expected a positive integer)",
+      "Missing or invalid env var FIREWORKS_MODEL_CONTEXT_WINDOW (expected a positive integer)",
     );
   }
   return n;
@@ -124,9 +137,12 @@ export function computeShouldCompact(
 }
 
 /**
- * Token usage as reported by OpenRouter's OpenAI-compatible chat-completions
- * API. Shared by every caller that meters spend; the caller decides how to
- * weight it. `total_tokens` is provided by the API but unused by our metering.
+ * Token usage in the OpenAI-compatible chat-completions shape, as reported by
+ * both providers (Fireworks for chat, OpenRouter for the podcast script's
+ * sibling calls). Shared by every caller that meters spend; the caller decides
+ * how to weight it. `total_tokens` is provided by the API but unused by our
+ * metering. `prompt_tokens_details.cached_tokens` may be absent on providers
+ * that don't report cache reads — callers already default it to 0.
  */
 export interface OpenRouterUsage {
   prompt_tokens?: number;

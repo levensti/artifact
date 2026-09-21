@@ -9,15 +9,15 @@
 
 import { NextRequest } from "next/server";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
-import { resolveOpenRouterKey } from "@/server/provider-env";
-import { OPENROUTER_BASE_URL, getOpenRouterModel } from "@/lib/openrouter";
+import { resolveFireworksKey } from "@/server/provider-env";
+import { FIREWORKS_BASE_URL, getFireworksModel } from "@/lib/openrouter";
 import type { ParsedPaper } from "@/lib/review-types";
 
-const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+const FIREWORKS_CHAT_COMPLETIONS_URL = `${FIREWORKS_BASE_URL}/chat/completions`;
 
 interface ParseRequest {
   paperText: string;
-  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  /** Optional per-user Fireworks key override. Server falls back to env. */
   apiKey?: string;
 }
 
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const resolvedApiKey = resolveOpenRouterKey(apiKey);
+  const resolvedApiKey = resolveFireworksKey(apiKey);
   if (!resolvedApiKey) {
     return jsonError("API key is required.", 401);
   }
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   const userPrompt = PARSE_USER_INSTRUCTION.replace("{{PAPER}}", paperText);
 
   try {
-    const raw = await callOpenRouter(resolvedApiKey, userPrompt);
+    const raw = await callFireworks(resolvedApiKey, userPrompt);
 
     const parsed = extractAndValidateJson(raw);
     if (!parsed) {
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       tables: Array.isArray(parsed.tables) ? parsed.tables : [],
       summary: typeof parsed.summary === "string" ? parsed.summary : "",
       parsedAt: new Date().toISOString(),
-      parsedWith: { modelId: getOpenRouterModel() },
+      parsedWith: { modelId: getFireworksModel() },
     };
 
     return new Response(JSON.stringify(result), {
@@ -112,21 +112,21 @@ export async function POST(req: NextRequest) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  OpenRouter call — non-streaming, JSON-mode                         */
+/*  Fireworks call — non-streaming, JSON-mode                          */
 /* ------------------------------------------------------------------ */
 
-async function callOpenRouter(
+async function callFireworks(
   apiKey: string,
   userPrompt: string,
 ): Promise<string> {
-  const response = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
+  const response = await fetch(FIREWORKS_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: getOpenRouterModel(),
+      model: getFireworksModel(),
       messages: [
         { role: "system", content: PARSE_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
@@ -148,7 +148,7 @@ async function callOpenRouter(
 
 async function parseError(response: Response) {
   const errorText = await response.text();
-  const fallback = `OpenRouter API error: ${response.status}`;
+  const fallback = `Fireworks API error: ${response.status}`;
   return new Error(parseApiErrorMessage(errorText, fallback));
 }
 

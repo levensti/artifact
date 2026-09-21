@@ -34,7 +34,7 @@ user without a key sees). To measure just the model + prompt without the loop,
 swap `ReadingAgentClient` for `GenerateClient` in `run.ts` (the bare
 [`generate()`](../../src/server/generate.ts) entrypoint).
 
-The only thing it needs is an OpenRouter key. It reads `OPENROUTER_API_KEY` from
+The only thing it needs is a Fireworks key. It reads `FIREWORKS_API_KEY` from
 the environment, falling back to the repo-root `.env` (the same file the app
 uses) via `--env-file-if-exists`; a `--api-key` flag overrides both. The dataset
 is pulled on demand from Hugging Face — no local download, no `datasets`
@@ -65,7 +65,7 @@ ID sent upstream. `limit` is optional (`all` runs the full 403 questions), and
 | Flag              | Default                               | Meaning                                      |
 | ----------------- | ------------------------------------- | -------------------------------------------- |
 | `--config NAME`   | `default`                             | Config file in `config/`, or a YAML path     |
-| `--api-key`       | `OPENROUTER_API_KEY` env, then `.env` | OpenRouter key used for the run              |
+| `--api-key`       | `FIREWORKS_API_KEY` env, then `.env`  | Fireworks key used for the run               |
 | `--limit N`       | config `limit`                        | Override how many questions to run           |
 | `--workers N`     | config `num_workers`                  | Override concurrent agent runs in flight     |
 | `--num-workers N` | config `num_workers`                  | Alias for `--workers`                        |

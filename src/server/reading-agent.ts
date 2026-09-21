@@ -1,6 +1,6 @@
 /**
  * The reading agent's single entrypoint: given a conversation, a paper/page in
- * context, and an OpenRouter key, run the tool-using agentic loop and stream
+ * context, and a Fireworks key, run the tool-using agentic loop and stream
  * its events to `emit`. This is the highest-level call that IS the agent —
  * everything below it (tool selection, the ReAct loop, the SSE parsing) is
  * shared, and everything above it in the chat route (auth, rate-limit
@@ -19,7 +19,7 @@ import type { TranscriptMessage } from "@/lib/transcript";
 import type { ParsedPaper } from "@/lib/review-types";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
-import { runOpenRouterAgentLoop } from "@/app/api/chat/openrouter-handler";
+import { runFireworksAgentLoop } from "@/app/api/chat/openrouter-handler";
 import { getReadingSystemPrompt, visualFormatReminder } from "@/recipes/reading-agent";
 
 // Re-export so the chat route resolves the prompt (for context budgeting)
@@ -51,7 +51,7 @@ export interface ReadingAgentParams {
   /** The conversation to send the model (already budgeted to the context
    *  window by the caller, if it cares). */
   conversation: TranscriptMessage[];
-  /** Resolved OpenRouter key. */
+  /** Resolved Fireworks key. */
   apiKey: string;
   /** Optional model override for offline evals; app traffic uses the fixed model. */
   model?: string;
@@ -123,7 +123,7 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
   };
   const systemPrompt = getReadingSystemPrompt(sourceUrl, mode);
 
-  await runOpenRouterAgentLoop(
+  await runFireworksAgentLoop(
     conversation,
     apiKey,
     systemPrompt,

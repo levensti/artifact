@@ -15,7 +15,7 @@
  *        - `GenerateClient` — the bare `generate()` entrypoint (no tools), for
  *          measuring just the model + prompt without the agent loop.
  *      All either needs is an OpenRouter key (`--api-key` or
- *      `OPENROUTER_API_KEY`); no dev server, no login.
+ *      `FIREWORKS_API_KEY`); no dev server, no login.
  *
  *   2. Multiple-choice answer parsing/scoring — turning free-form model text
  *      into a set of option letters and exact-matching it against a gold set.
@@ -103,7 +103,7 @@ async function runWithRetry(
     return {
       content: "",
       ok: false,
-      error: "No OpenRouter key. Pass --api-key or set OPENROUTER_API_KEY.",
+      error: "No Fireworks key. Pass --api-key or set FIREWORKS_API_KEY.",
     };
   }
 
@@ -155,7 +155,7 @@ export class ReadingAgentClient implements EvalClient {
   private readonly maxPaperChars: number;
 
   constructor(opts: GenerateClientOptions = {}) {
-    this.apiKey = opts.apiKey || process.env.OPENROUTER_API_KEY || null;
+    this.apiKey = opts.apiKey || process.env.FIREWORKS_API_KEY || null;
     this.model = opts.model;
     this.maxRetries = opts.maxRetries ?? 4;
     this.maxPaperChars = opts.maxPaperChars ?? PAPER_CONTEXT_HARD_LIMIT - 1;
@@ -202,7 +202,7 @@ export class GenerateClient implements EvalClient {
   private readonly maxPaperChars: number;
 
   constructor(opts: GenerateClientOptions = {}) {
-    this.apiKey = opts.apiKey || process.env.OPENROUTER_API_KEY || null;
+    this.apiKey = opts.apiKey || process.env.FIREWORKS_API_KEY || null;
     this.model = opts.model;
     this.maxRetries = opts.maxRetries ?? 4;
     this.maxPaperChars = opts.maxPaperChars ?? PAPER_CONTEXT_HARD_LIMIT - 1;

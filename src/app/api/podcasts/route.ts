@@ -5,6 +5,7 @@ import { adminRoute } from "@/server/api";
 import * as store from "@/server/store";
 import { uploadAudio } from "@/server/storage";
 import { generatePodcast } from "@/server/podcast";
+import { platformOpenRouterKey } from "@/server/provider-env";
 import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
 import type { OpenRouterUsage } from "@/lib/openrouter";
 import { PODCAST_INSTRUCTIONS_MAX } from "@/lib/podcast";
@@ -20,7 +21,8 @@ const createSchema = z.object({
   paperTitle: z.string().max(1_000).optional(),
   paperContext: z.string().min(1).max(500_000),
   instructions: z.string().max(PODCAST_INSTRUCTIONS_MAX).optional(),
-  // Optional per-user OpenRouter key; falls back to the platform key/allowance.
+  // Optional per-user Fireworks key (script generation only); falls back to
+  // the platform key/allowance. TTS always runs on the platform OpenRouter key.
   apiKey: z.string().optional(),
 });
 
@@ -37,13 +39,15 @@ export const POST = adminRoute(async (userId, request: Request) => {
   }
   const { reviewId, paperTitle, paperContext, instructions } = parsed.data;
 
-  // Resolve the key (and gate on the allowance) BEFORE creating a row, so an
-  // unauthorized or rate-limited caller never leaves a stray GENERATING row.
+  // Resolve both keys (and gate on the allowance) BEFORE creating a row, so an
+  // unauthorized, rate-limited, or TTS-less caller never leaves a stray
+  // GENERATING row. The script bills the resolved Fireworks key; synthesis
+  // bills the platform OpenRouter key (there is no per-user TTS key).
   const outcome = await resolveMeteredKey(parsed.data.apiKey);
   if (!outcome.ok) {
     return outcome.reason === "rate_limited"
       ? jsonError(
-          "You've reached the current usage limit. Add your own OpenRouter key for higher limits.",
+          "You've reached the current usage limit. Add your own API key for higher limits.",
           429,
         )
       : jsonError(
@@ -52,6 +56,13 @@ export const POST = adminRoute(async (userId, request: Request) => {
         );
   }
   const { apiKey, meter, userId: meterUserId } = outcome;
+  const ttsApiKey = platformOpenRouterKey();
+  if (!ttsApiKey) {
+    return jsonError(
+      "Podcast audio isn't configured on this deployment (missing OpenRouter TTS key).",
+      503,
+    );
+  }
 
   const id = crypto.randomUUID();
   let podcast;
@@ -74,6 +85,7 @@ export const POST = adminRoute(async (userId, request: Request) => {
     try {
       const { transcript, audio, durationSec, usages } = await generatePodcast(
         apiKey,
+        ttsApiKey,
         { paperTitle: paperTitle ?? "", paperContext, instructions },
       );
       const audioPath = await uploadAudio(userId, id, audio);

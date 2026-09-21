@@ -3,7 +3,7 @@ import "server-only";
 /**
  * Per-user token-bucket rate limiter for platform LLM spend.
  *
- * The app can call OpenRouter with either a shared PLATFORM key or a user's own
+ * The app can call Fireworks with either a shared PLATFORM key or a user's own
  * key. We give every signed-in user a free per-user allowance on the platform
  * key and only fall back to their own key once that allowance is spent — so the
  * platform allowance is always consumed FIRST, and a user's own key is overflow
@@ -34,7 +34,7 @@ import "server-only";
  */
 
 import { Redis } from "@upstash/redis";
-import { resolveOpenRouterKey } from "./provider-env";
+import { resolveFireworksKey } from "./provider-env";
 import { requireUserId } from "./api";
 
 /* ------------------------------------------------------------------ */
@@ -234,7 +234,7 @@ export type KeyOutcome =
   | { ok: false; reason: "rate_limited" | "no_key" };
 
 /**
- * Decide which OpenRouter key a request should use, spending the user's free
+ * Decide which Fireworks key a request should use, spending the user's free
  * platform allowance before their own key:
  *
  *   1. No platform key configured, or limiter disabled → original behavior:
@@ -255,7 +255,7 @@ export async function resolveMeteredKey(
     typeof inlineUserKey === "string" && inlineUserKey.trim()
       ? inlineUserKey.trim()
       : null;
-  const platformKey = resolveOpenRouterKey(null); // env key, or null
+  const platformKey = resolveFireworksKey(null); // env key, or null
 
   // Case 1: no platform metering possible.
   if (!platformKey || !rateLimitEnabled()) {

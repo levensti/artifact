@@ -18,7 +18,7 @@
  * run makes real network calls beyond the model itself.)
  *
  * Usage:
- *   npm run eval:elaip_bench -- --api-key sk-or-...     # or set OPENROUTER_API_KEY
+ *   npm run eval:elaip_bench -- --api-key fw_...         # or set FIREWORKS_API_KEY
  *   npm run eval:elaip_bench -- --limit 20 --workers 4  # quick smoke test
  *
  * Reference points from the ELAIPBench paper: best LLM 39.95%, human 48.14%.
@@ -310,7 +310,7 @@ function printErrorHints(results: RowResult[]): void {
   if (sample.includes("No OpenRouter key") || sample.includes("401")) {
     console.log(
       "  -> missing or invalid key. Pass --api-key sk-or-... or set\n" +
-        "     OPENROUTER_API_KEY, and check the key has credit.\n",
+        "     FIREWORKS_API_KEY, and check the key has credit.\n",
     );
   } else if (sample.includes("429")) {
     console.log("  -> 429: OpenRouter throttled. Lower --workers and retry.\n");

@@ -1,12 +1,12 @@
 /**
  * The app's single LLM generation entrypoint: build the system prompt (with the
- * paper wrapped in a `<paper>` block) and call OpenRouter's chat-completions
+ * paper wrapped in a `<paper>` block) and call Fireworks' chat-completions
  * API, streaming or not.
  *
  * This is pure provider I/O — no auth, no rate-limit metering, no HTTP framing.
  * The `/api/generate` route wraps these functions with per-user key resolution
  * and budget metering; offline eval harnesses import and call them directly with
- * an OpenRouter key. Both paths therefore exercise the EXACT same prompt and
+ * a Fireworks key. Both paths therefore exercise the EXACT same prompt and
  * paper wrapping, with nothing re-implemented on either side.
  *
  * Deliberately free of any `server-only` / DB / Next-runtime imports so it runs
@@ -17,8 +17,8 @@
 
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
-  OPENROUTER_BASE_URL,
-  getOpenRouterModel,
+  FIREWORKS_BASE_URL,
+  getFireworksModel,
   type OpenRouterUsage,
 } from "@/lib/openrouter";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
@@ -28,7 +28,7 @@ import {
   researchAssistantRecipe,
 } from "@/recipes/research-assistant";
 
-const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+const FIREWORKS_CHAT_COMPLETIONS_URL = `${FIREWORKS_BASE_URL}/chat/completions`;
 
 /**
  * Ceiling for a non-streaming generation, which returns only once the whole
@@ -68,7 +68,7 @@ function chatRequestInit(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: opts.model ?? getOpenRouterModel(),
+      model: opts.model ?? getFireworksModel(),
       messages: [
         { role: "system", content: systemContentFor(paperContext) },
         { role: "user", content: prompt },
@@ -91,7 +91,7 @@ export async function generate(
   model?: string,
 ): Promise<{ content: string; usage?: OpenRouterUsage }> {
   const response = await fetchWithTimeout(
-    OPENROUTER_CHAT_COMPLETIONS_URL,
+    FIREWORKS_CHAT_COMPLETIONS_URL,
     chatRequestInit(apiKey, prompt, paperContext, { stream: false, model }),
     GENERATE_TIMEOUT_MS,
   );
@@ -115,16 +115,16 @@ export async function openStream(
   model?: string,
 ): Promise<ReadableStream<Uint8Array>> {
   const response = await fetch(
-    OPENROUTER_CHAT_COMPLETIONS_URL,
+    FIREWORKS_CHAT_COMPLETIONS_URL,
     chatRequestInit(apiKey, prompt, paperContext, { stream: true, model }),
   );
   if (!response.ok) throw await parseError(response);
-  if (!response.body) throw new Error("OpenRouter returned no stream body.");
+  if (!response.body) throw new Error("Fireworks returned no stream body.");
   return response.body;
 }
 
 /**
- * Read SSE chunks from OpenRouter and emit just the text deltas as plain UTF-8
+ * Read SSE chunks from Fireworks and emit just the text deltas as plain UTF-8
  * to the client. Closes when the upstream stream ends. `onComplete` fires once
  * at the end with the raw usage object from the final chunk (null if the
  * upstream never reported usage) so the caller can reconcile metered spend.
@@ -192,6 +192,6 @@ function parseSseEvent(eventBlock: string): { text: string; usage: OpenRouterUsa
 
 async function parseError(response: Response) {
   const errorText = await response.text();
-  const fallback = `OpenRouter API error: ${response.status}`;
+  const fallback = `Fireworks API error: ${response.status}`;
   return new Error(parseApiErrorMessage(errorText, fallback));
 }

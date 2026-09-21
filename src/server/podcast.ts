@@ -1,15 +1,17 @@
 /**
  * Podcast generation: turn a paper into a single-host audio episode.
  *
- * Two provider calls, both against OpenRouter's OpenAI-compatible API:
- *   1. Script — a chat completion with the podcast recipe's system prompt and
- *      the paper in context, producing spoken-word narration (also the
- *      on-screen transcript).
- *   2. Audio — the configured TTS model (`PODCAST_TTS_MODEL`, never hardcoded)
- *      synthesizing that script. The model streams back raw PCM, so we chunk
- *      the script (TTS calls have their own output ceiling), synthesize each
- *      chunk, concatenate the PCM, and wrap it in a single WAV container the
- *      browser can play directly.
+ * Two provider calls, split across the app's two providers:
+ *   1. Script — a Fireworks chat completion with the podcast recipe's system
+ *      prompt and the paper in context, producing spoken-word narration (also
+ *      the on-screen transcript). Paid by the resolved chat key (platform or
+ *      per-user), like every other chat completion.
+ *   2. Audio — OpenRouter's `/audio/speech` endpoint running the configured
+ *      TTS model (`PODCAST_TTS_MODEL`, never hardcoded), always on the
+ *      platform OpenRouter key (Fireworks has no equivalent speech endpoint).
+ *      The model streams back raw PCM, so we chunk the script (TTS calls have
+ *      their own output ceiling), synthesize each chunk, concatenate the PCM,
+ *      and wrap it in a single WAV container the browser can play directly.
  *
  * Like `generate.ts`, this is pure provider I/O — no auth, no DB, no
  * rate-limit metering, no HTTP framing. The route wraps these with per-user key
@@ -19,8 +21,9 @@
 
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
+  FIREWORKS_BASE_URL,
   OPENROUTER_BASE_URL,
-  getOpenRouterModel,
+  getFireworksModel,
   getPodcastTtsModel,
   type OpenRouterUsage,
 } from "@/lib/openrouter";
@@ -28,7 +31,7 @@ import { fetchWithTimeout } from "@/lib/fetch-timeout";
 import { promptFromRecipe } from "@/recipes/types";
 import { PODCAST_PROMPTS, podcastRecipe } from "@/recipes/podcast";
 
-const OPENROUTER_CHAT_COMPLETIONS_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+const FIREWORKS_CHAT_COMPLETIONS_URL = `${FIREWORKS_BASE_URL}/chat/completions`;
 // TTS is a dedicated OpenAI-compatible endpoint — NOT chat/completions. TTS
 // models advertise a `text->speech` modality and reject `modalities:["audio"]`
 // on chat/completions ("No endpoints found that support ... audio").
@@ -108,11 +111,12 @@ function buildScriptMessages(params: PodcastScriptParams) {
  * the route can meter the spend.
  */
 export async function generatePodcastScript(
+  /** Resolved Fireworks (chat) key. */
   apiKey: string,
   params: PodcastScriptParams,
 ): Promise<{ transcript: string; usage?: OpenRouterUsage }> {
   const response = await fetchWithTimeout(
-    OPENROUTER_CHAT_COMPLETIONS_URL,
+    FIREWORKS_CHAT_COMPLETIONS_URL,
     {
       method: "POST",
       headers: {
@@ -120,13 +124,13 @@ export async function generatePodcastScript(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: getOpenRouterModel(),
+        model: getFireworksModel(),
         messages: buildScriptMessages(params),
       }),
     },
     SCRIPT_TIMEOUT_MS,
   );
-  if (!response.ok) throw await parseError(response);
+  if (!response.ok) throw await parseError(response, "Fireworks");
 
   const data = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
@@ -222,14 +226,14 @@ function pcmDurationSec(
  * encoded formats, raw PCM joins without artifacts. The response is a binary
  * byte stream, not JSON, and carries no usage (only the script call is metered).
  */
-async function synthesizeChunk(apiKey: string, text: string): Promise<Buffer> {
+async function synthesizeChunk(ttsApiKey: string, text: string): Promise<Buffer> {
   const response = await fetchWithTimeout(
     OPENROUTER_SPEECH_URL,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${ttsApiKey}`,
       },
       body: JSON.stringify({
         model: getPodcastTtsModel(),
@@ -240,7 +244,7 @@ async function synthesizeChunk(apiKey: string, text: string): Promise<Buffer> {
     },
     TTS_TIMEOUT_MS,
   );
-  if (!response.ok) throw await parseError(response);
+  if (!response.ok) throw await parseError(response, "OpenRouter");
   return Buffer.from(await response.arrayBuffer());
 }
 
@@ -250,13 +254,14 @@ async function synthesizeChunk(apiKey: string, text: string): Promise<Buffer> {
  * under provider rate limits), their PCM concatenated, then WAV-wrapped once.
  */
 export async function synthesizeSpeech(
-  apiKey: string,
+  /** Platform OpenRouter (TTS) key. */
+  ttsApiKey: string,
   script: string,
 ): Promise<{ audio: Buffer; durationSec: number }> {
   const chunks = splitScriptForTts(script);
   const pcmParts: Buffer[] = [];
   for (const chunk of chunks) {
-    pcmParts.push(await synthesizeChunk(apiKey, chunk));
+    pcmParts.push(await synthesizeChunk(ttsApiKey, chunk));
   }
 
   const pcm = Buffer.concat(pcmParts);
@@ -267,12 +272,15 @@ export async function synthesizeSpeech(
 }
 
 /**
- * End-to-end: script then audio. Returns the transcript, the WAV audio, its
- * duration, and the combined usage of every provider call so the route meters
- * both the script and the synthesis spend.
+ * End-to-end: script then audio. The two stages bill different providers, so
+ * the caller passes both keys: the resolved Fireworks (chat) key for the
+ * script, and the platform OpenRouter key for synthesis. Returns the
+ * transcript, the WAV audio, its duration, and the combined usage of every
+ * provider call so the route meters both the script and the synthesis spend.
  */
 export async function generatePodcast(
-  apiKey: string,
+  scriptApiKey: string,
+  ttsApiKey: string,
   params: PodcastScriptParams,
 ): Promise<{
   transcript: string;
@@ -280,14 +288,14 @@ export async function generatePodcast(
   durationSec: number;
   usages: OpenRouterUsage[];
 }> {
-  const { transcript, usage } = await generatePodcastScript(apiKey, params);
-  const { audio, durationSec } = await synthesizeSpeech(apiKey, transcript);
+  const { transcript, usage } = await generatePodcastScript(scriptApiKey, params);
+  const { audio, durationSec } = await synthesizeSpeech(ttsApiKey, transcript);
   // Only the script call reports usage; the speech endpoint returns raw bytes.
   return { transcript, audio, durationSec, usages: usage ? [usage] : [] };
 }
 
-async function parseError(response: Response) {
+async function parseError(response: Response, provider: "Fireworks" | "OpenRouter") {
   const errorText = await response.text();
-  const fallback = `OpenRouter API error: ${response.status}`;
+  const fallback = `${provider} API error: ${response.status}`;
   return new Error(parseApiErrorMessage(errorText, fallback));
 }
