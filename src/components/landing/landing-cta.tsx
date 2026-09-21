@@ -28,12 +28,10 @@ export function LandingCta({ signupHref }: LandingCtaProps) {
         >
           Explore the frontier.{" "}
           <span
+            className="landing-accent"
             style={{
-              fontFamily: "var(--font-reading)",
-              fontStyle: "italic",
-              fontWeight: 500,
               color:
-                "color-mix(in srgb, var(--primary-foreground) 75%, transparent)",
+                "color-mix(in srgb, var(--primary-foreground) 78%, transparent)",
             }}
           >
             Capture what you learn.
@@ -61,7 +59,7 @@ export function LandingCta({ signupHref }: LandingCtaProps) {
               "color-mix(in srgb, var(--primary-foreground) 60%, transparent)",
           }}
         >
-          Free usage every day · No key required to start · MIT licensed
+          MIT licensed · Self-host it, or use the hosted version free
         </p>
       </div>
     </section>

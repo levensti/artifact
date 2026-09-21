@@ -147,6 +147,7 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-reading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -1101,11 +1102,20 @@
   text-wrap: balance;
 }
 .landing-h1 .frontier {
-  font-family: var(--font-reading);
+  font-family: var(--font-serif);
   font-style: italic;
   font-weight: 500;
   color: color-mix(in srgb, var(--primary) 92%, transparent);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
+}
+
+/* Serif italic accent — the "reading" voice, used inside display headings
+   on the marketing and auth surfaces. */
+.landing-accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 .landing-h2 {
   font-family: var(--font-sans);

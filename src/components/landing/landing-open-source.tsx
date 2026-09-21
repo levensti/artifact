@@ -68,7 +68,7 @@ export function LandingOpenSource({ githubUrl }: LandingOpenSourceProps) {
           </header>
 
           <div className="grid grid-cols-1 gap-x-12 gap-y-8 sm:grid-cols-2">
-            {PRINCIPLES.map((p, i) => (
+            {PRINCIPLES.map((p) => (
               <div
                 key={p.title}
                 className="border-t pt-4"
@@ -77,18 +77,7 @@ export function LandingOpenSource({ githubUrl }: LandingOpenSourceProps) {
                     "color-mix(in srgb, var(--border) 80%, transparent)",
                 }}
               >
-                <div
-                  className="font-mono text-[10px]"
-                  style={{
-                    letterSpacing: "0.1em",
-                    color:
-                      "color-mix(in srgb, var(--primary) 60%, transparent)",
-                    fontFeatureSettings: '"tnum"',
-                  }}
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </div>
-                <h4 className="mt-2 font-sans text-[15px] font-semibold tracking-[-0.012em] text-foreground">
+                <h4 className="mt-1 font-sans text-[15px] font-semibold tracking-[-0.012em] text-foreground">
                   {p.title}
                 </h4>
                 <p

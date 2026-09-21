@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
-import { Inter } from "next/font/google";
+import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Analytics } from "@vercel/analytics/next";
@@ -10,6 +10,15 @@ import { getApexHost } from "@/lib/host";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+// Serif italic accent for the marketing + auth surfaces ("frontier.").
+// Variable font; we only ever set it italic, at display sizes.
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-newsreader",
   display: "swap",
 });
 
@@ -51,7 +60,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} h-full`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} ${newsreader.variable} h-full`}
     >
       <body className="h-full overflow-hidden">
         <TooltipProvider delay={200}>{children}</TooltipProvider>

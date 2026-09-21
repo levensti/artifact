@@ -70,8 +70,9 @@ export function LandingHero({ signupHref, githubUrl }: LandingHeroProps) {
           </div>
 
           <p className="mt-5 text-[12.5px] text-muted-foreground/80">
-            Free usage every day · No key required to start · Self-host if you
-            like
+            <span className="whitespace-nowrap">Free usage every day</span> ·{" "}
+            <span className="whitespace-nowrap">No key required to start</span>{" "}
+            · <span className="whitespace-nowrap">Self-host if you like</span>
           </p>
         </div>
 

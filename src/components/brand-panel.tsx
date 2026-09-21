@@ -50,15 +50,7 @@ export function SignupPitch() {
     <div className="relative max-w-md">
       <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.03em]">
         Explore the{" "}
-        <span
-          className="text-primary-foreground/85"
-          style={{
-            fontFamily: "var(--font-reading)",
-            fontStyle: "italic",
-            fontWeight: 500,
-            letterSpacing: "-0.01em",
-          }}
-        >
+        <span className="landing-accent text-primary-foreground/85">
           frontier.
         </span>
       </h2>
@@ -98,12 +90,32 @@ export function SigninWelcome() {
   return (
     <div className="relative max-w-md">
       <h2 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.03em]">
-        Welcome back.
+        Explore the{" "}
+        <span className="landing-accent text-primary-foreground/85">
+          frontier.
+        </span>
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
-        Pick up where you left off. Your reviews, annotations, and chats are
-        right where you left them.
+        Your reviews, annotations, and chats are right where you left them.
       </p>
+
+      {/* A margin note, the way it looks in the reader — quiet proof of
+          what the workspace holds. */}
+      <figure className="mt-10 rounded-lg border border-primary-foreground/15 bg-primary-foreground/8 p-4">
+        <figcaption
+          className="font-mono text-[9px] uppercase text-primary-foreground/55"
+          style={{ letterSpacing: "0.14em" }}
+        >
+          P. 4 · Margin note
+        </figcaption>
+        <blockquote
+          className="landing-accent mt-2 text-[13.5px] leading-[1.6] text-primary-foreground/80"
+          style={{ fontWeight: 400 }}
+        >
+          The contamination story feels optimistic: new issues leak into
+          pretraining faster than they assume.
+        </blockquote>
+      </figure>
     </div>
   );
 }
