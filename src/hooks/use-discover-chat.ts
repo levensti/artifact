@@ -367,6 +367,7 @@ export function useDiscoverChat({
         if (!response.body) throw new Error("No response body received");
 
         await parseNDJSONStream(response.body, (event) => {
+          if (event.type === "heartbeat") return; // liveness only
           if (event.type === "error") throw new Error(event.message);
           steps = processStreamEvent(steps, event);
           setLiveSteps([...steps]);

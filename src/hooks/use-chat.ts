@@ -66,7 +66,16 @@ function createInactivityController(message: string) {
     if (timer !== null) window.clearTimeout(timer);
     timer = null;
   };
-  return { signal: controller.signal, noteActivity, dispose };
+  /** User-facing message for a failed request. When the watchdog fired, the
+   *  thrown error is the browser's generic abort (Chrome: "BodyStreamBuffer
+   *  was aborted") rather than our reason, so report the stall explicitly. */
+  const errorMessage = (err: unknown) =>
+    controller.signal.aborted
+      ? message
+      : err instanceof Error
+        ? err.message
+        : "Something went wrong";
+  return { signal: controller.signal, noteActivity, dispose, errorMessage };
 }
 
 /* ------------------------------------------------------------------ */
@@ -411,6 +420,7 @@ export function useChat({
 
         await parseNDJSONStream(response.body, (event) => {
           inactivity.noteActivity();
+          if (event.type === "heartbeat") return; // liveness only
           if (event.type === "error") {
             // Throw so the catch block handles cleanup uniformly with HTTP errors.
             const e = new Error(event.message);
@@ -455,8 +465,7 @@ export function useChat({
           ),
         );
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Something went wrong";
+        const message = inactivity.errorMessage(err);
         const code = (err as { code?: string })?.code;
         // Drop the empty assistant placeholder — never repurpose it for an
         // error, since it visually masquerades as a real reply. The user
@@ -631,6 +640,7 @@ export function useChat({
 
         await parseNDJSONStream(response.body, (event) => {
           inactivity.noteActivity();
+          if (event.type === "heartbeat") return; // liveness only
           if (event.type === "error") {
             const e = new Error(event.message);
             if (event.code) (e as { code?: string }).code = event.code;
@@ -657,8 +667,7 @@ export function useChat({
         await updateAnnotation(reviewId, chatThreadAnnotationId, { thread });
         onAnnotationsPersist();
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Something went wrong";
+        const message = inactivity.errorMessage(err);
         const code = (err as { code?: string })?.code;
         // On error, roll back to the thread with only the user message —
         // don't persist an empty/broken assistant placeholder to the DB.

@@ -7,7 +7,7 @@ import { uploadAudio } from "@/server/storage";
 import { generatePodcast } from "@/server/podcast";
 import { platformOpenRouterKey } from "@/server/provider-env";
 import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
-import type { OpenRouterUsage } from "@/lib/openrouter";
+import type { ChatUsage } from "@/lib/fireworks";
 import { PODCAST_INSTRUCTIONS_MAX } from "@/lib/podcast";
 
 export const runtime = "nodejs";
@@ -122,7 +122,7 @@ export const GET = adminRoute(async (userId, request: Request) => {
  * Tokens charged for one usage report, cost-weighted (mirrors the /api/generate
  * accounting): full-rate uncached input + completion, cache reads discounted.
  */
-function usageTotal(usage: OpenRouterUsage): number {
+function usageTotal(usage: ChatUsage): number {
   const prompt = usage.prompt_tokens ?? 0;
   const completion = usage.completion_tokens ?? 0;
   const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;

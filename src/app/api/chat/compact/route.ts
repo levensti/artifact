@@ -22,8 +22,8 @@ import { generate } from "@/server/generate";
 import {
   computeShouldCompact,
   getFireworksContextWindow,
-  type OpenRouterUsage,
-} from "@/lib/openrouter";
+  type ChatUsage,
+} from "@/lib/fireworks";
 import { estimateTokens } from "@/lib/transcript";
 import * as store from "@/server/store";
 import type {
@@ -234,7 +234,7 @@ ${transcript}`;
  * Tokens charged for one usage report, cost-weighted (see `meteredTokens`).
  * `prompt_tokens` includes the cached portion, so subtract it back out.
  */
-function usageTotal(usage: OpenRouterUsage): number {
+function usageTotal(usage: ChatUsage): number {
   const prompt = usage.prompt_tokens ?? 0;
   const completion = usage.completion_tokens ?? 0;
   const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;

@@ -3,7 +3,7 @@ import { jsonError } from "@/lib/api-utils";
 import { HttpError, errorResponse } from "@/server/api";
 import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
 import { generate, openStream, transformSseToText } from "@/server/generate";
-import type { OpenRouterUsage } from "@/lib/openrouter";
+import type { ChatUsage } from "@/lib/fireworks";
 import type { GenerateRequest } from "@/lib/explore";
 
 export async function POST(req: NextRequest) {
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
  * and completion, cache reads discounted (see `meteredTokens`). `prompt_tokens`
  * includes the cached portion, so subtract it back out to get uncached input.
  */
-function usageTotal(usage: OpenRouterUsage): number {
+function usageTotal(usage: ChatUsage): number {
   const prompt = usage.prompt_tokens ?? 0;
   const completion = usage.completion_tokens ?? 0;
   const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;

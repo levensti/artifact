@@ -19,8 +19,8 @@ import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
   FIREWORKS_BASE_URL,
   getFireworksModel,
-  type OpenRouterUsage,
-} from "@/lib/openrouter";
+  type ChatUsage,
+} from "@/lib/fireworks";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
 import { promptFromRecipe } from "@/recipes/types";
 import {
@@ -89,7 +89,7 @@ export async function generate(
   prompt: string,
   paperContext?: string,
   model?: string,
-): Promise<{ content: string; usage?: OpenRouterUsage }> {
+): Promise<{ content: string; usage?: ChatUsage }> {
   const response = await fetchWithTimeout(
     FIREWORKS_CHAT_COMPLETIONS_URL,
     chatRequestInit(apiKey, prompt, paperContext, { stream: false, model }),
@@ -100,7 +100,7 @@ export async function generate(
 
   const data = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
-    usage?: OpenRouterUsage;
+    usage?: ChatUsage;
   };
   return {
     content: data.choices?.[0]?.message?.content ?? "",
@@ -131,11 +131,11 @@ export async function openStream(
  */
 export function transformSseToText(
   upstream: ReadableStream<Uint8Array>,
-  onComplete?: (usage: OpenRouterUsage | null) => void,
+  onComplete?: (usage: ChatUsage | null) => void,
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
-  let usage: OpenRouterUsage | null = null;
+  let usage: ChatUsage | null = null;
 
   const handle = (evt: string, controller: ReadableStreamDefaultController<Uint8Array>) => {
     const parsed = parseSseEvent(evt);
@@ -171,9 +171,9 @@ export function transformSseToText(
 }
 
 /** Extract the text delta and (when present) the raw usage from one SSE event. */
-function parseSseEvent(eventBlock: string): { text: string; usage: OpenRouterUsage | null } {
+function parseSseEvent(eventBlock: string): { text: string; usage: ChatUsage | null } {
   let text = "";
-  let usage: OpenRouterUsage | null = null;
+  let usage: ChatUsage | null = null;
   for (const line of eventBlock.split("\n")) {
     if (!line.startsWith("data:")) continue;
     const payload = line.slice(5).trim();

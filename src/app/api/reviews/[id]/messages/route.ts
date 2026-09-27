@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authedRoute } from "@/server/api";
-import { computeShouldCompact } from "@/lib/openrouter";
+import { computeShouldCompact } from "@/lib/fireworks";
 import * as store from "@/server/store";
 import type { ChatMessage, ContextUsage } from "@/lib/review-types";
 

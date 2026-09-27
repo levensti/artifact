@@ -12,8 +12,8 @@ import type { ParsedPaper } from "@/lib/review-types";
 import {
   FIREWORKS_BASE_URL,
   getFireworksModel,
-  type OpenRouterUsage,
-} from "@/lib/openrouter";
+  type ChatUsage,
+} from "@/lib/fireworks";
 import { toOpenAITools } from "@/tools/registry";
 import type { ToolContext, ToolDefinition } from "@/tools/types";
 import { toOpenAIMessages, type TranscriptMessage } from "@/lib/transcript";
@@ -42,6 +42,9 @@ interface OpenAIToolCall {
 
 interface OpenAIStreamDelta {
   content?: string;
+  /** Hidden reasoning from thinking models. Not rendered; only used as a
+   *  liveness signal (see HEARTBEAT_INTERVAL_MS). */
+  reasoning_content?: string;
   tool_calls?: Array<{
     index?: number;
     id?: string;
@@ -56,7 +59,7 @@ interface OpenAIStreamChoice {
 
 interface OpenAIStreamEvent {
   choices?: OpenAIStreamChoice[];
-  usage?: OpenRouterUsage;
+  usage?: ChatUsage;
 }
 
 export async function runFireworksAgentLoop(
@@ -214,6 +217,15 @@ export async function runFireworksAgentLoop(
 /*  OpenAI-compatible SSE parser                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Minimum gap between `heartbeat` events. Reasoning and tool-call argument
+ * deltas produce nothing the client renders, so without these a long thinking
+ * pass looks like a dead stream and trips the client's 60s inactivity
+ * watchdog. Throttled so every reasoning token doesn't become an NDJSON line;
+ * anything well under 60s works.
+ */
+const HEARTBEAT_INTERVAL_MS = 10_000;
+
 async function parseOpenAISSE(
   body: ReadableStream<Uint8Array>,
   emit: (e: StreamEvent) => void,
@@ -221,12 +233,13 @@ async function parseOpenAISSE(
   textContent: string;
   toolCalls: OpenAIToolCall[];
   finishReason: string;
-  usage?: OpenRouterUsage;
+  usage?: ChatUsage;
 }> {
   let textContent = "";
   const toolCallMap = new Map<number, OpenAIToolCall>();
   let finishReason = "stop";
-  let usage: OpenRouterUsage | undefined;
+  let usage: ChatUsage | undefined;
+  let lastHeartbeat = Date.now();
 
   await readSSEStream<OpenAIStreamEvent>(body, (event) => {
     // Final chunk: choices is empty array, usage is populated.
@@ -247,6 +260,13 @@ async function parseOpenAISSE(
     if (delta.content) {
       textContent += delta.content;
       emit({ type: "text_delta", text: delta.content });
+      lastHeartbeat = Date.now();
+    } else if (
+      (delta.reasoning_content || delta.tool_calls) &&
+      Date.now() - lastHeartbeat >= HEARTBEAT_INTERVAL_MS
+    ) {
+      emit({ type: "heartbeat" });
+      lastHeartbeat = Date.now();
     }
 
     if (delta.tool_calls) {
