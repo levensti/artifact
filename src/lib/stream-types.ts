@@ -50,4 +50,13 @@ export type StreamEvent =
        *  than a generic failure. */
       code?: "rate_limit";
     }
+  | {
+      /**
+       * Liveness ping: the model is producing output the client doesn't render
+       * (hidden reasoning, tool-call arguments still streaming in). Carries no
+       * content; it only resets the client's stream-inactivity watchdog so a
+       * long silent reasoning pass isn't mistaken for a stalled stream.
+       */
+      type: "heartbeat";
+    }
   | { type: "done" };

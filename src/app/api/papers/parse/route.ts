@@ -10,7 +10,7 @@
 import { NextRequest } from "next/server";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import { resolveFireworksKey } from "@/server/provider-env";
-import { FIREWORKS_BASE_URL, getFireworksModel } from "@/lib/openrouter";
+import { FIREWORKS_BASE_URL, getFireworksModel } from "@/lib/fireworks";
 import type { ParsedPaper } from "@/lib/review-types";
 
 const FIREWORKS_CHAT_COMPLETIONS_URL = `${FIREWORKS_BASE_URL}/chat/completions`;

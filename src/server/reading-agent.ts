@@ -19,7 +19,7 @@ import type { TranscriptMessage } from "@/lib/transcript";
 import type { ParsedPaper } from "@/lib/review-types";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
-import { runFireworksAgentLoop } from "@/app/api/chat/openrouter-handler";
+import { runFireworksAgentLoop } from "@/app/api/chat/fireworks-handler";
 import { getReadingSystemPrompt, visualFormatReminder } from "@/recipes/reading-agent";
 
 // Re-export so the chat route resolves the prompt (for context budgeting)

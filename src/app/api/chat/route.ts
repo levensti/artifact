@@ -18,7 +18,7 @@ import {
   computeShouldCompact,
   getFireworksContextWindow,
   TOKEN_RESERVE,
-} from "@/lib/openrouter";
+} from "@/lib/fireworks";
 import type { StreamEvent } from "@/lib/stream-types";
 import { jsonError } from "@/lib/api-utils";
 import {

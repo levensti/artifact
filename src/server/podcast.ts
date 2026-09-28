@@ -22,11 +22,10 @@
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
   FIREWORKS_BASE_URL,
-  OPENROUTER_BASE_URL,
   getFireworksModel,
-  getPodcastTtsModel,
-  type OpenRouterUsage,
-} from "@/lib/openrouter";
+  type ChatUsage,
+} from "@/lib/fireworks";
+import { OPENROUTER_BASE_URL, getPodcastTtsModel } from "@/lib/openrouter";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
 import { promptFromRecipe } from "@/recipes/types";
 import { PODCAST_PROMPTS, podcastRecipe } from "@/recipes/podcast";
@@ -114,7 +113,7 @@ export async function generatePodcastScript(
   /** Resolved Fireworks (chat) key. */
   apiKey: string,
   params: PodcastScriptParams,
-): Promise<{ transcript: string; usage?: OpenRouterUsage }> {
+): Promise<{ transcript: string; usage?: ChatUsage }> {
   const response = await fetchWithTimeout(
     FIREWORKS_CHAT_COMPLETIONS_URL,
     {
@@ -134,7 +133,7 @@ export async function generatePodcastScript(
 
   const data = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
-    usage?: OpenRouterUsage;
+    usage?: ChatUsage;
   };
   const transcript = (data.choices?.[0]?.message?.content ?? "").trim();
   if (!transcript) throw new Error("Podcast script generation returned empty.");
@@ -286,7 +285,7 @@ export async function generatePodcast(
   transcript: string;
   audio: Buffer;
   durationSec: number;
-  usages: OpenRouterUsage[];
+  usages: ChatUsage[];
 }> {
   const { transcript, usage } = await generatePodcastScript(scriptApiKey, params);
   const { audio, durationSec } = await synthesizeSpeech(ttsApiKey, transcript);
