@@ -14,7 +14,7 @@
  *          actually talks to. This is what evaluates the whole harness.
  *        - `GenerateClient` — the bare `generate()` entrypoint (no tools), for
  *          measuring just the model + prompt without the agent loop.
- *      All either needs is an OpenRouter key (`--api-key` or
+ *      All either needs is a Fireworks key (`--api-key` or
  *      `FIREWORKS_API_KEY`); no dev server, no login.
  *
  *   2. Multiple-choice answer parsing/scoring — turning free-form model text

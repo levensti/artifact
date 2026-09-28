@@ -3,22 +3,19 @@ import "server-only";
 /**
  * Provider key resolution + tool-key availability.
  *
- * Two providers, two keys:
- *   - Fireworks pays for every chat completion. A signed-in user may save
- *     their own Fireworks key; otherwise the route handlers fall back to a
- *     platform key read from `FIREWORKS_API_KEY` in the environment.
- *   - OpenRouter pays ONLY for podcast text-to-speech, always via the
- *     platform `OPENROUTER_API_KEY` — there is no per-user TTS key.
+ * Fireworks pays for every model call. A signed-in user may save their own
+ * Fireworks key; otherwise the route handlers fall back to a platform key read
+ * from `FIREWORKS_API_KEY` in the environment.
  *
  * Hard rules:
  *   - This module is server-only. The env values MUST NOT reach the browser.
  *     Routes that serialize settings (`/api/bootstrap`, `/api/settings`) may
- *     surface ONLY the booleans from `platformFireworksAvailable()` /
- *     `platformOpenRouterAvailable()` — never a key itself.
+ *     surface ONLY the boolean from `platformFireworksAvailable()` — never a
+ *     key itself.
  *   - A fallback activates only when its env var is set.
  */
 
-function envKey(name: "FIREWORKS_API_KEY" | "OPENROUTER_API_KEY"): string | null {
+function envKey(name: "FIREWORKS_API_KEY"): string | null {
   const raw = process.env[name];
   const trimmed = typeof raw === "string" ? raw.trim() : "";
   return trimmed ? trimmed : null;
@@ -44,23 +41,6 @@ export function resolveFireworksKey(
  */
 export function platformFireworksAvailable(): boolean {
   return envKey("FIREWORKS_API_KEY") !== null;
-}
-
-/**
- * The platform OpenRouter key, used exclusively for podcast TTS. Null when
- * unset (the podcast route surfaces a clear error / the UI gates on the
- * availability boolean). Never a per-user key.
- */
-export function platformOpenRouterKey(): string | null {
-  return envKey("OPENROUTER_API_KEY");
-}
-
-/**
- * Whether a platform OpenRouter key is configured. Safe to send to the
- * client — leaks existence only, never the key.
- */
-export function platformOpenRouterAvailable(): boolean {
-  return envKey("OPENROUTER_API_KEY") !== null;
 }
 
 /**

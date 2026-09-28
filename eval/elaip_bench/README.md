@@ -56,7 +56,7 @@ num_workers: 8
 ```
 
 `experiment_name` determines the output folder under `results/`, so the default
-config writes to `results/deepseek-v4-flash/`. `model` is the OpenRouter model
+config writes to `results/deepseek-v4-flash/`. `model` is the Fireworks model
 ID sent upstream. `limit` is optional (`all` runs the full 403 questions), and
 `num_workers` controls concurrency.
 

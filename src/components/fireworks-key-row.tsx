@@ -13,27 +13,27 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  clearOpenRouterKey,
-  getOpenRouterKey,
-  hasPlatformOpenRouterKey,
+  clearFireworksKey,
+  getFireworksKey,
+  hasPlatformFireworksKey,
   KEYS_UPDATED_EVENT,
-  setOpenRouterKey,
+  setFireworksKey,
 } from "@/lib/keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings row for the OpenRouter API key. Mirrors `ExaKeyRow`'s structure.
+ * Settings row for the Fireworks API key. Mirrors `ExaKeyRow`'s structure.
  *
  * A key is optional for the user: when the platform has its own key in env,
  * chat works out of the box. A user-entered key overrides the platform key.
  */
-export function OpenRouterKeyRow() {
-  const [stored, setStored] = useState(() => getOpenRouterKey() ?? "");
-  const [value, setValue] = useState(() => getOpenRouterKey() ?? "");
+export function FireworksKeyRow() {
+  const [stored, setStored] = useState(() => getFireworksKey() ?? "");
+  const [value, setValue] = useState(() => getFireworksKey() ?? "");
   const [platformKey, setPlatformKey] = useState(() =>
-    hasPlatformOpenRouterKey(),
+    hasPlatformFireworksKey(),
   );
   const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -47,10 +47,10 @@ export function OpenRouterKeyRow() {
 
   useEffect(() => {
     const sync = () => {
-      const next = getOpenRouterKey() ?? "";
+      const next = getFireworksKey() ?? "";
       setStored(next);
       setValue(next);
-      setPlatformKey(hasPlatformOpenRouterKey());
+      setPlatformKey(hasPlatformFireworksKey());
     };
     sync();
     window.addEventListener(KEYS_UPDATED_EVENT, sync);
@@ -68,7 +68,7 @@ export function OpenRouterKeyRow() {
   const handleSave = () => {
     const trimmed = value.trim();
     if (!trimmed || !dirty) return;
-    void setOpenRouterKey(trimmed).then(() => {
+    void setFireworksKey(trimmed).then(() => {
       setStored(trimmed);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -80,7 +80,7 @@ export function OpenRouterKeyRow() {
       if (confirmTimeoutRef.current)
         window.clearTimeout(confirmTimeoutRef.current);
       setConfirmingDelete(false);
-      void clearOpenRouterKey().then(() => {
+      void clearFireworksKey().then(() => {
         setStored("");
         setValue("");
         setVisible(false);
@@ -95,7 +95,7 @@ export function OpenRouterKeyRow() {
 
   return (
     <div
-      data-settings-tool="openrouter"
+      data-settings-tool="fireworks"
       className="rounded-xl border border-border/60 bg-card transition-all duration-200"
     >
       <button
@@ -109,7 +109,7 @@ export function OpenRouterKeyRow() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[13.5px] font-semibold tracking-[-0.005em] text-foreground">
-            OpenRouter
+            Fireworks
           </p>
           <p
             className="truncate text-[12px] leading-snug"
@@ -172,7 +172,7 @@ export function OpenRouterKeyRow() {
                   "color-mix(in srgb, var(--muted-foreground) 85%, transparent)",
               }}
             >
-              Artifact offers a platform-provided OpenRouter key for easy
+              Artifact offers a platform-provided Fireworks key for easy
               quickstart. Add your own key to get unmetered usage.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -185,7 +185,7 @@ export function OpenRouterKeyRow() {
                   type={visible ? "text" : "password"}
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
-                  placeholder="sk-or-..."
+                  placeholder="fw_..."
                   className="pl-8 pr-9 text-xs h-9"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleSave();

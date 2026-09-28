@@ -1,54 +1,53 @@
 import {
   clearExaApiKey as clearExaApiKeyRemote,
-  clearOpenRouterKey as clearOpenRouterKeyRemote,
+  clearFireworksKey as clearFireworksKeyRemote,
   getExaApiKey as getExaApiKeyCached,
-  getOpenRouterKey as getOpenRouterKeyCached,
+  getFireworksKey as getFireworksKeyCached,
   hasAnySavedApiKey as hasAnySavedApiKeyCached,
   hasExaApiKey as hasExaApiKeyCached,
   hasPlatformExaKey as hasPlatformExaKeyCached,
-  hasPlatformOpenRouterKey as hasPlatformOpenRouterKeyCached,
-  hasPodcastTts as hasPodcastTtsCached,
+  hasPlatformFireworksKey as hasPlatformFireworksKeyCached,
   hasUsableProvider as hasUsableProviderCached,
   isSettingsHydrated as isSettingsHydratedCached,
   setExaApiKey as setExaApiKeyRemote,
-  setOpenRouterKey as setOpenRouterKeyRemote,
+  setFireworksKey as setFireworksKeyRemote,
 } from "@/lib/client-data";
 
 export { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
 
-/** The user's saved OpenRouter key override, if any. */
-export function getOpenRouterKey(): string | null {
-  return getOpenRouterKeyCached();
+/** The user's saved Fireworks key override, if any. */
+export function getFireworksKey(): string | null {
+  return getFireworksKeyCached();
 }
 
-export async function setOpenRouterKey(key: string): Promise<void> {
-  return setOpenRouterKeyRemote(key);
+export async function setFireworksKey(key: string): Promise<void> {
+  return setFireworksKeyRemote(key);
 }
 
-export async function clearOpenRouterKey(): Promise<void> {
-  return clearOpenRouterKeyRemote();
+export async function clearFireworksKey(): Promise<void> {
+  return clearFireworksKeyRemote();
 }
 
 /**
  * Resolve the request-body credentials chat/generate/parse endpoints expect.
- * The only field is the user's optional OpenRouter key override; the server
+ * The only field is the user's optional Fireworks key override; the server
  * falls back to its env key when this is empty. Always returns an object —
  * an empty key is valid (the server supplies one).
  */
 export function resolveModelCredentials(): { apiKey: string } {
-  return { apiKey: getOpenRouterKeyCached() ?? "" };
+  return { apiKey: getFireworksKeyCached() ?? "" };
 }
 
 export function hasAnySavedApiKey(): boolean {
   return hasAnySavedApiKeyCached();
 }
 
-/** Server has a platform OpenRouter key in env. */
-export function hasPlatformOpenRouterKey(): boolean {
-  return hasPlatformOpenRouterKeyCached();
+/** Server has a platform Fireworks key in env. */
+export function hasPlatformFireworksKey(): boolean {
+  return hasPlatformFireworksKeyCached();
 }
 
-/** User can run the app: own OpenRouter key or a platform key. */
+/** User can run the app: own Fireworks key or a platform key. */
 export function hasUsableProvider(): boolean {
   return hasUsableProviderCached();
 }
@@ -72,11 +71,6 @@ export function hasExaApiKey(): boolean {
 /** True when the server has EXA_API_KEY in env (booleans-only signal). */
 export function hasPlatformExaKey(): boolean {
   return hasPlatformExaKeyCached();
-}
-
-/** Server has PODCAST_TTS_MODEL configured — podcast generation is available. */
-export function hasPodcastTts(): boolean {
-  return hasPodcastTtsCached();
 }
 
 /** Web search is usable: either the user has a key or the platform has one. */

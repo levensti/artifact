@@ -21,7 +21,7 @@ const PRINCIPLES: Principle[] = [
   },
   {
     title: "Bring your own key",
-    body: "Need more than the free allowance? Add your own OpenRouter key and keep going on any model it offers.",
+    body: "Need more than the free allowance? Add your own Fireworks key and keep going.",
   },
   {
     title: "Trust every answer",

@@ -79,7 +79,7 @@ export function SignupPitch() {
           title="Free usage every day"
         >
           Start chatting immediately with a daily allowance on us. Bring your
-          own OpenRouter key when you need more.
+          own Fireworks key when you need more.
         </Feature>
       </ul>
     </div>

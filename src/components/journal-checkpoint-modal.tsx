@@ -78,7 +78,7 @@ export default function JournalCheckpointModal({
 
   const handleSave = useCallback(async () => {
     if (!modelReady) {
-      setValidationErr("Add an OpenRouter API key in Settings first.");
+      setValidationErr("Add a Fireworks API key in Settings first.");
       return;
     }
     const creds = resolveModelCredentials();

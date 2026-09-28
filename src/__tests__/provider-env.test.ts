@@ -2,13 +2,10 @@ import { describe, it, expect, afterEach } from "vitest";
 import {
   resolveFireworksKey,
   platformFireworksAvailable,
-  platformOpenRouterKey,
-  platformOpenRouterAvailable,
 } from "@/server/provider-env";
 
 function clearEnv() {
   delete process.env.FIREWORKS_API_KEY;
-  delete process.env.OPENROUTER_API_KEY;
 }
 
 afterEach(clearEnv);
@@ -36,11 +33,6 @@ describe("resolveFireworksKey", () => {
     process.env.FIREWORKS_API_KEY = "   ";
     expect(resolveFireworksKey("")).toBeNull();
   });
-
-  it("never falls back to the OpenRouter (TTS) key", () => {
-    process.env.OPENROUTER_API_KEY = "sk-or-tts";
-    expect(resolveFireworksKey("")).toBeNull();
-  });
 });
 
 describe("platformFireworksAvailable", () => {
@@ -60,23 +52,3 @@ describe("platformFireworksAvailable", () => {
   });
 });
 
-describe("platformOpenRouterKey", () => {
-  it("returns the trimmed env key when set", () => {
-    process.env.OPENROUTER_API_KEY = "  sk-or-platform  ";
-    expect(platformOpenRouterKey()).toBe("sk-or-platform");
-    expect(platformOpenRouterAvailable()).toBe(true);
-  });
-
-  it("is null/false when unset or whitespace-only", () => {
-    clearEnv();
-    expect(platformOpenRouterKey()).toBeNull();
-    process.env.OPENROUTER_API_KEY = "   ";
-    expect(platformOpenRouterKey()).toBeNull();
-    expect(platformOpenRouterAvailable()).toBe(false);
-  });
-
-  it("never reads the Fireworks (chat) key", () => {
-    process.env.FIREWORKS_API_KEY = "fw-chat";
-    expect(platformOpenRouterKey()).toBeNull();
-  });
-});
