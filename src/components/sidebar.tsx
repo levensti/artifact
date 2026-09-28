@@ -271,22 +271,30 @@ export default function Sidebar({
     setRenameValue("");
   }, []);
 
+  // Most recently active first. The server already returns this order; sort
+  // here too so a local `touchReview` bump re-sorts without a refetch.
+  const byRecency = useMemo(
+    () =>
+      [...reviews].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [reviews],
+  );
+
   const projectReviews = useMemo(() => {
     const map = new Map<string, PaperReview[]>();
     for (const p of projects) map.set(p.id, []);
-    for (const r of reviews) {
+    for (const r of byRecency) {
       if (r.projectId && map.has(r.projectId)) {
         map.get(r.projectId)!.push(r);
       }
     }
     return map;
-  }, [reviews, projects]);
+  }, [byRecency, projects]);
 
   const grouped = useMemo(() => {
-    const ungrouped = reviews.filter((r) => !r.projectId);
+    const ungrouped = byRecency.filter((r) => !r.projectId);
     const byDate = new Map<string, PaperReview[]>();
     for (const r of ungrouped) {
-      const dateKey = localDateKeyFromIso(r.createdAt);
+      const dateKey = localDateKeyFromIso(r.updatedAt);
       const list = byDate.get(dateKey) ?? [];
       list.push(r);
       byDate.set(dateKey, list);
@@ -315,7 +323,7 @@ export default function Sidebar({
       else if (dateKey === yesterdayKey) label = `Yesterday · ${short}`;
       return { key: dateKey, label, items: byDate.get(dateKey)! };
     });
-  }, [reviews]);
+  }, [byRecency]);
 
   const renderReviewRow = (review: PaperReview) => {
     const isActive = pathname === `/review/${review.id}`;
