@@ -157,6 +157,19 @@ export function getReview(id: string): PaperReview | undefined {
   return reviewsCache.find((r) => r.id === id);
 }
 
+/**
+ * Mirror the server's `updatedAt` bump locally after a chat or note write, so
+ * the library list re-sorts immediately instead of on the next refresh.
+ */
+export function touchReview(id: string): void {
+  if (!reviewsCache.some((r) => r.id === id)) return;
+  const now = new Date().toISOString();
+  reviewsCache = reviewsCache.map((r) =>
+    r.id === id ? { ...r, updatedAt: now } : r,
+  );
+  dispatch(REVIEWS_UPDATED_EVENT);
+}
+
 export async function createReview(
   arxivId: string,
   title: string,
@@ -347,6 +360,7 @@ export async function saveMessages(
     method: "PUT",
     body: { messages },
   });
+  touchReview(reviewId);
 }
 
 /**
@@ -386,6 +400,7 @@ export async function saveAnnotations(
     method: "PUT",
     body: { annotations },
   });
+  touchReview(reviewId);
   dispatch(ANNOTATIONS_UPDATED_EVENT);
 }
 

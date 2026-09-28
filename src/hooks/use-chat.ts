@@ -12,6 +12,7 @@ import {
   compactConversation,
   saveMessages,
   primeMessagesCache,
+  touchReview,
   type ChatMessage,
 } from "@/lib/reviews";
 import type { AnnotationMessage } from "@/lib/annotations";
@@ -464,6 +465,9 @@ export function useChat({
               : m,
           ),
         );
+        // The server bumped the review's updatedAt when it persisted this
+        // turn; mirror it so the library list re-sorts now.
+        touchReview(reviewId);
       } catch (err) {
         const message = inactivity.errorMessage(err);
         const code = (err as { code?: string })?.code;

@@ -24,9 +24,11 @@ import { sendSlackEvent, SlackEventType } from "./notifications";
 /* ── Reviews ──────────────────────────────────────────────────── */
 
 export async function listReviews(userId: string): Promise<PaperReview[]> {
+  // Most recently active first: `updatedAt` is bumped on every chat and note
+  // write (see `touchReviewOp`), so it tracks the user's last interaction.
   const rows = await prisma.review.findMany({
     where: { userId },
-    orderBy: { createdAt: "desc" },
+    orderBy: { updatedAt: "desc" },
   });
   return rows.map(rowToReview);
 }
@@ -162,6 +164,16 @@ function rowToReview(r: {
 
 /* ── Messages / annotations ──────────────────────────────────── */
 
+/** Bump a review's `updatedAt` to now. Chat and note writes run this in the
+ *  same transaction so the library's recency order reflects the last
+ *  interaction, not creation time. */
+function touchReviewOp(reviewId: string) {
+  return prisma.review.update({
+    where: { id: reviewId },
+    data: { updatedAt: new Date() },
+  });
+}
+
 async function assertReviewOwned(userId: string, reviewId: string): Promise<void> {
   const exists = await prisma.review.findFirst({
     where: { id: reviewId, userId },
@@ -242,18 +254,21 @@ export async function setMessages(
     contextMetadata !== undefined
       ? { contextMetadata: contextMetadata as unknown as Prisma.InputJsonValue }
       : {};
-  await prisma.reviewMessages.upsert({
-    where: { reviewId },
-    create: {
-      reviewId,
-      messages: messages as unknown as Prisma.InputJsonValue,
-      ...metaData,
-    },
-    update: {
-      messages: messages as unknown as Prisma.InputJsonValue,
-      ...metaData,
-    },
-  });
+  await prisma.$transaction([
+    prisma.reviewMessages.upsert({
+      where: { reviewId },
+      create: {
+        reviewId,
+        messages: messages as unknown as Prisma.InputJsonValue,
+        ...metaData,
+      },
+      update: {
+        messages: messages as unknown as Prisma.InputJsonValue,
+        ...metaData,
+      },
+    }),
+    touchReviewOp(reviewId),
+  ]);
   // Fire when a new user-authored message has appeared in this save.
   // Persistence happens after streaming, so by the time we see it the
   // assistant reply is usually the tail; we still want to count the user
@@ -296,16 +311,19 @@ export async function setAnnotations(
   });
   const priorAnns =
     (prior?.annotations as unknown as Annotation[] | undefined) ?? [];
-  await prisma.reviewAnnotations.upsert({
-    where: { reviewId },
-    create: {
-      reviewId,
-      annotations: annotations as unknown as Prisma.InputJsonValue,
-    },
-    update: {
-      annotations: annotations as unknown as Prisma.InputJsonValue,
-    },
-  });
+  await prisma.$transaction([
+    prisma.reviewAnnotations.upsert({
+      where: { reviewId },
+      create: {
+        reviewId,
+        annotations: annotations as unknown as Prisma.InputJsonValue,
+      },
+      update: {
+        annotations: annotations as unknown as Prisma.InputJsonValue,
+      },
+    }),
+    touchReviewOp(reviewId),
+  ]);
   const priorIds = new Set(priorAnns.map((a) => a.id));
   const added = annotations.filter((a) => !priorIds.has(a.id));
   for (const a of added) {

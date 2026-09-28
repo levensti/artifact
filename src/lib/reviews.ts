@@ -10,6 +10,7 @@ import {
   compactConversation,
   saveMessages,
   primeMessagesCache,
+  touchReview,
   updateReviewTitle as updateReviewTitleRemote,
 } from "@/lib/client-data";
 import { normalizeArxivId } from "@/lib/arxiv";
@@ -85,4 +86,5 @@ export {
   compactConversation,
   saveMessages,
   primeMessagesCache,
+  touchReview,
 };
