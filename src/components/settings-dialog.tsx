@@ -10,10 +10,10 @@ import {
 } from "@/components/ui/dialog";
 import { MonoLabel } from "@/components/folio";
 import { ExaKeyRow } from "@/components/exa-key-row";
-import { OpenRouterKeyRow } from "@/components/openrouter-key-row";
+import { FireworksKeyRow } from "@/components/fireworks-key-row";
 import {
   hasAnySavedApiKey,
-  hasPlatformOpenRouterKey,
+  hasPlatformFireworksKey,
   KEYS_UPDATED_EVENT,
 } from "@/lib/keys";
 
@@ -33,7 +33,7 @@ export default function SettingsDialog({
       setStatus(
         hasAnySavedApiKey()
           ? "user"
-          : hasPlatformOpenRouterKey()
+          : hasPlatformFireworksKey()
             ? "platform"
             : "none",
       );
@@ -74,7 +74,7 @@ export default function SettingsDialog({
             <h3 className="px-1 pb-0.5">
               <MonoLabel>Model provider</MonoLabel>
             </h3>
-            <OpenRouterKeyRow />
+            <FireworksKeyRow />
             <div className="pt-3">
               <h3 className="px-1 pb-2.5">
                 <MonoLabel>Search &amp; external tools</MonoLabel>

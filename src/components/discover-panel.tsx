@@ -200,7 +200,7 @@ export default function DiscoverPanel() {
 
   const composerHint = canSubmit
     ? "What do you want to explore?"
-    : "Add an OpenRouter API key in Settings to start";
+    : "Add a Fireworks API key in Settings to start";
 
   // Browse vs focus. We're "in focus" while a run is active (streaming or
   // awaiting the web-search decision) or when a brief has been opened.
@@ -301,7 +301,7 @@ export default function DiscoverPanel() {
                         Add an API key to start
                       </p>
                       <p className="text-muted-foreground">
-                        Discover uses the same OpenRouter key as the rest of
+                        Discover uses the same Fireworks key as the rest of
                         Artifact. Add one in{" "}
                         <button
                           type="button"

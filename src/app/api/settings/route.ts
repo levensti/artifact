@@ -13,7 +13,7 @@ export const GET = authedRoute(async (userId) => {
   const settings = await store.getSettings(userId);
   return NextResponse.json({
     settings,
-    platformOpenRouter: platformFireworksAvailable(),
+    platformFireworks: platformFireworksAvailable(),
     platformTools: platformToolAvailability(),
   });
 });
@@ -24,7 +24,7 @@ export const PATCH = authedRoute(async (userId, request: Request) => {
   const settings = await store.getSettings(userId);
   return NextResponse.json({
     settings,
-    platformOpenRouter: platformFireworksAvailable(),
+    platformFireworks: platformFireworksAvailable(),
     platformTools: platformToolAvailability(),
   });
 });

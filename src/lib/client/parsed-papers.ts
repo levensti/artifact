@@ -53,7 +53,7 @@ export async function cacheParsedPaper(
 
 interface ParseRequestPayload {
   paperText: string;
-  /** Optional per-user OpenRouter key override. */
+  /** Optional per-user Fireworks key override. */
   apiKey?: string;
 }
 

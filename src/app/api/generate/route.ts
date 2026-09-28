@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     return jsonError("Request payload too large.", 413);
   }
 
-  // Resolve the OpenRouter key, spending the user's free platform allowance
+  // Resolve the Fireworks key, spending the user's free platform allowance
   // first (metered) and falling back to their own key once it's spent. Gating
   // this endpoint too keeps it from bypassing the chat limiter on the same
   // per-user budget.
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     if (!outcome.ok) {
       if (outcome.reason === "rate_limited") {
         return jsonError(
-          "You've reached the current usage limit. Add your own OpenRouter key for higher limits.",
+          "You've reached the current usage limit. Add your own Fireworks key for higher limits.",
           429,
         );
       }

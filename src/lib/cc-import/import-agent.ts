@@ -37,7 +37,7 @@ import type { ParsedCcSession } from "./types";
 
 export interface ImportSessionsArgs {
   sessions: ParsedCcSession[];
-  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  /** Optional per-user Fireworks key override. Server falls back to env. */
   apiKey?: string;
   /**
    * "separate" (default): one agent call per session, one entry per session.

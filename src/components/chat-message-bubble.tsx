@@ -168,7 +168,7 @@ export function ChatMessageBubble({
               className="text-[12px] leading-relaxed text-muted-foreground"
               style={{ fontFamily: "var(--font-reading)" }}
             >
-              Add your own OpenRouter key for higher limits, then resend.
+              Add your own Fireworks key for higher limits, then resend.
             </p>
             <div className="flex items-center gap-2">
               {failure.onAddKey && (

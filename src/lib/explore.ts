@@ -1,5 +1,5 @@
 export interface GenerateRequest {
-  /** Optional per-user OpenRouter key override. Server falls back to env. */
+  /** Optional per-user Fireworks key override. Server falls back to env. */
   apiKey?: string;
   prompt: string;
   paperContext?: string;

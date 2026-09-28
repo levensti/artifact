@@ -31,13 +31,13 @@ import {
 import { apiFetch } from "@/lib/client/api";
 
 interface SettingsCache {
-  /** User's optional OpenRouter key override (server falls back to env). */
-  openRouterKey: string | null;
+  /** User's optional Fireworks key override (server falls back to env). */
+  fireworksKey: string | null;
   exaApiKey: string | null;
 }
 
 const EMPTY_SETTINGS: SettingsCache = {
-  openRouterKey: null,
+  fireworksKey: null,
   exaApiKey: null,
 };
 
@@ -49,17 +49,11 @@ export interface CurrentUser {
 }
 
 /**
- * Whether the server has a platform OpenRouter key in env. Boolean only —
+ * Whether the server has a platform Fireworks key in env. Boolean only —
  * the key never reaches the browser. Lets the UI treat the app as usable
  * even when the user hasn't entered their own key.
  */
-let platformOpenRouterCache = false;
-
-/**
- * Whether the server has PODCAST_TTS_MODEL configured. Boolean only — the value
- * never reaches the browser. Gates the Media tab's Generate action.
- */
-let podcastTtsCache = false;
+let platformFireworksCache = false;
 
 /**
  * Tool-key counterpart to `platformProvidersCache`. Booleans only — the
@@ -111,9 +105,8 @@ export async function hydrateClientStore(): Promise<void> {
     const boot = await apiFetch<{
       reviews: PaperReview[];
       settings: SettingsCache;
-      platformOpenRouter?: boolean;
+      platformFireworks?: boolean;
       platformTools?: PlatformToolsCache;
-      podcastTts?: boolean;
       deepDives: DeepDiveSession[];
       projects: Project[];
       user: CurrentUser | null;
@@ -122,8 +115,7 @@ export async function hydrateClientStore(): Promise<void> {
     reviewsHydrated = true;
     settingsCache = boot.settings;
     settingsHydrated = true;
-    platformOpenRouterCache = boot.platformOpenRouter ?? false;
-    podcastTtsCache = boot.podcastTts ?? false;
+    platformFireworksCache = boot.platformFireworks ?? false;
     platformToolsCache = boot.platformTools ?? {};
     deepDivesCache = boot.deepDives;
     projectsCache = boot.projects ?? [];
@@ -777,17 +769,17 @@ export function isSettingsHydrated(): boolean {
   return settingsHydrated;
 }
 
-/** The user's saved OpenRouter key override, if any. */
-export function getOpenRouterKey(): string | null {
-  return settingsCache.openRouterKey;
+/** The user's saved Fireworks key override, if any. */
+export function getFireworksKey(): string | null {
+  return settingsCache.fireworksKey;
 }
 
 /**
- * True when the server has a platform OpenRouter key in env. Boolean only —
+ * True when the server has a platform Fireworks key in env. Boolean only —
  * sourced from /api/bootstrap; the env key is never sent to the browser.
  */
-export function hasPlatformOpenRouterKey(): boolean {
-  return platformOpenRouterCache;
+export function hasPlatformFireworksKey(): boolean {
+  return platformFireworksCache;
 }
 
 /** True when the server has EXA_API_KEY set in env. Booleans only. */
@@ -795,49 +787,44 @@ export function hasPlatformExaKey(): boolean {
   return platformToolsCache.exa === true;
 }
 
-/** True when the server has PODCAST_TTS_MODEL configured. Booleans only. */
-export function hasPodcastTts(): boolean {
-  return podcastTtsCache;
-}
-
-/** Literal: the user has saved their own OpenRouter key. */
+/** Literal: the user has saved their own Fireworks key. */
 export function hasAnySavedApiKey(): boolean {
-  return !!settingsCache.openRouterKey;
+  return !!settingsCache.fireworksKey;
 }
 
 /**
- * True when the app can run — the user has their own OpenRouter key OR the
+ * True when the app can run — the user has their own Fireworks key OR the
  * server has a platform key. The gate the chat / discover UI uses, so a
  * fresh user can work out of the box when a platform key is configured.
  */
 export function hasUsableProvider(): boolean {
-  return hasAnySavedApiKey() || hasPlatformOpenRouterKey();
+  return hasAnySavedApiKey() || hasPlatformFireworksKey();
 }
 
 interface SettingsPatchBody {
-  openRouterKey?: string | null;
+  fireworksKey?: string | null;
   exaApiKey?: string | null;
 }
 
 async function patchSettings(patch: SettingsPatchBody): Promise<void> {
-  const { settings, platformOpenRouter, platformTools } = await apiFetch<{
+  const { settings, platformFireworks, platformTools } = await apiFetch<{
     settings: SettingsCache;
-    platformOpenRouter?: boolean;
+    platformFireworks?: boolean;
     platformTools?: PlatformToolsCache;
   }>("/api/settings", { method: "PATCH", body: patch });
   settingsCache = settings;
   settingsHydrated = true;
-  if (platformOpenRouter !== undefined) platformOpenRouterCache = platformOpenRouter;
+  if (platformFireworks !== undefined) platformFireworksCache = platformFireworks;
   if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);
 }
 
-export async function setOpenRouterKey(key: string): Promise<void> {
-  await patchSettings({ openRouterKey: key });
+export async function setFireworksKey(key: string): Promise<void> {
+  await patchSettings({ fireworksKey: key });
 }
 
-export async function clearOpenRouterKey(): Promise<void> {
-  await patchSettings({ openRouterKey: null });
+export async function clearFireworksKey(): Promise<void> {
+  await patchSettings({ fireworksKey: null });
 }
 
 /* ── Tool keys (currently just Exa Search) ── */
@@ -859,14 +846,14 @@ export async function clearExaApiKey(): Promise<void> {
 }
 
 export async function refreshSettingsFromServer(): Promise<void> {
-  const { settings, platformOpenRouter, platformTools } = await apiFetch<{
+  const { settings, platformFireworks, platformTools } = await apiFetch<{
     settings: SettingsCache;
-    platformOpenRouter?: boolean;
+    platformFireworks?: boolean;
     platformTools?: PlatformToolsCache;
   }>("/api/settings");
   settingsCache = settings;
   settingsHydrated = true;
-  if (platformOpenRouter !== undefined) platformOpenRouterCache = platformOpenRouter;
+  if (platformFireworks !== undefined) platformFireworksCache = platformFireworks;
   if (platformTools) platformToolsCache = platformTools;
   dispatch(KEYS_UPDATED_EVENT);
 }

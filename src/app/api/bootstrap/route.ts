@@ -6,7 +6,6 @@ import {
   platformFireworksAvailable,
   platformToolAvailability,
 } from "@/server/provider-env";
-import { podcastTtsAvailable } from "@/lib/openrouter";
 
 export const dynamic = "force-dynamic";
 
@@ -32,17 +31,12 @@ export const GET = authedRoute(async (userId) => {
   return NextResponse.json({
     reviews,
     settings,
-    // Boolean only — whether a platform chat-provider (Fireworks) key is
-    // configured. NEVER the key itself. Field name kept as `platformOpenRouter`
-    // so existing clients keep working.
-    platformOpenRouter: platformFireworksAvailable(),
+    // Boolean only — whether a platform Fireworks key is configured. NEVER
+    // the key itself.
+    platformFireworks: platformFireworksAvailable(),
     // Same shape, for tool keys (Exa). Lets the client suppress the
     // "add a key" prompt when the server already has one in env.
     platformTools: platformToolAvailability(),
-    // Boolean only — whether TTS (model + platform OpenRouter key) is
-    // configured. Gates the Media tab's Generate action so an unconfigured
-    // deploy shows a disabled state.
-    podcastTts: podcastTtsAvailable(),
     deepDives,
     projects,
     user,

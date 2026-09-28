@@ -53,7 +53,7 @@ import {
 import { formatRelative } from "@/lib/format-relative";
 import { cn } from "@/lib/utils";
 import SettingsDialog from "@/components/settings-dialog";
-import { OpenRouterKeyRow } from "@/components/openrouter-key-row";
+import { FireworksKeyRow } from "@/components/fireworks-key-row";
 
 interface JournalImportModalProps {
   onClose: () => void;
@@ -541,11 +541,11 @@ export default function JournalImportModal({
                 <div className="mb-2 flex items-start gap-2">
                   <Key className="mt-0.5 size-3 shrink-0 text-muted-foreground/70" />
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Your key stays on-device and is sent only to OpenRouter.
+                    Your key stays on-device and is sent only to Fireworks.
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <OpenRouterKeyRow />
+                  <FireworksKeyRow />
                 </div>
               </div>
             ) : null}

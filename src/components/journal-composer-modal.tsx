@@ -47,7 +47,7 @@ export default function JournalComposerModal({
     const trimmed = prompt.trim();
     if (!trimmed) return;
     if (!modelReady) {
-      setValidationErr("Add an OpenRouter API key in Settings first.");
+      setValidationErr("Add a Fireworks API key in Settings first.");
       return;
     }
     const creds = resolveModelCredentials();

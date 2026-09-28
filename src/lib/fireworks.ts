@@ -1,11 +1,10 @@
 /**
- * Fireworks: the single chat-completions provider (chat, generate, paper
- * parsing, podcast scripts), with one fixed model chosen by the platform.
+ * Fireworks: the single model provider (chat, generate, paper parsing), with
+ * one fixed model chosen by the platform.
  * Users don't pick a model: a fixed, vetted model keeps agent quality
  * attributable to Artifact rather than to whatever the user happened to
  * select. The platform key comes from `FIREWORKS_API_KEY`, with an optional
- * per-user override entered in Settings. (Podcast TTS is the one non-Fireworks
- * call; see `@/lib/openrouter`.)
+ * per-user override entered in Settings.
  *
  * The model and its context window come from the environment, with no code
  * fallback: a misconfigured deploy fails loudly rather than silently routing

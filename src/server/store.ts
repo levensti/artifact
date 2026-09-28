@@ -745,35 +745,35 @@ import { decrypt, encrypt } from "./crypto";
 
 /** Pseudo-provider identifying the Exa Search tool key in the ApiKey table. */
 const EXA_PROVIDER = "exa";
-/** Provider slug for the user's optional OpenRouter key override. */
-const OPENROUTER_PROVIDER = "openrouter";
+/** Provider slug for the user's optional Fireworks key override. */
+const FIREWORKS_PROVIDER = "fireworks";
 
 export interface SettingsSnapshot {
-  /** User's optional OpenRouter key override (server falls back to env). */
-  openRouterKey: string | null;
+  /** User's optional Fireworks key override (server falls back to env). */
+  fireworksKey: string | null;
   exaApiKey: string | null;
 }
 
 export async function getSettings(userId: string): Promise<SettingsSnapshot> {
   const apiKeys = await prisma.apiKey.findMany({ where: { userId } });
 
-  let openRouterKey: string | null = null;
+  let fireworksKey: string | null = null;
   let exaApiKey: string | null = null;
   for (const row of apiKeys) {
-    if (row.provider === OPENROUTER_PROVIDER) {
-      openRouterKey = decrypt(row.value);
+    if (row.provider === FIREWORKS_PROVIDER) {
+      fireworksKey = decrypt(row.value);
     } else if (row.provider === EXA_PROVIDER) {
       exaApiKey = decrypt(row.value);
     }
     // Any other rows (legacy per-provider keys: anthropic/openai/xai/brave)
-    // are ignored — the app now uses a single OpenRouter key.
+    // are ignored — the app now uses a single Fireworks key.
   }
 
-  return { openRouterKey, exaApiKey };
+  return { fireworksKey, exaApiKey };
 }
 
 export interface SettingsPatch {
-  openRouterKey?: string | null;
+  fireworksKey?: string | null;
   exaApiKey?: string | null;
 }
 
@@ -799,8 +799,8 @@ export async function patchSettings(
       }
     };
 
-    if ("openRouterKey" in patch) {
-      await applyKey(OPENROUTER_PROVIDER, patch.openRouterKey);
+    if ("fireworksKey" in patch) {
+      await applyKey(FIREWORKS_PROVIDER, patch.fireworksKey);
     }
     if ("exaApiKey" in patch) {
       await applyKey(EXA_PROVIDER, patch.exaApiKey);
@@ -845,134 +845,6 @@ export async function deletePdfBlobRecord(
   if (!row) return null;
   await prisma.pdfBlob.delete({ where: { id } });
   return row.storagePath;
-}
-
-/* ── Podcasts ─────────────────────────────────────────────────── */
-
-import type { PodcastDTO, PodcastStatus } from "@/lib/podcast";
-import type { Podcast as PodcastRow } from "@prisma/client";
-
-/** Map the DB status enum to the client-facing lowercase union. */
-function podcastStatus(status: PodcastRow["status"]): PodcastStatus {
-  switch (status) {
-    case "READY":
-      return "ready";
-    case "FAILED":
-      return "failed";
-    default:
-      return "generating";
-  }
-}
-
-/** Serialize a Podcast row to its client DTO. The audio is served through an
- *  app route, so the raw storage path never leaves the server. */
-function rowToPodcast(row: PodcastRow): PodcastDTO {
-  return {
-    id: row.id,
-    reviewId: row.reviewId,
-    status: podcastStatus(row.status),
-    title: row.title,
-    instructions: row.instructions,
-    transcript: row.transcript,
-    audioUrl: row.audioPath ? `/api/podcasts/${row.id}/audio` : null,
-    durationSec: row.durationSec,
-    error: row.error,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-/** Create a podcast row up front in GENERATING so the client can render a
- *  spinner that survives a page refresh. Verifies review ownership. */
-export async function createPodcast(
-  userId: string,
-  input: { id: string; reviewId: string; title: string | null; instructions: string | null },
-): Promise<PodcastDTO> {
-  await assertReviewOwned(userId, input.reviewId);
-  const row = await prisma.podcast.create({
-    data: {
-      id: input.id,
-      userId,
-      reviewId: input.reviewId,
-      title: input.title,
-      instructions: input.instructions,
-      status: "GENERATING",
-    },
-  });
-  return rowToPodcast(row);
-}
-
-export async function listPodcastsForReview(
-  userId: string,
-  reviewId: string,
-): Promise<PodcastDTO[]> {
-  const rows = await prisma.podcast.findMany({
-    where: { userId, reviewId },
-    orderBy: { createdAt: "desc" },
-  });
-  return rows.map(rowToPodcast);
-}
-
-export async function getPodcast(
-  userId: string,
-  id: string,
-): Promise<PodcastDTO | null> {
-  const row = await prisma.podcast.findFirst({ where: { id, userId } });
-  return row ? rowToPodcast(row) : null;
-}
-
-/** Internal accessor for the audio route: returns the storage path (not part
- *  of the DTO) for a podcast the user owns. */
-export async function getPodcastAudioPath(
-  userId: string,
-  id: string,
-): Promise<string | null> {
-  const row = await prisma.podcast.findFirst({
-    where: { id, userId },
-    select: { audioPath: true },
-  });
-  return row?.audioPath ?? null;
-}
-
-/** Flip a podcast to READY with its transcript, audio path, and duration. */
-export async function setPodcastReady(
-  userId: string,
-  id: string,
-  result: { transcript: string; audioPath: string; durationSec: number },
-): Promise<void> {
-  await prisma.podcast.updateMany({
-    where: { id, userId },
-    data: {
-      status: "READY",
-      transcript: result.transcript,
-      audioPath: result.audioPath,
-      durationSec: result.durationSec,
-      error: null,
-    },
-  });
-}
-
-/** Flip a podcast to FAILED, recording the reason for the card. */
-export async function setPodcastFailed(
-  userId: string,
-  id: string,
-  error: string,
-): Promise<void> {
-  await prisma.podcast.updateMany({
-    where: { id, userId },
-    data: { status: "FAILED", error },
-  });
-}
-
-/** Delete a podcast row (if owned) and return its audio storage path so the
- *  caller can remove the blob. */
-export async function deletePodcastRecord(
-  userId: string,
-  id: string,
-): Promise<string | null> {
-  const row = await prisma.podcast.findFirst({ where: { id, userId } });
-  if (!row) return null;
-  await prisma.podcast.delete({ where: { id } });
-  return row.audioPath;
 }
 
 /* ── Parsed papers (per-user content cache) ───────────────────── */

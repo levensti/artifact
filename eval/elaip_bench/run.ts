@@ -13,7 +13,7 @@
  * loop the `/api/chat` reading surface runs — tools included — via
  * `runReadingAgent()` in-process (see ReadingAgentClient in utils.ts). So the
  * run measures the whole harness a user talks to, not a reimplementation, with
- * no dev server, auth, or rate limiter in the loop — just an OpenRouter key.
+ * no dev server, auth, or rate limiter in the loop — just a Fireworks key.
  * (Note: the agent may call `arxiv_search` / `web_search` mid-answer, so a full
  * run makes real network calls beyond the model itself.)
  *
@@ -299,21 +299,21 @@ function printSummary(s: ReturnType<typeof summarize>): void {
 /**
  * When the run is dominated by API errors, the score is meaningless — surface
  * the likely cause instead of a misleading 0%. Errors now come straight from
- * OpenRouter (the harness calls `generate()` directly), so the usual suspects
+ * Fireworks (the harness calls `generate()` directly), so the usual suspects
  * are a missing/invalid key or provider throttling.
  */
 function printErrorHints(results: RowResult[]): void {
   const errors = results.filter((r) => !r.api_ok);
   if (errors.length === 0) return;
   const sample = errors[0].note ?? "";
-  console.log(`\n${errors.length}/${results.length} requests failed calling OpenRouter.`);
-  if (sample.includes("No OpenRouter key") || sample.includes("401")) {
+  console.log(`\n${errors.length}/${results.length} requests failed calling Fireworks.`);
+  if (sample.includes("No Fireworks key") || sample.includes("401")) {
     console.log(
-      "  -> missing or invalid key. Pass --api-key sk-or-... or set\n" +
+      "  -> missing or invalid key. Pass --api-key fw_... or set\n" +
         "     FIREWORKS_API_KEY, and check the key has credit.\n",
     );
   } else if (sample.includes("429")) {
-    console.log("  -> 429: OpenRouter throttled. Lower --workers and retry.\n");
+    console.log("  -> 429: Fireworks throttled. Lower --workers and retry.\n");
   } else {
     console.log(`  -> first error: ${sample}\n`);
   }
