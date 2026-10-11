@@ -16,7 +16,7 @@
 
 import type { StreamEvent } from "@/lib/stream-types";
 import type { TranscriptMessage } from "@/lib/transcript";
-import type { ParsedPaper } from "@/lib/review-types";
+import type { ChunkHit } from "@/lib/documents";
 import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import { runFireworksAgentLoop } from "@/app/api/chat/fireworks-handler";
@@ -26,14 +26,9 @@ import { getReadingSystemPrompt, visualFormatReminder } from "@/recipes/reading-
 // through the same module it runs the agent from.
 export { getReadingSystemPrompt };
 
-/** Paper-internal tools, registered only when the paper is parsed to structured
- *  form — otherwise the model sees them and calls them only to get a "not
- *  parsed yet" error back. */
-const PAPER_PARSED_TOOLS = new Set([
-  "read_section",
-  "search_paper",
-  "lookup_citation",
-]);
+/** Registered only when the document has a chunk index (long documents); a
+ *  short document is fully in context and the tool would have nothing to do. */
+const CHUNK_INDEX_TOOLS = new Set(["search_paper"]);
 
 /** Structured-output tools that only the surface using them should register. */
 const DISCOVER_ONLY_TOOLS = new Set(["submit_picks"]);
@@ -57,8 +52,21 @@ export interface ReadingAgentParams {
   model?: string;
   /** Full paper/page text (short-source mode). */
   paperContext?: string;
-  /** Structured paper (long-source mode); enables the paper-internal tools. */
-  parsedPaper?: ParsedPaper;
+  /**
+   * Passages retrieved for this turn (long-source mode). `null` means
+   * retrieval ran and nothing cleared the floor; `undefined` means the turn
+   * is not in retrieval mode.
+   */
+  retrievedContext?: string | null;
+  /** Appended to the paper block, e.g. "only the first N pages are available
+   *  while indexing finishes". */
+  paperNote?: string;
+  /** Document title, when known. */
+  documentTitle?: string;
+  /** Table of contents (retrieval mode), one heading per line with page. */
+  tableOfContents?: string;
+  /** Vector search over the document's chunks; enables `search_paper`. */
+  searchChunks?: (query: string, k: number) => Promise<ChunkHit[]>;
   paperTitle?: string;
   arxivId?: string;
   reviewId?: string;
@@ -79,17 +87,18 @@ export interface ReadingAgentParams {
 
 /**
  * Select the tools to register for a turn, exactly as the chat route does:
- * drop `web_search` when the user dismissed it, drop the paper-internal tools
- * until the paper is parsed, and register `submit_picks` only in discover mode.
+ * drop `web_search` when the user dismissed it, register `search_paper` only
+ * when the document has a chunk index, and `submit_picks` only in discover
+ * mode.
  */
 export function selectReadingTools(params: {
-  parsedPaper?: ParsedPaper;
+  hasChunkIndex?: boolean;
   skipWebSearch?: boolean;
   mode?: "discover";
 }) {
   return getAllTools().filter((t) => {
     if (params.skipWebSearch && t.name === "web_search") return false;
-    if (!params.parsedPaper && PAPER_PARSED_TOOLS.has(t.name)) return false;
+    if (!params.hasChunkIndex && CHUNK_INDEX_TOOLS.has(t.name)) return false;
     if (params.mode !== "discover" && DISCOVER_ONLY_TOOLS.has(t.name)) return false;
     return true;
   });
@@ -101,7 +110,11 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     apiKey,
     model,
     paperContext,
-    parsedPaper,
+    retrievedContext,
+    paperNote,
+    documentTitle,
+    tableOfContents,
+    searchChunks,
     paperTitle,
     arxivId,
     reviewId,
@@ -112,10 +125,14 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     emit,
   } = params;
 
-  const tools = selectReadingTools({ parsedPaper, skipWebSearch, mode });
+  const tools = selectReadingTools({
+    hasChunkIndex: !!searchChunks,
+    skipWebSearch,
+    mode,
+  });
   const toolContext: ToolContext = {
     paperContext,
-    parsedPaper,
+    searchChunks,
     paperTitle,
     arxivId,
     reviewId,
@@ -127,8 +144,15 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     conversation,
     apiKey,
     systemPrompt,
-    paperContext,
-    parsedPaper,
+    paperContext || retrievedContext !== undefined
+      ? {
+          text: paperContext,
+          retrieved: retrievedContext,
+          title: documentTitle,
+          tableOfContents,
+          note: paperNote,
+        }
+      : undefined,
     tools,
     toolContext,
     emit,

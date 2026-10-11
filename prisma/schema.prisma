@@ -36,8 +36,6 @@ model User {
   inferenceProfiles InferenceProfile[]
   preferences       UserPreferences?
   pdfBlobs          PdfBlob[]
-  parsedPapers      ParsedPaper[]
-  pageMaps          PageMap[]
   shares            Share[]
   discoverQueries   DiscoverQuery[]
   projects          Project[]
@@ -106,6 +104,11 @@ model Review {
   /// Project this review belongs to. Null = ungrouped. SetNull so deleting
   /// a project ungroups its papers without deleting them.
   projectId              String?
+  /// The content-addressed document this review reads. Linked lazily the
+  /// first time the client extracts the text (the hash is computed from the
+  /// extracted text, which only the browser has). SetNull so a re-index or
+  /// document purge never deletes the review.
+  documentId             String?
 
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages           ReviewMessages?
@@ -115,9 +118,11 @@ model Review {
   shares             Share[]
   fromRecommendation Recommendation?    @relation(fields: [fromRecommendationId], references: [id], onDelete: SetNull)
   project            Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  document           Document?          @relation(fields: [documentId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([userId, arxivId])
+  @@index([documentId])
 }
 
 model ReviewMessages {
@@ -276,31 +281,108 @@ model PdfBlob {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model ParsedPaper {
-  id     String @id @default(uuid())
-  userId String
-  hash   String
-  parsed Json
+/// A document (paper PDF or web page) identified by the sha256 of its
+/// extracted text. Deliberately NOT scoped by user: the text, the LLM parse,
+/// the page map, and the chunk embeddings are all pure functions of the
+/// content, so two readers of the same paper share one row and pay the
+/// indexing cost once. Access control lives on `Review` (the user → document
+/// edge); a user can only reach a document by presenting its text.
+model Document {
+  id        String  @id @default(uuid())
+  /// sha256 (hex) of the extracted text — the identity key.
+  hash      String  @unique
+  /// Full extracted text, with `[Page N]` markers at page boundaries. Short
+  /// documents are injected into chat whole from here; long ones are served
+  /// by retrieval over `chunks`. Null only for rows backfilled from the
+  /// legacy per-user caches (which never stored the text); the next open
+  /// uploads it.
+  text      String?
+  charCount Int      @default(0)
+  title     String?
+  /// Citation-token → page map from the per-page LLM pass (short docs).
+  pageMap   Json?
+  /// PDF outline (bookmarks) as uploaded, kept so the section tree can be
+  /// rebuilt when detection improves without re-uploading the text.
+  outline   Json?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  indexStatus    DocumentIndexStatus @default(pending)
+  indexError     String?
+  /// Set when indexing finishes: which embedding model + width the chunk
+  /// vectors were produced with. A model change re-indexes rather than
+  /// mixing incompatible vectors in one table.
+  embeddingModel String?
+  embeddingDims  Int?
+  chunkCount     Int                 @default(0)
+  /// 0–100 while `indexing`; drives the progress pill in the chat header.
+  indexProgress  Int                 @default(0)
+  /// Bumped when indexing starts so a stale `indexing` row (crashed worker)
+  /// can be retried after a timeout instead of wedging forever.
+  indexStartedAt DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
-  @@unique([userId, hash])
+  reviews  Review[]
+  sections DocumentSection[]
+  chunks   DocumentChunk[]
 }
 
-/// Lightweight per-paper map from citation tokens (section/figure/table
-/// numbers) to PDF page numbers. Produced by a small LLM call that runs on
-/// every paper open (not gated on length), independent of the full
-/// `ParsedPaper`. Powers chip click-to-scroll without requiring the
-/// expensive full parse to have run.
-model PageMap {
-  id     String @id @default(uuid())
-  userId String
-  hash   String
-  map    Json
+enum DocumentIndexStatus {
+  pending
+  indexing
+  ready
+  failed
+}
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+/// A node in the document's heading tree (chapter → section → subsection).
+/// `label` is the printed number ("3.2", "A.1") when there is one; numbering
+/// schemes vary too much to store it as anything but text.
+model DocumentSection {
+  id         String  @id @default(uuid())
+  documentId String
+  parentId   String?
+  /// Position among siblings (0-based).
+  ordinal    Int
+  /// 0 = top level, 1 = subsection, ...
+  depth      Int
+  label      String?
+  title      String
+  startPage  Int?
+  endPage    Int?
+  /// Half-open char range [charStart, charEnd) in `Document.text`.
+  charStart  Int
+  charEnd    Int
 
-  @@unique([userId, hash])
+  document Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parent   DocumentSection?  @relation("SectionTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children DocumentSection[] @relation("SectionTree")
+  chunks   DocumentChunk[]
+
+  @@index([documentId, ordinal])
+}
+
+/// A semantic chunk of a document with its embedding. Chunks never cross a
+/// section boundary (chunking runs per section), so `sectionId` is
+/// unambiguous when sections were detected. `embedding` is a pgvector
+/// `halfvec` — Prisma can't type it, so reads/writes go through raw SQL in
+/// `src/server/documents.ts`.
+model DocumentChunk {
+  id         String                        @id @default(uuid())
+  documentId String
+  sectionId  String?
+  /// Position in the document (0-based, document order).
+  ordinal    Int
+  text       String
+  tokenCount Int
+  startPage  Int?
+  endPage    Int?
+  charStart  Int
+  charEnd    Int
+  embedding  Unsupported("halfvec(2048)")?
+
+  document Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  section  DocumentSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  @@unique([documentId, ordinal])
 }
 
 /// A shareable link pointing at one review or one wiki page. The token

@@ -138,8 +138,8 @@ async function runWithRetry(
 /**
  * Drives the FULL agentic reading harness — `runReadingAgent()`, the same
  * tool-using ReAct loop the `/api/chat` route runs — in-process. The paper text
- * is fed as `paperContext` (so the agent works off the full source, no
- * `parsedPaper` → the paper-internal tools self-disable) and the answer is the
+ * is fed as `paperContext` (so the agent works off the full source, with no
+ * chunk index → `search_paper` self-disables) and the answer is the
  * concatenated text the agent produced, assembled with the exact same
  * `stepsToContent` logic the app persists and renders.
  *

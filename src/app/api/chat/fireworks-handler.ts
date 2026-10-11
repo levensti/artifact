@@ -8,16 +8,16 @@
 import type { StreamEvent } from "@/lib/stream-types";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
-import type { ParsedPaper } from "@/lib/review-types";
 import {
   FIREWORKS_BASE_URL,
   getFireworksModel,
+  getFireworksReasoningEffort,
   type ChatUsage,
 } from "@/lib/fireworks";
 import { toOpenAITools } from "@/tools/registry";
 import type { ToolContext, ToolDefinition } from "@/tools/types";
 import { toOpenAIMessages, type TranscriptMessage } from "@/lib/transcript";
-import { buildPaperBlock } from "./paper-block";
+import { buildPaperBlock, type PaperBlockInput } from "./paper-block";
 import {
   runAgentLoop,
   TOOL_RESULT_GUARDRAIL,
@@ -66,15 +66,14 @@ export async function runFireworksAgentLoop(
   chatMessages: TranscriptMessage[],
   apiKey: string,
   systemPrompt: string,
-  paperContext: string | undefined,
-  parsedPaper: ParsedPaper | undefined,
+  paper: PaperBlockInput | undefined,
   tools: ToolDefinition[],
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
   options?: AgentLoopOptions,
   model = getFireworksModel(),
 ) {
-  const paperBlock = buildPaperBlock(paperContext, parsedPaper);
+  const paperBlock = buildPaperBlock(paper);
   const baseSystem = systemPrompt + TOOL_RESULT_GUARDRAIL;
   const systemContent = paperBlock ? `${baseSystem}\n\n${paperBlock}` : baseSystem;
 
@@ -114,6 +113,9 @@ export async function runFireworksAgentLoop(
           tools: openaiTools,
           stream: true,
           max_tokens: 16384,
+          // Cap hidden reasoning: the default thinks ~17s before the first
+          // visible token on a long-document prompt (see getFireworksReasoningEffort).
+          reasoning_effort: getFireworksReasoningEffort(),
           // Opt into usage in the final stream chunk so we can report
           // cached_tokens uniformly.
           stream_options: { include_usage: true },

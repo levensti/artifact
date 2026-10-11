@@ -1,61 +1,51 @@
 /**
- * Shared paper-block construction for both chat handlers.
+ * The `<paper>` block injected into the reading agent's system prompt.
  *
- * The chat handlers receive either `paperContext` (full text) or
- * `parsedPaper` (structured summary + ToC). They build different `<paper>`
- * blocks for each mode so the model knows what's in context and which
- * tools to use.
+ * Three shapes, decided by the caller from the document's size and index
+ * state:
+ *   - full:      the whole text (short documents),
+ *   - retrieval: passages retrieved for this turn plus the table of
+ *                contents from the section tree (long, indexed documents),
+ *   - partial:   a leading slice of the text with a note (long documents
+ *                still indexing), so chat degrades instead of blocking.
  */
 
-import type { ParsedPaper } from "@/lib/review-types";
+export interface PaperBlockInput {
+  /** Full (or partial) text to inject verbatim. */
+  text?: string;
+  /** Retrieved passages for this turn (already formatted). */
+  retrieved?: string | null;
+  title?: string;
+  /** One heading per line, "§1.2 Title (p. 8)", indented by depth. */
+  tableOfContents?: string;
+  /** Appended inside the block when set (e.g. "still indexing"). */
+  note?: string;
+}
 
-/**
- * Build the `<paper>` block injected into the system prompt.
- *
- * - When `parsedPaper` is present: includes title, abstract, L1 summary,
- *   and a numbered table of contents. Sections themselves are accessed on
- *   demand via tools.
- * - Otherwise, when `paperContext` is present: includes the full extracted
- *   text. Backwards-compatible with the pre-Phase-3 behavior.
- * - Returns null when no paper is available — caller skips the block.
- */
-export function buildPaperBlock(
-  paperContext: string | undefined,
-  parsedPaper: ParsedPaper | undefined,
-): string | null {
-  if (parsedPaper) {
-    const tocLines = parsedPaper.sections.map(
-      (s, i) =>
-        `[${i}] ${"  ".repeat(Math.max(0, s.level - 1))}${s.heading}` +
-        (s.startPage ? ` (p. ${s.startPage})` : ""),
-    );
+export function buildPaperBlock(input: PaperBlockInput | undefined): string | null {
+  if (!input) return null;
+  const { text, retrieved, title, tableOfContents, note } = input;
+  const parts: string[] = [];
 
-    const refCount = parsedPaper.references.length;
-    const figCount = parsedPaper.figures.length;
-    const refsNote = refCount
-      ? `\nThe paper has ${refCount} references; resolve any with \`lookup_citation\`.`
-      : "";
-    const figsNote = figCount ? ` It has ${figCount} figures/tables.` : "";
+  if (title) parts.push(`<title>${title}</title>`);
 
-    const parts: string[] = ["<paper>"];
-    if (parsedPaper.title) parts.push(`<title>${parsedPaper.title}</title>`);
-    if (parsedPaper.abstract)
-      parts.push(`<abstract>\n${parsedPaper.abstract}\n</abstract>`);
-    if (parsedPaper.summary)
-      parts.push(`<summary>\n${parsedPaper.summary}\n</summary>`);
+  if (text) {
+    parts.push(text);
+  } else if (retrieved !== undefined) {
+    if (tableOfContents) {
+      parts.push(`<table_of_contents>\n${tableOfContents}\n</table_of_contents>`);
+    }
     parts.push(
-      `<table_of_contents>\n${tocLines.join("\n")}\n</table_of_contents>`,
+      retrieved
+        ? `<retrieved_passages>\n${retrieved}\n</retrieved_passages>`
+        : `<retrieved_passages>\n(no passages matched this question)\n</retrieved_passages>`,
     );
     parts.push(
-      `<note>You have only the summary and ToC above. Use \`read_section\` or \`search_paper\` for section bodies.${refsNote}${figsNote}</note>`,
+      "<note>This is a long document. The passages above were retrieved for the current question and are ordered as they appear in the document, grouped under their section heading, each with its page range. Cite sections ONLY by the § number shown in those headings; if a heading has no number, cite the page instead (\"(p. 12)\") and name the section in prose. Never invent a section number. Use `search_paper` to retrieve more passages for a different angle or for parts of the document not shown.</note>",
     );
-    parts.push("</paper>");
-    return parts.join("\n");
   }
 
-  if (paperContext) {
-    return `<paper>\n${paperContext}\n</paper>`;
-  }
-
-  return null;
+  if (note) parts.push(`<note>${note}</note>`);
+  if (parts.length === 0) return null;
+  return `<paper>\n${parts.join("\n")}\n</paper>`;
 }

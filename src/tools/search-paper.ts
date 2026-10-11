@@ -1,12 +1,12 @@
 /**
  * Tool: search_paper
  *
- * Lexical search across the parsed paper's sections. Returns ranked
- * passages with their section heading and (when available) page number.
- * For a single document, simple token-overlap scoring is plenty — no
- * embeddings or external indexers needed.
+ * Vector search over the document's semantic chunks, with section and page
+ * provenance. Registered only for long documents (the ones served by
+ * retrieval); a short document is fully in context and needs no search.
  */
 
+import { formatPages } from "@/lib/documents";
 import type { ToolDefinition } from "./types";
 
 export const searchPaperTool: ToolDefinition = {
@@ -22,8 +22,8 @@ export const searchPaperTool: ToolDefinition = {
       query: {
         type: "string",
         description:
-          "Free-text query — keywords or short phrase. Will be tokenized; " +
-          'no special operators. Example: "ablation results on ImageNet".',
+          "Natural-language query or keywords describing the passage you want. " +
+          'Example: "ablation results on ImageNet".',
       },
       k: {
         type: "number",
@@ -35,130 +35,30 @@ export const searchPaperTool: ToolDefinition = {
   },
 
   async execute(input, context) {
-    const parsed = context.parsedPaper;
-    if (!parsed) {
-      return {
-        content:
-          "Error: this paper hasn't been parsed into sections yet. " +
-          "Search the existing flat paper context directly instead.",
-        ok: false,
-      };
-    }
-
     const query = String(input.query ?? "").trim();
     if (!query) return { content: "Error: query is required.", ok: false };
-
     const k = Math.max(1, Math.min(10, Number(input.k) || 5));
 
-    const queryTokens = tokenize(query);
-    if (queryTokens.length === 0) {
-      return { content: "Error: query produced no searchable tokens.", ok: false };
+    if (context.searchChunks) {
+      const hits = await context.searchChunks(query, k);
+      if (hits.length === 0) {
+        return { content: `No passages match "${query}".`, ok: false };
+      }
+      const blocks = hits.map((h) => {
+        const section = h.sectionLabel
+          ? `§${h.sectionLabel} ${h.sectionTitle ?? ""}`.trim()
+          : h.sectionTitle ?? "(unsectioned)";
+        const pages = formatPages(h.startPage, h.endPage);
+        return `${section}${pages ? ` (${pages})` : ""}\n${h.text}`;
+      });
+      return `Top ${hits.length} passages for "${query}":\n\n${blocks.join("\n\n")}`;
     }
 
-    // Score each section by a TF-IDF-ish overlap: sum of (term_count /
-    // sqrt(section_len)) for query terms present. Cheap and effective
-    // for single-document search.
-    const scored = parsed.sections.map((s, idx) => ({
-      idx,
-      heading: s.heading,
-      page: s.startPage,
-      body: s.body,
-      score: scoreSection(queryTokens, s.body),
-    }));
-
-    const ranked = scored
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, k);
-
-    if (ranked.length === 0) {
-      return { content: `No passages match "${query}".`, ok: false };
-    }
-
-    const blocks = ranked.map((r) => {
-      const snippet = bestSnippet(queryTokens, r.body);
-      const pageNote = r.page ? ` (p. ${r.page})` : "";
-      return `[${r.idx}] ${r.heading}${pageNote}\n${snippet}`;
-    });
-
-    return `Top ${ranked.length} matches for "${query}":\n\n${blocks.join("\n\n")}`;
+    return {
+      content:
+        "Error: this document has no search index (it is short enough to be " +
+        "fully in context — read it directly).",
+      ok: false,
+    };
   },
 };
-
-/* ------------------------------------------------------------------ */
-/*  Lexical scoring                                                    */
-/* ------------------------------------------------------------------ */
-
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
-}
-
-function scoreSection(queryTokens: string[], body: string): number {
-  if (!body) return 0;
-  const bodyLower = body.toLowerCase();
-  const lenNorm = Math.sqrt(Math.max(50, body.length));
-  let score = 0;
-  for (const t of queryTokens) {
-    // Word-boundary match — avoids "rate" matching "iterate".
-    const re = new RegExp(`\\b${escapeRegex(t)}\\b`, "g");
-    const matches = bodyLower.match(re);
-    if (matches) score += matches.length / lenNorm;
-  }
-  return score;
-}
-
-/** ~250-char snippet centered on the highest-density query-term region. */
-function bestSnippet(queryTokens: string[], body: string): string {
-  if (!body) return "";
-  if (body.length <= 250) return body.trim();
-
-  const bodyLower = body.toLowerCase();
-  let bestStart = 0;
-  let bestHits = 0;
-  const window = 250;
-
-  // Scan in 80-char strides; cheap.
-  for (let i = 0; i < body.length - window; i += 80) {
-    const slice = bodyLower.slice(i, i + window);
-    let hits = 0;
-    for (const t of queryTokens) {
-      const re = new RegExp(`\\b${escapeRegex(t)}\\b`, "g");
-      const m = slice.match(re);
-      if (m) hits += m.length;
-    }
-    if (hits > bestHits) {
-      bestHits = hits;
-      bestStart = i;
-    }
-  }
-
-  // Trim to word boundaries.
-  let start = bestStart;
-  let end = Math.min(body.length, bestStart + window);
-  while (start > 0 && body[start] !== " " && start > bestStart - 30) start--;
-  while (end < body.length && body[end] !== " " && end < bestStart + window + 30) end++;
-
-  const prefix = start > 0 ? "…" : "";
-  const suffix = end < body.length ? "…" : "";
-  return `${prefix}${body.slice(start, end).trim()}${suffix}`;
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-const STOPWORDS = new Set([
-  "the", "a", "an", "and", "or", "but", "of", "in", "on", "at", "to", "for",
-  "with", "by", "from", "as", "is", "are", "was", "were", "be", "been", "being",
-  "this", "that", "these", "those", "it", "its", "we", "our", "you", "your",
-  "they", "their", "he", "she", "his", "her", "i", "me", "my",
-  "do", "does", "did", "have", "has", "had", "will", "would", "should", "can",
-  "could", "may", "might", "must", "if", "then", "else", "when", "where",
-  "what", "which", "who", "whom", "how", "why",
-  "not", "no", "so", "than", "such", "into", "about", "above", "below",
-  "between", "while", "during", "before", "after",
-]);

@@ -2,7 +2,7 @@
  * Shared Semantic Scholar (S2) request config.
  *
  * Every S2 call (`arxiv_search` primary path, `paper_details`, the
- * `lookup_citation` abstract fetch) goes through here so they share one auth
+ * abstract fetches) goes through here so they share one auth
  * story. Without `SEMANTIC_SCHOLAR_API_KEY` set, requests use the shared
  * UNAUTHENTICATED pool — roughly 1 request/second across every anonymous
  * caller globally — which throttles hard (observed: single search calls taking

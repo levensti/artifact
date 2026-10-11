@@ -1,23 +1,16 @@
 /**
  * Resolve citation tokens (§N, Fig. N, Ref. [key]) to a page number and
- * tooltip text using the paper's extracted text and (when available) its
- * structured representation.
+ * tooltip text using a page map (from the per-page LLM pass for short
+ * papers, or the server's section tree for long ones) and the paper's
+ * extracted text.
  *
  * The extracted text from `pdfjs-dist` is annotated with `[Page N]` markers
  * at every page boundary; we use those as the ground truth for "what page
- * does this thing live on?" The structured paper is consulted first when
- * present, but we always fall back to scanning the raw text — the model
- * doesn't reliably populate `startPage`, and short papers skip parsing
- * entirely.
+ * does this thing live on?" The page map is consulted first when present,
+ * and we always fall back to scanning the raw text.
  */
 
-import type {
-  PageMap,
-  ParsedFigure,
-  ParsedPaper,
-  ParsedReference,
-  ParsedSection,
-} from "@/lib/review-types";
+import type { PageMap } from "@/lib/review-types";
 
 export interface CitationResolution {
   page?: number;
@@ -38,31 +31,31 @@ const PAGE_MARKER_RE = /\[Page (\d+)\]/g;
 
 export function resolveSection(
   sectionNum: string,
-  parsed: ParsedPaper | null,
   paperText: string | null | undefined,
   pageMap: PageMap | null = null,
 ): CitationResolution {
   const mapped = pageMap?.sections?.[sectionNum];
   const mappedAnchor = pageMap?.anchors?.sections?.[sectionNum];
-  if (parsed) {
-    const match = findSectionInParsed(parsed.sections, sectionNum);
-    if (match) {
-      const fromText = paperText
-        ? findSectionInText(paperText, sectionNum, match.heading)
-        : null;
-      return {
-        page: mapped ?? match.startPage ?? fromText?.page,
-        tooltip: match.heading,
-        anchorText: anchorCandidates(
-          mappedAnchor,
-          fromText?.anchorText,
-          match.heading,
-        ),
-      };
-    }
-  }
   if (paperText) {
     const fromText = findSectionInText(paperText, sectionNum) ?? {};
+    return {
+      page: mapped ?? fromText.page,
+      tooltip: fromText.tooltip ?? mappedAnchor,
+      anchorText: anchorCandidates(mappedAnchor, fromText.anchorText),
+    };
+  }
+  return mapped ? { page: mapped, tooltip: mappedAnchor, anchorText: mappedAnchor } : {};
+}
+
+export function resolveFigure(
+  figureNum: string,
+  paperText: string | null | undefined,
+  pageMap: PageMap | null = null,
+): CitationResolution {
+  const mapped = pageMap?.figures?.[figureNum];
+  const mappedAnchor = pageMap?.anchors?.figures?.[figureNum];
+  if (paperText) {
+    const fromText = findFigureInText(paperText, figureNum) ?? {};
     return {
       page: mapped ?? fromText.page,
       tooltip: fromText.tooltip,
@@ -72,71 +65,17 @@ export function resolveSection(
   return mapped ? { page: mapped, anchorText: mappedAnchor } : {};
 }
 
-export function resolveFigure(
-  figureNum: string,
-  parsed: ParsedPaper | null,
-  paperText: string | null | undefined,
-  pageMap: PageMap | null = null,
-): CitationResolution {
-  const mapped = pageMap?.figures?.[figureNum];
-  const mappedAnchor = pageMap?.anchors?.figures?.[figureNum];
-  if (parsed) {
-    const match = findFigureInParsed(parsed.figures, figureNum);
-    if (match) {
-      const fromText = paperText
-        ? findFigureInText(paperText, figureNum, mapped ?? match.page ?? undefined)
-        : null;
-      return {
-        page: fromText?.page ?? mapped ?? match.page,
-        tooltip: shorten(match.caption, 200),
-        anchorText: anchorCandidates(
-          mappedAnchor,
-          fromText?.anchorText,
-          match.caption,
-        ),
-      };
-    }
-  }
-  if (paperText) {
-    const fromText = findFigureInText(paperText, figureNum, mapped) ?? {};
-    return {
-      page: fromText.page ?? mapped,
-      tooltip: fromText.tooltip,
-      anchorText: anchorCandidates(mappedAnchor, fromText.anchorText),
-    };
-  }
-  return mapped ? { page: mapped, anchorText: mappedAnchor } : {};
-}
-
 export function resolveTable(
   num: string,
-  parsed: ParsedPaper | null,
   paperText: string | null | undefined,
   pageMap: PageMap | null = null,
 ): CitationResolution {
   const mapped = pageMap?.tables?.[num];
   const mappedAnchor = pageMap?.anchors?.tables?.[num];
-  if (parsed) {
-    const match = findTableInParsed(parsed, num);
-    if (match) {
-      const fromText = paperText
-        ? findTableInText(paperText, num, mapped ?? match.page ?? undefined)
-        : null;
-      return {
-        page: fromText?.page ?? mapped ?? match.page,
-        tooltip: shorten(match.caption, 200),
-        anchorText: anchorCandidates(
-          mappedAnchor,
-          fromText?.anchorText,
-          match.caption,
-        ),
-      };
-    }
-  }
   if (paperText) {
-    const fromText = findTableInText(paperText, num, mapped) ?? {};
+    const fromText = findTableInText(paperText, num) ?? {};
     return {
-      page: fromText.page ?? mapped,
+      page: mapped ?? fromText.page,
       tooltip: fromText.tooltip,
       anchorText: anchorCandidates(mappedAnchor, fromText.anchorText),
     };
@@ -146,90 +85,10 @@ export function resolveTable(
 
 export function resolveReference(
   key: string,
-  parsed: ParsedPaper | null,
   paperText: string | null | undefined,
 ): CitationResolution {
-  if (parsed) {
-    const match = findReferenceInParsed(parsed.references, key);
-    if (match) return { tooltip: shorten(match.text, 250) };
-  }
-  if (paperText) {
-    return findReferenceInText(paperText, key) ?? {};
-  }
+  if (paperText) return findReferenceInText(paperText, key) ?? {};
   return {};
-}
-
-/* ------------------------------------------------------------------ */
-/*  Parsed-paper lookups                                               */
-/* ------------------------------------------------------------------ */
-
-function sectionHeadingMatchesNumber(heading: string, num: string): boolean {
-  const trimmed = heading.trim();
-  return (
-    trimmed.startsWith(`${num} `) ||
-    trimmed.startsWith(`${num}.`) ||
-    trimmed.startsWith(`${num}:`) ||
-    trimmed === num
-  );
-}
-
-function findSectionInParsed(
-  sections: ParsedSection[],
-  num: string,
-): ParsedSection | null {
-  return (
-    sections.find((s) => sectionHeadingMatchesNumber(s.heading, num)) ?? null
-  );
-}
-
-function findFigureInParsed(
-  figures: ParsedFigure[],
-  num: string,
-): ParsedFigure | null {
-  return (
-    figures.find((f) => {
-      // Skip table entries — they share this array but only match `(Table N)`.
-      if (/^\s*table\b/i.test(f.id)) return false;
-      const id = f.id.replace(/[^0-9.]/g, "");
-      return id === num || f.id === num || f.id === `Figure ${num}`;
-    }) ?? null
-  );
-}
-
-function findTableInParsed(
-  parsed: ParsedPaper,
-  num: string,
-): ParsedFigure | null {
-  // Prefer the dedicated `tables` array (current schema). Fall back to
-  // scanning `figures` for table-prefixed ids — papers parsed before the
-  // tables/figures split lumped both into `figures`.
-  const direct = (parsed.tables ?? []).find((t) => {
-    const id = t.id.replace(/[^0-9.]/g, "");
-    return id === num || t.id.toLowerCase() === `table ${num}`;
-  });
-  if (direct) return direct;
-  return (
-    parsed.figures.find((f) => {
-      if (!/^\s*table\b/i.test(f.id)) return false;
-      const id = f.id.replace(/[^0-9.]/g, "");
-      return id === num || f.id.toLowerCase() === `table ${num}`;
-    }) ?? null
-  );
-}
-
-function findReferenceInParsed(
-  references: ParsedReference[],
-  key: string,
-): ParsedReference | null {
-  const needle = normalizeKey(key);
-  let match = references.find((r) => normalizeKey(r.key) === needle);
-  if (!match) {
-    match = references.find((r) => normalizeKey(r.key).includes(needle));
-  }
-  if (!match) {
-    match = references.find((r) => r.text.toLowerCase().includes(key.toLowerCase()));
-  }
-  return match ?? null;
 }
 
 /* ------------------------------------------------------------------ */

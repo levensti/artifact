@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 import dynamic from "next/dynamic";
+import { sanitizeExtractedText, type DocumentOutlineEntry } from "@/lib/documents";
+import { getReviewDocument, type ReviewDocument } from "@/lib/client/documents";
 import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2, MessageSquare, StickyNote, X } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -160,6 +162,54 @@ export default function ReviewPage() {
   }, [clientReady, params.id]);
 
   const [paperText, setPaperText] = useState("");
+  /** PDF outline (bookmarks) captured with the text; feeds section detection. */
+  const [paperOutline, setPaperOutline] = useState<DocumentOutlineEntry[] | null>(null);
+  /**
+   * Server copy of the document for a review that was opened before. Loaded
+   * up front so the viewer can skip its per-page text extraction (10–30s on
+   * a book) and the citation context can skip re-registering. `null` after
+   * a miss means "extract as usual".
+   */
+  const [preloadFetch, setPreloadFetch] = useState<{
+    documentId: string;
+    doc: ReviewDocument | null;
+  } | null>(null);
+  const reviewDocumentId = review?.documentId ?? null;
+  useEffect(() => {
+    if (!clientReady || !review?.id || !reviewDocumentId) return;
+    let cancelled = false;
+    void getReviewDocument(review.id).then((doc) => {
+      if (cancelled) return;
+      setPreloadFetch({ documentId: reviewDocumentId, doc });
+      if (doc) {
+        setPaperOutline(null);
+        setPaperText(doc.text);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the id + link, not the review object, so title edits don't refetch.
+  }, [clientReady, review?.id, reviewDocumentId]);
+  /** The server copy for the CURRENT link; a stale fetch for a prior link is ignored. */
+  const preloadedDoc: ReviewDocument | null =
+    reviewDocumentId !== null && preloadFetch?.documentId === reviewDocumentId
+      ? preloadFetch.doc
+      : null;
+  /**
+   * Extraction is skipped while a server copy is loading or once it arrived;
+   * a miss (404) flips this to false and the viewer extracts late.
+   */
+  const skipTextExtraction =
+    reviewDocumentId !== null &&
+    !(preloadFetch?.documentId === reviewDocumentId && preloadFetch.doc === null);
+  const handleTextExtracted = useCallback(
+    (text: string, outline?: DocumentOutlineEntry[]) => {
+      setPaperOutline(outline && outline.length > 0 ? outline : null);
+      setPaperText(sanitizeExtractedText(text));
+    },
+    [],
+  );
   const [selectionInfo, setSelectionInfo] = useState<TextSelectionInfo | null>(
     null,
   );
@@ -528,7 +578,7 @@ export default function ReviewPage() {
             {review.sourceUrl ? (
               <WebViewer
                 sourceUrl={review.sourceUrl}
-                onTextExtracted={setPaperText}
+                onTextExtracted={handleTextExtracted}
                 onTextSelected={handleTextSelected}
                 onSelectionCleared={handleSelectionCleared}
                 annotations={annotations}
@@ -540,7 +590,8 @@ export default function ReviewPage() {
             ) : pdfUrl ? (
               <PdfViewer
                 pdfUrl={pdfUrl}
-                onTextExtracted={setPaperText}
+                onTextExtracted={handleTextExtracted}
+                skipTextExtraction={skipTextExtraction}
                 onTextSelected={handleTextSelected}
                 onSelectionCleared={handleSelectionCleared}
                 annotations={annotations}
@@ -579,6 +630,10 @@ export default function ReviewPage() {
             >
               <CitationContextProvider
                 paperText={paperText}
+                paperOutline={paperOutline}
+                preloaded={preloadedDoc}
+                reviewId={review.id}
+                paperTitle={review.title}
                 modelReady={modelReady}
                 onResolvedTitle={handleResolvedTitle}
                 paperLoading={!paperText}
@@ -660,6 +715,10 @@ export default function ReviewPage() {
             </button>
             <CitationContextProvider
               paperText={paperText}
+              paperOutline={paperOutline}
+              preloaded={preloadedDoc}
+              reviewId={review.id}
+              paperTitle={review.title}
               modelReady={modelReady}
               onResolvedTitle={handleResolvedTitle}
               paperLoading={!paperText}

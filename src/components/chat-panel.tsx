@@ -147,6 +147,40 @@ function ChatQuotePopover({
 /*  Chat input                                                         */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Index progress for a long document. Chat is already usable while this
+ * shows (the server answers from the opening of the document); the pill just
+ * tells the reader that deeper passages become searchable shortly. Renders
+ * nothing for short documents, once the index is ready, or before the
+ * document is registered.
+ */
+function IndexingPill() {
+  const { documentStatus } = useCitationContext();
+  if (!documentStatus || documentStatus.mode !== "retrieval") return null;
+  if (documentStatus.indexStatus === "indexing") {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] text-muted-foreground"
+        title="The full text becomes searchable when indexing finishes. Until then, answers use the opening of the document."
+      >
+        <Loader2 className="size-3 animate-spin" aria-hidden />
+        Indexing · {documentStatus.indexProgress}%
+      </span>
+    );
+  }
+  if (documentStatus.indexStatus === "failed") {
+    return (
+      <span
+        className="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
+        title={documentStatus.indexError ?? "Indexing failed; answers use the opening of the document."}
+      >
+        Index unavailable
+      </span>
+    );
+  }
+  return null;
+}
+
 function ChatInput({
   input,
   setInput,
@@ -156,6 +190,7 @@ function ChatInput({
   isPreparingPaper,
   chatThreadAnnotationId,
   focusToken,
+  hideHeader,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -167,13 +202,24 @@ function ChatInput({
   chatThreadAnnotationId: string | null;
   /** Increment to imperatively focus the composer (e.g. after a quote insert). */
   focusToken: number;
+  /** When the panel header is hidden the indexing pill renders here instead. */
+  hideHeader?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
-  const { pageMapProgress, pageMapError } = useCitationContext();
-  // Chat is available by default (platform key); only the paper-indexing step
-  // gates input. Provider/usage failures surface inline on the message.
+  const { pageMapProgress, pageMapError, preparingPhase, registrationError } =
+    useCitationContext();
+  // Chat is available by default (platform key); only the paper-preparation
+  // steps gate input. Provider/usage failures surface inline on the message.
   const inputLocked = isPreparingPaper;
+  const preparingLabel =
+    preparingPhase === "extracting"
+      ? "Extracting text from the PDF…"
+      : preparingPhase === "registering"
+        ? "Preparing document for chat…"
+        : preparingPhase === "registration_failed"
+          ? `Couldn't prepare the document: ${registrationError ?? "unknown error"}`
+          : "Indexing paper for chat…";
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -268,6 +314,11 @@ function ChatInput({
         </Button>
       </div>
       <div className="mt-1.5 space-y-0.5">
+        {hideHeader && (
+          <div className="flex justify-center">
+            <IndexingPill />
+          </div>
+        )}
         {pageMapError && !isPreparingPaper && (
           <p className="px-1 text-center text-[11px] leading-snug text-warning">
             Page index unavailable: {pageMapError} Chat still works; citation
@@ -276,11 +327,15 @@ function ChatInput({
         )}
         {isPreparingPaper && (
           <div className="px-1">
-            <p className="text-center text-[11px] leading-snug text-muted-foreground inline-flex w-full items-center justify-center gap-1.5">
-              <Loader2 className="size-3 animate-spin" aria-hidden />
-              Indexing paper for chat…
+            <p
+              className={`text-center text-[11px] leading-snug inline-flex w-full items-center justify-center gap-1.5 ${preparingPhase === "registration_failed" ? "text-warning" : "text-muted-foreground"}`}
+            >
+              {preparingPhase !== "registration_failed" && (
+                <Loader2 className="size-3 animate-spin" aria-hidden />
+              )}
+              {preparingLabel}
             </p>
-            {(() => {
+            {preparingPhase === "page_map" && (() => {
               const total = pageMapProgress?.total ?? 0;
               const done = pageMapProgress?.done ?? 0;
               const pct = total > 0 ? (done / total) * 100 : 0;
@@ -888,6 +943,7 @@ export default function ChatPanel({
                 Ask the paper
               </span>
             </div>
+            <IndexingPill />
           </div>
         )}
 
@@ -1072,6 +1128,7 @@ export default function ChatPanel({
           isStreaming={chat.isStreaming}
           modelReady={modelReady}
           isPreparingPaper={isPreparingPaper}
+          hideHeader={hideHeader}
           chatThreadAnnotationId={chatThreadAnnotationId}
           focusToken={composerFocusToken}
         />

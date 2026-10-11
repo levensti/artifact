@@ -34,15 +34,24 @@ import {
 } from "@/lib/agent-steps";
 import { retireLegacyVisualFences } from "@/lib/diagram/fence";
 import { requireUserId, HttpError, errorResponse } from "@/server/api";
-import { resolveMeteredKey, charge, meteredTokens } from "@/server/rate-limit";
+import {
+  resolveMeteredKey,
+  charge,
+  meteredTokens,
+  EMBEDDING_TOKEN_WEIGHT,
+} from "@/server/rate-limit";
 import * as store from "@/server/store";
-import { buildPaperBlock } from "./paper-block";
-import { getReadingSystemPrompt, runReadingAgent } from "@/server/reading-agent";
-import type {
-  ChatMessage,
-  ContextMetadata,
-  ParsedPaper,
-} from "@/lib/review-types";
+import * as docs from "@/server/documents";
+import { retrieveContext } from "@/server/retrieval";
+import { embedTexts } from "@/server/embeddings";
+import { documentMode, RETRIEVAL_THRESHOLD_CHARS } from "@/lib/documents";
+import { buildPaperBlock, type PaperBlockInput } from "./paper-block";
+import {
+  getReadingSystemPrompt,
+  runReadingAgent,
+  type ReadingAgentParams,
+} from "@/server/reading-agent";
+import type { ChatMessage, ContextMetadata } from "@/lib/review-types";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -77,18 +86,13 @@ interface ChatRequest {
   /** Optional per-user Fireworks key override. Server falls back to env. */
   apiKey?: string;
   /**
-   * Full paper text. For short papers (<~30k tokens) the browser sends this
-   * and the agent works directly off it. For long papers, the browser sends
-   * `parsedPaper` instead and the agent fetches sections on demand via tools.
+   * Content hash of the document being read (see `POST /api/documents`).
+   * The server resolves everything about the paper from this: short
+   * documents are injected whole from the stored text; long ones get
+   * passages retrieved for the current turn from the chunk index. The
+   * browser never sends paper text with a chat turn.
    */
-  paperContext?: string;
-  /**
-   * Structured paper representation (L1 summary, sections, references). Sent
-   * for long papers in place of `paperContext`. When present, the chat handler
-   * puts only the summary + table of contents in the system prompt and
-   * exposes `read_section` / `search_paper` / `lookup_citation` for detail.
-   */
-  parsedPaper?: ParsedPaper;
+  documentHash?: string;
   paperTitle?: string;
   arxivId?: string;
   reviewId?: string;
@@ -98,8 +102,8 @@ interface ChatRequest {
    * Selects which system prompt and tool subset to use. Default is the
    * paper/web reading agent. `"discover"` swaps in a discovery-focused
    * prompt and (since there's no paper context) only registers
-   * `arxiv_search` and `web_search` — paper-internal tools are already
-   * gated by `parsedPaper` so they self-disable in this mode.
+   * `arxiv_search` and `web_search` — `search_paper` is already gated on
+   * the document having a chunk index, so it self-disables in this mode.
    */
   mode?: "discover";
   /**
@@ -114,6 +118,102 @@ interface ChatRequest {
    * attempt it again.
    */
   skipWebSearch?: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Paper resolution                                                   */
+/* ------------------------------------------------------------------ */
+
+interface ResolvedPaper {
+  /** What the agent receives (paper text / retrieved passages / tools). */
+  agent?: Pick<
+    ReadingAgentParams,
+    | "paperContext"
+    | "retrievedContext"
+    | "paperNote"
+    | "documentTitle"
+    | "tableOfContents"
+    | "searchChunks"
+  >;
+  /** The same, shaped for `buildPaperBlock` (context budgeting). */
+  block?: PaperBlockInput;
+  /** Cost-weighted tokens spent before the stream (rewrite + embedding). */
+  meteredTokens?: number;
+}
+
+/**
+ * Turn a document hash into what this turn's prompt should carry.
+ *
+ *   - no hash / unknown document / no text yet → nothing (chat proceeds
+ *     without a paper; the client uploads text on open),
+ *   - short document → the full stored text,
+ *   - long + indexed → passages retrieved for the latest user message,
+ *     plus a `search_paper` closure for follow-up retrieval,
+ *   - long + not yet indexed → the leading slice with a note, so chat
+ *     degrades instead of blocking on the index.
+ *
+ * Also links the review to the document when it isn't yet (the hash only
+ * exists client-side, so the edge is created lazily on first contact).
+ */
+async function resolvePaper(params: {
+  userId: string;
+  documentHash: string | undefined;
+  reviewId: string | undefined;
+  apiKey: string;
+  conversation: TranscriptMessage[];
+}): Promise<ResolvedPaper> {
+  const { userId, documentHash, reviewId, apiKey, conversation } = params;
+  if (!documentHash || typeof documentHash !== "string") return {};
+  const doc = await docs.getDocumentByHash(documentHash);
+  if (!doc) return {};
+  if (reviewId) await docs.linkReviewDocument(userId, reviewId, doc.id);
+
+  const title = doc.title ?? undefined;
+  if (!doc.text) return {};
+
+  if (documentMode(doc.charCount) === "full") {
+    return {
+      agent: { paperContext: doc.text, documentTitle: title },
+      block: { text: doc.text, title },
+    };
+  }
+
+  if (doc.indexStatus !== "ready") {
+    const note =
+      doc.indexStatus === "failed"
+        ? "This document is long and building its search index failed, so only the beginning of the text is in context."
+        : "This document is long and its search index is still being built, so only the beginning of the text is in context for now.";
+    const text = doc.text.slice(0, RETRIEVAL_THRESHOLD_CHARS);
+    return {
+      agent: { paperContext: text, paperNote: note, documentTitle: title },
+      block: { text, note, title },
+    };
+  }
+
+  const [retrieval, tableOfContents] = await Promise.all([
+    retrieveContext({ documentId: doc.id, apiKey, conversation }),
+    docs.tableOfContents(doc.id),
+  ]);
+  let meteredTokens =
+    retrieval.rewriteTokens + retrieval.embedUsage.tokens * EMBEDDING_TOKEN_WEIGHT;
+  const searchChunks = async (query: string, k: number) => {
+    const [vector] = await embedTexts(apiKey, [query], (u) => {
+      meteredTokens += u.tokens * EMBEDDING_TOKEN_WEIGHT;
+    });
+    return docs.searchChunks(doc.id, vector, k);
+  };
+  return {
+    agent: {
+      retrievedContext: retrieval.block,
+      documentTitle: title,
+      tableOfContents,
+      searchChunks,
+    },
+    block: { retrieved: retrieval.block, title, tableOfContents },
+    get meteredTokens() {
+      return meteredTokens;
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -190,8 +290,7 @@ export async function POST(req: NextRequest) {
     assistantMessageId,
     resume,
     apiKey,
-    paperContext,
-    parsedPaper,
+    documentHash,
     paperTitle,
     arxivId,
     reviewId,
@@ -261,18 +360,69 @@ export async function POST(req: NextRequest) {
   } | null = null;
   // Context window; the emit loop reuses it for `context_usage` events.
   const windowTokens = getFireworksContextWindow();
+  // Reuse the user already resolved during metered key resolution to avoid a
+  // second session read on the pre-stream path.
+  let userId: string;
+  try {
+    userId = meterUserId ?? (await requireUserId());
+  } catch (err) {
+    if (err instanceof HttpError) return errorResponse(err);
+    throw err;
+  }
+
+  // Resolve the paper from the document hash: full text, retrieved passages,
+  // or a leading slice while indexing finishes. Retrieval spends a little on
+  // the query embedding + rewrite; that's metered below with the stream.
+  let paper: ResolvedPaper = {};
+  let preTurnTokens = 0;
+  // Server-owned path: the stored conversation, loaded once and reused below.
+  let stored: Awaited<ReturnType<typeof store.getConversation>> | null = null;
+  try {
+    // The latest user turn drives retrieval for long documents, so the
+    // conversation (prior turns + this message) is assembled before the
+    // paper block. Server-owned path: load the stored history once here and
+    // reuse it below; a resume / idempotent retry re-runs the stored last
+    // user turn rather than appending a new one.
+    let forRetrieval: TranscriptMessage[];
+    if (isStateful) {
+      stored = await store.getConversation(userId, reviewId!);
+      const prior: TranscriptMessage[] = stored.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const last = stored.messages[stored.messages.length - 1];
+      const reusesStored =
+        resume || (last?.role === "user" && last.id === userMessageId);
+      forRetrieval = reusesStored
+        ? prior
+        : [...prior, { role: "user", content: userMessage ?? "" }];
+    } else {
+      forRetrieval = messages!;
+    }
+    paper = await resolvePaper({
+      userId,
+      documentHash,
+      reviewId,
+      apiKey: resolvedApiKey,
+      conversation: forRetrieval,
+    });
+    preTurnTokens = paper.meteredTokens ?? 0;
+  } catch (err) {
+    if (err instanceof HttpError) return errorResponse(err);
+    // Retrieval problems degrade to "no paper in context" rather than
+    // failing the turn; the model will say it can't see the document.
+    console.error("Paper resolution failed:", err);
+    paper = {};
+  }
+
   // Fixed (uncompactable) overhead, split out for the usage breakdown: the
   // paper block's footprint in context, plus the system prompt. Conversation
   // tokens are the measured total minus this.
-  const paperTokens = estimateTokens(buildPaperBlock(paperContext, parsedPaper) ?? "");
+  const paperTokens = estimateTokens(buildPaperBlock(paper.block) ?? "");
   const overheadTokens = paperTokens + estimateTokens(systemPrompt);
   if (isStateful) {
     try {
-      // Reuse the user already resolved during metered key resolution to avoid
-      // a second session read on the pre-stream path.
-      const userId = meterUserId ?? (await requireUserId());
-      const { messages: history, contextMetadata: priorMeta } =
-        await store.getConversation(userId, reviewId!);
+      const { messages: history, contextMetadata: priorMeta } = stored!;
       const last = history[history.length - 1];
       let base: ChatMessage[];
       if (resume || (last?.role === "user" && last.id === userMessageId)) {
@@ -344,7 +494,8 @@ export async function POST(req: NextRequest) {
       // we can persist it on completion — same step logic the client renders.
       let steps: AgentStep[] = [];
       // Sum real token usage across every tool round for the reconcile below.
-      let actualTokens = 0;
+      // Seeded with the retrieval spend (query rewrite + embedding).
+      let actualTokens = preTurnTokens;
       // Largest measured context size this turn (the last round is fullest),
       // persisted so the client meter is accurate after a refresh.
       let lastContextTokens = persist?.priorMeta?.lastContextTokens ?? 0;
@@ -388,8 +539,7 @@ export async function POST(req: NextRequest) {
         await runReadingAgent({
           conversation,
           apiKey: resolvedApiKey,
-          paperContext,
-          parsedPaper,
+          ...paper.agent,
           paperTitle,
           arxivId,
           reviewId,
@@ -415,6 +565,10 @@ export async function POST(req: NextRequest) {
               },
         );
       }
+
+      // Follow-up `search_paper` calls embed their queries mid-stream; pick
+      // up that spend now that the agent is done.
+      actualTokens += (paper.meteredTokens ?? 0) - preTurnTokens;
 
       // Persist the turn (best-effort) AFTER streaming, so it never delays the
       // first token — this is also where the one Slack notification fires. The

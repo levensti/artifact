@@ -1,13 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
-  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
   Loader2,
-  Quote,
   Search,
   Wrench,
   X,
@@ -26,9 +24,7 @@ import type { AgentStep } from "@/hooks/use-chat";
 const TOOL_LABELS: Record<string, [string, string]> = {
   arxiv_search: ["Searching arXiv", "Searched arXiv"],
   web_search: ["Searching the web", "Searched the web"],
-  read_section: ["Reading section", "Read section"],
   search_paper: ["Searching the paper", "Searched the paper"],
-  lookup_citation: ["Looking up citation", "Looked up citation"],
 };
 
 function toolLabel(name: string, done: boolean): string {
@@ -40,17 +36,49 @@ function toolLabel(name: string, done: boolean): string {
 const TOOL_ICONS: Record<string, typeof Search> = {
   arxiv_search: Search,
   web_search: Search,
-  read_section: BookOpen,
   search_paper: Search,
-  lookup_citation: Quote,
 };
 
 /* ------------------------------------------------------------------ */
 /*  ThinkingIndicator                                                  */
 /* ------------------------------------------------------------------ */
 
+/**
+ * When the current assistant turn started (ms since epoch), provided by the
+ * streaming message body so every thinking indicator in the turn counts
+ * from the user's send rather than from its own mount. Null outside a
+ * streaming turn.
+ */
+export const TurnStartContext = createContext<number | null>(null);
+
+/**
+ * "Thinking" with a running elapsed-seconds counter measured from the start
+ * of the turn (see TurnStartContext), so it reads as the user's wait so far
+ * and does not reset after each tool call. The count appears from the first
+ * second; its purpose is to show a long silent reasoning pass is still alive
+ * rather than hung.
+ */
 export function ThinkingIndicator() {
-  return <ShimmerStatus label="Thinking" />;
+  const turnStart = useContext(TurnStartContext);
+  const [elapsed, setElapsed] = useState(() =>
+    turnStart ? Math.floor((Date.now() - turnStart) / 1000) : 0,
+  );
+  useEffect(() => {
+    const startedAt = turnStart ?? Date.now();
+    const tick = () => setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [turnStart]);
+  const label = elapsed >= 1 ? `Thinking · ${formatElapsed(elapsed)}` : "Thinking";
+  return <ShimmerStatus label={label} />;
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s.toString().padStart(2, "0")}s`;
 }
 
 /* ------------------------------------------------------------------ */

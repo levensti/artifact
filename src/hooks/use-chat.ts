@@ -18,11 +18,8 @@ import {
 import type { AnnotationMessage } from "@/lib/annotations";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
-import {
-  isLongPaper,
-  parseAndCachePaper,
-} from "@/lib/client/parsed-papers";
-import type { ContextUsage, ParsedPaper } from "@/lib/review-types";
+import { hashPaperText } from "@/lib/client/documents";
+import type { ContextUsage } from "@/lib/review-types";
 import { streamingStore } from "@/lib/streaming-store";
 import {
   processStreamEvent,
@@ -283,37 +280,17 @@ export function useChat({
   const hasKeyForModel = modelReady && hasUsableProvider();
 
   /**
-   * Decide what paper payload to send to /api/chat. Short papers go in as
-   * `paperContext` (full text) — the historical behavior. Long papers are
-   * parsed once and sent as `parsedPaper`, with sections fetched on demand
-   * via tools. Parse-on-first-use; cached in IndexedDB so repeat opens are
-   * free. If parsing fails, fall back to sending the full text and let the
-   * server cap or the model truncate — degrading is preferable to blocking
-   * chat on a parse error.
+   * The paper payload for /api/chat is just the document's content hash. The
+   * server holds the text (registered on open by the citation context) and
+   * decides per turn whether to inject it whole or retrieve passages from
+   * the chunk index. Nothing paper-sized crosses the wire per message.
    */
   const buildPaperPayload = useCallback(
-    async (): Promise<{
-      paperContext?: string;
-      parsedPaper?: ParsedPaper;
-    }> => {
+    async (): Promise<{ documentHash?: string }> => {
       if (!paperContext) return {};
-      if (!isLongPaper(paperContext)) return { paperContext };
-      if (!modelReady) return { paperContext };
-
-      const creds = resolveModelCredentials();
-
-      try {
-        const parsed = await parseAndCachePaper(paperContext, {
-          apiKey: creds.apiKey,
-        });
-        return { parsedPaper: parsed };
-      } catch (err) {
-        // Best-effort fallback: still chat, just with truncated/full text.
-        console.warn("Paper parse failed, sending full text instead:", err);
-        return { paperContext };
-      }
+      return { documentHash: await hashPaperText(paperContext) };
     },
-    [paperContext, modelReady],
+    [paperContext],
   );
 
   /* ---------------------------------------------------------------- */

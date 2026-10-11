@@ -21,7 +21,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 import { jsonError, parseApiErrorMessage } from "@/lib/api-utils";
 import { resolveFireworksKey } from "@/server/provider-env";
-import { FIREWORKS_BASE_URL, getFireworksModel } from "@/lib/fireworks";
+import {
+  FIREWORKS_BASE_URL,
+  getFireworksModel,
+  getFireworksReasoningEffort,
+} from "@/lib/fireworks";
 import type { PageMap } from "@/lib/review-types";
 
 const FIREWORKS_CHAT_COMPLETIONS_URL = `${FIREWORKS_BASE_URL}/chat/completions`;
@@ -299,6 +303,9 @@ async function callFireworks(
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
+      // One small extraction per page; full thinking would multiply the
+      // per-page latency by ~5 for no gain on a lookup task.
+      reasoning_effort: getFireworksReasoningEffort(),
       stream: false,
       // Output is just three small dictionaries — a few hundred tokens is
       // plenty for even a 50-section paper.
