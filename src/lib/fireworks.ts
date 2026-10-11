@@ -43,6 +43,24 @@ export function getFireworksModel(): string {
   return raw;
 }
 
+export type ReasoningEffort = "none" | "low" | "medium" | "high";
+
+/**
+ * How much hidden reasoning the chat model may do before answering, from the
+ * optional `FIREWORKS_REASONING_EFFORT` env var. Defaults to "low": measured
+ * on kimi-k3 with a retrieval-sized prompt, the provider default thinks for
+ * ~17s before the first visible token versus ~3s at "low", with answers of
+ * the same length. "none" disables thinking entirely. Sent as
+ * `reasoning_effort` on every chat-completions call; unknown values fall
+ * back to the default.
+ */
+export function getFireworksReasoningEffort(): ReasoningEffort {
+  const raw = process.env.FIREWORKS_REASONING_EFFORT?.trim().toLowerCase();
+  return raw === "none" || raw === "low" || raw === "medium" || raw === "high"
+    ? raw
+    : "low";
+}
+
 /**
  * Conservative context-window estimate (tokens) for the configured model, used
  * by the server's history-budgeting pass. Erring small only trims history a

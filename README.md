@@ -14,7 +14,7 @@ Have a domain in mind and want to get a lay of the land? Tell Artifact what you'
 
 ### Read with an AI assistant that knows the paper
 
-The assistant has the full text in context, so you can ask questions, request derivations, pull side-by-side definitions, or highlight a passage to dive deeper. Margin notes and AI threads live in a notes rail next to the page.
+The assistant has the full text in context (long documents are indexed into semantic chunks and the relevant passages are retrieved per question), so you can ask questions, request derivations, pull side-by-side definitions, or highlight a passage to dive deeper. Margin notes and AI threads live in a notes rail next to the page.
 
 ![Paper review: PDF with AI assistant and notes rail](docs/demo_screenshots/paper-review.png)
 

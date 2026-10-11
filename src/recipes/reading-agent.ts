@@ -200,14 +200,15 @@ function buildReadingPrompt(kind: ReadingKind): string {
     : "You are a research assistant working alongside someone reading a web page — an article, blog post, or documentation. Your job: help them understand it deeply and the ideas around it — explain, search, discover, connect.";
 
   // Both surfaces support long-mode: a short source arrives as full text; a
-  // long one is parsed to a summary + ToC with the source-internal tools
-  // registered (the chat route gates those tools on the parsed paper).
+  // long one arrives as passages retrieved for the current question (plus a
+  // summary + ToC when a structured parse exists), with the source-internal
+  // tools registered for follow-up retrieval.
   const sourceInContext = `How the ${noun} appears in your context:
 - For a short ${noun}, the source block contains the full text. Read it directly.
-- For a long ${noun}, the source block contains only the title, an L1 summary, and a numbered table of contents. Use \`read_section\` (by name or index), \`search_paper\` (to find passages by query), or \`lookup_citation\` (to resolve a reference) to fetch specific content. Don't pretend to read what you haven't fetched — if the summary doesn't cover a question, fetch the relevant section.`;
+- For a long ${noun}, the source block contains its table of contents and passages retrieved for the current question, in document order, each tagged with its section and page range. Ground your answer in those passages and cite their sections and pages. If they don't cover the question, call \`search_paper\` with a different query to retrieve more. Don't pretend to have read what isn't in context.`;
 
   const tools = `Tools:
-- \`read_section\`, \`search_paper\`, \`lookup_citation\` — source-internal content (long-${noun} mode only)
+- \`search_paper\` — retrieve more passages from the ${noun} (long-${noun} mode only)
 - \`arxiv_search\` — search Semantic Scholar + arXiv for papers
 - ${WEB_SEARCH_NOTE}`;
 

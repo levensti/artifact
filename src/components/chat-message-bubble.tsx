@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useLayoutEffect, useMemo } from "react";
+import { useContext, useLayoutEffect, useMemo, useState } from "react";
 import { AlertCircle, KeyRound, RotateCw } from "lucide-react";
 import type { ArxivSearchResult } from "@/lib/explore";
 import type { ChatAssistantBlock, ChatMessage } from "@/lib/review-types";
@@ -8,6 +8,7 @@ import type { AnnotationMessage } from "@/lib/annotations";
 import MarkdownMessage, { MarkdownStreamingBoundary } from "./markdown-message";
 import {
   ThinkingIndicator,
+  TurnStartContext,
   ToolCallStep,
   AgentSteps,
 } from "./chat-step-renderers";
@@ -111,21 +112,26 @@ export function InterleavedBlocks({ blocks }: { blocks: ChatAssistantBlock[] }) 
 function StreamingMessageBody() {
   const agentSteps = useStreamingSteps();
   const scrollIfPinned = useContext(ChatScrollContext);
+  // The turn's start, fixed at first render of the streaming bubble (which
+  // appears when the user sends), so thinking counters measure total wait.
+  const [turnStart] = useState(() => Date.now());
   // Runs after React commits the new typewriter frame, so scrollHeight is
   // up to date. Doing this in a store subscriber would read stale layout.
   useLayoutEffect(() => {
     scrollIfPinned();
   }, [agentSteps, scrollIfPinned]);
   return (
-    <div className="max-w-full text-[15px] leading-relaxed text-foreground">
-      {agentSteps.length === 0 ? (
-        <ThinkingIndicator />
-      ) : (
-        <MarkdownStreamingBoundary>
-          <AgentSteps steps={agentSteps} />
-        </MarkdownStreamingBoundary>
-      )}
-    </div>
+    <TurnStartContext.Provider value={turnStart}>
+      <div className="max-w-full text-[15px] leading-relaxed text-foreground">
+        {agentSteps.length === 0 ? (
+          <ThinkingIndicator />
+        ) : (
+          <MarkdownStreamingBoundary>
+            <AgentSteps steps={agentSteps} />
+          </MarkdownStreamingBoundary>
+        )}
+      </div>
+    </TurnStartContext.Provider>
   );
 }
 

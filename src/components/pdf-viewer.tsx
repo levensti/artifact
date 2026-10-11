@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { DocumentOutlineEntry } from "@/lib/documents";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -21,7 +22,13 @@ export interface TextSelectionInfo {
 interface PdfViewerProps {
   /** The URL to load the PDF from. Passed directly to react-pdf. */
   pdfUrl: string;
-  onTextExtracted: (text: string) => void;
+  onTextExtracted: (text: string, outline?: DocumentOutlineEntry[]) => void;
+  /**
+   * Skip the per-page text extraction pass (the host already has the text
+   * from the server). Flipping this back to false after load triggers the
+   * pass late, for the case where the server copy turned out to be missing.
+   */
+  skipTextExtraction?: boolean;
   onTextSelected: (info: TextSelectionInfo) => void;
   onSelectionCleared: () => void;
   annotations?: Annotation[];
@@ -50,6 +57,7 @@ function clientXY(e: MouseEvent | TouchEvent): { x: number; y: number } {
 export default function PdfViewer({
   pdfUrl,
   onTextExtracted,
+  skipTextExtraction = false,
   onTextSelected,
   onSelectionCleared,
   annotations = [],
@@ -207,7 +215,8 @@ export default function PdfViewer({
             .join(" ");
           pages.push(`[Page ${i}]\n${strings}`);
         }
-        onTextExtracted(pages.join("\n\n"));
+        const outline = await extractOutline(pdf);
+        onTextExtracted(pages.join("\n\n"), outline);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (!msg.includes("Cannot read properties of null")) {
@@ -218,17 +227,22 @@ export default function PdfViewer({
     [onTextExtracted],
   );
 
-  const onDocumentLoadSuccess = useCallback(
-    (result: { numPages: number }) => {
-      setNumPages(result.numPages);
-      setLoading(false);
-      const pdfProxy = result as unknown as PDFDocumentProxy;
-      if (typeof pdfProxy.getPage === "function") {
-        extractText(pdfProxy);
-      }
-    },
-    [extractText],
-  );
+  const [loadedPdf, setLoadedPdf] = useState<PDFDocumentProxy | null>(null);
+  const extractedRef = useRef(false);
+  const onDocumentLoadSuccess = useCallback((result: { numPages: number }) => {
+    setNumPages(result.numPages);
+    setLoading(false);
+    const pdfProxy = result as unknown as PDFDocumentProxy;
+    if (typeof pdfProxy.getPage === "function") setLoadedPdf(pdfProxy);
+  }, []);
+
+  // Extract once the document is loaded unless the host already has the
+  // text; re-evaluated if `skipTextExtraction` flips to false later.
+  useEffect(() => {
+    if (!loadedPdf || skipTextExtraction || extractedRef.current) return;
+    extractedRef.current = true;
+    extractText(loadedPdf);
+  }, [loadedPdf, skipTextExtraction, extractText]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -674,4 +688,48 @@ export default function PdfViewer({
       </div>
     </div>
   );
+}
+
+/**
+ * Flatten the PDF's outline (bookmarks) into `{ title, page, depth }`
+ * entries, resolving each destination to a 1-based page. Best-effort: any
+ * entry that can't be resolved is skipped, and a PDF without an outline
+ * yields an empty array (the server then falls back to heading detection).
+ */
+async function extractOutline(pdf: PDFDocumentProxy): Promise<DocumentOutlineEntry[]> {
+  const out: DocumentOutlineEntry[] = [];
+  let items: Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>;
+  try {
+    items = await pdf.getOutline();
+  } catch {
+    return out;
+  }
+  if (!items) return out;
+
+  const resolvePage = async (dest: unknown): Promise<number | null> => {
+    try {
+      let explicit = dest;
+      if (typeof dest === "string") explicit = await pdf.getDestination(dest);
+      if (!Array.isArray(explicit) || explicit.length === 0) return null;
+      const ref = explicit[0];
+      if (typeof ref === "number") return ref + 1;
+      const index = await pdf.getPageIndex(ref);
+      return index + 1;
+    } catch {
+      return null;
+    }
+  };
+
+  const walk = async (nodes: typeof items, depth: number) => {
+    for (const node of nodes) {
+      if (out.length >= 2000) return;
+      const page = await resolvePage(node.dest);
+      if (page !== null && node.title?.trim()) {
+        out.push({ title: node.title.trim(), page, depth });
+      }
+      if (node.items?.length) await walk(node.items, depth + 1);
+    }
+  };
+  await walk(items, 0);
+  return out;
 }

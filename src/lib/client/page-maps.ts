@@ -8,19 +8,15 @@
 
 import type { PageMap } from "@/lib/review-types";
 import { apiFetch } from "@/lib/client/api";
-import {
-  hashPaperText,
-  LONG_PAPER_THRESHOLD_CHARS,
-} from "@/lib/client/parsed-papers";
+import { hashPaperText } from "@/lib/client/documents";
 
 /**
- * Char-count threshold above which we skip the page-map LLM call.
- * Locked to `LONG_PAPER_THRESHOLD_CHARS` so the two paths are
- * complementary: short papers get a page map (no full parse), long
- * papers get a full parse (no page map). Avoids paying both LLM costs
- * in an overlap window.
+ * Char-count threshold above which we skip the page-map LLM call: it fans
+ * out one model call per page, which is fine for a paper and wasteful for a
+ * book. Long documents get § chips from the server's section tree instead;
+ * figure/table chips fall back to scanning the text.
  */
-export const PAGE_MAP_MAX_CHARS = LONG_PAPER_THRESHOLD_CHARS;
+export const PAGE_MAP_MAX_CHARS = 300_000;
 
 export function hasPageMapAnchors(
   map: PageMap | null | undefined,
@@ -32,7 +28,7 @@ export async function getCachedPageMap(
   hash: string,
 ): Promise<PageMap | null> {
   const { map } = await apiFetch<{ map: PageMap | null }>(
-    `/api/page-maps/${encodeURIComponent(hash)}`,
+    `/api/documents/${encodeURIComponent(hash)}/page-map`,
   );
   return map;
 }
@@ -41,7 +37,7 @@ export async function cachePageMap(
   hash: string,
   map: PageMap,
 ): Promise<void> {
-  await apiFetch(`/api/page-maps/${encodeURIComponent(hash)}`, {
+  await apiFetch(`/api/documents/${encodeURIComponent(hash)}/page-map`, {
     method: "PUT",
     body: { map },
   });

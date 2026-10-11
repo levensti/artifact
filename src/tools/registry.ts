@@ -8,9 +8,7 @@
 import type { ToolDefinition } from "./types";
 import { arxivSearchTool } from "./arxiv-search";
 import { webSearchTool } from "./web-search";
-import { readSectionTool } from "./read-section";
 import { searchPaperTool } from "./search-paper";
-import { lookupCitationTool } from "./lookup-citation";
 import { paperDetailsTool } from "./paper-details";
 import { submitPicksTool } from "./submit-picks";
 
@@ -22,9 +20,7 @@ const ALL_TOOLS: ToolDefinition[] = [
   // Paper-internal tools — only useful when the paper has been parsed
   // into sections. They no-op gracefully (returning a clear error) when
   // the agent has only flat paper text.
-  readSectionTool,
   searchPaperTool,
-  lookupCitationTool,
   // Search tools — find related papers and ground answers in web sources.
   arxivSearchTool,
   webSearchTool,

@@ -84,75 +84,10 @@ export interface ContextUsage {
   overheadTokens?: number;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Structured paper representation                                    */
-/* ------------------------------------------------------------------ */
-
-/**
- * A section of a parsed paper. Body text is the section's content
- * verbatim; level is 1 for top-level (Introduction) and 2/3 for nested.
- */
-export interface ParsedSection {
-  heading: string;
-  level: number;
-  body: string;
-  startPage?: number;
-}
-
-/**
- * A bibliographic reference resolved from the paper's reference list.
- * Key matches the in-text citation form (e.g. "[27]" or "Vaswani2017").
- */
-export interface ParsedReference {
-  key: string;
-  text: string;
-  doi?: string;
-  arxivId?: string;
-}
-
-/** A figure identified by caption. */
-export interface ParsedFigure {
-  id: string;
-  caption: string;
-  page?: number;
-}
-
-/** A table identified by caption. Same shape as ParsedFigure. */
-export type ParsedTable = ParsedFigure;
-
-/**
- * Structured representation of a paper, produced by the parsing endpoint
- * and cached per content hash in IndexedDB. Used by section-aware tools
- * (read_section, search_paper, lookup_citation) and the L1-card chat
- * strategy for long papers.
- */
-export interface ParsedPaper {
-  title: string;
-  abstract: string;
-  sections: ParsedSection[];
-  references: ParsedReference[];
-  figures: ParsedFigure[];
-  /**
-   * Tables. Optional for backward compatibility: papers parsed before the
-   * tables/figures split shared a single `figures` array, so older cached
-   * entries don't have this field. Resolvers fall back to scanning
-   * `figures` for `Table N`-prefixed ids when this is missing.
-   */
-  tables?: ParsedTable[];
-  /**
-   * 800-1500 word L1 paper card: central claim, methods, key results,
-   * novelty, limitations. Always sent to the chat handler in long-paper
-   * mode; sections are fetched on demand via tools.
-   */
-  summary: string;
-  parsedAt: string;
-  parsedWith: { modelId: string };
-}
-
 /**
  * Lightweight citation-to-page mapping for a single paper. Produced by a
- * small LLM call that runs on every paper open (independent of the full
- * `ParsedPaper`). Keys are the citation token as it appears in chat
+ * small LLM call that runs on every short paper open. Keys are the
+ * citation token as it appears in chat
  * (e.g. "3.2" for a section, "1" for "Figure 1"); values are PDF page
  * numbers. Newer maps also carry short evidence snippets copied from the
  * mapped page; the citation resolver uses those as precise scroll anchors.
@@ -195,6 +130,9 @@ export interface PaperReview {
   importedFromName?: string;
   /** Project this review belongs to. Null = ungrouped. */
   projectId?: string | null;
+  /** Content-addressed document this review reads, once linked (set on the
+   *  first open after upload). Lets a reopen skip text extraction. */
+  documentId?: string | null;
 }
 
 export interface Project {

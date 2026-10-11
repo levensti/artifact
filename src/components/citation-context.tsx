@@ -10,26 +10,46 @@ import {
   type ReactNode,
 } from "react";
 import {
-  getCachedParsedPaper,
-  hashPaperText,
-  isLongPaper,
-  parseAndCachePaper,
-} from "@/lib/client/parsed-papers";
-import {
   fetchAndCachePageMap,
   getCachedPageMap,
   hasPageMapAnchors,
   PAGE_MAP_MAX_CHARS,
 } from "@/lib/client/page-maps";
+import {
+  getDocumentSections,
+  getDocumentStatus,
+  hashPaperText,
+  isDocumentIndexing,
+  isDocumentReady,
+  registerDocument,
+  sectionsToPageMap,
+  type DocumentStatus,
+  type ReviewDocument,
+} from "@/lib/client/documents";
 import { resolveModelCredentials } from "@/lib/keys";
-import type { PageMap, ParsedPaper } from "@/lib/review-types";
+import type { DocumentOutlineEntry } from "@/lib/documents";
+import type { PageMap } from "@/lib/review-types";
 
 interface CitationContextValue {
-  parsedPaper: ParsedPaper | null;
   /** LLM-derived map from citation tokens to PDF page numbers. */
   pageMap: PageMap | null;
-  /** Raw extracted paper text — used as a fallback resolver when parsedPaper isn't available. */
+  /** Raw extracted paper text — the fallback resolver when the page map has no entry. */
   paperText: string | null;
+  /**
+   * Server-side document record for `paperText` (content-hashed, shared
+   * across readers). Null until registration completes. Chat sends only
+   * `documentStatus.hash`; long documents also wait on `indexStatus`.
+   */
+  documentStatus: DocumentStatus | null;
+  /**
+   * Which step chat is waiting on while `parseReady` is false:
+   * extracting text in the browser, registering the document with the
+   * server, or (short papers) building the page map. Null when ready.
+   * `registration_failed` keeps chat locked until the failsafe, with the
+   * error in `registrationError`.
+   */
+  preparingPhase: "extracting" | "registering" | "page_map" | "registration_failed" | null;
+  registrationError: string | null;
   /**
    * True once the parse the chat depends on is loaded — full parse for long
    * papers, page map for short ones. Also true when there's no paper or no
@@ -69,9 +89,11 @@ function normalizeForTitleMatch(s: string): string {
 }
 
 const Ctx = createContext<CitationContextValue>({
-  parsedPaper: null,
   pageMap: null,
   paperText: null,
+  documentStatus: null,
+  preparingPhase: null,
+  registrationError: null,
   parseReady: true,
   pageMapProgress: null,
   pageMapError: null,
@@ -80,6 +102,18 @@ const Ctx = createContext<CitationContextValue>({
 
 interface ProviderProps {
   paperText: string | null | undefined;
+  /** PDF outline captured with the text; feeds server-side section detection. */
+  paperOutline?: DocumentOutlineEntry[] | null;
+  /** Review to link to the document on registration. */
+  reviewId?: string;
+  /**
+   * Server copy of the document (status + sections) when the review was
+   * opened before. Skips the registration upload; `paperText` is then the
+   * stored text the host already set.
+   */
+  preloaded?: ReviewDocument | null;
+  /** Title hint stored on first registration (the parse/page map refine it). */
+  paperTitle?: string;
   /**
    * Whether a usable provider is configured — needed to call the page-map LLM
    * endpoint. Optional: when false, we still serve cached page maps but won't
@@ -103,17 +137,24 @@ interface ProviderProps {
 
 export function CitationContextProvider({
   paperText,
+  paperOutline,
+  reviewId,
+  preloaded,
+  paperTitle,
   modelReady,
   onResolvedTitle,
   paperLoading,
   children,
 }: ProviderProps) {
-  const [parsedPaper, setParsedPaper] = useState<ParsedPaper | null>(null);
   const [pageMap, setPageMap] = useState<PageMap | null>(null);
   const [pageMapProgress, setPageMapProgress] = useState<
     { done: number; total: number } | null
   >(null);
   const [pageMapError, setPageMapError] = useState<string | null>(null);
+  const [documentStatus, setDocumentStatus] = useState<DocumentStatus | null>(null);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  /** Page map synthesized from the server's section tree (long documents). */
+  const [sectionPageMap, setSectionPageMap] = useState<PageMap | null>(null);
   // Failsafe: unlock chat after 40s even if parsing hasn't finished. Parse
   // keeps running in the background and the cache picks it up once ready;
   // chat falls back to sending full paper text in the meantime. Track the
@@ -147,46 +188,87 @@ export function CitationContextProvider({
   // short text, etc.) won't pass it and we keep the placeholder.
   useEffect(() => {
     const candidate =
-      parsedPaper?.title?.trim() || pageMap?.title?.trim() || "";
+      pageMap?.title?.trim() || documentStatus?.title?.trim() || "";
     if (!candidate || !paperText) return;
     const needle = normalizeForTitleMatch(candidate);
     if (needle.length < 4) return;
     const haystack = normalizeForTitleMatch(paperText.slice(0, 1000));
     if (!haystack.includes(needle)) return;
     onResolvedTitle?.(candidate);
-  }, [parsedPaper, pageMap, paperText, onResolvedTitle]);
+  }, [documentStatus, pageMap, paperText, onResolvedTitle]);
 
-  // Load cached parsed paper whenever the paper text changes. Re-checks
-  // the cache periodically so a parse triggered mid-chat picks up here too.
+  // Register the document with the server as soon as the text is extracted,
+  // then poll while a long document is being indexed. The outline is sent
+  // along for section detection. Registration is idempotent per hash, so a
+  // second reader of the same paper just links their review and gets the
+  // existing index.
   useEffect(() => {
     let cancelled = false;
+    let timer: number | null = null;
+    setDocumentStatus(null);
+    setSectionPageMap(null);
+    setRegistrationError(null);
+    if (!paperText) return;
 
-    const load = async () => {
-      if (!paperText) {
-        if (!cancelled) setParsedPaper(null);
-        return;
-      }
-      try {
-        const hash = await hashPaperText(paperText);
-        const cached = await getCachedParsedPaper(hash);
-        if (!cancelled) setParsedPaper(cached);
-      } catch {
-        /* ignore — citations degrade to no-hover/no-jump */
+    const poll = async (hash: string) => {
+      const status = await getDocumentStatus(hash);
+      if (cancelled) return;
+      if (status) setDocumentStatus(status);
+      if (isDocumentIndexing(status)) {
+        timer = window.setTimeout(() => void poll(hash), 2000);
       }
     };
 
-    void load();
-    if (!paperText) return;
-    const interval = window.setInterval(load, 5000);
+    const run = async () => {
+      try {
+        // Reopen: the server already has this document. Skip the upload and
+        // use its status + sections directly.
+        if (preloaded) {
+          setDocumentStatus(preloaded.status);
+          setSectionPageMap(sectionsToPageMap(preloaded.sections));
+          if (isDocumentIndexing(preloaded.status)) {
+            timer = window.setTimeout(() => void poll(preloaded.status.hash), 2000);
+          }
+          return;
+        }
+        const status = await registerDocument(paperText, {
+          title: paperTitle,
+          outline: paperOutline,
+          reviewId,
+          apiKey: resolveModelCredentials().apiKey || undefined,
+        });
+        if (cancelled) return;
+        setDocumentStatus(status);
+        if (isDocumentIndexing(status)) {
+          timer = window.setTimeout(() => void poll(status.hash), 2000);
+        }
+        // Sections exist from registration on (no need to wait for the
+        // index); they back §-chip resolution for long documents.
+        const sections = await getDocumentSections(status.hash);
+        if (!cancelled) setSectionPageMap(sectionsToPageMap(sections));
+      } catch (err) {
+        // Chat still works without a document (the server just has no paper
+        // to put in context) once the failsafe unlocks it; surface the error
+        // so the user isn't staring at a spinner with no explanation.
+        console.warn("Document registration failed:", err);
+        if (!cancelled) {
+          setRegistrationError(err instanceof Error ? err.message : "Registration failed.");
+        }
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (timer !== null) window.clearTimeout(timer);
     };
+    // paperOutline / paperTitle / reviewId / preloaded arrive with the text;
+    // keying on the text alone avoids re-registering on every title refinement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperText]);
 
   // Fetch (or load cached) page map whenever paper text changes. Runs for
   // any paper, regardless of length — short papers especially benefit
-  // since they have no `parsedPaper` to fall back on.
+  // since § chips have nothing else to resolve against there.
   useEffect(() => {
     let cancelled = false;
 
@@ -260,34 +342,28 @@ export function CitationContextProvider({
     };
   }, [paperText, modelReady]);
 
-  // Eagerly kick off the full parse for long papers when the paper text and
-  // credentials are available. Without this the parse only fires lazily on
-  // first chat submit, which would deadlock a chat-loading gate.
-  useEffect(() => {
-    if (!paperText || !isLongPaper(paperText)) return;
-    if (parsedPaper) return;
-    if (!modelReady) return;
-    const creds = resolveModelCredentials();
-
-    let cancelled = false;
-    void parseAndCachePaper(paperText, { apiKey: creds.apiKey })
-      .then((parsed) => {
-        if (!cancelled) setParsedPaper(parsed);
-      })
-      .catch(() => {
-        /* polling above will re-check the cache; chat falls back if it never arrives */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [paperText, modelReady, parsedPaper]);
+  const preparingPhase = useMemo<CitationContextValue["preparingPhase"]>(() => {
+    if (paperLoading) return "extracting";
+    if (!paperText || !modelReady) return null;
+    if (registrationError) return "registration_failed";
+    if (!isDocumentReady(documentStatus)) return "registering";
+    if (documentStatus?.mode === "retrieval") return null;
+    if (pageMapError || pageMap !== null) return null;
+    return "page_map";
+  }, [paperLoading, paperText, modelReady, registrationError, documentStatus, pageMap, pageMapError]);
 
   const parseReady = useMemo(() => {
     if (paperLoading) return false;
     if (!paperText) return true;
     if (!modelReady) return true;
     if (timedOutFor === paperText) return true;
-    if (isLongPaper(paperText)) return parsedPaper !== null;
+    // The server must hold the text before chat can see the paper at all. A
+    // long document's index building is not a gate: chat answers from the
+    // leading slice meanwhile and the header shows progress.
+    if (!isDocumentReady(documentStatus)) return false;
+    // Retrieval mode needs no page map up front: passages come from the
+    // chunk index and section chips from the section tree.
+    if (documentStatus?.mode === "retrieval") return true;
     // Page-map failure is terminal: unlock chat in degraded mode rather than
     // sitting on the banner until the 40s failsafe. The user sees the error
     // and can still chat — citations just fall back to regex resolution.
@@ -297,10 +373,10 @@ export function CitationContextProvider({
     paperLoading,
     paperText,
     modelReady,
-    parsedPaper,
     pageMap,
     pageMapError,
     timedOutFor,
+    documentStatus,
   ]);
 
   const scrollToPage = useCallback(
@@ -332,20 +408,38 @@ export function CitationContextProvider({
     [],
   );
 
+  const effectivePageMap = useMemo<PageMap | null>(() => {
+    if (!sectionPageMap) return pageMap;
+    if (!pageMap) return sectionPageMap;
+    return {
+      ...pageMap,
+      sections: { ...sectionPageMap.sections, ...pageMap.sections },
+      anchors: {
+        sections: { ...sectionPageMap.anchors?.sections, ...pageMap.anchors?.sections },
+        figures: pageMap.anchors?.figures ?? {},
+        tables: pageMap.anchors?.tables ?? {},
+      },
+    };
+  }, [pageMap, sectionPageMap]);
+
   const value = useMemo(
     () => ({
-      parsedPaper,
-      pageMap,
+      pageMap: effectivePageMap,
       paperText: paperText ?? null,
+      documentStatus,
+      preparingPhase,
+      registrationError,
       parseReady,
       pageMapProgress,
       pageMapError,
       scrollToPage,
     }),
     [
-      parsedPaper,
-      pageMap,
+      effectivePageMap,
       paperText,
+      documentStatus,
+      preparingPhase,
+      registrationError,
       parseReady,
       pageMapProgress,
       pageMapError,

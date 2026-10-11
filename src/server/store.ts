@@ -144,6 +144,7 @@ function rowToReview(r: {
   importedFromShareToken?: string | null;
   importedFromName?: string | null;
   projectId?: string | null;
+  documentId?: string | null;
 }): PaperReview {
   return {
     id: r.id,
@@ -154,6 +155,7 @@ function rowToReview(r: {
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
     projectId: r.projectId ?? null,
+    documentId: r.documentId ?? null,
     ...(r.importedAt ? { importedAt: r.importedAt.toISOString() } : {}),
     ...(r.importedFromShareToken
       ? { importedFromShareToken: r.importedFromShareToken }
@@ -863,54 +865,6 @@ export async function deletePdfBlobRecord(
   if (!row) return null;
   await prisma.pdfBlob.delete({ where: { id } });
   return row.storagePath;
-}
-
-/* ── Parsed papers (per-user content cache) ───────────────────── */
-
-import type { ParsedPaper, PageMap } from "@/lib/review-types";
-
-export async function getCachedParsedPaper(
-  userId: string,
-  hash: string,
-): Promise<ParsedPaper | null> {
-  const row = await prisma.parsedPaper.findUnique({
-    where: { userId_hash: { userId, hash } },
-  });
-  return row ? (row.parsed as unknown as ParsedPaper) : null;
-}
-
-export async function cacheParsedPaper(
-  userId: string,
-  hash: string,
-  parsed: ParsedPaper,
-): Promise<void> {
-  await prisma.parsedPaper.upsert({
-    where: { userId_hash: { userId, hash } },
-    create: { userId, hash, parsed: parsed as unknown as Prisma.InputJsonValue },
-    update: { parsed: parsed as unknown as Prisma.InputJsonValue },
-  });
-}
-
-export async function getCachedPageMap(
-  userId: string,
-  hash: string,
-): Promise<PageMap | null> {
-  const row = await prisma.pageMap.findUnique({
-    where: { userId_hash: { userId, hash } },
-  });
-  return row ? (row.map as unknown as PageMap) : null;
-}
-
-export async function cachePageMap(
-  userId: string,
-  hash: string,
-  map: PageMap,
-): Promise<void> {
-  await prisma.pageMap.upsert({
-    where: { userId_hash: { userId, hash } },
-    create: { userId, hash, map: map as unknown as Prisma.InputJsonValue },
-    update: { map: map as unknown as Prisma.InputJsonValue },
-  });
 }
 
 /* ── Discover queries + recommendations ───────────────────────── */

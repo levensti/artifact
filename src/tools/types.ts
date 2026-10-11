@@ -49,17 +49,19 @@ export interface ToolContext {
   /** Internal review ID for data persistence. */
   reviewId?: string;
   /**
-   * Structured representation of the paper, when available. Used by
-   * paper-internal tools (read_section, search_paper, lookup_citation)
-   * to access the paper without dragging the full text into every prompt.
-   * Populated by the chat handler from the request body.
-   */
-  parsedPaper?: import("@/lib/review-types").ParsedPaper;
-  /**
    * User-provided Exa API key. When present, `web_search` uses this;
    * otherwise the tool returns a sentinel and the UI prompts for a key.
    */
   exaApiKey?: string;
+  /**
+   * Vector search over the document's chunk index, when the document is
+   * indexed. `search_paper` prefers this over lexical scoring. Supplied by
+   * the chat route (which has the DB); absent in offline evals.
+   */
+  searchChunks?: (
+    query: string,
+    k: number,
+  ) => Promise<import("@/lib/documents").ChunkHit[]>;
 }
 
 /* ------------------------------------------------------------------ */

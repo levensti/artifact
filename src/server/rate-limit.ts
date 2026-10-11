@@ -78,6 +78,13 @@ function dayKey(userId: string): string {
 export const CACHE_READ_WEIGHT = 0.1;
 
 /**
+ * Weight applied to embedding tokens. Embeddings bill at roughly 1–2% of the
+ * chat model's input price, so indexing a textbook (~500k embedding tokens)
+ * counts as ~10k chat tokens rather than wiping out the hourly bucket.
+ */
+export const EMBEDDING_TOKEN_WEIGHT = 0.02;
+
+/**
  * Tokens charged against a user's budget for one usage report: full-rate input
  * and output, cache reads discounted by {@link CACHE_READ_WEIGHT}. Returns a
  * float; `charge` rounds when it debits.

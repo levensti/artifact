@@ -19,6 +19,7 @@ import { parseApiErrorMessage } from "@/lib/api-utils";
 import {
   FIREWORKS_BASE_URL,
   getFireworksModel,
+  getFireworksReasoningEffort,
   type ChatUsage,
 } from "@/lib/fireworks";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
@@ -74,6 +75,7 @@ function chatRequestInit(
         { role: "user", content: prompt },
       ],
       stream: opts.stream,
+      reasoning_effort: getFireworksReasoningEffort(),
       // Ask for the final usage chunk so a streaming caller can reconcile spend.
       ...(opts.stream ? { stream_options: { include_usage: true } } : {}),
     }),
