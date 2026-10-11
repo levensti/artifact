@@ -1,4 +1,3 @@
-import { MonoLabel } from "@/components/folio";
 import { GithubMark } from "@/components/landing/landing-icons";
 
 export interface LandingOpenSourceProps {
@@ -17,7 +16,7 @@ const PRINCIPLES: Principle[] = [
   },
   {
     title: "Free usage, every day",
-    body: "Every account includes a daily allowance on the house — sign in and start chatting. No key, no card, no paid tier.",
+    body: "Every account includes a daily allowance on the house. Sign in and start chatting. No key, no card, no paid tier.",
   },
   {
     title: "Bring your own key",
@@ -37,16 +36,14 @@ export function LandingOpenSource({ githubUrl }: LandingOpenSourceProps) {
   return (
     <section
       id="open-source"
-      className="border-t"
-      style={{
-        borderColor: "color-mix(in srgb, var(--border) 70%, transparent)",
-        background: "var(--background)",
-      }}
+      className="border-t border-border"
     >
       <div className="mx-auto max-w-[1120px] px-6 py-20 sm:py-24 md:px-10">
         <div className="grid grid-cols-1 gap-x-16 gap-y-10 lg:grid-cols-[5fr_6fr]">
           <header>
-            <MonoLabel>Principles</MonoLabel>
+            <p className="landing-label">
+              <b>[04]</b> Open source
+            </p>
             <h2 className="landing-h2 mt-4">
               Free, open source,
               <br />
@@ -54,13 +51,13 @@ export function LandingOpenSource({ githubUrl }: LandingOpenSourceProps) {
             </h2>
             <p className="landing-lede mt-4 max-w-[460px]">
               Artifact is built in the open. Read the code, file an issue,
-              send a patch — contributions are very much welcome.
+              send a patch. Contributions are very much welcome.
             </p>
             <a
               href={githubUrl}
               target="_blank"
               rel="noreferrer noopener"
-              className="mt-7 inline-flex h-10 items-center gap-2 rounded-md border border-border bg-transparent px-[18px] text-[13.5px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
+              className="mt-7 inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-[18px] text-[13.5px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
             >
               <GithubMark className="size-3.25" />
               View on GitHub
@@ -71,22 +68,13 @@ export function LandingOpenSource({ githubUrl }: LandingOpenSourceProps) {
             {PRINCIPLES.map((p) => (
               <div
                 key={p.title}
-                className="border-t pt-4"
-                style={{
-                  borderColor:
-                    "color-mix(in srgb, var(--border) 80%, transparent)",
-                }}
+                className="border-t border-border pt-4"
               >
-                <h4 className="mt-1 font-sans text-[15px] font-semibold tracking-[-0.012em] text-foreground">
+                <h4 className="mt-1 font-sans text-[14.5px] font-medium tracking-[-0.01em] text-foreground">
                   {p.title}
                 </h4>
                 <p
-                  className="mt-1.5 text-[13.5px] leading-[1.6]"
-                  style={{
-                    fontFamily: "var(--font-reading)",
-                    color:
-                      "color-mix(in srgb, var(--foreground) 72%, transparent)",
-                  }}
+                  className="mt-1.5 text-[13.5px] leading-[1.6] text-muted-foreground"
                 >
                   {p.body}
                 </p>

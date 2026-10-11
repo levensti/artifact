@@ -10,12 +10,8 @@ import { MonoLabel } from "@/components/folio";
 export function LandingWorkspace() {
   return (
     <div
-      className="overflow-hidden rounded-xl border bg-card text-left"
-      style={{
-        borderColor: "color-mix(in srgb, var(--border) 90%, transparent)",
-        boxShadow:
-          "var(--shadow-lg), 0 30px 80px -20px color-mix(in srgb, var(--primary) 22%, transparent)",
-      }}
+      className="overflow-hidden rounded-lg border border-border bg-card text-left"
+      style={{ boxShadow: "var(--shadow-lg)" }}
     >
       {/* Window chrome */}
       <div

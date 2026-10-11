@@ -1,17 +1,44 @@
 "use client";
 
-import { ArrowUp, Globe, Loader2, Search, Upload } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUp,
+  Compass,
+  FileText,
+  Globe,
+  Loader2,
+  Search,
+  Upload,
+} from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
-import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+} from "react";
+import Link from "next/link";
 import NewReviewDialog from "@/components/new-review-dialog";
-import { ItalicAccent, MonoLabel } from "@/components/folio";
-import { createOrGetReview, getReviewByArxivId } from "@/lib/reviews";
+import { MonoLabel } from "@/components/folio";
+import {
+  areReviewsHydrated,
+  createOrGetReview,
+  getReviewByArxivId,
+  getReviews,
+  REVIEWS_UPDATED_EVENT,
+  type PaperReview,
+} from "@/lib/reviews";
 import { cn, extractArxivId } from "@/lib/utils";
 import type { ArxivSearchResult } from "@/lib/explore";
 import { useRouter } from "next/navigation";
 
 /** The importer modes a secondary action can deep-link into. */
 type ImportMode = "local" | "web";
+
+/** How many recent reviews the home page lists under "Continue reading". */
+const RECENT_LIMIT = 6;
 
 export default function HomeClient() {
   // SettingsOpenerProvider is mounted *inside* DashboardLayout, so any hook
@@ -38,57 +65,50 @@ function HomeBody() {
   return (
     <>
       <div
-        className="relative flex h-full flex-col overflow-y-auto"
+        className="flex h-full flex-col overflow-y-auto"
         style={{ background: "var(--reader-mat)" }}
       >
-        {/* Ambient watermark — the Artifact mark at large scale */}
-        <svg
-          viewBox="4 4 24 24"
-          aria-hidden
-          className="pointer-events-none absolute right-[8%] top-[12%] size-80 opacity-[0.025]"
-        >
-          <polygon
-            points="5,24 12,7 19,24"
-            fill="currentColor"
-            opacity="0.55"
-          />
-          <polygon points="13,24 20,12 27,24" fill="currentColor" />
-        </svg>
-
         {/* Same content column as Discover/Journal so navigating between pages
             doesn't reflow the layout. */}
         <div className="mx-auto w-full max-w-4xl px-6 pb-16 pt-12 sm:px-8 sm:pt-14">
           {/* Title mirrors the Discover/Journal PageHeader (size, weight, and
               top position) so navigating between pages doesn't shift the
               header. */}
-          <h1
-            className="text-[27px] font-semibold leading-tight tracking-[-0.022em] text-foreground"
-            style={{ textWrap: "balance" }}
-          >
-            What would you like to explore <ItalicAccent>today?</ItalicAccent>
+          <h1 className="text-[27px] font-semibold leading-tight tracking-[-0.022em] text-foreground">
+            Home
           </h1>
+          <p className="mt-1 text-[14px] text-muted-foreground">
+            Open a paper to start a review, or pick up where you left off.
+          </p>
 
           {/* Primary input: paste an arXiv link or search papers by keyword. */}
           <div className="mt-6">
             <ArxivBar onOpenReview={openReview} />
-            <div
-              className="mt-3 flex flex-wrap items-center gap-x-0.5 gap-y-1 pl-0.5 text-[13px]"
-              style={{ fontFamily: "var(--font-reading)" }}
-            >
-              <span className="pr-1 text-muted-foreground/60">or</span>
-              <SecondaryAction
-                icon={Upload}
-                label="upload a PDF"
-                onClick={() => setImportMode("local")}
-              />
-              <span className="text-muted-foreground/35">·</span>
-              <SecondaryAction
-                icon={Globe}
-                label="open a web page"
-                onClick={() => setImportMode("web")}
-              />
-            </div>
           </div>
+
+          {/* Other ways in, as one hairline-divided strip. */}
+          <div className="mt-4 grid grid-cols-1 overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-3 sm:divide-x divide-y sm:divide-y-0 divide-border">
+            <QuickAction
+              icon={Upload}
+              title="Upload a PDF"
+              detail="From your computer"
+              onClick={() => setImportMode("local")}
+            />
+            <QuickAction
+              icon={Globe}
+              title="Open a web page"
+              detail="Blog posts, docs, articles"
+              onClick={() => setImportMode("web")}
+            />
+            <QuickAction
+              icon={Compass}
+              title="Discover papers"
+              detail="Get a ranked reading list"
+              onClick={() => router.push("/discover")}
+            />
+          </div>
+
+          <RecentReviews />
         </div>
       </div>
 
@@ -103,6 +123,151 @@ function HomeBody() {
       />
     </>
   );
+}
+
+function QuickAction({
+  icon: Icon,
+  title,
+  detail,
+  onClick,
+}: {
+  icon: typeof Upload;
+  title: string;
+  detail: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/60"
+    >
+      <Icon
+        className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+        strokeWidth={1.75}
+      />
+      <span className="min-w-0">
+        <span className="block text-[13.5px] font-medium text-foreground">
+          {title}
+        </span>
+        <span className="block truncate text-[12px] text-muted-foreground">
+          {detail}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  RecentReviews: the "Continue reading" list                         */
+/* ------------------------------------------------------------------ */
+
+function subscribeReviews(onStoreChange: () => void) {
+  window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
+  return () => window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
+}
+
+// Serialized so useSyncExternalStore gets a stable snapshot between events,
+// same approach as the sidebar.
+function recentSnapshot() {
+  const recent = [...getReviews()]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, RECENT_LIMIT);
+  return JSON.stringify({ recent, hydrated: areReviewsHydrated() });
+}
+
+function recentServerSnapshot() {
+  return JSON.stringify({ recent: [], hydrated: false });
+}
+
+function RecentReviews() {
+  const json = useSyncExternalStore(
+    subscribeReviews,
+    recentSnapshot,
+    recentServerSnapshot,
+  );
+  const { recent, hydrated } = useMemo(
+    () => JSON.parse(json) as { recent: PaperReview[]; hydrated: boolean },
+    [json],
+  );
+
+  return (
+    <section className="mt-12">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-[13px] font-medium text-foreground">
+          Continue studying
+        </h2>
+        {recent.length > 0 ? (
+          <span className="text-[12px] text-muted-foreground">
+            Sorted by last opened
+          </span>
+        ) : null}
+      </div>
+
+      {!hydrated ? (
+        <div className="h-[168px] animate-pulse rounded-lg border border-border bg-card" />
+      ) : recent.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted-foreground">
+          Reviews you open will show up here.
+        </div>
+      ) : (
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+          {recent.map((r) => (
+            <li key={r.id}>
+              <Link
+                href={`/review/${r.id}`}
+                className="group grid grid-cols-[16px_1fr_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60"
+              >
+                <FileText
+                  className="size-4 text-muted-foreground"
+                  strokeWidth={1.75}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-[13.5px] font-medium text-foreground">
+                    {r.title}
+                  </span>
+                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                    {sourceLabel(r)}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2 text-[12px] tabular-nums text-muted-foreground">
+                  {relativeTime(r.updatedAt)}
+                  <ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function sourceLabel(r: PaperReview): string {
+  if (r.arxivId) return `arXiv:${r.arxivId}`;
+  if (r.sourceUrl) {
+    try {
+      return new URL(r.sourceUrl).hostname.replace(/^www\./, "");
+    } catch {
+      return "Web page";
+    }
+  }
+  return "PDF";
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diff / 60_000);
+  if (min < 1) return "Just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -239,15 +404,12 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
     <div>
       <div
         className={cn(
-          "relative rounded-2xl border bg-card transition-colors",
+          "relative rounded-lg border bg-card transition-colors",
           loading
             ? "border-border/50 opacity-90"
-            : "border-input focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10",
+            : "border-input focus-within:border-foreground/30 focus-within:ring-[3px] focus-within:ring-foreground/5",
         )}
-        style={{
-          boxShadow:
-            "0 1px 0 rgb(0 0 0 / 0.03), 0 12px 28px -18px rgb(0 0 0 / 0.25)",
-        }}
+        style={{ boxShadow: "var(--shadow-sm)" }}
       >
         <Search
           className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/55"
@@ -263,8 +425,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
           placeholder="Paste an arXiv link, or search papers by keyword"
           disabled={loading}
           autoFocus
-          className="block w-full bg-transparent py-3.5 pl-11 pr-12 text-[16px] leading-normal text-foreground placeholder:text-muted-foreground/55 focus:outline-none disabled:cursor-not-allowed"
-          style={{ fontFamily: "var(--font-reading)" }}
+          className="block w-full bg-transparent py-3 pl-11 pr-12 text-[15px] leading-normal text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:cursor-not-allowed"
         />
         <button
           type="button"
@@ -273,7 +434,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
           aria-label="Start review"
           title="Start review"
           className={cn(
-            "absolute right-2.5 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors",
+            "absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md transition-colors",
             canSend
               ? "bg-primary text-primary-foreground hover:bg-primary/90"
               : "cursor-default text-muted-foreground/40",
@@ -290,7 +451,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
 
       {/* Live keyword results — only while typing a non-link query. */}
       {looksLikeQuery ? (
-        <div className="mt-2 overflow-hidden rounded-xl border border-border/70 bg-card">
+        <div className="mt-2 overflow-hidden rounded-lg border border-border bg-card">
           {searching && results.length === 0 ? (
             <div className="flex items-center gap-2 px-3.5 py-3">
               <Loader2
@@ -300,10 +461,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
               <MonoLabel>Searching arXiv</MonoLabel>
             </div>
           ) : results.length === 0 ? (
-            <div
-              className="px-3.5 py-3 text-[12.5px] text-muted-foreground"
-              style={{ fontFamily: "var(--font-reading)" }}
-            >
+            <div className="px-3.5 py-3 text-[12.5px] text-muted-foreground">
               No papers found. Try different keywords.
             </div>
           ) : (
@@ -314,15 +472,12 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
                     type="button"
                     onClick={() => void startReview(r.arxivId, r.title)}
                     disabled={loading}
-                    className="w-full px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--badge-accent-bg)] disabled:opacity-50"
+                    className="w-full px-3.5 py-2.5 text-left transition-colors hover:bg-muted/60 disabled:opacity-50"
                   >
-                    <div className="line-clamp-2 text-[13px] font-semibold leading-[1.4] tracking-[-0.005em] text-foreground">
+                    <div className="line-clamp-2 text-[13px] font-medium leading-[1.4] tracking-[-0.005em] text-foreground">
                       {r.title}
                     </div>
-                    <div
-                      className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground"
-                      style={{ fontFamily: "var(--font-reading)" }}
-                    >
+                    <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
                       {r.authors.slice(0, 3).join(", ")}
                       {r.authors.length > 3 ? " et al." : ""}
                       {r.publishedDate
@@ -338,35 +493,8 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
       ) : null}
 
       {error ? (
-        <p
-          className="mt-2 pl-1 text-[12px] text-destructive"
-          style={{ fontFamily: "var(--font-reading)" }}
-        >
-          {error}
-        </p>
+        <p className="mt-2 pl-1 text-[12px] text-destructive">{error}</p>
       ) : null}
     </div>
   );
 }
-
-function SecondaryAction({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: typeof Upload;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-    >
-      <Icon className="size-3.5" strokeWidth={1.8} />
-      {label}
-    </button>
-  );
-}
-

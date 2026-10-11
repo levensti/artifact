@@ -6,13 +6,13 @@ import { SectionHeader } from "@/components/landing/landing-section";
  */
 export function LandingShare() {
   return (
-    <section id="share" style={{ background: "var(--reader-mat)" }}>
+    <section id="share" className="border-t border-border">
       <div className="mx-auto grid max-w-[1120px] grid-cols-1 items-center gap-x-16 gap-y-12 px-6 py-20 sm:py-24 md:px-10 lg:grid-cols-[5fr_6fr]">
         <SectionHeader
           num="03"
           kicker="Share"
           title="Send a colleague your read on a paper."
-          lede="One link carries the whole bundle — every highlight, every margin note, every chat and deep dive. A colleague imports it into their own workspace and keeps going where you left off."
+          lede="One link carries the whole bundle: every highlight, every margin note, every chat and deep dive. A colleague imports it into their own workspace and keeps going where you left off."
         />
 
         <ShareCard />
@@ -24,11 +24,8 @@ export function LandingShare() {
 function ShareCard() {
   return (
     <div
-      className="overflow-hidden rounded-xl border bg-card"
-      style={{
-        borderColor: "color-mix(in srgb, var(--border) 90%, transparent)",
-        boxShadow: "var(--shadow-md)",
-      }}
+      className="overflow-hidden rounded-lg border border-border bg-card"
+      style={{ boxShadow: "var(--shadow-sm)" }}
     >
       <div
         className="flex items-center gap-2 border-b px-4 py-3 font-mono text-[11px] text-muted-foreground"

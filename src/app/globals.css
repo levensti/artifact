@@ -4,17 +4,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Quiet Precision — warm neutrals + ink-indigo accent */
+/* Quiet Precision: neutral stone surfaces, hairline borders, ink-indigo
+   reserved for primary actions and focus. */
 
 :root {
-  --radius: 0.5rem;
+  --radius: 0.375rem;
 
   --background: #ffffff;
-  --foreground: #37352f;
+  --foreground: #1c1b19;
   --card: #ffffff;
-  --card-foreground: #37352f;
+  --card-foreground: #1c1b19;
   --popover: #ffffff;
-  --popover-foreground: #37352f;
+  --popover-foreground: #1c1b19;
 
   --primary: #1e2b5e;
   --primary-foreground: #ffffff;
@@ -22,8 +23,8 @@
 
   --secondary: #f1f1ef;
   --secondary-foreground: #37352f;
-  --muted: #f1f0ec;
-  --muted-foreground: #787570;
+  --muted: #f3f2ef;
+  --muted-foreground: #6f6c66;
   --accent: #ececea;
   --accent-foreground: #37352f;
 
@@ -45,19 +46,19 @@
   --chart-4: #5e6a93;
   --chart-5: #9db4d0;
 
-  --border: #e9e8e3;
-  --input: #e1e0db;
+  --border: #e7e5e1;
+  --input: #dddbd6;
   --ring: #1e2b5e;
 
-  --reader-mat: #f6f5f2;
+  --reader-mat: #fafaf9;
 
-  --sidebar: #f7f6f3;
-  --sidebar-foreground: #37352f;
+  --sidebar: #fafaf9;
+  --sidebar-foreground: #1c1b19;
   --sidebar-primary: #1e2b5e;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ececea;
-  --sidebar-accent-foreground: #37352f;
-  --sidebar-border: #e9e8e3;
+  --sidebar-accent: #efeeeb;
+  --sidebar-accent-foreground: #1c1b19;
+  --sidebar-border: #e7e5e1;
   --sidebar-ring: #1e2b5e;
 
   /* Badge intent tokens */
@@ -979,33 +980,23 @@
    the Discover canvas read as a single system rather than two.
    ------------------------------------------------------------------------- */
 .sb-row {
-  border-radius: 9px;
+  border-radius: 6px;
   transition:
-    background-color 140ms var(--ease-out),
-    color 140ms var(--ease-out),
-    box-shadow 140ms var(--ease-out);
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .sb-row:hover {
-  background-color: color-mix(in srgb, var(--sidebar-accent) 58%, transparent);
+  background-color: color-mix(in srgb, var(--sidebar-accent) 70%, transparent);
 }
 /* Keyboard focus mirrors hover so focus-visible rows never look "dead". */
 .sb-row:focus-visible {
-  background-color: color-mix(in srgb, var(--sidebar-accent) 58%, transparent);
+  background-color: color-mix(in srgb, var(--sidebar-accent) 70%, transparent);
 }
-/* Active wins over the :hover / :focus-visible warm fill above (equal
-   specificity, declared later) so a focused active row keeps its white card. */
+/* Active is a flat fill, one step darker than hover. No card, no glow. */
 .sb-row-active,
-.sb-row-active:focus-visible {
-  background-color: var(--card);
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
-}
+.sb-row-active:focus-visible,
 .sb-row-active:hover {
-  background-color: color-mix(in srgb, var(--card) 74%, var(--sidebar-accent));
-  box-shadow:
-    var(--shadow-md),
-    inset 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
+  background-color: var(--sidebar-accent);
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-row {
@@ -1091,26 +1082,22 @@
   scroll-margin-top: 88px;
 }
 
-/* Display type. */
+/* Display type. One sans voice at modest sizes; hierarchy comes from
+   weight and spacing rather than scale. */
 .landing-h1 {
   font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: clamp(54px, 8.2vw, 110px);
-  line-height: 0.96;
-  letter-spacing: -0.045em;
+  font-weight: 600;
+  font-size: clamp(40px, 5.6vw, 64px);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
   color: var(--foreground);
   text-wrap: balance;
 }
 .landing-h1 .frontier {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 500;
-  color: color-mix(in srgb, var(--primary) 92%, transparent);
-  letter-spacing: -0.02em;
+  color: var(--muted-foreground);
 }
 
-/* Serif italic accent — the "reading" voice, used inside display headings
-   on the marketing and auth surfaces. */
+/* Serif italic accent, used on the auth brand panel. */
 .landing-accent {
   font-family: var(--font-serif);
   font-style: italic;
@@ -1119,19 +1106,42 @@
 }
 .landing-h2 {
   font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: clamp(32px, 4.2vw, 44px);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
   color: var(--foreground);
   text-wrap: balance;
 }
 .landing-lede {
-  font-family: var(--font-reading);
-  font-size: 17px;
-  line-height: 1.65;
-  color: color-mix(in srgb, var(--foreground) 80%, transparent);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
   text-wrap: pretty;
+}
+
+/* Bracketed mono section label: "[01] Discover". */
+.landing-label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+}
+.landing-label b {
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+/* Hairline grid: cells share 1px borders, like a spec sheet. The parent
+   draws top/left, each cell draws right/bottom. */
+.landing-grid {
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+.landing-grid > * {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 /* Fine dot grid laid over the hero mat and the ink bands. */
@@ -1218,8 +1228,7 @@
 /* Responsive — pull the display type in on narrow viewports. */
 @media (max-width: 720px) {
   .landing-h1 {
-    font-size: clamp(44px, 13vw, 56px);
-    letter-spacing: -0.035em;
+    font-size: clamp(36px, 10vw, 44px);
   }
 }
 

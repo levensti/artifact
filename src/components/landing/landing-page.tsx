@@ -18,15 +18,19 @@ const GITHUB_URL =
  * Marketing landing page. Rendered at the apex root (`withartifact.com/`)
  * via host discrimination in `app/page.tsx`. Not a route on its own.
  *
- * Layout: "ink & paper" — the hero sits on the warm reader mat with the
- * workspace miniature as the showpiece, product sections alternate between
- * paper, mat, and two full-bleed bands of the brand indigo (Discover and
- * the closing CTA).
+ * Layout: one flat paper tone for the whole page, sections separated by
+ * hairline rules. Color is reserved for the product mocks and the primary
+ * action; the workspace miniature is the showpiece.
  *
  * The wrapping div is the page's own scroll container: the root <body>
  * is `overflow-hidden` so the PDF reader stays pinned to the viewport.
  */
-export async function LandingPage() {
+export async function LandingPage({
+  preview = false,
+}: {
+  /// Skip the authed-visitor redirect (dev preview route only).
+  preview?: boolean;
+} = {}) {
   const appOrigin = getAppOrigin();
 
   // Belt-and-braces: the proxy already bounces authed apex visitors to the
@@ -40,7 +44,7 @@ export async function LandingPage() {
   } catch {
     isAuthed = false;
   }
-  if (isAuthed) {
+  if (isAuthed && !preview) {
     redirect(appOrigin ? `${appOrigin}/` : "/");
   }
 
@@ -49,9 +53,14 @@ export async function LandingPage() {
   return (
     <div
       id="landing-scroll"
-      className="landing-root h-full overflow-y-auto bg-background text-foreground"
+      className="landing-root h-full overflow-y-auto text-foreground"
+      style={{ background: "var(--reader-mat)" }}
     >
-      <LandingNav signupHref={signupHref} />
+      <LandingNav
+        signupHref={signupHref}
+        signinHref={`${appOrigin}/signin`}
+        githubUrl={GITHUB_URL}
+      />
       <main>
         <Reveal scrollGate={false}>
           <LandingHero signupHref={signupHref} githubUrl={GITHUB_URL} />
