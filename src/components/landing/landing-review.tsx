@@ -6,7 +6,7 @@ import { SectionHeader } from "@/components/landing/landing-section";
  */
 export function LandingReview() {
   return (
-    <section id="review" className="bg-background">
+    <section id="review" className="border-t border-border">
       <div className="mx-auto grid max-w-[1120px] grid-cols-1 items-center gap-x-16 gap-y-12 px-6 py-20 sm:py-24 md:px-10 lg:grid-cols-[6fr_5fr]">
         <div className="order-2 lg:order-1">
           <HighlightThread />
@@ -16,7 +16,7 @@ export function LandingReview() {
             num="02"
             kicker="Review"
             title="Highlight a sentence. Ask about it."
-            lede="The assistant has the full text in context. Ask for a derivation, pull definitions side-by-side, or highlight any passage to open a thread that stays pinned to it. Every answer cites its source — click the chip, land on the passage."
+            lede="The assistant has the full text in context. Ask for a derivation, pull definitions side by side, or highlight any passage to open a thread that stays pinned to it. Every answer cites its source: click the chip, land on the passage."
           />
         </div>
       </div>
@@ -68,7 +68,7 @@ function HighlightThread() {
         className="relative ml-6 mr-2 -mt-2.5 rounded-lg border bg-card p-4 sm:ml-12 sm:mr-6"
         style={{
           borderColor: "color-mix(in srgb, var(--primary) 22%, transparent)",
-          boxShadow: "var(--shadow-primary), var(--shadow-md)",
+          boxShadow: "var(--shadow-md)",
         }}
       >
         <span

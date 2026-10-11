@@ -521,16 +521,16 @@ export default function Sidebar({
             (collapsed ? "w-0 border-r-0" : "w-[272px]"),
         )}
       >
-        <div className="shrink-0 px-2 pb-2 pt-5">
-          <div className="mb-4 flex items-start justify-between gap-2 px-2">
+        <div className="shrink-0 px-2 pb-2 pt-3">
+          <div className="mb-3 flex items-center justify-between gap-2 px-2">
             <button
               type="button"
               onClick={() => router.push("/")}
               aria-label="Go to home"
-              className="group flex min-w-0 items-center gap-3 rounded-lg text-left transition-opacity hover:opacity-90"
+              className="group flex min-w-0 items-center gap-2 rounded-md text-left transition-opacity hover:opacity-80"
             >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[#1e2b5e] transition-transform duration-150 group-hover:scale-105">
-                <svg viewBox="4 4 24 24" aria-hidden className="size-[18px]">
+              <span className="flex size-[22px] shrink-0 items-center justify-center rounded-[5px] bg-primary">
+                <svg viewBox="4 4 24 24" aria-hidden className="size-3">
                   <polygon
                     points="5,24 12,7 19,24"
                     fill="#fafafa"
@@ -539,34 +539,22 @@ export default function Sidebar({
                   <polygon points="13,24 20,12 27,24" fill="#fafafa" />
                 </svg>
               </span>
-              <div className="flex min-w-0 flex-col leading-tight">
-                <span className="truncate text-[18px] font-bold tracking-[-0.025em] text-foreground">
-                  Artifact
-                </span>
-                <span
-                  className="truncate text-[11.5px] font-normal italic"
-                  style={{
-                    fontFamily: "var(--font-reading)",
-                    color:
-                      "color-mix(in srgb, var(--muted-foreground) 80%, transparent)",
-                  }}
-                >
-                  Explore the frontier.
-                </span>
-              </div>
+              <span className="truncate text-[14.5px] font-semibold tracking-[-0.015em] text-foreground">
+                Artifact
+              </span>
             </button>
             <a
               href="https://github.com/levensti/artifact"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="View Artifact on GitHub"
-              className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors duration-150 hover:bg-sidebar-accent hover:text-foreground"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-foreground"
             >
               <svg
                 viewBox="0 0 24 24"
                 fill="currentColor"
                 aria-hidden
-                className="size-[22px]"
+                className="size-4"
               >
                 <path
                   fillRule="evenodd"
@@ -579,10 +567,10 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => setShowNewReview(true)}
-            className="sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px] text-foreground/80 hover:text-foreground"
+            className="sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px] text-foreground/80 hover:text-foreground"
           >
-            <span className="flex w-6 shrink-0 items-center justify-center">
-              <FilePlus className="size-[18px] opacity-80" strokeWidth={1.75} />
+            <span className="flex w-5 shrink-0 items-center justify-center">
+              <FilePlus className="size-4 opacity-70" strokeWidth={1.75} />
             </span>
             <span className="truncate">Start a review</span>
           </button>
@@ -591,14 +579,14 @@ export default function Sidebar({
             onClick={handleDiscoverClick}
             aria-label="Discover"
             className={cn(
-              "sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px]",
+              "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
               pathname === "/discover"
                 ? "sb-row-active text-foreground font-medium"
                 : "text-foreground/80 hover:text-foreground",
             )}
           >
-            <span className="flex w-6 shrink-0 items-center justify-center">
-              <Compass className="size-[18px] opacity-80" strokeWidth={1.75} />
+            <span className="flex w-5 shrink-0 items-center justify-center">
+              <Compass className="size-4 opacity-70" strokeWidth={1.75} />
             </span>
             <span className="truncate">Discover</span>
           </button>
@@ -607,15 +595,15 @@ export default function Sidebar({
               type="button"
               onClick={() => router.push("/journal")}
               className={cn(
-                "sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px]",
+                "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
                 pathname === "/journal"
                   ? "sb-row-active text-foreground font-medium"
                   : "text-foreground/80 hover:text-foreground",
               )}
             >
-              <span className="relative flex w-6 shrink-0 items-center justify-center">
+              <span className="relative flex w-5 shrink-0 items-center justify-center">
                 <FilePen
-                  className="size-[18px] opacity-80"
+                  className="size-4 opacity-70"
                   strokeWidth={1.75}
                 />
                 {ingestActive ? (
@@ -663,15 +651,15 @@ export default function Sidebar({
               type="button"
               onClick={() => router.push("/evals")}
               className={cn(
-                "sb-row flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px]",
+                "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
                 pathname === "/evals"
                   ? "sb-row-active text-foreground font-medium"
                   : "text-foreground/80 hover:text-foreground",
               )}
             >
-              <span className="flex w-6 shrink-0 items-center justify-center">
+              <span className="flex w-5 shrink-0 items-center justify-center">
                 <FlaskConical
-                  className="size-[18px] opacity-80"
+                  className="size-4 opacity-70"
                   strokeWidth={1.75}
                 />
               </span>
@@ -682,11 +670,11 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => openSettings()}
-            className="sb-row mt-0.5 flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[14px] text-foreground/80 hover:text-foreground"
+            className="sb-row mt-0.5 flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px] text-foreground/80 hover:text-foreground"
             aria-label="Manage API keys"
           >
-            <span className="relative flex w-6 shrink-0 items-center justify-center">
-              <KeyRound className="size-[18px] opacity-80" strokeWidth={1.75} />
+            <span className="relative flex w-5 shrink-0 items-center justify-center">
+              <KeyRound className="size-4 opacity-70" strokeWidth={1.75} />
             </span>
             <span className="truncate">API keys</span>
           </button>

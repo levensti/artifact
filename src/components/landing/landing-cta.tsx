@@ -5,62 +5,28 @@ export interface LandingCtaProps {
 }
 
 /**
- * Closing ink band — the brand line, once, big, and one button.
+ * Closing block: one line, one button, set inside a hairline frame on the
+ * same paper as the rest of the page.
  */
 export function LandingCta({ signupHref }: LandingCtaProps) {
   return (
-    <section className="landing-ink relative overflow-hidden">
-      <div
-        className="landing-dots-inverse absolute inset-0"
-        style={{
-          maskImage:
-            "linear-gradient(180deg, transparent 0%, transparent 40%, black 100%)",
-        }}
-        aria-hidden
-      />
-      <div className="relative mx-auto max-w-[1120px] px-6 py-24 text-center sm:py-28 md:px-10">
-        <h2
-          className="landing-h2 mx-auto max-w-[680px]"
-          style={{
-            color: "var(--primary-foreground)",
-            fontSize: "clamp(36px, 5vw, 54px)",
-          }}
-        >
-          Explore the frontier.{" "}
-          <span
-            className="landing-accent"
-            style={{
-              color:
-                "color-mix(in srgb, var(--primary-foreground) 78%, transparent)",
-            }}
-          >
-            Capture what you learn.
-          </span>
-        </h2>
-
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+    <section className="border-t border-border">
+      <div className="mx-auto max-w-[1120px] px-6 py-20 sm:py-24 md:px-10">
+        <div className="flex flex-col items-start gap-6 rounded-lg border border-border bg-card px-8 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-10">
+          <div>
+            <h2 className="landing-h2">Start reading.</h2>
+            <p className="landing-lede mt-2">
+              Free every day. MIT licensed. Self-host it if you prefer.
+            </p>
+          </div>
           <a
             href={signupHref}
-            className="inline-flex h-11 items-center gap-2 rounded-md px-5 text-[14px] font-medium transition-transform duration-150 hover:opacity-90 active:translate-y-px"
-            style={{
-              background: "var(--primary-foreground)",
-              color: "var(--primary)",
-            }}
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 text-[14px] font-medium text-background transition-opacity duration-150 hover:opacity-85"
           >
             Get started
             <ArrowRight className="size-[13px]" />
           </a>
         </div>
-
-        <p
-          className="mt-5 text-[12.5px]"
-          style={{
-            color:
-              "color-mix(in srgb, var(--primary-foreground) 60%, transparent)",
-          }}
-        >
-          MIT licensed · Self-host it, or use the hosted version free
-        </p>
       </div>
     </section>
   );

@@ -61,7 +61,14 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/share/") ||
     /^\/api\/shares\/[^/]+\/preview\/?$/.test(nextUrl.pathname);
 
+  // Dev-only preview of the marketing page on localhost (see
+  // app/landing-preview/page.tsx). Production builds 404 it.
+  const isLandingPreview =
+    process.env.NODE_ENV === "development" &&
+    nextUrl.pathname === "/landing-preview";
+
   const isOpen =
+    isLandingPreview ||
     nextUrl.pathname === "/signin" ||
     nextUrl.pathname === "/signup" ||
     nextUrl.pathname.startsWith("/api/auth/") ||

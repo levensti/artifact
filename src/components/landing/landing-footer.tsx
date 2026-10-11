@@ -8,7 +8,7 @@ export interface LandingFooterProps {
 
 export function LandingFooter({ signupHref, githubUrl }: LandingFooterProps) {
   return (
-    <footer className="bg-background py-10 font-sans text-[12px] text-muted-foreground">
+    <footer className="border-t border-border py-10 font-sans text-[12px] text-muted-foreground">
       <div className="mx-auto grid max-w-[1120px] grid-cols-1 gap-x-14 gap-y-6 px-6 md:grid-cols-[1fr_auto] md:items-center md:px-10">
         <div className="flex items-center gap-2.5">
           <Link
