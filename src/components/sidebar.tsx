@@ -12,7 +12,7 @@ import {
   FilePen,
   FilePlus,
   AlertCircle,
-  KeyRound,
+  House,
   Pencil,
   Share2,
   Compass,
@@ -53,7 +53,6 @@ import {
   WIKI_UPDATED_EVENT,
 } from "@/lib/storage-events";
 import { isAdminEmail } from "@/lib/admin";
-import { useSettingsOpener } from "@/components/settings-opener-context";
 import {
   getWikiIngestError,
   getWikiIngestSnapshot,
@@ -73,6 +72,8 @@ import {
 import NewReviewDialog from "./new-review-dialog";
 import ShareReviewDialog from "./share-review-dialog";
 import UserMenu from "./user-menu";
+import { BrandGlyph } from "./brand-panel";
+import { MonoLabel } from "./folio";
 
 function subscribeSidebar(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -217,7 +218,6 @@ export default function Sidebar({
   const renameInputRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const pathname = usePathname();
-  const { openSettings } = useSettingsOpener();
 
   // Ensure wiki cache is populated so the snapshot picks up page counts
   useEffect(() => {
@@ -392,7 +392,7 @@ export default function Sidebar({
         )}
         {isImported && !isRenaming ? (
           <span
-            className="mt-px inline-flex shrink-0 items-center rounded-full bg-(--badge-imported-bg) px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[var(--badge-imported-fg)]"
+            className="mt-0.5 inline-flex shrink-0 items-center font-mono text-[10.5px] text-muted-foreground"
             aria-label={
               sharerFirstName
                 ? `Imported from ${sharerFirstName}'s share`
@@ -515,7 +515,7 @@ export default function Sidebar({
         className={cn(
           "flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden",
           presentation === "overlay"
-            ? "fixed inset-y-0 left-0 z-40 w-[min(272px,85vw)] shrink-0 shadow-xl shadow-black/10 safe-area-x"
+            ? "fixed inset-y-0 left-0 z-40 w-[min(272px,85vw)] shrink-0 shadow-[var(--shadow-lg)] safe-area-x"
             : "shrink-0 transition-sidebar",
           presentation === "inline" &&
             (collapsed ? "w-0 border-r-0" : "w-[272px]"),
@@ -529,15 +529,8 @@ export default function Sidebar({
               aria-label="Go to home"
               className="group flex min-w-0 items-center gap-2 rounded-md text-left transition-opacity hover:opacity-80"
             >
-              <span className="flex size-[22px] shrink-0 items-center justify-center rounded-[5px] bg-primary">
-                <svg viewBox="4 4 24 24" aria-hidden className="size-3">
-                  <polygon
-                    points="5,24 12,7 19,24"
-                    fill="#fafafa"
-                    opacity="0.4"
-                  />
-                  <polygon points="13,24 20,12 27,24" fill="#fafafa" />
-                </svg>
+              <span className="flex size-[22px] shrink-0 items-center justify-center rounded-[5px] bg-primary text-primary-foreground">
+                <BrandGlyph className="size-3" />
               </span>
               <span className="truncate text-[14.5px] font-semibold tracking-[-0.015em] text-foreground">
                 Artifact
@@ -564,6 +557,21 @@ export default function Sidebar({
               </svg>
             </a>
           </div>
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className={cn(
+              "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
+              pathname === "/"
+                ? "sb-row-active text-foreground font-medium"
+                : "text-foreground/80 hover:text-foreground",
+            )}
+          >
+            <span className="flex w-5 shrink-0 items-center justify-center">
+              <House className="size-4 opacity-70" strokeWidth={1.75} />
+            </span>
+            <span className="truncate">Home</span>
+          </button>
           <button
             type="button"
             onClick={() => setShowNewReview(true)}
@@ -615,12 +623,12 @@ export default function Sidebar({
               </span>
               <span className="truncate">Journal</span>
               {ingestActive ? (
-                <span className="ml-auto text-[10px] font-medium italic text-primary/80 animate-pulse">
+                <span className="ml-auto font-mono text-[11px] text-primary animate-pulse">
                   {ingestLabel}
                 </span>
               ) : null}
               {wikiPageCount > 0 && !ingestActive ? (
-                <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-sidebar-accent/80 px-1.5 py-0.5 tabular-nums text-[10px] font-semibold text-muted-foreground">
+                <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
                   {wikiPageCount}
                 </span>
               ) : null}
@@ -667,17 +675,6 @@ export default function Sidebar({
             </button>
           ) : null}
 
-          <button
-            type="button"
-            onClick={() => openSettings()}
-            className="sb-row mt-0.5 flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px] text-foreground/80 hover:text-foreground"
-            aria-label="Manage API keys"
-          >
-            <span className="relative flex w-5 shrink-0 items-center justify-center">
-              <KeyRound className="size-4 opacity-70" strokeWidth={1.75} />
-            </span>
-            <span className="truncate">API keys</span>
-          </button>
         </div>
 
         {/* Hairline divider between nav and the reviews list. The date-group
@@ -690,16 +687,7 @@ export default function Sidebar({
           {projects.length > 0 || reviewsHydrated ? (
             <div className="mb-3">
               <div className="flex items-center justify-between px-2 py-1">
-                <span
-                  className="font-mono text-[10px] uppercase"
-                  style={{
-                    letterSpacing: "0.16em",
-                    color:
-                      "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
-                  }}
-                >
-                  Projects
-                </span>
+                <MonoLabel>Projects</MonoLabel>
                 <button
                   type="button"
                   onClick={() => setShowNewProject(true)}
@@ -737,12 +725,12 @@ export default function Sidebar({
                         />
                         {isCollapsed ? (
                           <Folder
-                            className="size-3.5 shrink-0 text-primary/70"
+                            className="size-3.5 shrink-0 text-muted-foreground"
                             strokeWidth={1.75}
                           />
                         ) : (
                           <FolderOpen
-                            className="size-3.5 shrink-0 text-primary/70"
+                            className="size-3.5 shrink-0 text-muted-foreground"
                             strokeWidth={1.75}
                           />
                         )}
@@ -780,7 +768,7 @@ export default function Sidebar({
                     {!isCollapsed && (
                       <div className="ml-5 flex flex-col gap-0.5 pl-1 pt-0.5">
                         {items.length === 0 ? (
-                          <p className="px-2 py-1 text-[11px] italic text-muted-foreground/50">
+                          <p className="px-2 py-1 text-[12px] text-muted-foreground/70">
                             No papers yet
                           </p>
                         ) : (
@@ -813,16 +801,7 @@ export default function Sidebar({
           {grouped.map((group) => (
             <div key={group.key} className="mb-5 last:mb-0">
               <p className="sticky top-0 z-10 mb-1 px-2 py-1 bg-sidebar/95 backdrop-blur-sm">
-                <span
-                  className="font-mono text-[10px] uppercase"
-                  style={{
-                    letterSpacing: "0.16em",
-                    color:
-                      "color-mix(in srgb, var(--muted-foreground) 60%, transparent)",
-                  }}
-                >
-                  {group.label}
-                </span>
+                <MonoLabel>{group.label}</MonoLabel>
               </p>
               <div className="flex flex-col gap-0.5">
                 {group.items.map(renderReviewRow)}

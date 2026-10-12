@@ -61,10 +61,10 @@ function AddToLibraryButton({
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center gap-1.5 rounded-md border border-success/40 bg-success/10 px-2 py-1 text-[11px] font-medium text-success transition-colors hover:bg-success/15"
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-[11.5px] font-medium text-foreground transition-colors hover:bg-muted"
       >
-        <Check className="size-3" strokeWidth={2.5} />
-        In library — open
+        <Check className="size-3 text-success" strokeWidth={2.5} />
+        Open review
       </button>
     );
   }
@@ -88,10 +88,8 @@ function AddToLibraryButton({
       onClick={onClick}
       disabled={state.status === "saving"}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary transition-colors",
-        state.status === "saving"
-          ? "opacity-70"
-          : "hover:bg-primary/15",
+        "inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-[11.5px] font-medium text-foreground transition-colors",
+        state.status === "saving" ? "opacity-70" : "hover:bg-muted",
       )}
     >
       {state.status === "saving" ? (
@@ -99,7 +97,7 @@ function AddToLibraryButton({
       ) : (
         <Plus className="size-3" strokeWidth={2.25} />
       )}
-      Add to library
+      Start review
     </button>
   );
 }
@@ -123,7 +121,7 @@ export function PaperCard({
   rationale?: string;
 }) {
   return (
-    <article className="rounded-lg border border-border/70 bg-card/60 px-3 py-2.5 transition-colors hover:border-border">
+    <article className="rounded-lg border border-border bg-card px-3 py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="text-[13px] font-semibold leading-snug text-foreground">

@@ -12,12 +12,14 @@ import dynamic from "next/dynamic";
 import { sanitizeExtractedText, type DocumentOutlineEntry } from "@/lib/documents";
 import { getReviewDocument, type ReviewDocument } from "@/lib/client/documents";
 import { useParams, useRouter } from "next/navigation";
-import { GripVertical, Loader2, MessageSquare, StickyNote, X } from "lucide-react";
+import { GripVertical, Loader2, MessageSquare, Share2, StickyNote, X } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel, { type RightPanelTab } from "@/components/right-panel";
 import { CitationContextProvider } from "@/components/citation-context";
 import NoteHoverCard, { type HoverAnchor } from "@/components/note-hover-card";
 import SelectionPopover from "@/components/selection-popover";
+import ShareReviewDialog from "@/components/share-review-dialog";
+import { canShareReview } from "@/lib/client/sharing/share-links";
 import { hydrateClientStore } from "@/lib/client-data";
 import { loadPdfBlob } from "@/lib/client/pdf-blobs";
 import { getReview, updateReviewTitle } from "@/lib/reviews";
@@ -116,6 +118,7 @@ export default function ReviewPage() {
   >(undefined);
   const [dataReady, setDataReady] = useState(false);
   const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Local PDFs live in IndexedDB — read the blob and hand the viewer an
   // object URL; revoke it on unmount so the browser can free the blob.
@@ -559,6 +562,18 @@ export default function ReviewPage() {
   const hoverCardPinned =
     !!hoverCardAnn && activeAnnotationId === hoverCardAnn.id;
 
+  const shareButton =
+    review && canShareReview(review) ? (
+      <button
+        type="button"
+        onClick={() => setShareOpen(true)}
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted sm:h-8"
+      >
+        <Share2 className="size-3.5" strokeWidth={2} aria-hidden />
+        <span className="hidden sm:inline">Share</span>
+      </button>
+    ) : null;
+
   if (!clientReady || !dataReady || !review) {
     return (
       <DashboardLayout>
@@ -574,7 +589,7 @@ export default function ReviewPage() {
       <div className="relative flex h-full overflow-hidden">
         {/* Main content: paper viewer + inline notes rail (when wide) */}
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)" style={{ boxShadow: 'inset 0 2px 12px rgba(0,0,0,0.04), inset 0 0 4px rgba(0,0,0,0.02)' }}>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             {review.sourceUrl ? (
               <WebViewer
                 sourceUrl={review.sourceUrl}
@@ -586,6 +601,8 @@ export default function ReviewPage() {
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
                 onAnnotationHover={handleViewerHover}
+                toolbarTitle={review.title}
+                toolbarActions={shareButton}
               />
             ) : pdfUrl ? (
               <PdfViewer
@@ -599,6 +616,8 @@ export default function ReviewPage() {
                 hoveredAnnotationId={hoveredAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
                 onAnnotationHover={handleViewerHover}
+                toolbarTitle={review.title}
+                toolbarActions={shareButton}
               />
             ) : (
               <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
@@ -800,6 +819,10 @@ export default function ReviewPage() {
         />
       )}
 
+      <ShareReviewDialog
+        review={shareOpen ? review : null}
+        onClose={() => setShareOpen(false)}
+      />
     </DashboardLayout>
   );
 }

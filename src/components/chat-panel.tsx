@@ -172,7 +172,10 @@ function IndexingPill() {
     return (
       <span
         className="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
-        title={documentStatus.indexError ?? "Indexing failed; answers use the opening of the document."}
+        title={
+          documentStatus.indexError ??
+          "Indexing failed; answers use the opening of the document."
+        }
       >
         Index unavailable
       </span>
@@ -260,10 +263,10 @@ function ChatInput({
     <div className="p-3 shrink-0 bg-linear-to-t from-background via-background to-transparent">
       <div
         className={cn(
-          "flex items-end gap-2 rounded-xl border transition-[box-shadow,border-color,background-color] duration-200",
+          "flex items-end gap-2 rounded-lg border transition-[border-color,background-color] duration-200",
           isPreparingPaper
             ? "bg-muted/30 border-border/60"
-            : "bg-card border-border shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 focus-within:shadow-md focus-within:shadow-primary/5",
+            : "bg-card border-border shadow-[var(--shadow-sm)] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/15",
         )}
       >
         <textarea
@@ -291,10 +294,10 @@ function ChatInput({
           variant="ghost"
           size="icon"
           className={cn(
-            "size-8 m-1.5 rounded-lg transition-all duration-200",
+            "size-8 m-1.5 rounded-md transition-colors duration-200",
             input.trim() && !inputLocked && modelReady && !isStreaming
-              ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-              : "bg-primary/10 text-primary hover:bg-primary/20",
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-muted text-muted-foreground/60",
           )}
           onClick={sendMessage}
           disabled={inputLocked || !modelReady || !input.trim() || isStreaming}
@@ -335,27 +338,28 @@ function ChatInput({
               )}
               {preparingLabel}
             </p>
-            {preparingPhase === "page_map" && (() => {
-              const total = pageMapProgress?.total ?? 0;
-              const done = pageMapProgress?.done ?? 0;
-              const pct = total > 0 ? (done / total) * 100 : 0;
-              return (
-                <div
-                  className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-border"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={total || 1}
-                  aria-valuenow={done}
-                >
+            {preparingPhase === "page_map" &&
+              (() => {
+                const total = pageMapProgress?.total ?? 0;
+                const done = pageMapProgress?.done ?? 0;
+                const pct = total > 0 ? (done / total) * 100 : 0;
+                return (
                   <div
-                    className="h-full bg-foreground/70 transition-[width] duration-200 ease-out"
-                    style={{
-                      width: `${Math.min(100, Math.max(0, pct))}%`,
-                    }}
-                  />
-                </div>
-              );
-            })()}
+                    className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-border"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={total || 1}
+                    aria-valuenow={done}
+                  >
+                    <div
+                      className="h-full bg-foreground/70 transition-[width] duration-200 ease-out"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, pct))}%`,
+                      }}
+                    />
+                  </div>
+                );
+              })()}
           </div>
         )}
       </div>
@@ -940,7 +944,7 @@ export default function ChatPanel({
             <div className="flex flex-col gap-0.5">
               <MonoLabel>Assistant</MonoLabel>
               <span className="text-[15px] font-semibold tracking-[-0.018em] text-foreground">
-                Ask the paper
+                Explore the frontier
               </span>
             </div>
             <IndexingPill />
@@ -970,9 +974,7 @@ export default function ChatPanel({
                       </Button>
 
                       <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
-                          From the paper
-                        </span>
+                        <MonoLabel>From the paper</MonoLabel>
                         <blockquote
                           className="line-clamp-4 border-l-2 pl-3 text-[13px] italic leading-relaxed"
                           style={{

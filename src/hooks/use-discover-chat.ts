@@ -101,6 +101,9 @@ export interface UseDiscoverChatReturn {
    *  surfaces the prompt card so the user can add a key (resume) or
    *  dismiss (proceed without web_search) before the agent starts. */
   pendingExaDecision: { text: string } | null;
+  /** Abort the in-flight run. Whatever the agent produced so far is still
+   *  finalized, so a stopped run keeps any picks it already submitted. */
+  stop: () => void;
 }
 
 /**
@@ -292,6 +295,7 @@ export function useDiscoverChat({
   // an effect once `isStreaming` flips false — without this the inline
   // card hides immediately on key-add but submit() early-returns due to
   // isStreaming, leaving the user without a retry.
+  const abortRef = useRef<AbortController | null>(null);
   const pendingResumeRef = useRef<{
     skipWebSearch: boolean;
     text: string;
@@ -334,6 +338,8 @@ export function useDiscoverChat({
       let queryId: string | null = null;
       let steps: AgentStep[] = [];
       let streamSucceeded = false;
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       try {
         const created = await createDiscoverQuery(trimmed);
@@ -355,6 +361,7 @@ export function useDiscoverChat({
             ...(exaKey ? { exaApiKey: exaKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
           }),
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -374,10 +381,16 @@ export function useDiscoverChat({
         });
         streamSucceeded = true;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Something went wrong";
-        setError(message);
+        // A user stop isn't an error: the run finalizes with what it has.
+        if (controller.signal.aborted) {
+          streamSucceeded = true;
+        } else {
+          const message =
+            err instanceof Error ? err.message : "Something went wrong";
+          setError(message);
+        }
       } finally {
+        if (abortRef.current === controller) abortRef.current = null;
         // Always attempt to finalize so the DiscoverQuery row reflects what
         // happened. Picks come out empty when the agent didn't emit a list
         // (errored, no results, etc.); the row still persists with status
@@ -461,6 +474,10 @@ export function useDiscoverChat({
     });
   }, [isStreaming, submit]);
 
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   return {
     isStreaming,
     liveSteps,
@@ -471,5 +488,6 @@ export function useDiscoverChat({
     submit,
     resumeAfterExaDecision,
     pendingExaDecision,
+    stop,
   };
 }

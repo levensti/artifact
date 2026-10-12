@@ -463,9 +463,9 @@ function LiveSynthesis({
   if (!text) return null;
 
   return (
-    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] px-3.5 py-3">
+    <div className="rounded-lg border border-border bg-card px-3.5 py-3">
       <div className="mb-1.5 flex items-center gap-1.5">
-        <MonoLabel tone="accent">Writing the brief</MonoLabel>
+        <MonoLabel>Writing the brief</MonoLabel>
         <span
           className="size-1.5 animate-pulse rounded-full bg-primary/60"
           aria-hidden
@@ -482,7 +482,7 @@ function LiveSynthesis({
  *  "setting up" line is more honest than fake result-shaped boxes. */
 function PlanningState() {
   return (
-    <div className="rounded-xl border border-dashed border-border/55 bg-card/20 px-4 py-5">
+    <div className="rounded-lg border border-dashed border-border px-4 py-5">
       <p className="thinking-shimmer text-[12.5px] font-medium">
         Scoping the question and lining up the first searches…
       </p>

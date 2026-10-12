@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, Sparkles, Trash2 } from "lucide-react";
+import { ChevronRight, Trash2 } from "lucide-react";
+import { MonoLabel } from "@/components/folio";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -208,7 +209,7 @@ function AnnotationCard({
         }
       }}
       className={cn(
-        "overflow-hidden rounded-xl border bg-card transition-all duration-200 hover:shadow-md hover:shadow-primary/5",
+        "overflow-hidden rounded-lg border bg-card transition-colors duration-200",
         "cursor-pointer",
         isActive
           ? "border-primary/40 ring-1 ring-primary/15"
@@ -219,17 +220,10 @@ function AnnotationCard({
     >
       {isAskAi ? (
         <>
-          <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
-            <span
-              className="inline-flex max-w-[min(100%,11rem)] items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold leading-tight tracking-tight"
-              style={{
-                background: "var(--badge-accent-bg)",
-                color: "var(--badge-accent-fg)",
-              }}
-            >
-              <Sparkles className="size-3 shrink-0" strokeWidth={2} />
-              Dive deeper
-            </span>
+          <div className="flex items-center justify-between gap-2 pl-3.5 pr-2 pt-2.5">
+            <MonoLabel tone="accent">
+              Thread · p. {annotation.pageNumber}
+            </MonoLabel>
             <Button
               variant="ghost"
               size="icon"
@@ -244,14 +238,16 @@ function AnnotationCard({
             </Button>
           </div>
 
-          <div className="mx-3.5 mt-3 rounded-xl border border-border/40 bg-gradient-to-br from-muted/20 to-muted/5 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              From the paper
-            </p>
-            <p className="mt-2 line-clamp-4 text-sm italic leading-relaxed text-foreground/90">
-              &ldquo;{annotation.highlightText}&rdquo;
-            </p>
-          </div>
+          <blockquote
+            className="mx-3.5 mt-1.5 line-clamp-4 border-l-2 pl-3 text-[13px] italic leading-relaxed"
+            style={{
+              fontFamily: "var(--font-reading)",
+              borderColor: "color-mix(in srgb, var(--primary) 35%, transparent)",
+              color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
+            }}
+          >
+            &ldquo;{annotation.highlightText}&rdquo;
+          </blockquote>
 
           <div className="mt-3 border-t border-border/60 px-3.5 pb-3.5 pt-3">
             {annotation.thread.length === 0 ? (
@@ -283,8 +279,8 @@ function AnnotationCard({
               style={{
                 backgroundColor:
                   isActive || isHovered
-                    ? "color-mix(in srgb, var(--primary) 60%, transparent)"
-                    : "color-mix(in srgb, var(--primary) 20%, transparent)",
+                    ? "color-mix(in srgb, var(--warning) 70%, transparent)"
+                    : "color-mix(in srgb, var(--warning) 30%, transparent)",
               }}
             />
             <div className="min-w-0 flex-1 pt-px">

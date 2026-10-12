@@ -155,11 +155,14 @@ export function ChatMessageBubble({
   if (msg.role === "user") {
     return (
       <div className="flex flex-col items-end gap-1">
-        <div className="max-w-[80%] rounded-[18px] border border-primary/20 bg-primary/10 px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
+        <div
+          className="max-w-[80%] rounded-lg rounded-br-sm px-3.5 py-2.5 text-[15px] leading-relaxed text-foreground"
+          style={{ background: "color-mix(in srgb, var(--primary) 9%, transparent)" }}
+        >
           <div className="whitespace-pre-wrap">{msg.content}</div>
         </div>
         {failure?.kind === "rate_limit" ? (
-          <div className="mt-1 flex max-w-[88%] flex-col gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3.5 py-3">
+          <div className="mt-1 flex max-w-[88%] flex-col gap-2 rounded-lg border border-border bg-card px-3.5 py-3">
             <div className="flex items-center gap-1.5 text-[12.5px] font-semibold tracking-tight text-foreground">
               <KeyRound
                 className="size-3.5 shrink-0"

@@ -8,7 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Sparkles, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { MonoLabel } from "@/components/folio";
 import { type Annotation, updateAnnotation } from "@/lib/annotations";
 
 /**
@@ -188,7 +189,7 @@ export default function NoteHoverCard({
     >
       <div
         className={[
-          "overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-lg)]",
+          "overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-md)]",
           "transition-[opacity,transform] duration-150 ease-[var(--ease-out)]",
           ready
             ? "opacity-100 translate-y-0"
@@ -197,16 +198,7 @@ export default function NoteHoverCard({
       >
         {isAskAi ? (
           <div className="px-3.5 py-3">
-            <span
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-tight"
-              style={{
-                background: "var(--badge-accent-bg)",
-                color: "var(--badge-accent-fg)",
-              }}
-            >
-              <Sparkles className="size-3" strokeWidth={2} />
-              Dive deeper
-            </span>
+            <MonoLabel tone="accent">Thread</MonoLabel>
             <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
               {annotation.thread.length === 0
                 ? "No replies yet."

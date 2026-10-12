@@ -85,9 +85,9 @@ function isTrivialSynthesis(prose: string): boolean {
 /** Full-width synthesis (single-column contexts): the boxed treatment. */
 function Synthesis({ prose }: { prose: string }) {
   return (
-    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] px-4 py-3.5">
+    <div className="rounded-lg border border-border bg-card px-4 py-3.5">
       <div className="mb-2">
-        <MonoLabel tone="accent">Overview</MonoLabel>
+        <MonoLabel>Overview</MonoLabel>
       </div>
       <div
         className="text-[13.5px] leading-relaxed text-foreground/90"
@@ -178,9 +178,12 @@ function ReadingList({ recs }: { recs: Recommendation[] }) {
       <MonoLabel>
         Reading list · {recs.length} paper{recs.length === 1 ? "" : "s"}
       </MonoLabel>
-      <div className="grid grid-cols-1 gap-3">
+      <ol
+        className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
+        style={{ boxShadow: "var(--shadow-sm)" }}
+      >
         {recs.map((rec, i) => (
-          <div
+          <li
             key={rec.id}
             style={{
               animation: "fadeIn 360ms var(--ease-out) both",
@@ -190,9 +193,9 @@ function ReadingList({ recs }: { recs: Recommendation[] }) {
             }}
           >
             <RecommendationCard rec={rec} />
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
     </div>
   );
 }
@@ -279,7 +282,7 @@ function EmptyState({
       <button
         type="button"
         onClick={() => onRetry(query.query)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11.5px] font-medium text-primary transition-colors hover:bg-primary/15"
+        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted"
       >
         <RotateCcw className="size-3" strokeWidth={2.25} />
         Retry
@@ -573,7 +576,7 @@ export default function ResearchBrief({
       className={cn(
         pinned
           ? cn("relative", isLive && "pl-5")
-          : "rounded-xl border border-border/60 bg-card/40 px-4 py-3.5",
+          : "rounded-lg border border-border bg-card px-4 py-3.5",
       )}
       style={pinned ? undefined : { animation: "fadeIn 220ms ease-out" }}
     >

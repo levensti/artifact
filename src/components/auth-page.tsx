@@ -2,12 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/server/auth";
 import {
-  BrandGlyph,
+  BrandMark,
   BrandPanel,
   SigninWelcome,
   SignupPitch,
 } from "@/components/brand-panel";
-import { MonoLabel } from "@/components/folio";
 import { CredentialsForm } from "@/components/credentials-form";
 
 export interface AuthPageProps {
@@ -32,38 +31,22 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
   return (
     <main className="grid min-h-screen bg-background md:grid-cols-2">
       <BrandPanel>{isSignup ? <SignupPitch /> : <SigninWelcome />}</BrandPanel>
-      <section className="relative flex items-center justify-center overflow-hidden px-6 py-12 text-left sm:px-10">
-        {/* Soft primary-tinted radial, keeps the surface from feeling flat */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,color-mix(in_srgb,var(--primary)_7%,transparent),transparent_55%),radial-gradient(circle_at_15%_95%,color-mix(in_srgb,var(--primary)_4%,transparent),transparent_55%)]"
-        />
-
-        <div className="relative mx-auto w-full max-w-sm text-left animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <section className="flex items-center justify-center px-6 py-12 text-left sm:px-10">
+        <div className="mx-auto w-full max-w-sm text-left animate-in fade-in duration-300">
           {/* Inline brand mark, only when the side panel is hidden */}
-          <div className="mb-10 flex items-center gap-2 md:hidden">
-            <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <BrandGlyph className="size-4" />
-            </span>
-            <span className="text-base font-semibold tracking-tight text-foreground">
-              Artifact
-            </span>
+          <div className="mb-10 md:hidden">
+            <BrandMark />
           </div>
 
           <header className="mb-7">
-            <MonoLabel>
+            <p className="landing-label">
+              <b>[■]</b>{" "}
               {isSignup ? "Create your account" : "Sign in"}
-            </MonoLabel>
-            <h1 className="mt-3.5 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[32px]">
+            </p>
+            <h1 className="landing-h2 mt-4">
               {isSignup ? "Set up your reading workspace." : "Welcome back."}
             </h1>
-            <p
-              className="mt-3 text-[14.5px] leading-[1.6]"
-              style={{
-                fontFamily: "var(--font-reading)",
-                color: "color-mix(in srgb, var(--foreground) 72%, transparent)",
-              }}
-            >
+            <p className="landing-lede mt-3 text-[15px]">
               {isSignup
                 ? "Use your email, or continue with Google. Free usage on us every day."
                 : "Sign in to continue studying."}
@@ -73,11 +56,9 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           <CredentialsForm mode={mode} callbackUrl={target} />
 
           {/* Hairline divider */}
-          <div className="mt-7 flex items-center gap-3 text-muted-foreground/60">
+          <div className="mt-7 flex items-center gap-3">
             <span className="h-px flex-1 bg-border" />
-            <span className="text-[11px] font-medium tracking-[0.18em] uppercase">
-              or
-            </span>
+            <span className="landing-label">or</span>
             <span className="h-px flex-1 bg-border" />
           </div>
 
@@ -90,7 +71,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           >
             <button
               type="submit"
-              className="group flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3 text-[14px] font-medium text-foreground/90 shadow-(--shadow-sm) transition-all duration-150 hover:border-primary/35 hover:shadow-(--shadow-primary) hover:-translate-y-px active:translate-y-0"
+              className="flex h-10 w-full items-center justify-center gap-2.5 rounded-md border border-border bg-card px-4 text-[14px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
             >
               <GoogleMark />
               <span>
@@ -119,7 +100,7 @@ function GoogleMark() {
     <svg
       viewBox="0 0 18 18"
       aria-hidden
-      className="size-4 transition-transform duration-150 group-hover:scale-105"
+      className="size-4"
     >
       <path
         fill="#EA4335"

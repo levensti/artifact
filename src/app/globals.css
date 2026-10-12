@@ -1225,6 +1225,174 @@
   vertical-align: middle;
 }
 
+/* ── Landing cover: "Ask the paper." ─────────────────────────────── */
+
+/* The cover fills the first screen, running behind the floating nav, capped
+   so very tall displays don't strand the headline in empty paper. */
+.landing-cover {
+  min-height: min(100svh, 920px);
+  padding-top: 96px; /* clears the floating nav */
+}
+
+/* Display line. Same Geist voice as the section heads, pushed to poster
+   scale with tight tracking; the size is the treatment. */
+.landing-display {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(56px, 10.5vw, 132px);
+  line-height: 0.94;
+  letter-spacing: -0.055em;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+
+/* Paper field: three justified columns of research prose, full-bleed. Two
+   masks: the outer fades the field out at top and bottom, the inner clears
+   an ellipse behind the headline so the type sits on open paper. */
+.paper-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 72%, transparent 100%);
+  animation: paper-field-in 1400ms var(--ease-out) both;
+}
+.paper-field-clear {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: radial-gradient(ellipse 50% 40% at 50% 46%, transparent 40%, #000 100%);
+  mask-image: radial-gradient(ellipse 50% 40% at 50% 46%, transparent 40%, #000 100%);
+}
+.paper-field-track {
+  animation: paper-field-drift 150s linear infinite;
+}
+.paper-field-track > * {
+  padding-bottom: 2.4em; /* the gap at the loop seam, same as a section break */
+}
+.paper-field-track--1 { animation-duration: 150s; }
+.paper-field-track--2 { animation-duration: 190s; margin-top: -120px; }
+.paper-field-track--3 { animation-duration: 130s; margin-top: -40px; }
+.paper-field-spread {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 56px;
+  width: min(1480px, 116vw);
+  margin: 0 auto;
+  padding: 24px 40px 40px;
+  font-family: var(--font-reading);
+  font-size: 15px;
+  line-height: 1.8;
+  text-align: justify;
+  hyphens: auto;
+  color: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+.paper-field-spread h4 {
+  margin: 1.6em 0 0.5em;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: color-mix(in srgb, var(--foreground) 18%, transparent);
+}
+.paper-field-spread p {
+  margin: 0 0 0.9em;
+}
+
+/* A mark sweeps in left to right (like a highlighter), holds, then lifts.
+   The passage's ink darkens while it's marked so the eye catches it. */
+.paper-field-mark {
+  --mark: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: inherit;
+  background-color: transparent;
+  background-image: linear-gradient(var(--mark), var(--mark));
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  border-radius: 2px;
+  padding: 0 1px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  animation: paper-field-mark 14s var(--ease-out) infinite;
+  animation-delay: var(--mark-delay, 0s);
+}
+.paper-field-mark--note {
+  --mark: color-mix(in srgb, var(--warning) 24%, transparent);
+}
+
+@keyframes paper-field-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes paper-field-drift {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+/* In from the left, hold, then out to the right (the anchor flips to the
+   right edge at the hold's end, invisibly, since the mark is full width). */
+@keyframes paper-field-mark {
+  0% { background-size: 0% 100%; background-position: left center; color: inherit; }
+  7% { background-size: 100% 100%; background-position: left center; color: color-mix(in srgb, var(--foreground) 62%, transparent); }
+  30% { background-size: 100% 100%; background-position: left center; color: color-mix(in srgb, var(--foreground) 62%, transparent); }
+  30.01% { background-size: 100% 100%; background-position: right center; }
+  38% { background-size: 0% 100%; background-position: right center; color: inherit; }
+  100% { background-size: 0% 100%; background-position: right center; color: inherit; }
+}
+
+/* Headline, subhead, actions: one staggered rise on load. Delays are set
+   inline per element. */
+.cover-in {
+  animation: cover-in 900ms var(--ease-out) both;
+}
+@keyframes cover-in {
+  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+/* The workspace mock arrives tilted back into the paper and settles flat as
+   it scrolls into view. Scroll-driven where supported; static elsewhere. */
+@supports (animation-timeline: view()) {
+  .cover-rise {
+    transform-origin: 50% 0%;
+    animation: cover-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+}
+@keyframes cover-rise {
+  from { transform: perspective(1800px) rotateX(16deg) translateY(24px) scale(0.95); }
+  to { transform: none; }
+}
+
+@media (max-width: 720px) {
+  .paper-field-spread {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 150vw;
+    margin-left: -25vw;
+    font-size: 13.5px;
+  }
+  .paper-field-clear {
+    -webkit-mask-image: radial-gradient(ellipse 80% 34% at 50% 48%, transparent 45%, #000 100%);
+    mask-image: radial-gradient(ellipse 80% 34% at 50% 48%, transparent 45%, #000 100%);
+  }
+  .paper-field-track--3 {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-field,
+  .paper-field-track,
+  .cover-in,
+  .cover-rise {
+    animation: none !important;
+  }
+  .paper-field-mark {
+    animation: none;
+    background-size: 100% 100%;
+  }
+}
+
 /* Responsive — pull the display type in on narrow viewports. */
 @media (max-width: 720px) {
   .landing-h1 {
