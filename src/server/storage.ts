@@ -41,6 +41,37 @@ export async function uploadPdf(
   return path;
 }
 
+/**
+ * Mint a signed URL the browser can PUT a PDF to directly, so large files
+ * never pass through a Vercel function (which caps request bodies at 4.5MB).
+ * The URL is scoped to this one path and expires after 2 hours.
+ */
+export async function createPdfUploadUrl(
+  userId: string,
+  id: string,
+): Promise<{ path: string; signedUrl: string }> {
+  const path = pathFor(userId, id);
+  const { data, error } = await client()
+    .storage.from(bucket())
+    .createSignedUploadUrl(path);
+  if (error) {
+    throw new Error(
+      `pdf upload url failed (bucket=${bucket()}): ${error.message}`,
+    );
+  }
+  return { path, signedUrl: data.signedUrl };
+}
+
+/** Storage path of the user's uploaded PDF for `id`, or null if absent. */
+export async function findUploadedPdf(
+  userId: string,
+  id: string,
+): Promise<string | null> {
+  const path = pathFor(userId, id);
+  const { data, error } = await client().storage.from(bucket()).exists(path);
+  return !error && data ? path : null;
+}
+
 export async function downloadPdf(path: string): Promise<Blob> {
   const { data, error } = await client().storage.from(bucket()).download(path);
   if (error) throw new Error(`pdf download failed: ${error.message}`);

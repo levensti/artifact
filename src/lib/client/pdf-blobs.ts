@@ -1,25 +1,55 @@
 /**
- * Client-side PDF blob storage. Uploaded PDFs are streamed to the server
- * (which writes them to Supabase Storage), and the server returns an opaque
- * id. The review's `pdfPath` holds that id; `loadPdfBlob` round-trips it
- * through the API to fetch the bytes back.
+ * Client-side PDF blob storage. Uploaded PDFs go straight from the browser
+ * to Supabase Storage through a signed URL the server mints, so the bytes
+ * never pass through a Vercel function (which rejects bodies over 4.5MB
+ * with a 413). The server returns an opaque id; the review's `pdfPath`
+ * holds that id, and `loadPdfBlob` round-trips it through the API to fetch
+ * the bytes back.
  */
 
+async function errorFrom(res: Response, fallback: string): Promise<Error> {
+  const message =
+    (await res.json().then((d) => d?.error ?? d?.message).catch(() => null)) ||
+    `${fallback} (${res.status})`;
+  return new Error(message);
+}
+
 export async function savePdfBlob(file: File): Promise<string> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch("/api/pdf-blobs", {
+  // 1. Reserve an id and a signed upload URL.
+  const urlRes = await fetch("/api/pdf-blobs/upload-url", {
     method: "POST",
     credentials: "same-origin",
-    body: form,
   });
-  if (!res.ok) {
-    const message =
-      (await res.json().then((d) => d?.error).catch(() => null)) ||
-      `PDF upload failed (${res.status})`;
-    throw new Error(message);
+  if (!urlRes.ok) throw await errorFrom(urlRes, "PDF upload failed");
+  const { id, uploadUrl } = (await urlRes.json()) as {
+    id: string;
+    uploadUrl: string;
+  };
+
+  // 2. Upload the bytes directly to storage.
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "content-type": "application/pdf", "x-upsert": "false" },
+    body: file,
+  });
+  if (!putRes.ok) {
+    if (putRes.status === 413) {
+      throw new Error("This PDF is larger than the storage size limit.");
+    }
+    throw await errorFrom(putRes, "PDF upload failed");
   }
-  const { id } = (await res.json()) as { id: string };
+
+  // 3. Record the blob now that the object exists.
+  const doneRes = await fetch(
+    `/api/pdf-blobs/${encodeURIComponent(id)}/complete`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: file.name || null }),
+    },
+  );
+  if (!doneRes.ok) throw await errorFrom(doneRes, "PDF upload failed");
   return id;
 }
 
