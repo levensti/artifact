@@ -59,12 +59,10 @@ export async function LandingPage({
       <LandingNav
         signupHref={signupHref}
         signinHref={`${appOrigin}/signin`}
-        githubUrl={GITHUB_URL}
       />
       <main>
-        <Reveal scrollGate={false}>
-          <LandingHero signupHref={signupHref} githubUrl={GITHUB_URL} />
-        </Reveal>
+        {/* The cover runs its own load sequence (see .cover-in). */}
+        <LandingHero signupHref={signupHref} githubUrl={GITHUB_URL} />
 
         <Reveal>
           <LandingDiscover />

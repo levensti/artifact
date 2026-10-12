@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import ToolbarTitle from "@/components/viewer-toolbar-title";
 import type { DocumentOutlineEntry } from "@/lib/documents";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -8,7 +9,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, Loader2, FileWarning, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import type { Annotation } from "@/lib/annotations";
+import { highlightBackground, type Annotation } from "@/lib/annotations";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -38,6 +39,11 @@ interface PdfViewerProps {
   /** Fired as the cursor moves over (or off) a highlight, with the hovered
    *  line's viewport rect + the page column edges so a margin note can dock. */
   onAnnotationHover?: (annotationId: string | null, anchor: import("@/components/note-hover-card").HoverAnchor | null) => void;
+  /** Document title shown in the toolbar's title bar (hidden on narrow
+   *  viewports). */
+  toolbarTitle?: string;
+  /** Right-aligned toolbar actions, e.g. Share. */
+  toolbarActions?: ReactNode;
 }
 
 const H_PADDING = 16;
@@ -65,6 +71,8 @@ export default function PdfViewer({
   hoveredAnnotationId,
   onAnnotationClick,
   onAnnotationHover,
+  toolbarTitle,
+  toolbarActions,
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -487,8 +495,8 @@ export default function PdfViewer({
 
   return (
     <div className="flex flex-col h-full bg-transparent">
-      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 pl-[max(env(safe-area-inset-left),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] sm:pl-[max(env(safe-area-inset-left),1rem)] sm:pr-[max(env(safe-area-inset-right),1rem)] backdrop-blur-md">
-        <div className="flex h-7 sm:h-8 items-center gap-0.5 rounded-full bg-muted/60 px-0.5 sm:px-1">
+      <div className="flex h-11 sm:h-14 shrink-0 items-center gap-3 border-b border-border bg-background pl-[max(env(safe-area-inset-left),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] sm:pl-[max(env(safe-area-inset-left),1rem)] sm:pr-[max(env(safe-area-inset-right),1rem)]">
+        <div className="flex h-7 sm:h-8 shrink-0 items-center rounded-md border border-border bg-card">
           <Button
             variant="ghost"
             size="icon"
@@ -499,7 +507,7 @@ export default function PdfViewer({
           >
             <ChevronUp size={14} />
           </Button>
-          <span className="min-w-[52px] sm:min-w-[56px] text-center text-[11px] sm:text-xs font-semibold tabular-nums leading-none text-foreground/70">
+          <span className="min-w-[52px] sm:min-w-[56px] text-center font-mono text-[11px] tabular-nums leading-none text-muted-foreground">
             {currentPage} / {numPages || "·"}
           </span>
           <Button
@@ -513,7 +521,8 @@ export default function PdfViewer({
             <ChevronDown size={14} />
           </Button>
         </div>
-        <div className="flex h-7 sm:h-8 items-center gap-0.5 rounded-full bg-muted/60 px-0.5 sm:px-1">
+        <ToolbarTitle title={toolbarTitle} />
+        <div className="flex h-7 sm:h-8 shrink-0 items-center rounded-md border border-border bg-card">
           <Button
             variant="ghost"
             size="icon"
@@ -523,7 +532,7 @@ export default function PdfViewer({
           >
             <ZoomOut size={14} />
           </Button>
-          <span className="min-w-[36px] sm:min-w-[40px] text-center text-[11px] sm:text-xs font-semibold tabular-nums leading-none text-foreground/70">
+          <span className="min-w-[36px] sm:min-w-[40px] text-center font-mono text-[11px] tabular-nums leading-none text-muted-foreground">
             {Math.round(liveZoom * 100)}%
           </span>
           <Button
@@ -536,6 +545,7 @@ export default function PdfViewer({
             <ZoomIn size={14} />
           </Button>
         </div>
+        {toolbarActions}
       </div>
 
       {searchOpen && (
@@ -658,13 +668,10 @@ export default function PdfViewer({
                 {pageAnnotations.map((ann) => {
                   const isActive = ann.id === activeAnnotationId;
                   const isHovered = ann.id === hoveredAnnotationId;
-                  // All highlights (notes + Ask AI) share the app's primary
-                  // (periwinkle) tint — the same accent used everywhere else.
-                  const backgroundColor = isActive
-                    ? "color-mix(in srgb, var(--primary) 32%, transparent)"
-                    : isHovered
-                      ? "color-mix(in srgb, var(--primary) 22%, transparent)"
-                      : "color-mix(in srgb, var(--primary) 14%, transparent)";
+                  const backgroundColor = highlightBackground(
+                    ann.kind,
+                    isActive ? "active" : isHovered ? "hovered" : "idle",
+                  );
                   return ann.anchorRects.map((r, ri) => (
                     <div
                       key={`hl-${ann.id}-${ri}`}

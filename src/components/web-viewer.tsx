@@ -1,10 +1,11 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ExternalLink, Loader2, FileWarning } from "lucide-react";
 import DOMPurify from "dompurify";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
-import type { Annotation } from "@/lib/annotations";
+import ToolbarTitle from "@/components/viewer-toolbar-title";
+import { highlightBackground, type Annotation } from "@/lib/annotations";
 
 /** Memoized so annotation-prop changes don't cause React to re-reconcile the
  *  dangerouslySetInnerHTML node, which would drop the browser's native text selection. */
@@ -66,6 +67,11 @@ interface WebViewerProps {
     annotationId: string | null,
     anchor: import("@/components/note-hover-card").HoverAnchor | null,
   ) => void;
+  /** Document title shown in the toolbar's title bar (hidden on narrow
+   *  viewports). */
+  toolbarTitle?: string;
+  /** Right-aligned toolbar actions, e.g. Share. */
+  toolbarActions?: ReactNode;
 }
 
 export default function WebViewer({
@@ -78,6 +84,8 @@ export default function WebViewer({
   hoveredAnnotationId,
   onAnnotationClick,
   onAnnotationHover,
+  toolbarTitle,
+  toolbarActions,
 }: WebViewerProps) {
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const [title, setTitle] = useState<string | null>(null);
@@ -279,23 +287,21 @@ export default function WebViewer({
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
-      <div className="flex h-11 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/60 pl-[max(env(safe-area-inset-left),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] sm:pl-[max(env(safe-area-inset-left),1rem)] sm:pr-[max(env(safe-area-inset-right),1rem)] backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {siteName && (
-            <span className="truncate text-xs font-medium text-foreground/70">
-              {siteName}
-            </span>
-          )}
-        </div>
+      <div className="flex h-11 sm:h-14 shrink-0 items-center gap-3 border-b border-border bg-background pl-[max(env(safe-area-inset-left),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] sm:pl-[max(env(safe-area-inset-left),1rem)] sm:pr-[max(env(safe-area-inset-right),1rem)]">
+        <span className="min-w-0 max-w-[40%] shrink truncate font-mono text-[11px] text-muted-foreground">
+          {siteName}
+        </span>
+        <ToolbarTitle title={toolbarTitle} />
         <a
           href={sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"
+          className="ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:h-8"
         >
           Open original
           <ExternalLink size={12} />
         </a>
+        {toolbarActions}
       </div>
 
       {/* Content */}
@@ -318,13 +324,10 @@ export default function WebViewer({
             {pageAnnotations.map((ann) => {
               const isActive = ann.id === activeAnnotationId;
               const isHovered = ann.id === hoveredAnnotationId;
-              // All highlights (notes + Ask AI) share the app's primary
-              // (periwinkle) tint — the same accent used everywhere else.
-              const backgroundColor = isActive
-                ? "color-mix(in srgb, var(--primary) 32%, transparent)"
-                : isHovered
-                  ? "color-mix(in srgb, var(--primary) 22%, transparent)"
-                  : "color-mix(in srgb, var(--primary) 14%, transparent)";
+              const backgroundColor = highlightBackground(
+                ann.kind,
+                isActive ? "active" : isHovered ? "hovered" : "idle",
+              );
               return ann.anchorRects.map((r, ri) => (
                 <div
                   key={`hl-${ann.id}-${ri}`}

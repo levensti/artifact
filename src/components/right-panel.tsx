@@ -3,7 +3,7 @@
 import {
   PanelRightClose,
   PanelRightOpen,
-  Sparkles,
+  MessageSquare,
   StickyNote,
 } from "lucide-react";
 import type { Annotation } from "@/lib/annotations";
@@ -90,7 +90,7 @@ export default function RightPanel({
           aria-label="Open assistant"
           className="flex h-11 w-full shrink-0 items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60"
         >
-          <Sparkles className="size-[15px]" strokeWidth={2} aria-hidden />
+          <MessageSquare className="size-[15px]" strokeWidth={2} aria-hidden />
         </button>
         <button
           type="button"
@@ -124,16 +124,12 @@ export default function RightPanel({
           <TabButton
             active={activeTab === "chat"}
             onClick={() => onTabChange("chat")}
-            icon={<Sparkles className="size-[14px]" strokeWidth={2} aria-hidden />}
           >
             Assistant
           </TabButton>
           <TabButton
             active={activeTab === "notes"}
             onClick={() => onTabChange("notes")}
-            icon={
-              <StickyNote className="size-[14px]" strokeWidth={2} aria-hidden />
-            }
             count={noteCount}
           >
             Notes
@@ -190,13 +186,11 @@ export default function RightPanel({
 function TabButton({
   active,
   onClick,
-  icon,
   count,
   children,
 }: {
   active: boolean;
   onClick: () => void;
-  icon: React.ReactNode;
   count?: number;
   children: React.ReactNode;
 }) {
@@ -213,17 +207,9 @@ function TabButton({
           : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
       )}
     >
-      {icon}
       {children}
       {typeof count === "number" && count > 0 ? (
-        <span
-          className={cn(
-            "ml-0.5 rounded-full px-1.5 py-px text-[10px] font-medium tabular-nums",
-            active
-              ? "bg-primary/12 text-primary"
-              : "bg-muted-foreground/10 text-muted-foreground",
-          )}
-        >
+        <span className="ml-0.5 font-mono text-[11px] font-normal tabular-nums text-muted-foreground">
           {count}
         </span>
       ) : null}

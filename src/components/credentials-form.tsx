@@ -82,11 +82,10 @@ export function CredentialsForm({ mode, callbackUrl }: Props) {
         type="submit"
         disabled={pending}
         className={cn(
-          "group relative flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[14px] font-medium text-primary-foreground",
-          "shadow-(--shadow-primary) transition-all duration-150",
-          "hover:-translate-y-px hover:brightness-[1.07]",
-          "active:translate-y-0 active:brightness-100",
-          "disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:brightness-100",
+          // The landing's primary CTA: ink fill, opacity hover, no lift.
+          "flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-[14px] font-medium text-background",
+          "transition-opacity duration-150 hover:opacity-85",
+          "disabled:cursor-not-allowed disabled:opacity-60",
         )}
       >
         {pending ? (
@@ -155,7 +154,7 @@ function Field({ label, htmlFor, children, hint, optional }: FieldProps) {
       >
         <MonoLabel>{label}</MonoLabel>
         {optional ? (
-          <span className="text-[10.5px] font-medium tracking-[0.05em] text-muted-foreground/60">
+          <span className="font-mono text-[10.5px] text-muted-foreground">
             optional
           </span>
         ) : null}
@@ -164,7 +163,7 @@ function Field({ label, htmlFor, children, hint, optional }: FieldProps) {
       {hint ? (
         <p
           id={hintId}
-          className="pt-0.5 text-[11.5px] leading-snug text-muted-foreground/75"
+          className="pt-0.5 text-[12px] leading-snug text-muted-foreground"
         >
           {hint}
         </p>

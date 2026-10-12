@@ -1,44 +1,24 @@
 "use client";
 
 import {
-  ArrowRight,
   ArrowUp,
   Compass,
-  FileText,
   Globe,
   Loader2,
   Search,
   Upload,
 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type KeyboardEvent,
-} from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import NewReviewDialog from "@/components/new-review-dialog";
 import { MonoLabel } from "@/components/folio";
-import {
-  areReviewsHydrated,
-  createOrGetReview,
-  getReviewByArxivId,
-  getReviews,
-  REVIEWS_UPDATED_EVENT,
-  type PaperReview,
-} from "@/lib/reviews";
+import { createOrGetReview, getReviewByArxivId } from "@/lib/reviews";
 import { cn, extractArxivId } from "@/lib/utils";
 import type { ArxivSearchResult } from "@/lib/explore";
 import { useRouter } from "next/navigation";
 
 /** The importer modes a secondary action can deep-link into. */
 type ImportMode = "local" | "web";
-
-/** How many recent reviews the home page lists under "Continue reading". */
-const RECENT_LIMIT = 6;
 
 export default function HomeClient() {
   // SettingsOpenerProvider is mounted *inside* DashboardLayout, so any hook
@@ -78,7 +58,7 @@ function HomeBody() {
             Home
           </h1>
           <p className="mt-1 text-[14px] text-muted-foreground">
-            Open a paper to start a review, or pick up where you left off.
+            Open a paper to start a review. Your reviews live in the sidebar.
           </p>
 
           {/* Primary input: paste an arXiv link or search papers by keyword. */}
@@ -107,8 +87,6 @@ function HomeBody() {
               onClick={() => router.push("/discover")}
             />
           </div>
-
-          <RecentReviews />
         </div>
       </div>
 
@@ -156,118 +134,6 @@ function QuickAction({
       </span>
     </button>
   );
-}
-
-/* ------------------------------------------------------------------ */
-/*  RecentReviews: the "Continue reading" list                         */
-/* ------------------------------------------------------------------ */
-
-function subscribeReviews(onStoreChange: () => void) {
-  window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-  return () => window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-}
-
-// Serialized so useSyncExternalStore gets a stable snapshot between events,
-// same approach as the sidebar.
-function recentSnapshot() {
-  const recent = [...getReviews()]
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, RECENT_LIMIT);
-  return JSON.stringify({ recent, hydrated: areReviewsHydrated() });
-}
-
-function recentServerSnapshot() {
-  return JSON.stringify({ recent: [], hydrated: false });
-}
-
-function RecentReviews() {
-  const json = useSyncExternalStore(
-    subscribeReviews,
-    recentSnapshot,
-    recentServerSnapshot,
-  );
-  const { recent, hydrated } = useMemo(
-    () => JSON.parse(json) as { recent: PaperReview[]; hydrated: boolean },
-    [json],
-  );
-
-  return (
-    <section className="mt-12">
-      <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-[13px] font-medium text-foreground">
-          Continue studying
-        </h2>
-        {recent.length > 0 ? (
-          <span className="text-[12px] text-muted-foreground">
-            Sorted by last opened
-          </span>
-        ) : null}
-      </div>
-
-      {!hydrated ? (
-        <div className="h-[168px] animate-pulse rounded-lg border border-border bg-card" />
-      ) : recent.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted-foreground">
-          Reviews you open will show up here.
-        </div>
-      ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
-          {recent.map((r) => (
-            <li key={r.id}>
-              <Link
-                href={`/review/${r.id}`}
-                className="group grid grid-cols-[16px_1fr_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60"
-              >
-                <FileText
-                  className="size-4 text-muted-foreground"
-                  strokeWidth={1.75}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate text-[13.5px] font-medium text-foreground">
-                    {r.title}
-                  </span>
-                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                    {sourceLabel(r)}
-                  </span>
-                </span>
-                <span className="flex items-center gap-2 text-[12px] tabular-nums text-muted-foreground">
-                  {relativeTime(r.updatedAt)}
-                  <ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function sourceLabel(r: PaperReview): string {
-  if (r.arxivId) return `arXiv:${r.arxivId}`;
-  if (r.sourceUrl) {
-    try {
-      return new URL(r.sourceUrl).hostname.replace(/^www\./, "");
-    } catch {
-      return "Web page";
-    }
-  }
-  return "PDF";
-}
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const min = Math.round(diff / 60_000);
-  if (min < 1) return "Just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.round(hr / 24);
-  if (day < 7) return `${day}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -407,7 +273,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
           "relative rounded-lg border bg-card transition-colors",
           loading
             ? "border-border/50 opacity-90"
-            : "border-input focus-within:border-foreground/30 focus-within:ring-[3px] focus-within:ring-foreground/5",
+            : "border-border focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/15",
         )}
         style={{ boxShadow: "var(--shadow-sm)" }}
       >
@@ -425,7 +291,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
           placeholder="Paste an arXiv link, or search papers by keyword"
           disabled={loading}
           autoFocus
-          className="block w-full bg-transparent py-3 pl-11 pr-12 text-[15px] leading-normal text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:cursor-not-allowed"
+          className="block w-full bg-transparent py-3 pl-11 pr-12 text-[15px] leading-normal text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
         />
         <button
           type="button"
@@ -437,14 +303,13 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
             "absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md transition-colors",
             canSend
               ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "cursor-default text-muted-foreground/40",
+              : "cursor-default bg-muted text-muted-foreground/60",
           )}
-          style={canSend ? undefined : { background: "var(--muted)" }}
         >
           {loading ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
-            <ArrowUp className="size-4" strokeWidth={2.5} />
+            <ArrowUp className="size-4" strokeWidth={2.25} />
           )}
         </button>
       </div>

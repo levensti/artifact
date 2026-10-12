@@ -8,12 +8,16 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { ArrowLeft, ArrowUp, KeyRound } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, ArrowUp, KeyRound, Square } from "lucide-react";
 import { hasUsableProvider } from "@/lib/keys";
 import {
   ensureDiscoverLoaded,
+  getDiscoverQueriesSnapshot,
+  getRecommendationsSnapshot,
   hydrateClientStore,
 } from "@/lib/client-data";
+import { buildFollowupPrompt, linkThread } from "@/lib/discover-threads";
 import { useDiscoverBriefs, RecentBriefsList } from "./discover-queue";
 import ResearchBrief from "./research-brief";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
@@ -74,18 +78,14 @@ function Composer({
   return (
     <div
       className={cn(
-        "relative rounded-2xl border bg-card transition-colors",
+        "relative rounded-lg border bg-card transition-colors",
         disabled
           ? "border-border/50 opacity-60"
           : isStreaming
             ? "border-border/50 opacity-90"
-            : "border-input focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10",
+            : "border-border focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/15",
       )}
-      style={{
-        boxShadow: disabled
-          ? undefined
-          : "0 1px 0 rgb(0 0 0 / 0.03), 0 12px 28px -18px rgb(0 0 0 / 0.25)",
-      }}
+      style={{ boxShadow: disabled ? undefined : "var(--shadow-sm)" }}
     >
       <textarea
         ref={textareaRef}
@@ -95,8 +95,7 @@ function Composer({
         placeholder={hint}
         rows={1}
         disabled={inert}
-        className="block max-h-44 min-h-[50px] w-full resize-none bg-transparent py-3 pl-4 pr-12 text-[16px] leading-normal text-foreground placeholder:text-muted-foreground/55 focus:outline-none disabled:cursor-not-allowed"
-        style={{ fontFamily: "var(--font-reading)" }}
+        className="block max-h-44 min-h-[50px] w-full resize-none bg-transparent py-3 pl-4 pr-12 text-[15px] leading-normal text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
       />
       <button
         type="button"
@@ -105,14 +104,13 @@ function Composer({
         aria-label="Research"
         title="Research"
         className={cn(
-          "absolute bottom-2 right-2 inline-flex size-8 items-center justify-center rounded-full transition-colors",
+          "absolute bottom-2 right-2 inline-flex size-8 items-center justify-center rounded-md transition-colors",
           canSend
             ? "bg-primary text-primary-foreground hover:bg-primary/90"
-            : "cursor-default text-muted-foreground/40",
+            : "cursor-default bg-muted text-muted-foreground/60",
         )}
-        style={canSend ? undefined : { background: "var(--muted)" }}
       >
-        <ArrowUp className="size-4" strokeWidth={2.5} />
+        <ArrowUp className="size-4" strokeWidth={2.25} />
       </button>
     </div>
   );
@@ -124,13 +122,7 @@ function Composer({
 
 function EmptyHeading() {
   return (
-    <p
-      className="-mt-1.5 max-w-[600px] text-[14.5px] leading-[1.6]"
-      style={{
-        fontFamily: "var(--font-reading)",
-        color: "color-mix(in srgb, var(--foreground) 66%, transparent)",
-      }}
-    >
+    <p className="-mt-1.5 max-w-[600px] text-[15px] leading-[1.6] text-muted-foreground">
       Ask a research question. The agent plans a search, reads across arXiv and
       the web, verifies what it finds, then writes you a short briefing with a
       ranked reading list.
@@ -145,8 +137,24 @@ function EmptyHeading() {
 export default function DiscoverPanel() {
   const [hydrated, setHydrated] = useState(false);
   const [modelReady, setModelReady] = useState(false);
-  // The brief currently in focus (a root query id). null = browse view.
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  // The brief in focus (a root query id) lives in the URL (`?brief=<id>`) so
+  // it survives refresh, works with Back, and can be linked. null = browse.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const focusedId = searchParams.get("brief");
+  const setFocusedId = useCallback(
+    (id: string | null) => {
+      if (id === focusedId) return;
+      router.push(
+        id ? `/discover?brief=${encodeURIComponent(id)}` : "/discover",
+        { scroll: false },
+      );
+    },
+    [focusedId, router],
+  );
+  // Set while a follow-up is starting: the parent brief the new run belongs
+  // under. Consumed once the run's query id exists.
+  const pendingParentRef = useRef<string | null>(null);
   const { openSettings } = useSettingsOpener();
 
   useEffect(() => {
@@ -174,10 +182,20 @@ export default function DiscoverPanel() {
     chat.liveSteps,
   );
 
-  // When a run goes live, focus it.
+  // When a run goes live, focus it. A follow-up is threaded under its parent
+  // brief, which stays the focused one.
   useEffect(() => {
     if (!chat.liveQueryId) return;
-    setFocusedId(chat.liveQueryId);
+    const parent = pendingParentRef.current;
+    if (parent) {
+      linkThread(chat.liveQueryId, parent);
+      pendingParentRef.current = null;
+      setFocusedId(parent);
+    } else {
+      setFocusedId(chat.liveQueryId);
+    }
+    // Only react to a new live run, not to URL changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.liveQueryId]);
 
   useEffect(() => {
@@ -185,7 +203,7 @@ export default function DiscoverPanel() {
     window.addEventListener(DISCOVER_HOME_EVENT, handleDiscoverHome);
     return () =>
       window.removeEventListener(DISCOVER_HOME_EVENT, handleDiscoverHome);
-  }, []);
+  }, [setFocusedId]);
 
   const handleSubmit = useCallback(
     (text: string) => {
@@ -193,7 +211,27 @@ export default function DiscoverPanel() {
         openSettings();
         return;
       }
+      pendingParentRef.current = null;
       void chat.submit(text);
+    },
+    [canSubmit, chat, openSettings],
+  );
+
+  const handleFollowup = useCallback(
+    (parentId: string, text: string) => {
+      if (!canSubmit) {
+        openSettings();
+        return;
+      }
+      const parent = getDiscoverQueriesSnapshot().find((q) => q.id === parentId);
+      if (!parent) return;
+      const picks = getRecommendationsSnapshot().filter(
+        (r) => r.queryId === parentId && !r.dismissedAt,
+      );
+      pendingParentRef.current = parentId;
+      void chat.submit(text, {
+        promptText: buildFollowupPrompt(parent, picks, text),
+      });
     },
     [canSubmit, chat, openSettings],
   );
@@ -202,19 +240,29 @@ export default function DiscoverPanel() {
     ? "What do you want to explore?"
     : "Add a Fireworks API key in Settings to start";
 
-  // Browse vs focus. We're "in focus" while a run is active (streaming or
-  // awaiting the web-search decision) or when a brief has been opened.
+  // Browse vs focus. A brief is in focus when the URL names one, plus the
+  // moments before a run has a query id to put there (awaiting the web-search
+  // decision, or the run's row still being created). Leaving a running brief
+  // is allowed: its history tile shows it as live.
   const inFocus =
-    focusedId !== null || chat.isStreaming || !!chat.pendingExaDecision;
-  const focusedThread =
-    threads.find((t) => t.root.query.id === focusedId) ??
-    (chat.liveQueryId
+    focusedId !== null ||
+    !!chat.pendingExaDecision ||
+    (chat.isStreaming && !chat.liveQueryId);
+  const focusedThread = focusedId
+    ? threads.find((t) => t.root.query.id === focusedId)
+    : chat.liveQueryId
       ? threads.find(
           (t) =>
             t.root.query.id === chat.liveQueryId ||
             t.followups.some((f) => f.query.id === chat.liveQueryId),
         )
-      : undefined);
+      : undefined;
+  // Whether the run streaming right now belongs to the brief on screen.
+  const focusedIsLive =
+    !!focusedThread &&
+    chat.isStreaming &&
+    (focusedThread.root.query.id === chat.liveQueryId ||
+      focusedThread.followups.some((f) => f.query.id === chat.liveQueryId));
   const hasHistory = threads.length > 0;
 
   return (
@@ -233,7 +281,7 @@ export default function DiscoverPanel() {
           {inFocus ? (
             /* ── Focus: one research session owns the canvas ── */
             <div className="space-y-5">
-              <div className="flex items-center">
+              <div className="flex items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setFocusedId(null)}
@@ -242,6 +290,16 @@ export default function DiscoverPanel() {
                   <ArrowLeft className="size-3.5" strokeWidth={2} />
                   All research
                 </button>
+                {focusedIsLive ? (
+                  <button
+                    type="button"
+                    onClick={chat.stop}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted"
+                  >
+                    <Square className="size-2.5 fill-current" strokeWidth={0} />
+                    Stop
+                  </button>
+                ) : null}
               </div>
 
               {chat.error ? (
@@ -251,14 +309,30 @@ export default function DiscoverPanel() {
               ) : null}
 
               {focusedThread ? (
-                <ResearchBrief
-                  pinned
-                  run={focusedThread.root}
-                  followups={focusedThread.followups}
-                  defaultCollapsed={false}
-                  hasExaKey={hasExaKey}
-                  onRetry={handleSubmit}
-                />
+                <>
+                  <ResearchBrief
+                    pinned
+                    run={focusedThread.root}
+                    followups={focusedThread.followups}
+                    defaultCollapsed={false}
+                    hasExaKey={hasExaKey}
+                    onRetry={handleSubmit}
+                  />
+                  {chat.pendingExaDecision ? (
+                    <ExaKeyPromptCard queryText={chat.pendingExaDecision.text} />
+                  ) : !focusedIsLive && canSubmit ? (
+                    <div className="border-t border-border pt-5">
+                      <Composer
+                        disabled={false}
+                        isStreaming={chat.isStreaming}
+                        hint="Ask a follow-up: go deeper, narrow the scope, compare…"
+                        onSubmit={(text) =>
+                          handleFollowup(focusedThread.root.query.id, text)
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </>
               ) : chat.pendingExaDecision ? (
                 <div className="space-y-3">
                   <div className="flex items-start gap-2">
@@ -269,9 +343,13 @@ export default function DiscoverPanel() {
                   </div>
                   <ExaKeyPromptCard queryText={chat.pendingExaDecision.text} />
                 </div>
+              ) : chat.isStreaming || !hydrated ? (
+                <p className="text-[13px] text-muted-foreground">
+                  {chat.isStreaming ? "Starting research…" : "Loading…"}
+                </p>
               ) : (
                 <p className="text-[13px] text-muted-foreground">
-                  Starting research…
+                  This brief isn&rsquo;t available. It may have been deleted.
                 </p>
               )}
             </div>
@@ -288,6 +366,12 @@ export default function DiscoverPanel() {
                 hint={composerHint}
                 onSubmit={handleSubmit}
               />
+
+              {chat.error ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
+                  {chat.error}
+                </div>
+              ) : null}
 
               {hydrated && !modelReady ? (
                 <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">

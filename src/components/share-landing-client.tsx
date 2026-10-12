@@ -12,8 +12,13 @@ import {
 } from "lucide-react";
 import type { SharePreview } from "@/server/shares";
 import { apiFetch } from "@/lib/client/api";
-import { BrandGlyph, BrandPanel, SignupPitch } from "@/components/brand-panel";
-import { ItalicAccent, MonoLabel } from "@/components/folio";
+import {
+  BrandGlyph,
+  BrandMark,
+  BrandPanel,
+  SignupPitch,
+} from "@/components/brand-panel";
+import { MonoLabel } from "@/components/folio";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -101,37 +106,24 @@ export default function ShareLandingClient({
       <section className="flex items-center justify-center px-6 py-12 sm:px-10">
         <div className="mx-auto w-full max-w-md">
           {/* Inline brand mark — only when the side panel is hidden */}
-          <div className="mb-10 flex items-center gap-2 md:hidden">
-            <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <BrandGlyph className="size-4" />
-            </span>
-            <span className="text-base font-semibold tracking-tight text-foreground">
-              Artifact
-            </span>
+          <div className="mb-10 md:hidden">
+            <BrandMark />
           </div>
 
-          <MonoLabel>
+          <p className="landing-label">
+            <b>[■]</b>{" "}
             {isReview ? "Shared paper review" : "Shared journal entry"}
-          </MonoLabel>
+          </p>
 
-          <h1
-            className="mt-4 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[32px]"
-            style={{ textWrap: "balance" }}
-          >
+          <h1 className="landing-h2 mt-4">
             {sharerName} shared{" "}
-            <ItalicAccent>
+            <span className="text-muted-foreground">
               {isReview ? "a paper review" : "a journal entry"}
-            </ItalicAccent>{" "}
+            </span>{" "}
             with you.
           </h1>
 
-          <p
-            className="mt-4 text-[14px] leading-[1.6]"
-            style={{
-              fontFamily: "var(--font-reading)",
-              color: "color-mix(in srgb, var(--foreground) 72%, transparent)",
-            }}
-          >
+          <p className="landing-lede mt-4 text-[15px]">
             One click and a copy lands in your workspace: chats, annotations,
             notes, and all.
           </p>
@@ -542,8 +534,9 @@ function CtaArea({
   );
 }
 
+// The landing's primary CTA: ink fill, opacity hover, no lift.
 const primaryBtnCls =
-  "group inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-[13.5px] font-medium text-primary-foreground shadow-[var(--shadow-primary)] transition-all duration-150 hover:-translate-y-px hover:shadow-[var(--shadow-md)]";
+  "group inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-[14px] font-medium text-background transition-opacity duration-150 hover:opacity-85";
 
 /* ── Revoked state ─────────────────────────────────────────────── */
 
@@ -563,20 +556,14 @@ function RevokedView() {
         >
           <BrandGlyph className="size-5 text-primary" />
         </span>
-        <MonoLabel>Link revoked</MonoLabel>
-        <h1
-          className="mt-3 text-[28px] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground"
-          style={{ textWrap: "balance" }}
-        >
-          This share was <ItalicAccent>taken down.</ItalicAccent>
+        <p className="landing-label">
+          <b>[■]</b> Link revoked
+        </p>
+        <h1 className="landing-h2 mt-4">
+          This share was{" "}
+          <span className="text-muted-foreground">taken down.</span>
         </h1>
-        <p
-          className="mt-4 text-[14px] leading-[1.6]"
-          style={{
-            fontFamily: "var(--font-reading)",
-            color: "color-mix(in srgb, var(--foreground) 72%, transparent)",
-          }}
-        >
+        <p className="landing-lede mt-4 text-[15px]">
           The person who shared this changed their mind. Reach out to them
           directly if you&apos;d like access.
         </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Compass } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import {
   getDiscoverQueriesSnapshot,
   getRecommendationsSnapshot,
@@ -181,20 +181,17 @@ function RecentRow({
     <button
       type="button"
       onClick={() => onOpen(q.id)}
-      className="group flex h-full w-full flex-col rounded-xl border border-border/60 bg-card/50 px-5 py-4 text-left transition-all duration-200 hover:-translate-y-px hover:border-primary/25 hover:bg-card hover:shadow-[var(--shadow-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+      className="group flex h-full w-full flex-col rounded-lg border border-border bg-card px-5 py-4 text-left transition-colors duration-150 hover:border-foreground/20 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
     >
       {/* Status / time */}
       <div className="mb-2.5 flex items-center gap-2">
-        <span className="inline-flex size-5 items-center justify-center rounded-md bg-muted text-primary/70">
-          <Compass className="size-3" strokeWidth={1.9} />
-        </span>
         {live ? (
-          <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-primary">
             <span className="landing-pulse-dot" />
             Researching
           </span>
         ) : (
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
+          <span className="font-mono text-[11px] text-muted-foreground">
             {relativeTime(q.createdAt)}
           </span>
         )}
@@ -206,10 +203,7 @@ function RecentRow({
       </p>
 
       {/* Footer meta */}
-      <div
-        className="mt-auto flex items-center gap-x-1.5 pt-3.5 text-[11px] text-muted-foreground"
-        style={{ borderTop: "1px solid var(--border)" }}
-      >
+      <div className="mt-auto flex items-center gap-x-1.5 pt-3.5 font-mono text-[11px] text-muted-foreground">
         {errored ? (
           <span className="inline-flex items-center gap-1 text-destructive/85">
             <AlertCircle className="size-3" strokeWidth={2} />
@@ -239,10 +233,7 @@ function RecentRow({
             ) : null}
           </span>
         ) : (
-          <span
-            className="italic text-muted-foreground/60"
-            style={{ fontFamily: "var(--font-reading)" }}
-          >
+          <span className="text-muted-foreground/70">
             {live ? "Working…" : "No picks yet"}
           </span>
         )}

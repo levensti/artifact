@@ -22,6 +22,23 @@ export interface Annotation {
   updatedAt: string;
 }
 
+/**
+ * Highlight fill for an annotation in the reader. Margin notes take the warm
+ * warning tint and passage threads the indigo accent, matching the landing's
+ * `landing-hl` / `landing-hl-blue` pair so the two kinds read apart at a glance.
+ */
+export function highlightBackground(
+  kind: AnnotationKind,
+  state: "idle" | "hovered" | "active",
+): string {
+  const token = kind === "ask_ai" ? "--primary" : "--warning";
+  const pct =
+    kind === "ask_ai"
+      ? { idle: 14, hovered: 22, active: 32 }[state]
+      : { idle: 22, hovered: 32, active: 42 }[state];
+  return `color-mix(in srgb, var(${token}) ${pct}%, transparent)`;
+}
+
 export interface AnnotationMessage {
   id: string;
   role: "user" | "assistant";
