@@ -108,19 +108,36 @@ export async function registerDocument(params: {
           indexError: null,
         },
       })
-    : await prisma.document.create({
-        data: {
-          hash,
-          text,
-          charCount: text.length,
-          title: title ?? null,
-          outline: toJson(outline),
-        },
-      });
+    : await prisma.document
+        .create({
+          data: {
+            hash,
+            text,
+            charCount: text.length,
+            title: title ?? null,
+            outline: toJson(outline),
+          },
+        })
+        .catch((err: unknown) => {
+          // Another reader registered the same paper between our lookup and
+          // this insert. Theirs holds the same text, so use it.
+          if (
+            err instanceof Prisma.PrismaClientKnownRequestError &&
+            err.code === "P2002"
+          ) {
+            return null;
+          }
+          throw err;
+        });
+  if (!doc) return registerDocument(params);
 
   await replaceSections(doc.id, text, outline ?? null);
   return { doc, textStored: true };
 }
+
+/** Prisma's 5s default is too tight for re-pointing a large document's
+ *  chunks at its sections. */
+const SECTIONS_TX_TIMEOUT_MS = 30_000;
 
 export async function replaceSections(
   documentId: string,
@@ -134,27 +151,27 @@ export async function replaceSections(
       await tx.documentChunk.updateMany({ where: { documentId }, data: { sectionId: null } });
       return;
     }
-    // Insert parents before children so parentId FKs resolve; detectSections
-    // emits in document order, which is parent-first for a well-formed tree.
+    // One bulk insert rather than a round trip per section: a bookmarked
+    // textbook can have hundreds of sections, and per-row inserts blew the
+    // transaction timeout. Ids are minted up front so parentId can point at
+    // rows in the same batch; detectSections emits parent-first, so any
+    // batch split Prisma makes still inserts parents before children.
     const ids = detected.map(() => crypto.randomUUID());
-    for (let i = 0; i < detected.length; i++) {
-      const s = detected[i];
-      await tx.documentSection.create({
-        data: {
-          id: ids[i],
-          documentId,
-          parentId: s.parentIndex === null ? null : ids[s.parentIndex],
-          ordinal: s.ordinal,
-          depth: s.depth,
-          label: s.label,
-          title: s.title,
-          startPage: s.startPage,
-          endPage: s.endPage,
-          charStart: s.charStart,
-          charEnd: s.charEnd,
-        },
-      });
-    }
+    await tx.documentSection.createMany({
+      data: detected.map((s, i) => ({
+        id: ids[i],
+        documentId,
+        parentId: s.parentIndex === null ? null : ids[s.parentIndex],
+        ordinal: s.ordinal,
+        depth: s.depth,
+        label: s.label,
+        title: s.title,
+        startPage: s.startPage,
+        endPage: s.endPage,
+        charStart: s.charStart,
+        charEnd: s.charEnd,
+      })),
+    });
     // Point existing chunks at the deepest section containing their start.
     await tx.$executeRaw`
       UPDATE "DocumentChunk" c
@@ -180,7 +197,7 @@ export async function replaceSections(
             AND c."charStart" >= s."charStart" AND c."charStart" < s."charEnd"
         )
     `;
-  });
+  }, { timeout: SECTIONS_TX_TIMEOUT_MS });
 }
 
 /**

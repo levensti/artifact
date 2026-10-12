@@ -71,6 +71,18 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
+  try {
+    return await register(userId, { hash, text, title, outline, reviewId, apiKey });
+  } catch (err) {
+    // Return JSON so the client can show the cause, not a bare 500.
+    return errorResponse(err);
+  }
+}
+
+async function register(
+  userId: string,
+  { hash, text, title, outline, reviewId, apiKey }: RegisterRequest,
+): Promise<NextResponse> {
   const cleanOutline = sanitizeOutline(outline);
   const { doc, textStored } = await docs.registerDocument({
     hash,
