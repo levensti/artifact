@@ -907,7 +907,7 @@ function ProjectDialog(
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. My thesis, NLP papers…"
-              className="w-full rounded-md border bg-background px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-primary/30"
+              className="h-8 w-full rounded-lg border bg-background px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
           <div className="mt-1 flex justify-end gap-2">

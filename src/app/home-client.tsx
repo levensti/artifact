@@ -291,7 +291,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
           placeholder="Paste an arXiv link, or search papers by keyword"
           disabled={loading}
           autoFocus
-          className="block w-full bg-transparent py-3 pl-11 pr-12 text-[15px] leading-normal text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
+          className="block w-full bg-transparent py-[9px] pl-11 pr-12 text-[15px] leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
         />
         <button
           type="button"
@@ -300,7 +300,7 @@ function ArxivBar({ onOpenReview }: { onOpenReview: (id: string) => void }) {
           aria-label="Start review"
           title="Start review"
           className={cn(
-            "absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md transition-colors",
+            "absolute right-[5px] top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md transition-colors",
             canSend
               ? "bg-primary text-primary-foreground hover:bg-primary/90"
               : "cursor-default bg-muted text-muted-foreground/60",

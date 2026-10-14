@@ -392,6 +392,23 @@ export function CitationContextProvider({
       // whole page when the text isn't found (text layer not rendered yet, or
       // extraction/render mismatch).
       const anchor = anchorText ? findAnchorElement(target, anchorText) : null;
+      // The viewer only mounts pages near the viewport, so a far page has no
+      // text layer yet. Jump to it, then settle on the anchor once it renders.
+      if (anchorText && !anchor && !target.querySelector(".textLayer")) {
+        target.scrollIntoView({ block: "center" });
+        const mo = new MutationObserver(() => {
+          const late = findAnchorElement(target, anchorText);
+          if (!late) return;
+          mo.disconnect();
+          late.style.scrollMarginTop = "19px";
+          late.scrollIntoView({ behavior: "smooth", block: anchorBlock });
+        });
+        mo.observe(target, { childList: true, subtree: true });
+        window.setTimeout(() => mo.disconnect(), 3000);
+        target.classList.add("page-flash");
+        window.setTimeout(() => target.classList.remove("page-flash"), 1100);
+        return;
+      }
       // `anchorBlock` controls where the anchor lands: "start" for section
       // headings (content reads downward from them, with a small margin so
       // the heading isn't flush against the edge), "center" for figure/table

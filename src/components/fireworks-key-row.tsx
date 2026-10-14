@@ -186,7 +186,7 @@ export function FireworksKeyRow() {
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
                   placeholder="fw_..."
-                  className="pl-8 pr-9 text-xs h-9"
+                  className="pl-8 pr-9 text-xs h-8"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleSave();
                   }}
@@ -208,8 +208,8 @@ export function FireworksKeyRow() {
                   size="sm"
                   className={
                     saved
-                      ? "text-success border-success/35 gap-1 h-9"
-                      : "h-9 gap-1"
+                      ? "text-success border-success/35 gap-1 h-8"
+                      : "h-8 gap-1"
                   }
                 >
                   {saved && <Check size={13} />}

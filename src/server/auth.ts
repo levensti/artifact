@@ -20,9 +20,17 @@ const cookiePrefix = useSecureCookies ? "__Secure-" : "";
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  providers: [Google],
+  // Google verifies its users' addresses, so a Google sign-in whose email
+  // matches an email + password account links to it instead of failing with
+  // OAuthAccountNotLinked. The signIn callback refuses unverified profiles,
+  // and the linkAccount event revokes the unverified password (see below).
+  providers: [Google({ allowDangerousEmailAccountLinking: true })],
   session: { strategy: "database" },
   callbacks: {
+    signIn({ account, profile }) {
+      if (account?.provider === "google") return profile?.email_verified === true;
+      return true;
+    },
     session({ session, user }) {
       session.user.id = user.id;
       return session;
@@ -30,7 +38,31 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   },
   events: {
     async createUser({ user }) {
+      // Auth.js also fires this when linking Google to an existing email +
+      // password user; only those rows carry a password at this point.
+      if ((user as { password?: string | null }).password) return;
       await sendSlackEvent(SlackEventType.Signup, "signed up", user.id);
+    },
+    async linkAccount({ user, profile }) {
+      if (!user.id) return;
+      const row = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { email: true, password: true, emailVerified: true },
+      });
+      if (!row || row.emailVerified) return;
+      // Only an inbox Google vouches for counts as proof of ownership.
+      if (profile.email?.toLowerCase() !== row.email.toLowerCase()) return;
+      // Email signup never verifies the address, so whoever set this password
+      // may not own the inbox (e.g. someone pre-registered the victim's
+      // email). Google has now proven ownership: drop that password and any
+      // sessions it opened. Runs before Auth.js creates the Google session.
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: user.id },
+          data: { emailVerified: new Date(), password: null },
+        }),
+        prisma.session.deleteMany({ where: { userId: user.id } }),
+      ]);
     },
     async signIn({ user, isNewUser }) {
       if (isNewUser || !user.id) return;

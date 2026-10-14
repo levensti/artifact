@@ -219,14 +219,14 @@ function JournalPageInner() {
             />
 
             {/* Prominent search — full-width beneath the title, Claude-style */}
-            <div className="mb-9 mt-5 flex items-center gap-2.5 rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
-              <Search className="size-4 shrink-0 text-muted-foreground/50" />
+            <div className="mb-9 mt-5 flex h-9 items-center gap-2 rounded-lg border border-border/70 bg-card px-3 shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
+              <Search className="size-3.5 shrink-0 text-muted-foreground/50" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search entries…"
-                className="w-full bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground/55 focus:outline-none"
+                className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/55 focus:outline-none"
               />
             </div>
 
@@ -280,14 +280,14 @@ function JournalPageInner() {
           />
 
           {/* Prominent search — full-width beneath the title, Claude-style */}
-          <div className="mb-9 mt-5 flex items-center gap-2.5 rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
-            <Search className="size-4 shrink-0 text-muted-foreground/50" />
+          <div className="mb-9 mt-5 flex h-9 items-center gap-2 rounded-lg border border-border/70 bg-card px-3 shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
+            <Search className="size-3.5 shrink-0 text-muted-foreground/50" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search entries…"
-              className="w-full bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground/55 focus:outline-none"
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/55 focus:outline-none"
             />
           </div>
 
