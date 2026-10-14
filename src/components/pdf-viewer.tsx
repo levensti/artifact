@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import ToolbarTitle from "@/components/viewer-toolbar-title";
 import type { DocumentOutlineEntry } from "@/lib/documents";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -51,6 +51,39 @@ const ZOOM_STEP = 0.2;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_DEBOUNCE_MS = 140;
+/** US Letter, used for page slots until the real page sizes are known. */
+const DEFAULT_ASPECT = 11 / 8.5;
+/** pdf.js's own default ceiling on canvas size; past this, rendering a
+ *  single page at high zoom costs hundreds of MB and seconds of raster. */
+const MAX_CANVAS_PIXELS = 16_777_216;
+
+function clampZoom(z: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === "&" ? "&amp;"
+    : c === "<" ? "&lt;"
+    : c === ">" ? "&gt;"
+    : c === '"' ? "&quot;"
+    : "&#39;",
+  );
+}
+
+/** Where the zoom focal point sat before a zoom: a page, the fractional
+ *  position inside it, and the viewport offset it should stay pinned to. */
+interface ZoomAnchor {
+  page: number;
+  fx: number;
+  fy: number;
+  vx: number;
+  vy: number;
+}
 
 function clientXY(e: MouseEvent | TouchEvent): { x: number; y: number } {
   if ("changedTouches" in e && e.changedTouches[0]) {
@@ -90,10 +123,24 @@ export default function PdfViewer({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [matchCount, setMatchCount] = useState(0);
+  /** Per-page match counts, keyed by the query they were computed for so a
+   *  stale async result never pairs with a newer query. */
+  const [matchState, setMatchState] = useState<{ query: string; counts: number[] }>({
+    query: "",
+    counts: [],
+  });
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  /** Height / width of each page at scale 1, indexed by page - 1. */
+  const [pageAspects, setPageAspects] = useState<number[]>([]);
+  /** Pages near the viewport. Only these mount a react-pdf <Page>; the rest
+   *  are empty slots of the right size, so zooming re-rasterizes a handful
+   *  of pages instead of the whole document. */
+  const [renderedPages, setRenderedPages] = useState<ReadonlySet<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const slotRefs = useRef(new Map<number, HTMLDivElement>());
+  const zoomAnchorRef = useRef<ZoomAnchor | null>(null);
+  const pageStringsRef = useRef(new Map<number, string[]>());
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -108,10 +155,59 @@ export default function PdfViewer({
   }, []);
 
   const fitWidth = Math.max(0, containerWidth - H_PADDING);
-  const pageWidth = Math.max(
-    120,
-    Math.floor(fitWidth * Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, committedZoom))),
-  );
+  const widthAt = (zoom: number) =>
+    containerWidth > 0 ? Math.max(120, Math.floor(fitWidth * clampZoom(zoom))) : 400;
+  // Slots are laid out at the live width so the document reflows the moment
+  // the user zooms; pdf.js rasterizes at the committed width and the canvas
+  // is CSS-scaled to fill the slot until the debounce commits.
+  const slotWidth = widthAt(liveZoom);
+  const renderWidth = widthAt(committedZoom);
+  const previewScale = slotWidth / renderWidth;
+  const aspectOf = (pageNum: number) =>
+    pageAspects[pageNum - 1] ?? pageAspects[0] ?? DEFAULT_ASPECT;
+
+  /** Record the page point under (clientX, clientY), defaulting to the
+   *  viewport center, so the layout effect below can keep it in place. */
+  const captureZoomAnchor = useCallback((clientX?: number, clientY?: number) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const cr = container.getBoundingClientRect();
+    const px = clientX ?? cr.left + cr.width / 2;
+    const py = clientY ?? cr.top + cr.height / 2;
+    let best: { page: number; rect: DOMRect; dist: number } | null = null;
+    for (const [page, el] of slotRefs.current) {
+      const rect = el.getBoundingClientRect();
+      const dist = py < rect.top ? rect.top - py : py > rect.bottom ? py - rect.bottom : 0;
+      if (!best || dist < best.dist) best = { page, rect, dist };
+      if (dist === 0) break;
+    }
+    if (!best) return;
+    const { rect } = best;
+    const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+    zoomAnchorRef.current = {
+      page: best.page,
+      fx: clamp01((px - rect.left) / rect.width),
+      fy: clamp01((py - rect.top) / rect.height),
+      vx: px - cr.left,
+      vy: py - cr.top,
+    };
+  }, []);
+
+  // After the slots resize, scroll so the anchored point is back under the
+  // cursor (pinch) or viewport center (buttons) instead of drifting.
+  useLayoutEffect(() => {
+    const anchor = zoomAnchorRef.current;
+    zoomAnchorRef.current = null;
+    const container = containerRef.current;
+    const slot = anchor && slotRefs.current.get(anchor.page);
+    if (!anchor || !container || !slot) return;
+    const cr = container.getBoundingClientRect();
+    const sr = slot.getBoundingClientRect();
+    container.scrollTop =
+      sr.top - cr.top + container.scrollTop + anchor.fy * sr.height - anchor.vy;
+    container.scrollLeft =
+      sr.left - cr.left + container.scrollLeft + anchor.fx * sr.width - anchor.vx;
+  }, [slotWidth]);
 
   // Trackpad pinch on macOS arrives as a `wheel` event with `ctrlKey`
   // synthesized by the OS; the same path covers actual Ctrl+wheel on a
@@ -124,6 +220,7 @@ export default function PdfViewer({
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
+      captureZoomAnchor(e.clientX, e.clientY);
       setLiveZoom((z) => {
         // Exponential mapping feels uniform across zoom levels: a given
         // pinch motion produces the same *percent* change whether you're
@@ -136,7 +233,7 @@ export default function PdfViewer({
     };
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [captureZoomAnchor]);
 
   // Coalesce rapid zoom clicks into one rasterization.
   useEffect(() => {
@@ -158,7 +255,6 @@ export default function PdfViewer({
           if (open) {
             setSearchQuery("");
             setActiveMatchIndex(0);
-            setMatchCount(0);
             return false;
           }
           requestAnimationFrame(() => {
@@ -176,39 +272,154 @@ export default function PdfViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // react-pdf renders page text layers asynchronously as each page loads, so
-  // we can't compute match count synchronously after a query change. Watch the
-  // container for mutations and recount whenever <mark> nodes appear/disappear.
-  // When the query is empty, customTextRenderer emits no marks, so the observer
-  // naturally drives matchCount to 0 — no synchronous reset needed here.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    if (!searchQuery.trim()) return;
-    const update = () => {
-      const matches = container.querySelectorAll(".paper-search-match");
-      setMatchCount(matches.length);
-      setActiveMatchIndex((idx) =>
-        matches.length === 0 ? 0 : Math.min(idx, matches.length - 1),
-      );
-    };
-    update();
-    const mo = new MutationObserver(update);
-    mo.observe(container, { childList: true, subtree: true, characterData: true });
-    return () => mo.disconnect();
-  }, [searchQuery]);
+  const [loadedPdf, setLoadedPdf] = useState<PDFDocumentProxy | null>(null);
+  const extractedRef = useRef(false);
+  const onDocumentLoadSuccess = useCallback((result: { numPages: number }) => {
+    setNumPages(result.numPages);
+    setLoading(false);
+    const pdfProxy = result as unknown as PDFDocumentProxy;
+    if (typeof pdfProxy.getPage === "function") setLoadedPdf(pdfProxy);
+  }, []);
 
-  // Apply the active class to the current match and scroll it into view.
+  // Text items per page, shared by extraction and search. Cached because
+  // search re-scans every page on each keystroke.
+  useEffect(() => {
+    pageStringsRef.current = new Map();
+  }, [loadedPdf]);
+  const getPageStrings = useCallback(
+    async (pdf: PDFDocumentProxy, pageNum: number): Promise<string[]> => {
+      const cached = pageStringsRef.current.get(pageNum);
+      if (cached) return cached;
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const strings = content.items.map((item) => ("str" in item ? item.str : ""));
+      pageStringsRef.current.set(pageNum, strings);
+      return strings;
+    },
+    [],
+  );
+
+  // Page sizes for the placeholder slots. The first page lands right away
+  // so the layout is close; the rest fill in once all are measured.
+  useEffect(() => {
+    if (!loadedPdf) return;
+    let cancelled = false;
+    void (async () => {
+      const aspects: number[] = [];
+      for (let i = 1; i <= loadedPdf.numPages; i++) {
+        try {
+          const vp = (await loadedPdf.getPage(i)).getViewport({ scale: 1 });
+          aspects.push(vp.height / vp.width);
+        } catch {
+          aspects.push(aspects[0] ?? DEFAULT_ASPECT);
+        }
+        if (cancelled) return;
+        if (i === 1) setPageAspects([...aspects]);
+      }
+      setPageAspects(aspects);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedPdf]);
+
+  // Mount pages within one viewport height above or below the visible area.
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    const matches = container.querySelectorAll<HTMLElement>(".paper-search-match");
-    matches.forEach((m, i) => {
-      m.classList.toggle("paper-search-match-active", i === activeMatchIndex);
-    });
-    const active = matches[activeMatchIndex];
-    if (active) active.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeMatchIndex, matchCount]);
+    if (!container || numPages === 0) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        setRenderedPages((prev) => {
+          let next: Set<number> | null = null;
+          for (const entry of entries) {
+            const pageNum = Number((entry.target as HTMLElement).dataset.pageSlot);
+            if (entry.isIntersecting === prev.has(pageNum)) continue;
+            next ??= new Set(prev);
+            if (entry.isIntersecting) next.add(pageNum);
+            else next.delete(pageNum);
+          }
+          return next ?? prev;
+        });
+      },
+      { root: container, rootMargin: "100% 0px" },
+    );
+    slotRefs.current.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [numPages]);
+
+  // Count matches from the text content rather than the DOM, since only the
+  // pages near the viewport have a text layer mounted.
+  const trimmedQuery = searchQuery.trim();
+  useEffect(() => {
+    if (!trimmedQuery || !loadedPdf) return;
+    let cancelled = false;
+    const re = new RegExp(escapeRegExp(trimmedQuery), "gi");
+    void (async () => {
+      const counts: number[] = [];
+      try {
+        for (let i = 1; i <= loadedPdf.numPages; i++) {
+          const strings = await getPageStrings(loadedPdf, i);
+          if (cancelled) return;
+          counts.push(strings.reduce((n, str) => n + (str.match(re)?.length ?? 0), 0));
+        }
+      } catch {
+        return;
+      }
+      setMatchState({ query: trimmedQuery, counts });
+      setActiveMatchIndex(0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trimmedQuery, loadedPdf, getPageStrings]);
+
+  const pageMatchCounts =
+    trimmedQuery && matchState.query === trimmedQuery ? matchState.counts : null;
+  const matchCount = pageMatchCounts?.reduce((a, b) => a + b, 0) ?? 0;
+
+  // Highlight the active match and scroll to it. If its page isn't mounted
+  // yet, jump to the page first and finish once the text layer renders.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !pageMatchCounts || matchCount === 0) return;
+    let page = 0;
+    let local = activeMatchIndex;
+    while (page < pageMatchCounts.length && local >= pageMatchCounts[page]) {
+      local -= pageMatchCounts[page];
+      page++;
+    }
+    const pageNum = page + 1;
+    let scrolledToMatch = false;
+    let scrolledToPage = false;
+    const apply = () => {
+      const slot = slotRefs.current.get(pageNum);
+      if (!slot) return;
+      const marks = slot.querySelectorAll<HTMLElement>(".paper-search-match");
+      const mark = marks[local];
+      if (!mark) {
+        if (!scrolledToPage) {
+          scrolledToPage = true;
+          slot.scrollIntoView({ block: "center" });
+        }
+        return;
+      }
+      if (!mark.classList.contains("paper-search-match-active")) {
+        container
+          .querySelectorAll(".paper-search-match-active")
+          .forEach((m) => m.classList.remove("paper-search-match-active"));
+        mark.classList.add("paper-search-match-active");
+      }
+      if (!scrolledToMatch) {
+        scrolledToMatch = true;
+        mark.scrollIntoView({ block: "center", behavior: scrolledToPage ? "auto" : "smooth" });
+      }
+    };
+    apply();
+    // Text layers re-render on zoom and mount on scroll; re-apply the class.
+    const mo = new MutationObserver(apply);
+    mo.observe(container, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [activeMatchIndex, pageMatchCounts, matchCount]);
 
   const extractText = useCallback(
     async (pdf: PDFDocumentProxy) => {
@@ -216,11 +427,7 @@ export default function PdfViewer({
         const pages: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
           if (!pdf || typeof pdf.getPage !== "function") return;
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          const strings = content.items
-            .map((item) => ("str" in item ? item.str : ""))
-            .join(" ");
+          const strings = (await getPageStrings(pdf, i)).join(" ");
           pages.push(`[Page ${i}]\n${strings}`);
         }
         const outline = await extractOutline(pdf);
@@ -232,17 +439,8 @@ export default function PdfViewer({
         }
       }
     },
-    [onTextExtracted],
+    [onTextExtracted, getPageStrings],
   );
-
-  const [loadedPdf, setLoadedPdf] = useState<PDFDocumentProxy | null>(null);
-  const extractedRef = useRef(false);
-  const onDocumentLoadSuccess = useCallback((result: { numPages: number }) => {
-    setNumPages(result.numPages);
-    setLoading(false);
-    const pdfProxy = result as unknown as PDFDocumentProxy;
-    if (typeof pdfProxy.getPage === "function") setLoadedPdf(pdfProxy);
-  }, []);
 
   // Extract once the document is loaded unless the host already has the
   // text; re-evaluated if `skipTextExtraction` flips to false later.
@@ -416,16 +614,15 @@ export default function PdfViewer({
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        const pages = container.querySelectorAll("[data-page-number]");
         let closestPage = 1;
         let closestDistance = Infinity;
         const containerTop = container.getBoundingClientRect().top;
 
-        pages.forEach((el) => {
+        slotRefs.current.forEach((el, pageNum) => {
           const distance = Math.abs(el.getBoundingClientRect().top - containerTop);
           if (distance < closestDistance) {
             closestDistance = distance;
-            closestPage = parseInt(el.getAttribute("data-page-number") || "1", 10);
+            closestPage = pageNum;
           }
         });
         setCurrentPage(closestPage);
@@ -440,30 +637,26 @@ export default function PdfViewer({
   }, [numPages]);
 
   const goToPage = (page: number) => {
-    const container = containerRef.current;
-    if (!container) return;
-    const target = container.querySelector(`[data-page-number="${page}"]`);
-    target?.scrollIntoView({ behavior: "smooth" });
+    slotRefs.current.get(page)?.scrollIntoView({ behavior: "smooth" });
   };
 
   const customTextRenderer = useCallback(
     (item: { str: string }) => {
-      const escapeHtml = (s: string) =>
-        s.replace(/[&<>"']/g, (c) =>
-          c === "&" ? "&amp;"
-          : c === "<" ? "&lt;"
-          : c === ">" ? "&gt;"
-          : c === '"' ? "&quot;"
-          : "&#39;",
-        );
-      const safe = escapeHtml(item.str);
-      const q = searchQuery.trim();
-      if (!q) return safe;
-      const safeQuery = escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(safeQuery, "gi");
-      return safe.replace(re, (m) => `<mark class="paper-search-match">${m}</mark>`);
+      if (!trimmedQuery) return escapeHtml(item.str);
+      // Match on the raw text and escape each piece, so the count agrees with
+      // the text-content search above and a query like "amp" can't land
+      // inside an escaped entity.
+      const re = new RegExp(`(${escapeRegExp(trimmedQuery)})`, "gi");
+      return item.str
+        .split(re)
+        .map((part, i) =>
+          i % 2 === 1
+            ? `<mark class="paper-search-match">${escapeHtml(part)}</mark>`
+            : escapeHtml(part),
+        )
+        .join("");
     },
-    [searchQuery],
+    [trimmedQuery],
   );
 
   const nextMatch = useCallback(
@@ -481,17 +674,20 @@ export default function PdfViewer({
     setSearchOpen(false);
     setSearchQuery("");
     setActiveMatchIndex(0);
-    setMatchCount(0);
   }, []);
 
-  const zoomOut = () =>
+  const zoomOut = () => {
+    captureZoomAnchor();
     setLiveZoom((z) =>
       Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100),
     );
-  const zoomIn = () =>
+  };
+  const zoomIn = () => {
+    captureZoomAnchor();
     setLiveZoom((z) =>
       Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100),
     );
+  };
 
   return (
     <div className="flex flex-col h-full bg-transparent">
@@ -558,7 +754,6 @@ export default function PdfViewer({
               const v = e.target.value;
               setSearchQuery(v);
               setActiveMatchIndex(0);
-              if (v.trim() === "") setMatchCount(0);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -644,27 +839,41 @@ export default function PdfViewer({
           {Array.from({ length: numPages }, (_, i) => {
             const pageNum = i + 1;
             const pageAnnotations = annotations.filter((a) => a.pageNumber === pageNum);
-            // Transient CSS scale during the debounce window so the page
-            // tracks the user's zoom intent before pdf.js re-rasterizes.
-            // Resolves to 1 on commit (and during stable state).
-            const previewScale = liveZoom / committedZoom;
+            const slotHeight = slotWidth * aspectOf(pageNum);
             return (
+              // The slot owns layout at the live zoom; `data-page-number` lives
+              // here (not only on react-pdf's inner div) so citation jumps and
+              // highlight clicks can find pages that aren't mounted.
               <div
                 key={pageNum}
-                className="relative"
-                style={{
-                  transform: previewScale === 1 ? undefined : `scale(${previewScale})`,
-                  transformOrigin: "top center",
-                  willChange: previewScale === 1 ? undefined : "transform",
+                ref={(el) => {
+                  if (el) slotRefs.current.set(pageNum, el);
+                  else slotRefs.current.delete(pageNum);
                 }}
+                data-page-slot={pageNum}
+                data-page-number={pageNum}
+                className="relative shrink-0 bg-white shadow-md"
+                style={{ width: slotWidth, height: slotHeight }}
               >
-                <Page
-                  pageNumber={pageNum}
-                  width={containerWidth > 0 ? pageWidth : 400}
-                  className="shadow-md"
-                  loading={null}
-                  customTextRenderer={customTextRenderer}
-                />
+                {renderedPages.has(pageNum) && (
+                  // Rasterized at the committed width, CSS-scaled to the slot
+                  // during the debounce window; resolves to scale 1 on commit.
+                  <div
+                    className="absolute left-0 top-0"
+                    style={{
+                      width: renderWidth,
+                      transform: previewScale === 1 ? undefined : `scale(${previewScale})`,
+                      transformOrigin: "0 0",
+                    }}
+                  >
+                    <PdfPage
+                      pageNumber={pageNum}
+                      width={renderWidth}
+                      height={renderWidth * aspectOf(pageNum)}
+                      customTextRenderer={customTextRenderer}
+                    />
+                  </div>
+                )}
                 {pageAnnotations.map((ann) => {
                   const isActive = ann.id === activeAnnotationId;
                   const isHovered = ann.id === hoveredAnnotationId;
@@ -696,6 +905,36 @@ export default function PdfViewer({
     </div>
   );
 }
+
+/**
+ * One rasterized page. Memoized so live-zoom renders, which only resize the
+ * slots, don't reconcile every mounted <Page>.
+ */
+const PdfPage = memo(function PdfPage({
+  pageNumber,
+  width,
+  height,
+  customTextRenderer,
+}: {
+  pageNumber: number;
+  width: number;
+  height: number;
+  customTextRenderer: (item: { str: string }) => string;
+}) {
+  // Cap the backing store at pdf.js's canvas limit so 300% on a retina
+  // screen doesn't allocate a 40-megapixel canvas per page.
+  const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  const devicePixelRatio = Math.min(dpr, Math.sqrt(MAX_CANVAS_PIXELS / (width * height)));
+  return (
+    <Page
+      pageNumber={pageNumber}
+      width={width}
+      devicePixelRatio={devicePixelRatio}
+      loading={null}
+      customTextRenderer={customTextRenderer}
+    />
+  );
+});
 
 /**
  * Flatten the PDF's outline (bookmarks) into `{ title, page, depth }`

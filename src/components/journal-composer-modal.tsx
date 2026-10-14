@@ -125,7 +125,7 @@ export default function JournalComposerModal({
             rows={4}
             placeholder="e.g. what I've been learning about diffusion samplers this week"
             disabled={submitting}
-            className="w-full resize-y rounded-md border border-border bg-card px-3 py-2 text-[13px] text-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring/15 disabled:opacity-60"
+            className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring/15 disabled:opacity-60"
           />
           <p className="text-[11px] text-muted-foreground/60">
             Drafted from your reviews, chats, and annotations from the last 30

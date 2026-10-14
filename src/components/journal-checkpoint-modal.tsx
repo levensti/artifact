@@ -224,7 +224,7 @@ export default function JournalCheckpointModal({
               rows={2}
               placeholder="e.g. focus on the implications for distributed training"
               disabled={submitting}
-              className="w-full resize-y rounded-md border border-border bg-card px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/55 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring/15 disabled:opacity-60"
+              className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/55 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring/15 disabled:opacity-60"
             />
           </div>
 

@@ -18,9 +18,12 @@ import {
   Info,
   Loader2,
   MessageSquareQuote,
+  Mic,
+  MicOff,
   Minimize2,
   PenLine,
   Send,
+  Square,
   X,
 } from "lucide-react";
 import {
@@ -38,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSettingsOpener } from "./settings-opener-context";
 import { useCitationContext } from "./citation-context";
+import { useSpeechInput } from "@/hooks/use-speech-input";
 import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import ChatEmptyState from "./chat-empty-state";
 import { ChatMessageBubble } from "./chat-message-bubble";
@@ -252,10 +256,21 @@ function ChatInput({
     ta.setSelectionRange(len, len);
   }, [focusToken, inputLocked]);
 
+  const dictation = useSpeechInput(setInput);
+  const { listening, stop: stopDictation } = dictation;
+  useEffect(() => {
+    if (inputLocked && listening) stopDictation();
+  }, [inputLocked, listening, stopDictation]);
+
+  const send = () => {
+    stopDictation();
+    void sendMessage();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void sendMessage();
+      send();
     }
   };
 
@@ -272,49 +287,95 @@ function ChatInput({
         <textarea
           ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            // Typing takes over from dictation; otherwise the next interim
+            // result would overwrite the edit.
+            if (listening) stopDictation();
+            setInput(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           disabled={inputLocked}
           placeholder={
             isPreparingPaper
               ? "Indexing paper for chat…"
-              : chatThreadAnnotationId
+              : listening
+                ? "Listening…"
+                : chatThreadAnnotationId
                 ? "Reply in this selection thread…"
                 : "Ask about the paper…"
           }
           rows={1}
           className={cn(
-            "flex-1 bg-transparent px-3 py-2.5 text-sm resize-none text-foreground placeholder:text-muted-foreground",
+            "flex-1 bg-transparent px-3 py-[9px] text-sm resize-none text-foreground placeholder:text-muted-foreground",
             inputLocked
               ? "cursor-not-allowed opacity-75"
               : "focus:outline-none",
           )}
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "size-8 m-1.5 rounded-md transition-colors duration-200",
-            input.trim() && !inputLocked && modelReady && !isStreaming
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-muted text-muted-foreground/60",
+        <div className="m-[5px] flex shrink-0 items-center gap-1">
+          {dictation.supported && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "size-7 rounded-md transition-colors duration-200",
+                listening
+                  ? "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => (listening ? stopDictation() : dictation.start(input))}
+              disabled={inputLocked}
+              aria-pressed={listening}
+              aria-label={
+                listening
+                  ? "Stop dictation"
+                  : dictation.error === "blocked"
+                    ? "Microphone access is blocked"
+                    : "Dictate"
+              }
+              title={
+                listening
+                  ? "Stop dictation"
+                  : dictation.error === "blocked"
+                    ? "Microphone access is blocked. Allow it in your browser's site settings."
+                    : "Dictate"
+              }
+            >
+              {listening ? (
+                <Square className="size-3 animate-pulse fill-current" />
+              ) : dictation.error === "blocked" ? (
+                <MicOff className="size-3.5" />
+              ) : (
+                <Mic className="size-3.5" />
+              )}
+            </Button>
           )}
-          onClick={sendMessage}
-          disabled={inputLocked || !modelReady || !input.trim() || isStreaming}
-          aria-label={
-            !modelReady
-              ? "Choose a model to send"
-              : isStreaming
-                ? "Sending..."
-                : "Send message"
-          }
-        >
-          {isStreaming ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Send className="size-3.5" />
-          )}
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "size-7 rounded-md transition-colors duration-200",
+              input.trim() && !inputLocked && modelReady && !isStreaming
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-muted text-muted-foreground/60",
+            )}
+            onClick={send}
+            disabled={inputLocked || !modelReady || !input.trim() || isStreaming}
+            aria-label={
+              !modelReady
+                ? "Choose a model to send"
+                : isStreaming
+                  ? "Sending..."
+                  : "Send message"
+            }
+          >
+            {isStreaming ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Send className="size-3.5" />
+            )}
+          </Button>
+        </div>
       </div>
       <div className="mt-1.5 space-y-0.5">
         {hideHeader && (

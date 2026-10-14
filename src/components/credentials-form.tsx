@@ -51,7 +51,7 @@ export function CredentialsForm({ mode, callbackUrl }: Props) {
             autoComplete="name"
             placeholder="What should we call you?"
             defaultValue={state.name ?? ""}
-            className="h-10"
+            className="h-9"
           />
         </Field>
       ) : null}
@@ -66,7 +66,7 @@ export function CredentialsForm({ mode, callbackUrl }: Props) {
           required
           placeholder="you@domain.com"
           defaultValue={state.email ?? ""}
-          className="h-10"
+          className="h-9"
         />
       </Field>
 
@@ -83,7 +83,7 @@ export function CredentialsForm({ mode, callbackUrl }: Props) {
         disabled={pending}
         className={cn(
           // The landing's primary CTA: ink fill, opacity hover, no lift.
-          "flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-[14px] font-medium text-background",
+          "flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 text-[14px] font-medium text-background",
           "transition-opacity duration-150 hover:opacity-85",
           "disabled:cursor-not-allowed disabled:opacity-60",
         )}
@@ -117,7 +117,7 @@ function PasswordInput({ isSignup }: { isSignup: boolean }) {
         required
         minLength={isSignup ? 8 : undefined}
         placeholder={isSignup ? "Pick a strong password" : "Your password"}
-        className="h-10 pr-10"
+        className="h-9 pr-10"
       />
       <button
         type="button"

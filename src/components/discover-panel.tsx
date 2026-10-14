@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowUp, KeyRound, Square } from "lucide-react";
+import { ArrowLeft, ArrowUp, KeyRound, Mic, MicOff, Square } from "lucide-react";
 import { hasUsableProvider } from "@/lib/keys";
 import {
   ensureDiscoverLoaded,
@@ -23,6 +23,7 @@ import ResearchBrief from "./research-brief";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import { useDiscoverChat } from "@/hooks/use-discover-chat";
+import { useSpeechInput } from "@/hooks/use-speech-input";
 import { useSettingsOpener } from "./settings-opener-context";
 import PageHeader from "./page-header";
 import { cn } from "@/lib/utils";
@@ -58,12 +59,19 @@ function Composer({
     el.style.overflowY = el.scrollHeight > MAX ? "auto" : "hidden";
   }, [text]);
 
+  const dictation = useSpeechInput(setText);
+  const { listening, stop: stopDictation } = dictation;
+  useEffect(() => {
+    if (inert && listening) stopDictation();
+  }, [inert, listening, stopDictation]);
+
   const send = useCallback(() => {
     if (!canSend) return;
+    stopDictation();
     const trimmed = text.trim();
     setText("");
     onSubmit(trimmed);
-  }, [canSend, text, onSubmit]);
+  }, [canSend, text, onSubmit, stopDictation]);
 
   const onKey = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -78,7 +86,7 @@ function Composer({
   return (
     <div
       className={cn(
-        "relative rounded-lg border bg-card transition-colors",
+        "flex items-end rounded-lg border bg-card transition-colors",
         disabled
           ? "border-border/50 opacity-60"
           : isStreaming
@@ -90,28 +98,71 @@ function Composer({
       <textarea
         ref={textareaRef}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          // Typing takes over from dictation; otherwise the next interim
+          // result would overwrite the edit.
+          if (listening) stopDictation();
+          setText(e.target.value);
+        }}
         onKeyDown={onKey}
-        placeholder={hint}
+        placeholder={listening ? "Listening…" : hint}
         rows={1}
         disabled={inert}
-        className="block max-h-44 min-h-[50px] w-full resize-none bg-transparent py-3 pl-4 pr-12 text-[15px] leading-normal text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
+        className="block max-h-40 min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3 pr-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
       />
-      <button
-        type="button"
-        onClick={send}
-        disabled={!canSend}
-        aria-label="Research"
-        title="Research"
-        className={cn(
-          "absolute bottom-2 right-2 inline-flex size-8 items-center justify-center rounded-md transition-colors",
-          canSend
-            ? "bg-primary text-primary-foreground hover:bg-primary/90"
-            : "cursor-default bg-muted text-muted-foreground/60",
+      <div className="m-[5px] flex shrink-0 items-center gap-1">
+        {dictation.supported && (
+          <button
+            type="button"
+            onClick={() => (listening ? stopDictation() : dictation.start(text))}
+            disabled={inert}
+            aria-pressed={listening}
+            aria-label={
+              listening
+                ? "Stop dictation"
+                : dictation.error === "blocked"
+                  ? "Microphone access is blocked"
+                  : "Dictate"
+            }
+            title={
+              listening
+                ? "Stop dictation"
+                : dictation.error === "blocked"
+                  ? "Microphone access is blocked. Allow it in your browser's site settings."
+                  : "Dictate"
+            }
+            className={cn(
+              "inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              listening
+                ? "bg-destructive/10 text-destructive hover:bg-destructive/15"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {listening ? (
+              <Square className="size-3 animate-pulse fill-current" />
+            ) : dictation.error === "blocked" ? (
+              <MicOff className="size-3.5" />
+            ) : (
+              <Mic className="size-3.5" />
+            )}
+          </button>
         )}
-      >
-        <ArrowUp className="size-4" strokeWidth={2.25} />
-      </button>
+        <button
+          type="button"
+          onClick={send}
+          disabled={!canSend}
+          aria-label="Research"
+          title="Research"
+          className={cn(
+            "inline-flex size-7 items-center justify-center rounded-md transition-colors",
+            canSend
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "cursor-default bg-muted text-muted-foreground/60",
+          )}
+        >
+          <ArrowUp className="size-3.5" strokeWidth={2.25} />
+        </button>
+      </div>
     </div>
   );
 }
