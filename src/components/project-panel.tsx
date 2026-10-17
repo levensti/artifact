@@ -25,11 +25,16 @@ import {
   getRecommendationsSnapshot,
   getReviewsSnapshot,
   hydrateClientStore,
+  judgeBriefs,
 } from "@/lib/client-data";
+import { orderByJudge } from "@/lib/judge-rubric";
 import { hasUsableProvider } from "@/lib/keys";
 import { normalizeArxivId } from "@/lib/arxiv";
 import { buildFollowupPrompt, linkThread } from "@/lib/discover-threads";
-import { projectResearchOptions } from "@/lib/project-research-client";
+import {
+  followupQuestion,
+  researchOptions,
+} from "@/lib/project-research-client";
 import type { Recommendation } from "@/lib/discover-types";
 import type { PaperReview } from "@/lib/review-types";
 import { useDiscoverChat } from "@/hooks/use-discover-chat";
@@ -80,10 +85,11 @@ interface ReadingEntry {
 }
 
 /**
- * One reading list across all of a project's research. Each session ranks
- * its own picks, so the combined order takes every session's #1 first
- * (newest session first), then every #2, and so on. A paper suggested by
- * more than one session appears once, at its best position.
+ * One reading list across all of a project's research, ordered by the
+ * judge's score (see src/lib/judge-rubric.ts). Picks not yet judged fall
+ * back to the sessions' own order: every session's #1 first (newest session
+ * first), then every #2, and so on, after the judged ones. A paper suggested
+ * by more than one session appears once, at its best position.
  */
 function combineReadingList(threads: ThreadView[]): ReadingEntry[] {
   const runs = threads
@@ -101,10 +107,11 @@ function combineReadingList(threads: ThreadView[]): ReadingEntry[] {
     run.recs.map((rec) => ({ rec, runIdx, run })),
   );
   all.sort((a, b) => a.rec.rank - b.rec.rank || a.runIdx - b.runIdx);
+  const ordered = orderByJudge(all, (e) => e.rec.judgeScore);
 
   const seen = new Set<string>();
   const out: ReadingEntry[] = [];
-  for (const { rec, run } of all) {
+  for (const { rec, run } of ordered) {
     const key = paperKey(rec.arxivId, rec.url);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -284,7 +291,7 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
         return;
       }
       pendingParentRef.current = null;
-      void chat.submit(text, projectResearchOptions(projectId, text));
+      void chat.submit(text, researchOptions(projectId, text, text));
     },
     [canSubmit, chat, openSettings, projectId],
   );
@@ -303,9 +310,10 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
       pendingParentRef.current = parentId;
       void chat.submit(
         text,
-        projectResearchOptions(
+        researchOptions(
           projectId,
           buildFollowupPrompt(parent, picks, text),
+          followupQuestion(parent.query, text),
         ),
       );
     },
@@ -344,6 +352,30 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
       );
   }, [reviews, projectId, readingList]);
   const reviewCount = reviews.filter((r) => r.projectId === projectId).length;
+
+  // Judge picks saved before the judge existed, once per visit. Live runs
+  // are skipped; they're judged when they finish.
+  const [judging, setJudging] = useState(false);
+  const backfilledRef = useRef(false);
+  useEffect(() => {
+    if (!hydrated || backfilledRef.current) return;
+    const unscored = projectThreads
+      .flatMap((t) => [t.root, ...t.followups])
+      .filter(
+        (run) =>
+          !run.liveSteps &&
+          [...run.recommendations, ...run.dismissed].some(
+            (r) => r.judgeScore === null,
+          ),
+      )
+      .map((run) => run.query.id);
+    backfilledRef.current = true;
+    if (unscored.length === 0) return;
+    setJudging(true);
+    void judgeBriefs(unscored.slice(0, 20))
+      .catch(() => false)
+      .finally(() => setJudging(false));
+  }, [hydrated, projectThreads]);
 
   // The run going on right now, if this page started it.
   const liveThread = chat.liveQueryId
@@ -571,7 +603,11 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
             {readingList.length > 0 ? (
               <BriefSection
                 title="Reading list"
-                count={plural(readingList.length, "source", "sources")}
+                count={
+                  judging
+                    ? `${plural(readingList.length, "source", "sources")} · Ranking…`
+                    : plural(readingList.length, "source", "sources")
+                }
               >
                 <ol
                   className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"

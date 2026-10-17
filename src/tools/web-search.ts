@@ -37,11 +37,32 @@ interface ExaSearchResponse {
   results?: ExaResult[];
 }
 
-async function exaSearch(
+export interface WebResult {
+  title: string;
+  url: string;
+  description: string;
+}
+
+/** The Exa key for a request: the user's, else the server's. */
+export function resolveExaKey(userKey: string | undefined): string {
+  return userKey?.trim() || process.env.EXA_API_KEY?.trim() || "";
+}
+
+/** The tool's text output for web results. The client parses this format to
+ *  show sources (see discover-paper-metadata). */
+export function formatWebResults(query: string, results: WebResult[]): string {
+  const formatted = results.map((r, i) =>
+    [`[${i + 1}] ${r.title}`, `    URL: ${r.url}`, `    ${r.description}`].join("\n"),
+  );
+  return `Found ${results.length} web results for "${query}":\n\n${formatted.join("\n\n")}`;
+}
+
+export async function exaSearch(
   query: string,
   count: number,
   apiKey: string,
-): Promise<{ title: string; url: string; description: string }[]> {
+  maxCharacters = 500,
+): Promise<WebResult[]> {
   const response = await fetchWithTimeout("https://api.exa.ai/search", {
     method: "POST",
     headers: {
@@ -53,7 +74,7 @@ async function exaSearch(
       query,
       numResults: count,
       type: "auto",
-      contents: { text: { maxCharacters: 500 } },
+      contents: { text: { maxCharacters } },
     }),
   });
 
@@ -103,10 +124,7 @@ export const webSearchTool: ToolDefinition = {
     if (!query) return { content: "Error: query parameter is required.", ok: false };
 
     const count = Math.max(1, Math.min(10, Number(input.count) || 5));
-    const apiKey =
-      context.exaApiKey?.trim() ||
-      process.env.EXA_API_KEY ||
-      "";
+    const apiKey = resolveExaKey(context.exaApiKey);
     if (!apiKey) {
       // No key: raise a control signal so the loop can pause for the user. The
       // chat UI watches for this exact `content` string and renders an inline
@@ -129,15 +147,7 @@ export const webSearchTool: ToolDefinition = {
         };
       }
 
-      const formatted = results.map((r, i) =>
-        [
-          `[${i + 1}] ${r.title}`,
-          `    URL: ${r.url}`,
-          `    ${r.description}`,
-        ].join("\n"),
-      );
-
-      return `Found ${results.length} web results for "${query}":\n\n${formatted.join("\n\n")}`;
+      return formatWebResults(query, results);
     } catch (err) {
       return {
         content: `Web search failed: ${err instanceof Error ? err.message : "unknown error"}`,

@@ -10,7 +10,7 @@ import type { ToolDefinition } from "./types";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
 import { SEMANTIC_SCHOLAR_BASE, semanticScholarHeaders } from "@/lib/semantic-scholar";
 
-interface PaperResult {
+export interface PaperResult {
   title: string;
   abstract: string;
   authors: string[];
@@ -198,6 +198,117 @@ async function searchArxivFallback(query: string, maxResults: number): Promise<P
 }
 
 /* ------------------------------------------------------------------ */
+/*  Structured search (shared by the tool and the discover funnel)     */
+/* ------------------------------------------------------------------ */
+
+export interface PaperSearchOutcome {
+  results: PaperResult[];
+  /** "Semantic Scholar" or "arXiv". */
+  source: string;
+  /** The query that produced the results (may be a broadened form). */
+  usedQuery: string;
+  /** Set when every backend failed. */
+  error?: string;
+  /** The broader query also tried, when the original found nothing. */
+  broadenedTo?: string;
+}
+
+/** Search papers, falling back from Semantic Scholar to arXiv and from the
+ *  query to a broader form of it when nothing comes back. */
+export async function searchPapers(
+  query: string,
+  maxResults: number,
+): Promise<PaperSearchOutcome> {
+  const queryAttempts = [query, synthesizeBroaderQuery(query)].filter(
+    (q, i, arr): q is string => !!q && arr.indexOf(q) === i,
+  );
+
+  let results: PaperResult[] = [];
+  let source = "Semantic Scholar";
+  let usedQuery = query;
+  let lastErr: unknown = null;
+
+  for (const attemptQuery of queryAttempts) {
+    usedQuery = attemptQuery;
+    try {
+      results = await searchSemanticScholar(attemptQuery, maxResults);
+      source = "Semantic Scholar";
+    } catch {
+      try {
+        results = await searchArxivFallback(attemptQuery, maxResults);
+        source = "arXiv";
+      } catch (err) {
+        lastErr = err;
+        continue;
+      }
+    }
+    if (results.length > 0) break;
+  }
+
+  return {
+    results,
+    source,
+    usedQuery,
+    broadenedTo: queryAttempts[1],
+    ...(results.length === 0 && lastErr
+      ? { error: lastErr instanceof Error ? lastErr.message : "unknown error" }
+      : {}),
+  };
+}
+
+/** The tool's text output for a search outcome. The client parses this
+ *  format to show sources (see discover-paper-metadata). */
+export function formatPaperSearch(
+  query: string,
+  outcome: PaperSearchOutcome,
+): string | { content: string; ok: false } {
+  const { results, source, usedQuery, error, broadenedTo } = outcome;
+  if (results.length === 0 && error) {
+    return {
+      content: `Paper search failed: ${error}. Both Semantic Scholar and arXiv are unavailable.`,
+      ok: false,
+    };
+  }
+  if (results.length === 0) {
+    const broadened = broadenedTo ? ` Also tried broader query: "${broadenedTo}".` : "";
+    return {
+      content: `No papers found for: "${query}". Try broader concepts (method family, task, or domain) instead of very specific phrases.${broadened}`,
+      ok: false,
+    };
+  }
+
+  const broadenNote =
+    usedQuery !== query
+      ? `\n(Broadened from "${query}" to "${usedQuery}" for better recall.)`
+      : "";
+
+  const formatted = results.map((r, i) => {
+    const authors =
+      r.authors.slice(0, 4).join(", ") + (r.authors.length > 4 ? " et al." : "");
+    const meta = [
+      r.publishedDate ?? (r.year ? String(r.year) : null),
+      r.venue ? r.venue : null,
+      r.citationCount != null ? `${r.citationCount} citations` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const abstractSnippet =
+      r.abstract.length > 300 ? r.abstract.slice(0, 297) + "..." : r.abstract;
+
+    return [
+      `[${i + 1}] ${r.title}`,
+      `    ${r.url}${meta ? ` | ${meta}` : ""}`,
+      `    Authors: ${authors}`,
+      abstractSnippet ? `    ${abstractSnippet}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
+
+  return `Found ${results.length} papers for "${usedQuery}" (via ${source}).${broadenNote}\n\n${formatted.join("\n\n")}`;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Tool definition                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -232,83 +343,7 @@ export const arxivSearchTool: ToolDefinition = {
   async execute(input: Record<string, unknown>) {
     const query = String(input.query ?? "").trim();
     if (!query) return { content: "Error: query parameter is required.", ok: false };
-
     const maxResults = Math.max(1, Math.min(20, Number(input.max_results) || 8));
-    const queryAttempts = [
-      query,
-      synthesizeBroaderQuery(query),
-    ].filter((q, i, arr): q is string => !!q && arr.indexOf(q) === i);
-
-    let results: PaperResult[];
-    let source: string;
-    let usedQuery = query;
-
-    results = [];
-    source = "Semantic Scholar";
-    let lastErr: unknown = null;
-
-    for (const attemptQuery of queryAttempts) {
-      usedQuery = attemptQuery;
-      // Try Semantic Scholar first, fall back to arXiv
-      try {
-        results = await searchSemanticScholar(attemptQuery, maxResults);
-        source = "Semantic Scholar";
-      } catch {
-        try {
-          results = await searchArxivFallback(attemptQuery, maxResults);
-          source = "arXiv";
-        } catch (err) {
-          lastErr = err;
-          continue;
-        }
-      }
-      if (results.length > 0) break;
-    }
-
-    if (results.length === 0 && lastErr) {
-      return {
-        content: `Paper search failed: ${lastErr instanceof Error ? lastErr.message : "unknown error"}. Both Semantic Scholar and arXiv are unavailable.`,
-        ok: false,
-      };
-    }
-
-    if (results.length === 0) {
-      const broadened = queryAttempts.length > 1 ? ` Also tried broader query: "${queryAttempts[1]}".` : "";
-      return {
-        content: `No papers found for: "${query}". Try broader concepts (method family, task, or domain) instead of very specific phrases.${broadened}`,
-        ok: false,
-      };
-    }
-
-    const broadenNote =
-      usedQuery !== query
-        ? `\n(Broadened from "${query}" to "${usedQuery}" for better recall.)`
-        : "";
-
-    const formatted = results.map((r, i) => {
-      const authors =
-        r.authors.slice(0, 4).join(", ") +
-        (r.authors.length > 4 ? " et al." : "");
-      const meta = [
-        r.publishedDate ?? (r.year ? String(r.year) : null),
-        r.venue ? r.venue : null,
-        r.citationCount != null ? `${r.citationCount} citations` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      const abstractSnippet =
-        r.abstract.length > 300 ? r.abstract.slice(0, 297) + "..." : r.abstract;
-
-      return [
-        `[${i + 1}] ${r.title}`,
-        `    ${r.url}${meta ? ` | ${meta}` : ""}`,
-        `    Authors: ${authors}`,
-        abstractSnippet ? `    ${abstractSnippet}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
-    });
-
-    return `Found ${results.length} papers for "${usedQuery}" (via ${source}).${broadenNote}\n\n${formatted.join("\n\n")}`;
+    return formatPaperSearch(query, await searchPapers(query, maxResults));
   },
 };

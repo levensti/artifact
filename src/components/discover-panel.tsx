@@ -10,6 +10,7 @@ import {
   getDiscoverQueriesSnapshot,
   getRecommendationsSnapshot,
   hydrateClientStore,
+  judgeBriefs,
 } from "@/lib/client-data";
 import { buildFollowupPrompt, linkThread } from "@/lib/discover-threads";
 import { useDiscoverBriefs, RecentBriefsList } from "./discover-queue";
@@ -22,7 +23,10 @@ import PageHeader from "./page-header";
 import ResearchComposer from "./research-composer";
 import { ARTIFACTS_HOME_EVENT } from "@/lib/storage-events";
 import { takePendingResearch } from "@/lib/pending-research";
-import { projectResearchOptions } from "@/lib/project-research-client";
+import {
+  followupQuestion,
+  researchOptions,
+} from "@/lib/project-research-client";
 
 /* ------------------------------------------------------------------ */
 /*  Empty state                                                        */
@@ -149,7 +153,7 @@ export default function DiscoverPanel() {
       setAwaitingFocus(true);
       void chat.submit(
         text,
-        projectId ? projectResearchOptions(projectId, text) : undefined,
+        researchOptions(projectId, text, text),
       );
     },
     [canSubmit, chat, openSettings],
@@ -190,12 +194,13 @@ export default function DiscoverPanel() {
       pendingParentRef.current = parentId;
       // A follow-up stays in its brief's project, with the project's
       // context so it doesn't re-suggest what the project already has.
-      const followupPrompt = buildFollowupPrompt(parent, picks, text);
       void chat.submit(
         text,
-        parent.projectId
-          ? projectResearchOptions(parent.projectId, followupPrompt)
-          : { promptText: followupPrompt },
+        researchOptions(
+          parent.projectId,
+          buildFollowupPrompt(parent, picks, text),
+          followupQuestion(parent.query, text),
+        ),
       );
     },
     [canSubmit, chat, openSettings],
@@ -227,6 +232,26 @@ export default function DiscoverPanel() {
     (focusedThread.root.query.id === chat.liveQueryId ||
       focusedThread.followups.some((f) => f.query.id === chat.liveQueryId));
   const hasHistory = threads.length > 0;
+
+  // Judge an opened brief's picks if they predate the judge (once per brief
+  // per visit). Live runs are judged when they finish.
+  const judgedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!focusedThread || judgedRef.current.has(focusedThread.root.query.id)) {
+      return;
+    }
+    const unscored = [focusedThread.root, ...focusedThread.followups]
+      .filter(
+        (run) =>
+          !run.liveSteps &&
+          [...run.recommendations, ...run.dismissed].some(
+            (r) => r.judgeScore === null,
+          ),
+      )
+      .map((run) => run.query.id);
+    judgedRef.current.add(focusedThread.root.query.id);
+    if (unscored.length > 0) void judgeBriefs(unscored).catch(() => false);
+  }, [focusedThread]);
   // The question being started, before its brief exists.
   const pendingQuestion =
     chat.pendingExaDecision?.text ??

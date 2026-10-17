@@ -470,6 +470,12 @@ model Recommendation {
   publishedYear Int?
   venue         String?
   citationCount Int?
+  /// Reading-list judge score, 0 to 1 (TypeSafe Jev, see src/server/judge.ts).
+  /// Null until judged, or when judging is unavailable; `rank` is then the
+  /// agent's own order. When set, `rank` is the judge's order.
+  judgeScore    Float?
+  /// Per-dimension scores and confidences behind `judgeScore`, plus the model.
+  judgeDetail   Json?
   dismissedAt   DateTime?
   createdAt     DateTime
 

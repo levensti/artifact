@@ -1,0 +1,27 @@
+{
+  "questions": 1,
+  "preference": {
+    "funnel": 0,
+    "agent": 1,
+    "tie": 0
+  },
+  "agent": {
+    "meanSeconds": 64.147,
+    "meanModelTokens": 21553,
+    "meanSearches": 4,
+    "meanPicks": 6,
+    "meanJev": 0.714,
+    "emptyLists": 0,
+    "errors": 0
+  },
+  "funnel": {
+    "meanSeconds": 65.892,
+    "meanModelTokens": 20820,
+    "meanSearches": 13,
+    "meanPicks": 6,
+    "meanJev": 0.702,
+    "emptyLists": 0,
+    "errors": 0,
+    "meanGraded": 150
+  }
+}

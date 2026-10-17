@@ -18,6 +18,7 @@ import {
 } from "@/lib/client-data";
 import { normalizeArxivId } from "@/lib/arxiv";
 import type { Recommendation } from "@/lib/discover-types";
+import { JUDGE_DIMENSIONS } from "@/lib/judge-rubric";
 
 /* ------------------------------------------------------------------ */
 /*  Source heuristics                                                  */
@@ -90,6 +91,25 @@ function authorsLabel(authors: string): string {
 function yearLabel(rec: Recommendation): string | null {
   if (rec.publishedYear) return String(rec.publishedYear);
   return rec.publishedDate?.slice(0, 4) ?? null;
+}
+
+/** Hover text for the rank: the judge's breakdown, or that the order is
+ *  the research agent's own when the pick hasn't been judged. */
+function rankTitle(rec: Recommendation): string {
+  if (rec.judgeScore === null || !rec.judgeDetail) {
+    return "Research agent's order (not yet judged)";
+  }
+  const lines = JUDGE_DIMENSIONS.flatMap((d) => {
+    const r = rec.judgeDetail?.dimensions[d.id];
+    if (!r) return [];
+    const top = d.criteria.length - 1;
+    const label = d.id.charAt(0).toUpperCase() + d.id.slice(1);
+    return [`${label}: ${r.score.toFixed(1)} / ${top}`];
+  });
+  return [
+    `Judge score: ${Math.round(rec.judgeScore * 100)} / 100`,
+    ...lines,
+  ].join("\n");
 }
 
 /* ------------------------------------------------------------------ */
@@ -177,7 +197,7 @@ export default function RecommendationCard({
           "pt-px text-right text-[15px] font-semibold tabular-nums",
           isTop ? "text-primary" : "text-muted-foreground/70",
         )}
-        title="Agent's preference order"
+        title={rankTitle(rec)}
       >
         {shownRank > 0 ? shownRank : ""}
       </span>

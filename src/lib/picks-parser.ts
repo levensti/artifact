@@ -31,6 +31,10 @@ export interface ParsedPick {
   publishedYear?: number | null;
   venue?: string | null;
   citationCount?: number | null;
+  /** Screening score from the discover funnel's judge (0 to 1), with its
+   *  per-dimension detail. */
+  judgeScore?: number | null;
+  judgeDetail?: unknown;
 }
 
 export interface ParsedPicksText {

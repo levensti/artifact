@@ -19,6 +19,8 @@ export interface DiscoverQuery {
   projectId: string | null;
 }
 
+import type { JudgeDetail } from "./judge-rubric";
+
 export interface Recommendation {
   id: string;
   queryId: string;
@@ -33,6 +35,9 @@ export interface Recommendation {
   publishedYear: number | null;
   venue: string | null;
   citationCount: number | null;
+  /** Reading-list judge score, 0 to 1. Null until judged. */
+  judgeScore: number | null;
+  judgeDetail: JudgeDetail | null;
   dismissedAt: string | null;
   createdAt: string;
 }

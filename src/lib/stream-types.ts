@@ -1,3 +1,5 @@
+import type { JudgeDetail } from "./judge-rubric";
+
 /**
  * NDJSON event types shared between the chat API route and client-side
  * stream parser.  Single source of truth — both sides import from here.
@@ -59,4 +61,21 @@ export type StreamEvent =
        */
       type: "heartbeat";
     }
+  | {
+      /**
+       * Discover funnel: the judge's screening scores for the shortlist, so
+       * the client can save them with the picks it finalizes (the reading
+       * list is ordered by them). Keyed by arXiv id when there is one, else
+       * by canonical URL.
+       */
+      type: "screen_scores";
+      scores: ScreenScore[];
+    }
   | { type: "done" };
+
+export interface ScreenScore {
+  arxivId: string | null;
+  url: string;
+  score: number;
+  detail: JudgeDetail;
+}

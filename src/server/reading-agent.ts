@@ -21,6 +21,8 @@ import { getAllTools } from "@/tools/registry";
 import type { ToolContext } from "@/tools/types";
 import { runFireworksAgentLoop } from "@/app/api/chat/fireworks-handler";
 import { getReadingSystemPrompt, visualFormatReminder } from "@/recipes/reading-agent";
+import { runDiscoverFunnel } from "./discover-funnel";
+import { judgeAvailable } from "./judge";
 
 // Re-export so the chat route resolves the prompt (for context budgeting)
 // through the same module it runs the agent from.
@@ -41,6 +43,19 @@ const DISCOVER_SUBMIT_NUDGE =
   "candidates (fewer if the pool is small) — each with a one-sentence rationale and " +
   "a canonical URL. Then write the explainer paragraph. Do not ask a question or " +
   "stop; submit the picks.";
+
+export interface DiscoverOptions {
+  /** "funnel": search wide, screen with the Jev judge, LLM picks from the
+   *  shortlist (the default whenever a judge is configured). "agent": the
+   *  single discovery agent that searches and picks on its own. */
+  pipeline?: "funnel" | "agent";
+  /** The question screening judges against, without prompt scaffolding.
+   *  Defaults to the last user message. */
+  question?: string;
+  projectName?: string | null;
+  /** Sources the project already has; never screened or picked. */
+  exclude?: { arxivIds?: string[]; urls?: string[] };
+}
 
 export interface ReadingAgentParams {
   /** The conversation to send the model (already budgeted to the context
@@ -81,6 +96,8 @@ export interface ReadingAgentParams {
   /** `"discover"` swaps in the discovery prompt + `submit_picks` and forces it
    *  as the final tool. Default is the paper/web reading agent. */
   mode?: "discover";
+  /** Discover only: inputs for the screening funnel. */
+  discover?: DiscoverOptions;
   /** Receives every stream event the loop produces. */
   emit: (event: StreamEvent) => void;
 }
@@ -122,8 +139,30 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     exaApiKey,
     skipWebSearch,
     mode,
+    discover,
     emit,
   } = params;
+
+  if (
+    mode === "discover" &&
+    (discover?.pipeline ?? (judgeAvailable() ? "funnel" : "agent")) === "funnel"
+  ) {
+    const lastUser = [...conversation].reverse().find((m) => m.role === "user");
+    const outcome = await runDiscoverFunnel({
+      conversation,
+      apiKey,
+      model,
+      question: discover?.question?.trim() || lastUser?.content || "",
+      projectName: discover?.projectName ?? null,
+      exclude: discover?.exclude,
+      exaApiKey,
+      skipWebSearch,
+      emit,
+    });
+    if (outcome === "done") return;
+    // Nothing to screen (every search came back empty): let the agent try
+    // its own reformulations.
+  }
 
   const tools = selectReadingTools({
     hasChunkIndex: !!searchChunks,

@@ -87,7 +87,7 @@ function overviewFromProse(prose: string): string {
 }
 
 interface LogEntry {
-  kind: "search" | "web" | "read";
+  kind: "search" | "web" | "read" | "grade";
   text: string;
   detail: string | null;
 }
@@ -107,6 +107,16 @@ function parseLog(log: string): LogEntry[] {
         kind: search[1] === "arXiv" ? "search" : "web",
         text: search[2] ?? "Search",
         detail: search[3] !== undefined ? `${search[3]} results` : null,
+      });
+      continue;
+    }
+    const graded = line.match(/^Graded (\d+) sources(?: — (\d+) shortlisted)?/);
+    if (graded) {
+      // `text` holds the count; the row and the summary word it.
+      entries.push({
+        kind: "grade",
+        text: graded[1],
+        detail: graded[2] ? `${graded[2]} shortlisted` : null,
       });
       continue;
     }
@@ -130,12 +140,14 @@ function ResearchLog({
   const [open, setOpen] = useState(false);
   const entries = parseLog(log);
   const reads = entries.filter((e) => e.kind === "read");
-  const searches = entries.filter((e) => e.kind !== "read");
+  const searches = entries.filter((e) => e.kind === "search" || e.kind === "web");
+  const grading = entries.find((e) => e.kind === "grade");
   if (entries.length === 0) return null;
   const titleFor = (id: string) =>
     recs.find((r) => r.arxivId === id)?.title ?? `arXiv:${id}`;
   const summary = [
     `${searches.length} ${searches.length === 1 ? "search" : "searches"}`,
+    grading ? `${grading.text} sources graded` : null,
     reads.length > 0
       ? `${reads.length} ${reads.length === 1 ? "paper" : "papers"} checked`
       : null,
@@ -165,6 +177,23 @@ function ResearchLog({
       </button>
       {open ? (
         <div className="mt-4 space-y-6">
+          {grading ? (
+            <div>
+              <h3 className="px-2 text-[13px] font-medium text-muted-foreground">
+                Grading
+              </h3>
+              <p className="mt-1.5 flex items-center gap-3 px-2 py-1.5 text-[14px]">
+                <span className="min-w-0 flex-1 text-foreground/85">
+                  Graded {grading.text} sources on their content
+                </span>
+                {grading.detail ? (
+                  <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                    {grading.detail}
+                  </span>
+                ) : null}
+              </p>
+            </div>
+          ) : null}
           {reads.length > 0 ? (
             <div>
               <h3 className="px-2 text-[13px] font-medium text-muted-foreground">
