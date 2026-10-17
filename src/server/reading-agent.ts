@@ -22,7 +22,6 @@ import type { ToolContext } from "@/tools/types";
 import { runFireworksAgentLoop } from "@/app/api/chat/fireworks-handler";
 import { getReadingSystemPrompt, visualFormatReminder } from "@/recipes/reading-agent";
 import { runDiscoverFunnel } from "./discover-funnel";
-import { judgeAvailable } from "./judge";
 
 // Re-export so the chat route resolves the prompt (for context budgeting)
 // through the same module it runs the agent from.
@@ -32,23 +31,11 @@ export { getReadingSystemPrompt };
  *  short document is fully in context and the tool would have nothing to do. */
 const CHUNK_INDEX_TOOLS = new Set(["search_paper"]);
 
-/** Structured-output tools that only the surface using them should register. */
+/** Discover's structured-output tool; the reading surfaces never register it
+ *  (the discover funnel picks its own tools). */
 const DISCOVER_ONLY_TOOLS = new Set(["submit_picks"]);
 
-/** Discover's completion-gate nudge: forces `submit_picks` when candidates were
- *  gathered but never submitted, so the user isn't left with nothing. */
-const DISCOVER_SUBMIT_NUDGE =
-  "You gathered search results and read candidates but never called submit_picks, " +
-  "so the user would see nothing. Call submit_picks NOW with the 4–6 strongest " +
-  "candidates (fewer if the pool is small) — each with a one-sentence rationale and " +
-  "a canonical URL. Then write the explainer paragraph. Do not ask a question or " +
-  "stop; submit the picks.";
-
 export interface DiscoverOptions {
-  /** "funnel": search wide, screen with the Jev judge, LLM picks from the
-   *  shortlist (the default whenever a judge is configured). "agent": the
-   *  single discovery agent that searches and picks on its own. */
-  pipeline?: "funnel" | "agent";
   /** The question screening judges against, without prompt scaffolding.
    *  Defaults to the last user message. */
   question?: string;
@@ -93,8 +80,8 @@ export interface ReadingAgentParams {
   exaApiKey?: string;
   /** The user dismissed the Exa-key card: drop `web_search` for the turn. */
   skipWebSearch?: boolean;
-  /** `"discover"` swaps in the discovery prompt + `submit_picks` and forces it
-   *  as the final tool. Default is the paper/web reading agent. */
+  /** `"discover"` runs the discover funnel (wide search, Jev screening, LLM
+   *  picks the reading list). Default is the paper/web reading agent. */
   mode?: "discover";
   /** Discover only: inputs for the screening funnel. */
   discover?: DiscoverOptions;
@@ -103,20 +90,18 @@ export interface ReadingAgentParams {
 }
 
 /**
- * Select the tools to register for a turn, exactly as the chat route does:
- * drop `web_search` when the user dismissed it, register `search_paper` only
- * when the document has a chunk index, and `submit_picks` only in discover
- * mode.
+ * Select the tools to register for a reading turn, exactly as the chat route
+ * does: drop `web_search` when the user dismissed it, and register
+ * `search_paper` only when the document has a chunk index.
  */
 export function selectReadingTools(params: {
   hasChunkIndex?: boolean;
   skipWebSearch?: boolean;
-  mode?: "discover";
 }) {
   return getAllTools().filter((t) => {
     if (params.skipWebSearch && t.name === "web_search") return false;
     if (!params.hasChunkIndex && CHUNK_INDEX_TOOLS.has(t.name)) return false;
-    if (params.mode !== "discover" && DISCOVER_ONLY_TOOLS.has(t.name)) return false;
+    if (DISCOVER_ONLY_TOOLS.has(t.name)) return false;
     return true;
   });
 }
@@ -143,12 +128,11 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     emit,
   } = params;
 
-  if (
-    mode === "discover" &&
-    (discover?.pipeline ?? (judgeAvailable() ? "funnel" : "agent")) === "funnel"
-  ) {
+  // Discover: search wide, screen with the Jev judge, LLM picks from the
+  // shortlist. See src/server/discover-funnel.ts.
+  if (mode === "discover") {
     const lastUser = [...conversation].reverse().find((m) => m.role === "user");
-    const outcome = await runDiscoverFunnel({
+    await runDiscoverFunnel({
       conversation,
       apiKey,
       model,
@@ -159,15 +143,12 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
       skipWebSearch,
       emit,
     });
-    if (outcome === "done") return;
-    // Nothing to screen (every search came back empty): let the agent try
-    // its own reformulations.
+    return;
   }
 
   const tools = selectReadingTools({
     hasChunkIndex: !!searchChunks,
     skipWebSearch,
-    mode,
   });
   const toolContext: ToolContext = {
     paperContext,
@@ -177,7 +158,7 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     reviewId,
     exaApiKey: exaApiKey || undefined,
   };
-  const systemPrompt = getReadingSystemPrompt(sourceUrl, mode);
+  const systemPrompt = getReadingSystemPrompt(sourceUrl);
 
   await runFireworksAgentLoop(
     conversation,
@@ -195,17 +176,9 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     tools,
     toolContext,
     emit,
-    mode === "discover"
-      ? {
-          requiredFinalTool: {
-            name: "submit_picks",
-            nudge: DISCOVER_SUBMIT_NUDGE,
-            maxNudges: 2,
-          },
-        }
-      : // Reading surfaces draw visuals; pin the format rules with recency so
-        // old in-conversation examples can't override them.
-        { trailingSystemReminder: visualFormatReminder() },
+    // Reading surfaces draw visuals; pin the format rules with recency so
+    // old in-conversation examples can't override them.
+    { trailingSystemReminder: visualFormatReminder() },
     model,
   );
 }

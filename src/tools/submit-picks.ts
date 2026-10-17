@@ -18,7 +18,7 @@ import type { ToolDefinition } from "./types";
 export const submitPicksTool: ToolDefinition = {
   name: "submit_picks",
   description:
-    "Submit your final curated list of recommendations — arXiv papers, web sources (lab blog posts, technical writeups, surveys), or a mix. Call this exactly ONCE at the end of your discovery turn after planning, searching, verifying, and filtering. The picks you submit here are what appear in the user's reading queue — the source of truth. Do not also emit the picks as a Markdown list.",
+    "Submit your final curated list of recommendations: arXiv papers, web sources (lab blog posts, technical writeups, surveys), or a mix. Call this exactly ONCE at the end of your discovery turn after planning, searching, verifying, and filtering. The picks you submit here are what appear in the user's reading queue, the source of truth. Do not also emit the picks as a Markdown list.",
   parameters: {
     type: "object",
     properties: {
@@ -28,7 +28,7 @@ export const submitPicksTool: ToolDefinition = {
           "Five to seven picks, each with the canonical URL, title, and a one-sentence rationale grounded in evidence (verified TLDR/abstract for arXiv picks, the search-result description for web picks).",
         items: {
           type: "object",
-          description: "A single recommendation — arXiv paper or web source.",
+          description: "A single recommendation: an arXiv paper or web source.",
           properties: {
             url: {
               type: "string",
@@ -42,7 +42,7 @@ export const submitPicksTool: ToolDefinition = {
             rationale: {
               type: "string",
               description:
-                "One sentence on why this fits the user's interest. Reference the actual contribution — what the paper or post does and why that matters for the query — not a paraphrase of the title.",
+                "One sentence on why this fits the user's interest. Reference the actual contribution (what the paper or post does and why that matters for the query), not a paraphrase of the title. No em dashes.",
             },
             arxivId: {
               type: "string",
@@ -84,6 +84,6 @@ export const submitPicksTool: ToolDefinition = {
 
   async execute(input: Record<string, unknown>) {
     const picks = Array.isArray(input.picks) ? input.picks : [];
-    return `Acknowledged ${picks.length} pick${picks.length === 1 ? "" : "s"}. They will appear in the user's reading queue. End your turn with a brief confirmation — do NOT repeat the picks.`;
+    return `Acknowledged ${picks.length} pick${picks.length === 1 ? "" : "s"}. They will appear in the user's reading queue. End your turn with a brief confirmation; do NOT repeat the picks.`;
   },
 };

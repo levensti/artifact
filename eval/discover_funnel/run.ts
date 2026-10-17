@@ -1,41 +1,45 @@
 /**
- * Before/after eval for Discover: the single discovery agent ("agent") vs.
- * the wide search + Jev screening funnel ("funnel").
+ * Before/after eval for Discover: the current discover funnel vs. the reading
+ * lists a previous run produced for the same questions.
  *
- * Both pipelines run in-process through `runReadingAgent()`, exactly as
- * `/api/chat` runs them in discover mode, so the comparison covers the real
- * prompts, tools, and searches. For each question we record each pipeline's
- * reading list, overview, latency, and model tokens, then compare the two:
+ * The funnel runs in-process through `runReadingAgent()`, exactly as
+ * `/api/chat` runs it in discover mode, so the eval covers the real prompts,
+ * tools, searches, and Jev screening. For each question we record the
+ * reading list, overview, latency, and model tokens, then compare it with
+ * the baseline run's list:
  *
  *   - Preference: a blind pairwise LLM judge (the configured Fireworks model)
  *     reads the question and both lists and picks the more useful one. It
  *     judges twice with the lists swapped to cancel position bias; split
  *     verdicts count as a tie.
- *   - Jev score: every final pick in both lists is scored by the same Jev
- *     rubric on title and metadata only (no abstract, no rationale), so
- *     neither pipeline is graded on inputs only it had. The funnel already
- *     optimizes for Jev, so read this as a sanity check, not a verdict.
+ *   - Jev score: every final pick is scored by the Jev rubric on title and
+ *     metadata only (no abstract, no rationale), a sanity check rather than
+ *     a verdict, since the funnel optimizes for Jev.
+ *
+ * The baseline is a previous results folder: by default the most recent one.
+ * Folders from the original agent-vs-funnel comparison hold two lists per
+ * question; `--baseline-side` picks which (default "funnel"; "agent" is the
+ * retired single-agent pipeline).
  *
  * Usage (needs FIREWORKS_API_KEY, FIREWORKS_MODEL, JEV_API_KEY, and
  * optionally EXA_API_KEY for web search, from the env or .env):
- *   npm run eval:discover_funnel                    # all questions
+ *   npm run eval:discover_funnel                    # vs. the latest run
  *   npm run eval:discover_funnel -- --limit 2       # quick smoke test
- *   npm run eval:discover_funnel -- --workers 2
+ *   npm run eval:discover_funnel -- --baseline eval/discover_funnel/results/<dir>
  *   npm run eval:discover_funnel -- --no-persist    # JSON output only
  *   npm run eval:discover_funnel -- --persist-from eval/discover_funnel/results/<dir>
  *                                                   # save a finished run to the DB
  *
  * Results land in eval/discover_funnel/results/<timestamp>/ and, when
- * DATABASE_URL is set, in the Evals tab: one run per pipeline under the
- * "Discover: agent vs funnel" benchmark. There, an item is CORRECT when that
- * pipeline's list won the blind preference, so a run's "accuracy" is its win
- * rate (ties count as a win for neither), and the compare view lines the two
- * pipelines up question by question.
+ * DATABASE_URL is set, in the Evals tab under "Discover: current vs
+ * baseline". There, an item is CORRECT when the current list won the blind
+ * preference, so a run's "accuracy" is its win rate over the baseline (ties
+ * count as a win for neither).
  */
 
 import { parseArgs } from "node:util";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { mapConcurrent, writeJson, writeJsonl } from "../utils.ts";
 import { createEvalPrisma } from "../db.ts";
@@ -51,8 +55,10 @@ import {
 } from "@/lib/fireworks";
 import type { StreamEvent } from "@/lib/stream-types";
 
+const RESULTS_DIR = join(import.meta.dirname, "results");
+
 /** Representative Discover questions: foundational, engineering, recent,
- *  and narrow topics, so neither pipeline is favored by question type. */
+ *  and narrow topics. */
 const QUESTIONS = [
   "How have attention mechanisms evolved over time?",
   "What are the main approaches to making LLM inference faster?",
@@ -66,8 +72,6 @@ const QUESTIONS = [
   "What are the main approaches to mechanistic interpretability of transformers?",
 ];
 
-type Pipeline = "agent" | "funnel";
-
 interface Pick {
   title: string;
   url: string;
@@ -76,7 +80,6 @@ interface Pick {
 }
 
 interface RunResult {
-  pipeline: Pipeline;
   picks: Pick[];
   overview: string;
   seconds: number;
@@ -84,17 +87,28 @@ interface RunResult {
   searches: number;
   graded: number | null;
   error: string | null;
+  meanJev: number | null;
+}
+
+type Verdict = "current" | "baseline" | "tie";
+
+interface Row {
+  question: string;
+  current: RunResult;
+  /** The baseline's list for this question; null when it has none. */
+  baseline: { picks: Pick[]; overview: string } | null;
+  preferred: Verdict | null;
+  preferenceReasons: string[];
 }
 
 /* ------------------------------------------------------------------ */
-/*  Running a pipeline                                                 */
+/*  Running the funnel                                                 */
 /* ------------------------------------------------------------------ */
 
-async function runPipeline(
-  pipeline: Pipeline,
+async function runDiscover(
   question: string,
   apiKey: string,
-): Promise<RunResult> {
+): Promise<Omit<RunResult, "meanJev">> {
   const started = Date.now();
   const events: StreamEvent[] = [];
   let error: string | null = null;
@@ -105,7 +119,7 @@ async function runPipeline(
       exaApiKey: process.env.EXA_API_KEY?.trim() || undefined,
       skipWebSearch: !process.env.EXA_API_KEY?.trim(),
       mode: "discover",
-      discover: { pipeline, question },
+      discover: { question },
       emit: (e) => events.push(e),
     });
   } catch (err) {
@@ -126,38 +140,77 @@ async function runPipeline(
       }
     }
   });
-  const overview = events
-    .slice(submitAt + 1)
-    .flatMap((e) => (submitAt !== -1 && e.type === "text_delta" ? [e.text] : []))
-    .join("")
-    .trim();
-  const modelTokens = events.reduce(
-    (n, e) =>
-      e.type === "cache_stats"
-        ? n + e.inputTokens + e.cacheReadTokens + e.outputTokens
-        : n,
-    0,
-  );
-  const searches = events.filter(
-    (e) =>
-      e.type === "tool_call" &&
-      (e.name === "arxiv_search" || e.name === "web_search"),
-  ).length;
+  const overview =
+    submitAt === -1
+      ? ""
+      : events
+          .slice(submitAt + 1)
+          .flatMap((e) => (e.type === "text_delta" ? [e.text] : []))
+          .join("")
+          .trim();
   const screen = events.find(
     (e): e is Extract<StreamEvent, { type: "tool_call" }> =>
       e.type === "tool_call" && e.name === "screen_sources",
   );
 
   return {
-    pipeline,
     picks,
     overview,
     seconds: (Date.now() - started) / 1000,
-    modelTokens,
-    searches,
+    modelTokens: events.reduce(
+      (n, e) =>
+        e.type === "cache_stats"
+          ? n + e.inputTokens + e.cacheReadTokens + e.outputTokens
+          : n,
+      0,
+    ),
+    searches: events.filter(
+      (e) =>
+        e.type === "tool_call" &&
+        (e.name === "arxiv_search" || e.name === "web_search"),
+    ).length,
     graded: screen ? Number(screen.input.candidates) || 0 : null,
     error,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Baseline                                                           */
+/* ------------------------------------------------------------------ */
+
+/** The newest results folder with at least one result. */
+async function latestResultsDir(): Promise<string | null> {
+  let names: string[];
+  try {
+    names = await readdir(RESULTS_DIR);
+  } catch {
+    return null;
+  }
+  for (const name of names.sort().reverse()) {
+    const dir = join(RESULTS_DIR, name);
+    try {
+      if ((await stat(join(dir, "results.jsonl"))).size > 1) return dir;
+    } catch {
+      /* not a finished run */
+    }
+  }
+  return null;
+}
+
+/** Each question's list from a previous run. Reads both this eval's rows
+ *  (`current`) and the original agent-vs-funnel rows (`agent` / `funnel`). */
+async function loadBaseline(
+  dir: string,
+  side: "agent" | "funnel",
+): Promise<Map<string, { picks: Pick[]; overview: string }>> {
+  const out = new Map<string, { picks: Pick[]; overview: string }>();
+  const text = await readFile(join(dir, "results.jsonl"), "utf8");
+  for (const line of text.split("\n").filter(Boolean)) {
+    const row = JSON.parse(line) as Record<string, unknown> & { question: string };
+    const list = (row.current ?? row[side]) as { picks?: Pick[]; overview?: string } | undefined;
+    if (list?.picks) out.set(row.question, { picks: list.picks, overview: list.overview ?? "" });
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -219,21 +272,18 @@ async function prefer(
 async function preference(
   apiKey: string,
   question: string,
-  agent: Pick[],
-  funnel: Pick[],
-): Promise<{ verdict: Pipeline | "tie"; reasons: string[] }> {
+  current: Pick[],
+  baseline: Pick[],
+): Promise<{ verdict: Verdict; reasons: string[] }> {
   const [first, second] = await Promise.all([
-    prefer(apiKey, question, agent, funnel),
-    prefer(apiKey, question, funnel, agent),
+    prefer(apiKey, question, current, baseline),
+    prefer(apiKey, question, baseline, current),
   ]);
-  const vote = (w: "A" | "B" | "tie", aIs: Pipeline): Pipeline | "tie" =>
-    w === "tie" ? "tie" : w === "A" ? aIs : aIs === "agent" ? "funnel" : "agent";
-  const v1 = vote(first.winner, "agent");
-  const v2 = vote(second.winner, "funnel");
-  return {
-    verdict: v1 === v2 ? v1 : "tie",
-    reasons: [first.reason, second.reason],
-  };
+  const v1: Verdict =
+    first.winner === "tie" ? "tie" : first.winner === "A" ? "current" : "baseline";
+  const v2: Verdict =
+    second.winner === "tie" ? "tie" : second.winner === "A" ? "baseline" : "current";
+  return { verdict: v1 === v2 ? v1 : "tie", reasons: [first.reason, second.reason] };
 }
 
 async function meanJev(question: string, picks: Pick[]): Promise<number | null> {
@@ -250,107 +300,93 @@ async function meanJev(question: string, picks: Pick[]): Promise<number | null> 
 /*  Persisting to the Evals tab                                        */
 /* ------------------------------------------------------------------ */
 
-type Row = {
-  question: string;
-  preferred: Pipeline | "tie";
-  preferenceReasons: string[];
-  agent: RunResult & { meanJev: number | null };
-  funnel: RunResult & { meanJev: number | null };
-};
-
 const BENCHMARK = {
-  name: "Discover: agent vs funnel",
+  name: "Discover: current vs baseline",
   description:
-    "Blind pairwise preference between the single discovery agent and the " +
-    "wide-search + Jev screening funnel, on representative Discover questions. " +
-    "An item is CORRECT when that pipeline's reading list won; accuracy is the win rate.",
-};
-
-const PIPELINE_DESCRIPTION: Record<Pipeline, string> = {
-  agent: "Single discovery agent: searches, verifies, and picks on its own; agent order.",
-  funnel:
-    "Wide search, Jev screening on content, LLM picks from the shortlist; ordered by Jev score.",
+    "Blind pairwise preference between the current discover funnel's reading " +
+    "lists and a previous run's, on representative Discover questions. An item " +
+    "is CORRECT when the current list won; accuracy is the win rate over the baseline.",
 };
 
 function itemKey(question: string): string {
   return createHash("sha256").update(question).digest("hex").slice(0, 16);
 }
 
-function describeList(run: RunResult): string {
-  const list = run.picks
+function describeList(list: { picks: Pick[]; overview: string }, error?: string | null): string {
+  const picks = list.picks
     .map((p, i) => `${i + 1}. ${p.title}\n   ${p.url}\n   ${p.rationale}`)
     .join("\n\n");
   return [
-    list || "(no reading list)",
-    run.overview ? `\nOverview:\n${run.overview}` : "",
-    run.error ? `\nError: ${run.error}` : "",
+    picks || "(no reading list)",
+    list.overview ? `\nOverview:\n${list.overview}` : "",
+    error ? `\nError: ${error}` : "",
   ].join("\n");
 }
 
-/** Save both pipelines' runs. Best-effort: a DB problem is logged, and the
- *  JSON output is the record of truth. */
-async function persist(rows: Row[], source: string): Promise<void> {
+/** Save the run. Best-effort: a DB problem is logged, and the JSON output is
+ *  the record of truth. */
+async function persist(rows: Row[], source: string, baselineDir: string | null): Promise<void> {
   if (!(process.env.DATABASE_URL ?? process.env.DIRECT_URL)) {
     console.log("(persistence skipped: no DATABASE_URL)");
     return;
   }
   const prisma = createEvalPrisma();
   try {
-    for (const pipeline of ["agent", "funnel"] as const) {
-      const recorder = await EvalRunRecorder.start(prisma, {
-        benchmark: BENCHMARK,
-        recipe: {
-          name: `discover:${pipeline}`,
-          description: PIPELINE_DESCRIPTION[pipeline],
-          metadata: {
-            model: `${pipeline} · ${process.env.FIREWORKS_MODEL ?? "unknown"}`,
-            pipeline,
-            source,
-            jevModel: process.env.JEV_MODEL ?? "jev-latest",
-            judgeDimensions: JUDGE_DIMENSIONS,
-            prompts: readingAgentRecipe.prompts,
-          },
+    const recorder = await EvalRunRecorder.start(prisma, {
+      benchmark: BENCHMARK,
+      recipe: {
+        name: "discover:funnel",
+        description:
+          "Wide search, Jev screening on content, LLM picks from the shortlist; ordered by Jev score.",
+        metadata: {
+          model: `funnel · ${process.env.FIREWORKS_MODEL ?? "unknown"}`,
+          source,
+          baseline: baselineDir,
+          jevModel: process.env.JEV_MODEL ?? "jev-latest",
+          judgeDimensions: JUDGE_DIMENSIONS,
+          prompts: readingAgentRecipe.prompts,
         },
+      },
+    });
+    for (const row of rows) {
+      await recorder.recordItem({
+        itemKey: itemKey(row.question),
+        target: row.preferred ?? "no baseline",
+        targetMetadata: { question: row.question },
+        prediction: "current",
+        predictionMetadata: {
+          response: describeList(row.current, row.current.error),
+          note: row.baseline
+            ? `Judge: ${row.preferenceReasons.join(" | ")}\n\nBaseline list:\n${describeList(row.baseline)}`
+            : "No baseline list for this question.",
+          seconds: row.current.seconds,
+          modelTokens: row.current.modelTokens,
+          searches: row.current.searches,
+          graded: row.current.graded,
+          meanJev: row.current.meanJev,
+        },
+        predictionOutcome: row.current.error
+          ? "ERROR"
+          : row.preferred === "current"
+            ? "CORRECT"
+            : "INCORRECT",
       });
-      for (const row of rows) {
-        const run = row[pipeline];
-        await recorder.recordItem({
-          itemKey: itemKey(row.question),
-          target: row.preferred,
-          targetMetadata: { question: row.question },
-          prediction: pipeline,
-          predictionMetadata: {
-            response: describeList(run),
-            note: `Judge: ${row.preferenceReasons.join(" | ")}`,
-            seconds: run.seconds,
-            modelTokens: run.modelTokens,
-            searches: run.searches,
-            graded: run.graded,
-            meanJev: run.meanJev,
-          },
-          predictionOutcome: run.error
-            ? "ERROR"
-            : row.preferred === pipeline
-              ? "CORRECT"
-              : "INCORRECT",
-        });
-      }
-      const mean = (xs: (number | null)[]) => {
-        const v = xs.filter((x): x is number => x !== null);
-        return v.length ? v.reduce((n, x) => n + x, 0) / v.length : 0;
-      };
-      await recorder.complete([
-        {
-          metric: "win_rate",
-          score: rows.filter((r) => r.preferred === pipeline).length / Math.max(1, rows.length),
-        },
-        { metric: "tie_rate", score: rows.filter((r) => r.preferred === "tie").length / Math.max(1, rows.length) },
-        { metric: "mean_seconds", score: mean(rows.map((r) => r[pipeline].seconds)) },
-        { metric: "mean_model_tokens", score: mean(rows.map((r) => r[pipeline].modelTokens)) },
-        { metric: "mean_jev_metadata_only", score: mean(rows.map((r) => r[pipeline].meanJev)) },
-      ]);
-      console.log(`Persisted ${pipeline} run ${recorder.runId}`);
     }
+    const mean = (xs: (number | null)[]) => {
+      const v = xs.filter((x): x is number => x !== null);
+      return v.length ? v.reduce((n, x) => n + x, 0) / v.length : 0;
+    };
+    const share = (v: Verdict) =>
+      rows.filter((r) => r.preferred === v).length / Math.max(1, rows.length);
+    await recorder.complete([
+      { metric: "win_rate", score: share("current") },
+      { metric: "loss_rate", score: share("baseline") },
+      { metric: "tie_rate", score: share("tie") },
+      { metric: "mean_seconds", score: mean(rows.map((r) => r.current.seconds)) },
+      { metric: "mean_model_tokens", score: mean(rows.map((r) => r.current.modelTokens)) },
+      { metric: "mean_jev_metadata_only", score: mean(rows.map((r) => r.current.meanJev)) },
+    ]);
+    console.log(`Persisted run ${recorder.runId}`);
   } finally {
     await prisma.$disconnect();
   }
@@ -365,6 +401,8 @@ async function main() {
     options: {
       limit: { type: "string" },
       workers: { type: "string", default: "2" },
+      baseline: { type: "string" },
+      "baseline-side": { type: "string", default: "funnel" },
       "no-persist": { type: "boolean", default: false },
       "persist-from": { type: "string" },
     },
@@ -373,11 +411,17 @@ async function main() {
   // Save an already-finished run's results without re-running anything.
   if (values["persist-from"]) {
     const dir = values["persist-from"];
-    const rows = (await readFile(join(dir, "results.jsonl"), "utf8"))
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as Row);
-    await persist(rows, dir);
+    const text = await readFile(join(dir, "results.jsonl"), "utf8");
+    const rows = text.split("\n").filter(Boolean).map((l) => JSON.parse(l) as Row);
+    if (!rows.every((r) => r.current)) {
+      throw new Error(
+        `${dir} is from the original agent-vs-funnel comparison, which is already saved.`,
+      );
+    }
+    const summary = JSON.parse(await readFile(join(dir, "summary.json"), "utf8")) as {
+      baseline?: string | null;
+    };
+    await persist(rows, dir, summary.baseline ?? null);
     return;
   }
 
@@ -386,34 +430,35 @@ async function main() {
   if (!process.env.JEV_API_KEY?.trim()) {
     throw new Error("Set JEV_API_KEY: the funnel and the Jev metric need it.");
   }
+  const side = values["baseline-side"] === "agent" ? "agent" : "funnel";
+  const baselineDir = values.baseline ?? (await latestResultsDir());
+  const baseline = baselineDir ? await loadBaseline(baselineDir, side) : new Map();
+  console.log(
+    baselineDir
+      ? `Baseline: ${baselineDir} (${baseline.size} lists)`
+      : "No baseline found: recording lists without a preference comparison.",
+  );
 
   const questions = QUESTIONS.slice(0, values.limit ? Number(values.limit) : undefined);
-  const outDir = join(
-    import.meta.dirname,
-    "results",
-    new Date().toISOString().replace(/[:.]/g, "-"),
-  );
-  console.log(`Running ${questions.length} questions × 2 pipelines → ${outDir}`);
+  const outDir = join(RESULTS_DIR, new Date().toISOString().replace(/[:.]/g, "-"));
+  console.log(`Running ${questions.length} questions → ${outDir}`);
 
-  const rows = await mapConcurrent(
+  const rows: Row[] = await mapConcurrent(
     questions,
     Number(values.workers) || 2,
     async (question) => {
-      const [agent, funnel] = await Promise.all([
-        runPipeline("agent", question, apiKey),
-        runPipeline("funnel", question, apiKey),
-      ]);
-      const [pref, agentJev, funnelJev] = await Promise.all([
-        preference(apiKey, question, agent.picks, funnel.picks),
-        meanJev(question, agent.picks),
-        meanJev(question, funnel.picks),
+      const run = await runDiscover(question, apiKey);
+      const base = baseline.get(question) ?? null;
+      const [pref, jev] = await Promise.all([
+        base ? preference(apiKey, question, run.picks, base.picks) : Promise.resolve(null),
+        meanJev(question, run.picks),
       ]);
       return {
         question,
-        preferred: pref.verdict,
-        preferenceReasons: pref.reasons,
-        agent: { ...agent, meanJev: agentJev },
-        funnel: { ...funnel, meanJev: funnelJev },
+        current: { ...run, meanJev: jev },
+        baseline: base,
+        preferred: pref?.verdict ?? null,
+        preferenceReasons: pref?.reasons ?? [],
       };
     },
     (done, total) => console.log(`  ${done}/${total} questions`),
@@ -423,30 +468,30 @@ async function main() {
     const v = xs.filter((x): x is number => x !== null);
     return v.length > 0 ? Number((v.reduce((n, x) => n + x, 0) / v.length).toFixed(3)) : null;
   };
-  const side = (p: Pipeline) => ({
-    meanSeconds: mean(rows.map((r) => r[p].seconds)),
-    meanModelTokens: mean(rows.map((r) => r[p].modelTokens)),
-    meanSearches: mean(rows.map((r) => r[p].searches)),
-    meanPicks: mean(rows.map((r) => r[p].picks.length)),
-    meanJev: mean(rows.map((r) => r[p].meanJev)),
-    emptyLists: rows.filter((r) => r[p].picks.length === 0).length,
-    errors: rows.filter((r) => r[p].error).length,
-  });
   const summary = {
     questions: rows.length,
+    baseline: baselineDir,
+    baselineSide: side,
     preference: {
-      funnel: rows.filter((r) => r.preferred === "funnel").length,
-      agent: rows.filter((r) => r.preferred === "agent").length,
+      current: rows.filter((r) => r.preferred === "current").length,
+      baseline: rows.filter((r) => r.preferred === "baseline").length,
       tie: rows.filter((r) => r.preferred === "tie").length,
+      notCompared: rows.filter((r) => r.preferred === null).length,
     },
-    agent: side("agent"),
-    funnel: { ...side("funnel"), meanGraded: mean(rows.map((r) => r.funnel.graded)) },
+    meanSeconds: mean(rows.map((r) => r.current.seconds)),
+    meanModelTokens: mean(rows.map((r) => r.current.modelTokens)),
+    meanSearches: mean(rows.map((r) => r.current.searches)),
+    meanGraded: mean(rows.map((r) => r.current.graded)),
+    meanPicks: mean(rows.map((r) => r.current.picks.length)),
+    meanJev: mean(rows.map((r) => r.current.meanJev)),
+    emptyLists: rows.filter((r) => r.current.picks.length === 0).length,
+    errors: rows.filter((r) => r.current.error).length,
   };
 
   await writeJsonl(join(outDir, "results.jsonl"), rows);
   await writeJson(join(outDir, "summary.json"), summary);
   console.log(JSON.stringify(summary, null, 2));
-  if (!values["no-persist"]) await persist(rows, outDir);
+  if (!values["no-persist"]) await persist(rows, outDir, baselineDir);
 }
 
 main().catch((err) => {

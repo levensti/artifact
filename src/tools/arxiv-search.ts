@@ -315,11 +315,11 @@ export function formatPaperSearch(
 export const arxivSearchTool: ToolDefinition = {
   name: "arxiv_search",
   description:
-    "Search for academic papers via Semantic Scholar (primary; indexes arXiv plus major venues — " +
+    "Search for academic papers via Semantic Scholar (primary; indexes arXiv plus major venues: " +
     "NeurIPS, ICML, ICLR, journals, conference proceedings) with the arXiv API as fallback. This is " +
     "a paper-search tool: given a topic, method, author, or keywords it returns matching papers with " +
     "titles, abstracts, authors, citation counts, and links (arXiv URL when available, Semantic " +
-    "Scholar URL otherwise). Use it to find or cite real papers — related work, a reading list, or a " +
+    "Scholar URL otherwise). Use it to find or cite real papers: related work, a reading list, or a " +
     "specific reference. Issue multiple distinct sub-queries in parallel when one query won't cover " +
     "the angles you care about.",
   parameters: {
@@ -328,7 +328,7 @@ export const arxivSearchTool: ToolDefinition = {
       query: {
         type: "string",
         description:
-          "Search query — use natural language keywords or phrases. " +
+          "Search query, in natural language keywords or phrases. " +
           'Example: "attention mechanism transformers" or "variational autoencoders image generation"',
       },
       max_results: {

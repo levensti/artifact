@@ -10,6 +10,8 @@
  *
  * Server code only (`JEV_API_KEY` never leaves the server), but free of the
  * `server-only` import so the offline evals can run it, like embeddings.ts.
+ * Without a key, nothing is graded: the funnel passes sources through
+ * unscored and the agent's order stands.
  *
  * Throughput: the account allows 80 requests and 100k input tokens per
  * second, shared by every user. Each request takes a permit from a
@@ -33,16 +35,11 @@ const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 const MAX_RETRIES = 3;
 const REQUEST_TIMEOUT_MS = 30_000;
 
-function envInt(name: string, fallback: number): number {
-  const n = Number.parseInt(process.env[name] ?? "", 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
 /** Headroom under the account's 80 req/s and 100k input tokens/s. */
-const REQUESTS_PER_SECOND = envInt("JEV_RPS", 70);
-const TOKENS_PER_SECOND = envInt("JEV_TPS", 90_000);
+const REQUESTS_PER_SECOND = 70;
+const TOKENS_PER_SECOND = 90_000;
 /** Requests in flight per process. */
-const CONCURRENCY = envInt("JEV_CONCURRENCY", 32);
+const CONCURRENCY = 32;
 
 function apiKey(): string | null {
   const raw = process.env.JEV_API_KEY;
@@ -251,6 +248,8 @@ export async function judgePicks(
   candidates: JudgeCandidate[],
 ): Promise<(JudgeResult | null)[]> {
   const results: (JudgeResult | null)[] = new Array(candidates.length).fill(null);
+  // No key: nothing to grade with. Callers treat all-null as "unscored".
+  if (!judgeAvailable()) return results;
   let next = 0;
   let failures = 0;
   let firstError: string | null = null;

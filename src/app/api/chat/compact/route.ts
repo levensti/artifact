@@ -221,9 +221,9 @@ function buildCompactionPrompt(
     .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
     .join("\n\n");
   const priorBlock = priorSummary
-    ? `Earlier summary (already condensed — fold this in):\n${priorSummary}\n\n`
+    ? `Earlier summary (already condensed; fold this in):\n${priorSummary}\n\n`
     : "";
-  return `You are compacting an ongoing conversation between a USER and an AI ASSISTANT about a research paper, to free up context space. Condense the material below into a concise recap that preserves: the questions the user asked, the conclusions reached, key facts/figures/definitions established, and any open threads still in play. Write in compact note form. Do not add commentary, preamble, or a sign-off — output only the recap.
+  return `You are compacting an ongoing conversation between a USER and an AI ASSISTANT about a research paper, to free up context space. Condense the material below into a concise recap that preserves: the questions the user asked, the conclusions reached, key facts/figures/definitions established, and any open threads still in play. Write in compact note form. Do not add commentary, preamble, or a sign-off: output only the recap. Never use em dashes (—); use commas, colons, or parentheses.
 
 ${priorBlock}Conversation to condense:
 

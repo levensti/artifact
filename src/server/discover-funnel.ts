@@ -116,10 +116,6 @@ interface Screened extends Candidate {
   detail: ScreenScore["detail"] | null;
 }
 
-/** "fallback": the funnel found nothing to screen, so the caller should run
- *  the plain discover agent instead. */
-export type FunnelOutcome = "done" | "fallback";
-
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -491,11 +487,20 @@ function shortlistBlock(short: Screened[], pooled: number, searches: number): st
 /*  Entry                                                              */
 /* ------------------------------------------------------------------ */
 
-export async function runDiscoverFunnel(p: FunnelParams): Promise<FunnelOutcome> {
+/** Shown as the brief's message when every search comes back empty; the
+ *  brief offers Retry and a follow-up box under it. */
+const NOTHING_FOUND =
+  "None of the searches returned sources for this question. Try rephrasing it " +
+  "with the field's standard terms, or name a specific method, paper, or system.";
+
+export async function runDiscoverFunnel(p: FunnelParams): Promise<void> {
   p.emit({ type: "turn_start" });
   const plan = await planSearches(p);
   const { candidates, searches } = await searchWide(p, plan);
-  if (candidates.length === 0) return "fallback";
+  if (candidates.length === 0) {
+    p.emit({ type: "text_delta", text: NOTHING_FOUND });
+    return;
+  }
 
   const short = await screen(p, candidates);
   p.emit({
@@ -541,5 +546,4 @@ export async function runDiscoverFunnel(p: FunnelParams): Promise<FunnelOutcome>
     },
     p.model,
   );
-  return "done";
 }
