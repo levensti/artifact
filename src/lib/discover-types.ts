@@ -15,6 +15,8 @@ export interface DiscoverQuery {
   notes: string | null;
   status: DiscoverQueryStatus;
   createdAt: string;
+  /** Project this research belongs to, if any. */
+  projectId: string | null;
 }
 
 export interface Recommendation {

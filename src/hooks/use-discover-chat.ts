@@ -68,6 +68,15 @@ async function parseNDJSONStream(
 /*  Hook                                                               */
 /* ------------------------------------------------------------------ */
 
+export interface SubmitOptions {
+  skipWebSearch?: boolean;
+  /** What's sent to the agent when it differs from the stored question
+   *  (follow-up or project context). */
+  promptText?: string;
+  /** Project the new brief belongs to. */
+  projectId?: string | null;
+}
+
 interface UseDiscoverChatOptions {
   modelReady: boolean;
 }
@@ -85,7 +94,7 @@ export interface UseDiscoverChatReturn {
   hasKeyForModel: boolean;
   submit: (
     text: string,
-    opts?: { skipWebSearch?: boolean; promptText?: string },
+    opts?: SubmitOptions,
   ) => Promise<void>;
   /** Re-submits a query after the user resolves the Exa key prompt
    *  (added a key → skipWebSearch=false; dismissed → true). Defaults to
@@ -296,7 +305,11 @@ export function useDiscoverChat({
   // is the (optional) context-augmented prompt actually sent to the agent —
   // both are preserved so a follow-up resumed after an Exa decision keeps
   // its context.
-  const lastSubmitRef = useRef<{ text: string; promptText?: string } | null>(
+  const lastSubmitRef = useRef<{
+    text: string;
+    promptText?: string;
+    projectId?: string | null;
+  } | null>(
     null,
   );
   // Pending resume queued while a stream was still in flight. Fires from
@@ -308,6 +321,7 @@ export function useDiscoverChat({
     skipWebSearch: boolean;
     text: string;
     promptText?: string;
+    projectId?: string | null;
   } | null>(null);
 
   const hasKeyForModel = modelReady && hasUsableProvider();
@@ -315,13 +329,17 @@ export function useDiscoverChat({
   const submit = useCallback(
     async (
       text: string,
-      opts?: { skipWebSearch?: boolean; promptText?: string },
+      opts?: SubmitOptions,
     ) => {
       const trimmed = text.trim();
       if (!trimmed || isStreaming || !modelReady) return;
       if (!hasUsableProvider()) return;
 
-      lastSubmitRef.current = { text: trimmed, promptText: opts?.promptText };
+      lastSubmitRef.current = {
+        text: trimmed,
+        promptText: opts?.promptText,
+        projectId: opts?.projectId,
+      };
 
       // Pre-flight: if neither the user nor the server has an Exa key,
       // pause and surface the prompt card. Otherwise the agent dispatches
@@ -350,7 +368,10 @@ export function useDiscoverChat({
       abortRef.current = controller;
 
       try {
-        const created = await createDiscoverQuery(trimmed);
+        const created = await createDiscoverQuery(
+          trimmed,
+          opts?.projectId ?? null,
+        );
         queryId = created.id;
         setLiveQueryId(created.id);
 
@@ -461,12 +482,18 @@ export function useDiscoverChat({
       const target = text ?? last?.text ?? null;
       if (!target) return;
       const promptText = text ? undefined : last?.promptText;
+      const projectId = text ? undefined : last?.projectId;
       if (isStreaming) {
         // Queue and let the effect below fire when the stream ends.
-        pendingResumeRef.current = { skipWebSearch, text: target, promptText };
+        pendingResumeRef.current = {
+          skipWebSearch,
+          text: target,
+          promptText,
+          projectId,
+        };
         return;
       }
-      void submit(target, { skipWebSearch, promptText });
+      void submit(target, { skipWebSearch, promptText, projectId });
     },
     [isStreaming, submit],
   );
@@ -479,6 +506,7 @@ export function useDiscoverChat({
     void submit(pending.text, {
       skipWebSearch: pending.skipWebSearch,
       promptText: pending.promptText,
+      projectId: pending.projectId,
     });
   }, [isStreaming, submit]);
 

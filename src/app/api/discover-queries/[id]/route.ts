@@ -76,6 +76,24 @@ export const POST = authedRoute(
   },
 );
 
+const patchSchema = z.object({
+  /** Link the brief to a project, or null to unlink it. */
+  projectId: z.string().min(1).nullable(),
+});
+
+export const PATCH = authedRoute(
+  async (userId, request: Request, { params }: Ctx) => {
+    const { id } = await params;
+    const body = patchSchema.parse(await request.json());
+    const result = await store.setDiscoverQueryProject(
+      userId,
+      id,
+      body.projectId,
+    );
+    return NextResponse.json(result);
+  },
+);
+
 export const DELETE = authedRoute(
   async (userId, _req: Request, { params }: Ctx) => {
     const { id } = await params;

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Folder } from "lucide-react";
+import { useProjects } from "@/hooks/use-projects";
 import {
   getDiscoverQueriesSnapshot,
   getRecommendationsSnapshot,
@@ -163,9 +164,11 @@ export function useDiscoverBriefs(
 
 function RecentRow({
   thread,
+  projectName,
   onOpen,
 }: {
   thread: ThreadView;
+  projectName: string | null;
   onOpen: (id: string) => void;
 }) {
   const { root, followups } = thread;
@@ -189,6 +192,13 @@ function RecentRow({
       onClick={() => onOpen(q.id)}
       className="group flex h-full min-h-[148px] w-full flex-col rounded-xl border border-border bg-card px-5 py-5 text-left transition-colors duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
     >
+      {projectName ? (
+        <p className="mb-2 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+          <Folder className="size-3.5 shrink-0" strokeWidth={1.75} />
+          <span className="truncate">{projectName}</span>
+        </p>
+      ) : null}
+
       {/* Query */}
       <p className="line-clamp-3 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
         {q.query}
@@ -231,12 +241,20 @@ export function RecentBriefsList({
     [threads],
   );
 
+  const projects = useProjects();
   if (threads.length === 0) return null;
 
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {sorted.map((t) => (
-        <RecentRow key={t.root.query.id} thread={t} onOpen={onOpen} />
+        <RecentRow
+          key={t.root.query.id}
+          thread={t}
+          projectName={
+            projects.find((p) => p.id === t.root.query.projectId)?.name ?? null
+          }
+          onOpen={onOpen}
+        />
       ))}
     </div>
   );

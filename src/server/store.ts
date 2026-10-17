@@ -75,6 +75,7 @@ export async function insertReview(
    * upload, web review, and import flows.
    */
   fromRecommendationId?: string | null,
+  projectId?: string | null,
 ): Promise<PaperReview> {
   const row = await prisma.review.create({
     data: {
@@ -88,6 +89,7 @@ export async function insertReview(
       updatedAt: new Date(review.updatedAt),
       importedAt: review.importedAt ? new Date(review.importedAt) : null,
       fromRecommendationId: fromRecommendationId ?? null,
+      projectId: projectId ?? null,
     },
   });
   if (!review.importedAt) {
@@ -875,6 +877,7 @@ interface DiscoverQueryRow {
   notes: string | null;
   status: string;
   createdAt: Date;
+  projectId: string | null;
 }
 
 interface RecommendationRow {
@@ -901,6 +904,7 @@ function rowToDiscoverQuery(r: DiscoverQueryRow): DiscoverQuery {
     notes: r.notes,
     status: r.status as DiscoverQueryStatus,
     createdAt: r.createdAt.toISOString(),
+    projectId: r.projectId,
   };
 }
 
@@ -947,10 +951,23 @@ async function assertRecommendationOwned(
     throw new HttpError(404, `Recommendation not found: ${recId}`);
 }
 
+async function assertProjectOwned(
+  userId: string,
+  projectId: string,
+): Promise<void> {
+  const exists = await prisma.project.findFirst({
+    where: { id: projectId, userId },
+    select: { id: true },
+  });
+  if (!exists) throw new HttpError(404, `Project not found: ${projectId}`);
+}
+
 export async function createDiscoverQuery(
   userId: string,
   query: string,
+  projectId: string | null = null,
 ): Promise<DiscoverQuery> {
+  if (projectId) await assertProjectOwned(userId, projectId);
   const row = await prisma.discoverQuery.create({
     data: {
       id: crypto.randomUUID(),
@@ -958,6 +975,7 @@ export async function createDiscoverQuery(
       query,
       status: "running",
       createdAt: new Date(),
+      projectId,
     },
   });
   await sendSlackEvent(
@@ -1080,6 +1098,45 @@ export async function undismissRecommendation(
   return rowToRecommendation(row);
 }
 
+/**
+ * Link a brief to a project (or unlink with null). Reviews already opened
+ * from its recommendations come along when they aren't in a project yet;
+ * reviews filed elsewhere stay where the user put them.
+ */
+export async function setDiscoverQueryProject(
+  userId: string,
+  queryId: string,
+  projectId: string | null,
+): Promise<{ query: DiscoverQuery; movedReviewIds: string[] }> {
+  await assertDiscoverQueryOwned(userId, queryId);
+  if (projectId) await assertProjectOwned(userId, projectId);
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.discoverQuery.update({
+      where: { id: queryId },
+      data: { projectId },
+    });
+    let movedReviewIds: string[] = [];
+    if (projectId) {
+      const reviews = await tx.review.findMany({
+        where: {
+          userId,
+          projectId: null,
+          fromRecommendation: { queryId },
+        },
+        select: { id: true },
+      });
+      movedReviewIds = reviews.map((r) => r.id);
+      if (movedReviewIds.length > 0) {
+        await tx.review.updateMany({
+          where: { id: { in: movedReviewIds } },
+          data: { projectId },
+        });
+      }
+    }
+    return { query: rowToDiscoverQuery(row), movedReviewIds };
+  });
+}
+
 export async function deleteDiscoverQuery(
   userId: string,
   queryId: string,
@@ -1104,11 +1161,27 @@ export async function openRecommendation(
   const rec = await getRecommendation(userId, recId);
   if (!rec) throw new HttpError(404, `Recommendation not found: ${recId}`);
 
+  // Research that belongs to a project files what it opens into that
+  // project, so reading from a project brief needs no manual linking.
+  const query = await prisma.discoverQuery.findFirst({
+    where: { id: rec.queryId, userId },
+    select: { projectId: true },
+  });
+  const projectId = query?.projectId ?? null;
+
   const canonicalArxivId = rec.arxivId ? normalizeArxivId(rec.arxivId) : null;
   const existing = canonicalArxivId
     ? await getReviewByArxivId(userId, canonicalArxivId)
     : await getReviewBySourceUrl(userId, rec.url);
-  if (existing) return { review: existing, alreadyInLibrary: true };
+  if (existing) {
+    // An ungrouped paper joins the project; one already filed elsewhere
+    // stays where the user put it.
+    if (projectId && !existing.projectId) {
+      const moved = await assignReviewToProject(userId, existing.id, projectId);
+      return { review: moved, alreadyInLibrary: true };
+    }
+    return { review: existing, alreadyInLibrary: true };
+  }
 
   const now = new Date().toISOString();
   const fallbackTitle = canonicalArxivId ? `arXiv:${canonicalArxivId}` : rec.url;
@@ -1124,6 +1197,7 @@ export async function openRecommendation(
       sourceUrl: canonicalArxivId ? null : rec.url,
     },
     recId,
+    projectId,
   );
   return { review, alreadyInLibrary: false };
 }

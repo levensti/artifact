@@ -22,6 +22,7 @@ import PageHeader from "./page-header";
 import ResearchComposer from "./research-composer";
 import { ARTIFACTS_HOME_EVENT } from "@/lib/storage-events";
 import { takePendingResearch } from "@/lib/pending-research";
+import { projectResearchOptions } from "@/lib/project-research-client";
 
 /* ------------------------------------------------------------------ */
 /*  Empty state                                                        */
@@ -139,14 +140,17 @@ export default function DiscoverPanel() {
   }, [setFocusedId]);
 
   const handleSubmit = useCallback(
-    (text: string) => {
+    (text: string, projectId: string | null = null) => {
       if (!canSubmit) {
         openSettings();
         return;
       }
       pendingParentRef.current = null;
       setAwaitingFocus(true);
-      void chat.submit(text);
+      void chat.submit(
+        text,
+        projectId ? projectResearchOptions(projectId, text) : undefined,
+      );
     },
     [canSubmit, chat, openSettings],
   );
@@ -184,9 +188,15 @@ export default function DiscoverPanel() {
         (r) => r.queryId === parentId && !r.dismissedAt,
       );
       pendingParentRef.current = parentId;
-      void chat.submit(text, {
-        promptText: buildFollowupPrompt(parent, picks, text),
-      });
+      // A follow-up stays in its brief's project, with the project's
+      // context so it doesn't re-suggest what the project already has.
+      const followupPrompt = buildFollowupPrompt(parent, picks, text);
+      void chat.submit(
+        text,
+        parent.projectId
+          ? projectResearchOptions(parent.projectId, followupPrompt)
+          : { promptText: followupPrompt },
+      );
     },
     [canSubmit, chat, openSettings],
   );
@@ -272,7 +282,9 @@ export default function DiscoverPanel() {
                       run={focusedThread.root}
                       followups={focusedThread.followups}
                       hasExaKey={hasExaKey}
-                      onRetry={handleSubmit}
+                      onRetry={(text) =>
+                        handleSubmit(text, focusedThread.root.query.projectId)
+                      }
                     />
                     {chat.pendingExaDecision ? (
                       <div className="mt-12">

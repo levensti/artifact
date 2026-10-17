@@ -280,6 +280,13 @@ export async function deleteProject(id: string): Promise<void> {
   await apiFetch(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
   projectsCache = projectsCache.filter((p) => p.id !== id);
   dispatch(PROJECTS_UPDATED_EVENT);
+  // Its research is kept but unlinked (SetNull), mirror that locally.
+  if (discoverQueriesCache.some((q) => q.projectId === id)) {
+    discoverQueriesCache = discoverQueriesCache.map((q) =>
+      q.projectId === id ? { ...q, projectId: null } : q,
+    );
+    dispatch(DISCOVER_UPDATED_EVENT);
+  }
   // Reviews that belonged to this project now have projectId=null — refresh.
   await refreshReviews();
 }
@@ -473,10 +480,13 @@ export async function ensureDiscoverLoaded(): Promise<void> {
   return discoverInflight;
 }
 
-export async function createDiscoverQuery(query: string): Promise<DiscoverQuery> {
+export async function createDiscoverQuery(
+  query: string,
+  projectId: string | null = null,
+): Promise<DiscoverQuery> {
   const { query: created } = await apiFetch<{ query: DiscoverQuery }>(
     "/api/discover-queries",
-    { method: "POST", body: { query } },
+    { method: "POST", body: { query, projectId } },
   );
   discoverQueriesCache = [created, ...discoverQueriesCache];
   dispatch(DISCOVER_UPDATED_EVENT);
@@ -549,6 +559,32 @@ export async function openRecommendation(
   // the rec itself is unchanged; the link is on Review.fromRecommendationId.
   await refreshReviews();
   return result;
+}
+
+/** Link a brief to a project (null unlinks). Reviews already opened from its
+ *  picks that weren't in a project move with it. */
+export async function setDiscoverQueryProject(
+  queryId: string,
+  projectId: string | null,
+): Promise<void> {
+  const { query, movedReviewIds } = await apiFetch<{
+    query: DiscoverQuery;
+    movedReviewIds: string[];
+  }>(`/api/discover-queries/${encodeURIComponent(queryId)}`, {
+    method: "PATCH",
+    body: { projectId },
+  });
+  discoverQueriesCache = discoverQueriesCache.map((q) =>
+    q.id === query.id ? query : q,
+  );
+  dispatch(DISCOVER_UPDATED_EVENT);
+  if (movedReviewIds.length > 0) {
+    const moved = new Set(movedReviewIds);
+    reviewsCache = reviewsCache.map((r) =>
+      moved.has(r.id) ? { ...r, projectId } : r,
+    );
+    dispatch(REVIEWS_UPDATED_EVENT);
+  }
 }
 
 export async function deleteDiscoverQuery(queryId: string): Promise<void> {

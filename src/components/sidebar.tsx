@@ -37,13 +37,10 @@ import {
 } from "@/lib/reviews";
 import {
   assignReviewToProject,
-  createProject,
-  deleteProject,
   getCurrentUser,
   getProjectsSnapshot,
   getWikiCacheSnapshot,
   loadWikiPages,
-  updateProject,
 } from "@/lib/client-data";
 import type { Project } from "@/lib/review-types";
 import {
@@ -72,6 +69,7 @@ import {
 import NewReviewDialog from "./new-review-dialog";
 import ShareReviewDialog from "./share-review-dialog";
 import UserMenu from "./user-menu";
+import { DeleteProjectDialog, ProjectDialog } from "./project-dialogs";
 import { BrandGlyph } from "./brand-panel";
 import { MonoLabel } from "./folio";
 
@@ -700,9 +698,19 @@ export default function Sidebar({
               {projects.map((project) => {
                 const isCollapsed = collapsedProjects.has(project.id);
                 const items = projectReviews.get(project.id) ?? [];
+                const isActive = pathname === `/projects/${project.id}`;
                 return (
                   <div key={project.id} className="mb-1">
-                    <div className="group flex items-center gap-1 rounded-md px-1 py-1 hover:bg-sidebar-accent/50">
+                    <div
+                      className={cn(
+                        "group flex items-center gap-0.5 rounded-md px-1 py-0.5",
+                        isActive
+                          ? "bg-sidebar-accent"
+                          : "hover:bg-sidebar-accent/50",
+                      )}
+                    >
+                      {/* The chevron expands the folder; the name opens the
+                          project's page. */}
                       <button
                         type="button"
                         onClick={() =>
@@ -713,15 +721,27 @@ export default function Sidebar({
                             return next;
                           })
                         }
-                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                        aria-label={
+                          isCollapsed
+                            ? `Show papers in ${project.name}`
+                            : `Hide papers in ${project.name}`
+                        }
+                        aria-expanded={!isCollapsed}
+                        className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/50 hover:bg-sidebar-accent hover:text-foreground"
                       >
                         <ChevronRight
                           className={cn(
-                            "size-3 shrink-0 text-muted-foreground/50 transition-transform duration-150",
+                            "size-3 transition-transform duration-150",
                             !isCollapsed && "rotate-90",
                           )}
                           strokeWidth={2}
                         />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/projects/${project.id}`)}
+                        className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left"
+                      >
                         {isCollapsed ? (
                           <Folder
                             className="size-3.5 shrink-0 text-muted-foreground"
@@ -733,7 +753,12 @@ export default function Sidebar({
                             strokeWidth={1.75}
                           />
                         )}
-                        <span className="truncate text-[12.5px] font-medium text-foreground/80">
+                        <span
+                          className={cn(
+                            "truncate text-[12.5px] font-medium",
+                            isActive ? "text-foreground" : "text-foreground/80",
+                          )}
+                        >
                           {project.name}
                         </span>
                       </button>
@@ -839,157 +864,11 @@ export default function Sidebar({
           project={deletingProject}
           paperCount={projectReviews.get(deletingProject.id)?.length ?? 0}
           onClose={() => setDeletingProject(null)}
+          onDeleted={() => {
+            if (pathname === `/projects/${deletingProject.id}`) router.push("/");
+          }}
         />
       )}
     </>
-  );
-}
-
-/* ── ProjectDialog ───────────────────────────────────────────── */
-
-function ProjectDialog(
-  props:
-    | { mode: "create"; open: boolean; onClose: () => void }
-    | { mode: "edit"; project: Project; open: boolean; onClose: () => void },
-) {
-  const initialName = props.mode === "edit" ? props.project.name : "";
-  const [name, setName] = useState(initialName);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (props.open) {
-      setName(props.mode === "edit" ? props.project.name : "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.open]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setSaving(true);
-    try {
-      if (props.mode === "create") {
-        await createProject(name.trim());
-      } else {
-        await updateProject(props.project.id, { name: name.trim() });
-      }
-      props.onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!props.open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={props.onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="mb-4 text-[15px] font-semibold tracking-[-0.01em]">
-          {props.mode === "create" ? "New project" : "Rename project"}
-        </h2>
-        <form
-          onSubmit={(e) => void handleSubmit(e)}
-          className="flex flex-col gap-3"
-        >
-          <div>
-            <label className="mb-1 block text-[12px] font-medium text-muted-foreground">
-              Name
-            </label>
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. My thesis, NLP papers…"
-              className="h-8 w-full rounded-lg border bg-background px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div className="mt-1 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={props.onClose}
-              className="rounded-md px-4 py-2 text-[13px] text-muted-foreground hover:bg-muted"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim() || saving}
-              className="rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
-            >
-              {saving ? "Saving…" : props.mode === "create" ? "Create" : "Save"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-/* ── DeleteProjectDialog ─────────────────────────────────────── */
-
-function DeleteProjectDialog({
-  project,
-  paperCount,
-  onClose,
-}: {
-  project: Project;
-  paperCount: number;
-  onClose: () => void;
-}) {
-  const [deleting, setDeleting] = useState(false);
-
-  const handleConfirm = async () => {
-    setDeleting(true);
-    try {
-      await deleteProject(project.id);
-      onClose();
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="mb-2 text-[15px] font-semibold tracking-[-0.01em]">
-          Delete project?
-        </h2>
-        <p className="mb-5 text-[13px] leading-relaxed text-muted-foreground">
-          &ldquo;{project.name}&rdquo; will be deleted.
-          {paperCount > 0 &&
-            ` ${paperCount} ${paperCount === 1 ? "paper" : "papers"} will be ungrouped but not deleted.`}
-        </p>
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={deleting}
-            className="rounded-md px-4 py-2 text-[13px] text-muted-foreground hover:bg-muted disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleConfirm()}
-            disabled={deleting}
-            className="rounded-md bg-destructive px-4 py-2 text-[13px] font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-          >
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

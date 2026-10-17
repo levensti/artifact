@@ -15,8 +15,6 @@ import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
 import type { PaperMeta } from "@/lib/discover-paper-metadata";
 import { buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
-import type { Recommendation } from "@/lib/discover-types";
-import { BriefSection, OverviewProse, ReadingList, picksCount } from "./brief-parts";
 
 /* ------------------------------------------------------------------ */
 /*  Tool-call display helpers                                           */
@@ -62,64 +60,17 @@ function submitIndex(steps: AgentStep[]): number {
 }
 
 /**
- * The agent writes two kinds of text: working notes between tool calls ("the
- * searches were noisy; let me verify…") and, after `submit_picks`, the
- * explainer that is the brief's overview. They're different content and are
- * shown in different places, so split them here.
+ * The agent's working notes: text written between tool calls ("the searches
+ * were noisy; let me verify…"). Text after `submit_picks` is the overview,
+ * which is shown only once the brief is saved.
  */
-function splitText(steps: AgentStep[]): { notes: string[]; explainer: string } {
+function workingNotes(steps: AgentStep[]): string[] {
   const cut = submitIndex(steps);
-  const notes: string[] = [];
-  const explainer: string[] = [];
-  steps.forEach((s, i) => {
-    if (s.kind !== "text" || !s.text.trim()) return;
-    if (cut !== -1 && i > cut) explainer.push(s.text);
-    else notes.push(s.text.trim());
-  });
-  return { notes, explainer: explainer.join("\n\n").trim() };
-}
-
-/** Picks from the `submit_picks` call, shaped like saved recommendations so
- *  the reading list can show them before the run is finalized. */
-function livePicks(
-  steps: AgentStep[],
-  pool: ReturnType<typeof buildPoolFromSteps>,
-): Recommendation[] {
-  const cut = submitIndex(steps);
-  if (cut === -1) return [];
-  const step = steps[cut] as ToolStep;
-  const raw = step.input?.picks;
-  if (!Array.isArray(raw)) return [];
-  const out: Recommendation[] = [];
-  raw.forEach((item, i) => {
-    if (!item || typeof item !== "object") return;
-    const p = item as Record<string, unknown>;
-    const url = typeof p.url === "string" ? p.url.trim() : "";
-    const title = typeof p.title === "string" ? p.title.trim() : "";
-    if (!url || !title) return;
-    const arxivId =
-      typeof p.arxivId === "string" && p.arxivId.trim() ? p.arxivId.trim() : null;
-    const meta = arxivId ? pool.byArxivId.get(arxivId) : undefined;
-    const year = meta?.year ? Number(meta.year) : null;
-    out.push({
-      id: `live-${i}`,
-      queryId: "live",
-      rank: out.length + 1,
-      url,
-      title,
-      rationale: typeof p.rationale === "string" ? p.rationale.trim() : "",
-      arxivId,
-      authors:
-        typeof p.authors === "string" ? p.authors : meta?.authors || null,
-      publishedDate: meta?.publishedDate ?? null,
-      publishedYear: year && Number.isInteger(year) ? year : null,
-      venue: null,
-      citationCount: null,
-      dismissedAt: null,
-      createdAt: "",
-    });
-  });
-  return out;
+  return steps.flatMap((s, i) =>
+    s.kind === "text" && s.text.trim() && (cut === -1 || i < cut)
+      ? [s.text.trim()]
+      : [],
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -348,25 +299,21 @@ function TraceGroup({ title, children }: { title: string; children: ReactNode })
   );
 }
 
-/** How the run got its answer: papers checked first (the strong signal), then
- *  the searches behind them. Open while the agent is gathering, since it's the
- *  only content then; it folds to a one-line summary once the brief is being
- *  written, unless the reader opens it. */
+/** What the agent is doing: papers checked first (the strong signal), then
+ *  the searches behind them. Folded to a one-line summary so the page holds
+ *  still while the run works; open it to watch. */
 function ResearchTrace({
   steps,
   pool,
-  gathering,
 }: {
   steps: AgentStep[];
   pool: ReturnType<typeof buildPoolFromSteps>;
-  gathering: boolean;
 }) {
-  const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  const open = userOpen ?? gathering;
+  const [open, setOpen] = useState(false);
   const searches = steps.filter(isSearch);
   const reads = steps.filter(isRead);
-  const { notes } = splitText(steps);
-  const latestNote = gathering ? notes[notes.length - 1] : undefined;
+  const notes = workingNotes(steps);
+  const latestNote = notes[notes.length - 1];
   if (searches.length === 0 && reads.length === 0) return null;
 
   const summary = [
@@ -380,7 +327,7 @@ function ResearchTrace({
     <section>
       <button
         type="button"
-        onClick={() => setUserOpen(!open)}
+        onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="-mx-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[15px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
@@ -430,65 +377,36 @@ function ResearchTrace({
 /* ------------------------------------------------------------------ */
 
 /**
- * The in-flight research run. It has the same shape as a finished brief
- * (Overview, Reading list, Research) so nothing jumps when it completes.
- * While gathering, the research trace is the content. Once the agent submits
- * its picks, the reading list appears, the overview streams in, and the trace
- * folds away.
+ * The in-flight research run. Nothing streams into the page: the brief's
+ * status line says what the agent is doing, this block holds a fixed place
+ * for the result, and the research trace is folded unless the reader opens
+ * it. The overview and reading list appear together once the run is saved.
  */
 export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
   const pool = useMemo(() => buildPoolFromSteps(steps), [steps]);
-  const picks = useMemo(() => livePicks(steps, pool), [steps, pool]);
-  const { explainer } = useMemo(() => splitText(steps), [steps]);
   const exaMissing = steps.some(
     (s) =>
       s.kind === "tool_call" &&
       s.name === "web_search" &&
       s.output?.trim() === EXA_KEY_REQUIRED_SENTINEL,
   );
-  const gathering = submitIndex(steps) === -1;
-  const hasWork = steps.some((s) => isSearch(s) || isRead(s));
 
   return (
-    <div className="space-y-12">
-      {!gathering ? (
-        <BriefSection title="Overview">
-          {explainer ? (
-            <OverviewProse prose={explainer} />
-          ) : (
-            // The status line already says it's writing; hold the space with
-            // the rough shape of a paragraph instead of saying it again.
-            <div className="max-w-[68ch] space-y-3 pt-1.5" aria-hidden>
-              {["100%", "96%", "62%"].map((w) => (
-                <div
-                  key={w}
-                  className="h-3 rounded-full bg-muted"
-                  style={{
-                    width: w,
-                    animation: "discover-phase-pulse 1.6s ease-in-out infinite",
-                  }}
-                />
-              ))}
-            </div>
-          )}
-        </BriefSection>
-      ) : null}
-
-      {picks.length > 0 ? (
-        <BriefSection title="Reading list" count={picksCount(picks.length)}>
-          <ReadingList recs={picks} pending />
-        </BriefSection>
-      ) : null}
+    <div className="space-y-8">
+      <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
+        <p className="text-[15px] font-medium text-foreground">
+          Researching your question
+        </p>
+        <p className="mx-auto mt-1.5 max-w-[440px] text-[14px] leading-relaxed text-muted-foreground">
+          The overview and reading list will appear here when it&rsquo;s done,
+          usually in a minute or two. You can keep working elsewhere in
+          Artifact while it runs.
+        </p>
+      </div>
 
       {exaMissing ? <ExaKeyPromptCard /> : null}
 
-      {hasWork ? (
-        <ResearchTrace steps={steps} pool={pool} gathering={gathering} />
-      ) : (
-        <p className="text-[14px] text-muted-foreground">
-          Searches and the papers they turn up will appear here.
-        </p>
-      )}
+      <ResearchTrace steps={steps} pool={pool} />
     </div>
   );
 }

@@ -49,16 +49,8 @@ export function OverviewProse({ prose }: { prose: string }) {
   );
 }
 
-/** The ranked reading list. `pending` renders picks the agent has chosen but
- *  that aren't saved yet: same layout, actions disabled, so nothing moves
- *  when the saved list replaces it. */
-export function ReadingList({
-  recs,
-  pending = false,
-}: {
-  recs: Recommendation[];
-  pending?: boolean;
-}) {
+/** The ranked reading list. */
+export function ReadingList({ recs }: { recs: Recommendation[] }) {
   return (
     <ol
       className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
@@ -66,7 +58,7 @@ export function ReadingList({
     >
       {recs.map((rec) => (
         <li key={rec.id}>
-          <RecommendationCard rec={rec} pending={pending} />
+          <RecommendationCard rec={rec} />
         </li>
       ))}
     </ol>

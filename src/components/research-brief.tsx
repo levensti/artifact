@@ -19,6 +19,7 @@ import type { AgentStep } from "@/hooks/use-chat";
 import MarkdownMessage from "./markdown-message";
 import { DiscoverLiveProgress, liveStatusLine } from "./discover-picks";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
+import BriefProjectControl from "./brief-project-control";
 import {
   BriefSection,
   OverviewProse,
@@ -564,20 +565,41 @@ export default function ResearchBrief({
   followups,
   hasExaKey,
   onRetry,
+  showProject = true,
+  titleAs = "h1",
 }: {
   run: BriefRunData;
   followups: BriefRunData[];
   hasExaKey: boolean;
   /** Re-run a query that came back empty or errored. */
   onRetry: (text: string) => void;
+  /** Show the "Add to project" control. Off on a project's own page. */
+  showProject?: boolean;
+  /** h2 when the brief is embedded under another page's title. */
+  titleAs?: "h1" | "h2";
 }) {
+  const Title = titleAs;
   return (
     <article>
       <header>
-        <h1 className="max-w-[30ch] text-[30px] font-semibold leading-[1.2] tracking-[-0.025em] text-foreground">
+        <Title className="max-w-[30ch] text-[30px] font-semibold leading-[1.2] tracking-[-0.025em] text-foreground">
           {run.query.query}
-        </h1>
-        <RunStatus run={run} large />
+        </Title>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <RunStatus run={run} large />
+          {showProject ? (
+            <div className="mt-3">
+              <BriefProjectControl
+                question={run.query.query}
+                projectId={run.query.projectId}
+                queryIds={[
+                  run.query.id,
+                  ...followups.map((f) => f.query.id),
+                ]}
+              />
+            </div>
+          ) : null}
+        </div>
       </header>
 
       <div className="mt-10 space-y-12">

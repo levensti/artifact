@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Check,
+  Compass,
   ExternalLink,
   Loader2,
   X,
@@ -100,15 +101,19 @@ function yearLabel(rec: Recommendation): string | null {
  * the filled primary action so the eye lands on the single best thing to
  * read; lower ranks get a bordered one. "In library" is detected against the
  * reviews cache so a re-surfaced paper shows the badge before any click.
- * `pending` is a pick the agent has chosen but that isn't saved yet: it
- * renders identically with its actions disabled.
+ * In a project's combined list, `rank` overrides the pick's own position and
+ * `origin` links back to the research session it came from.
  */
 export default function RecommendationCard({
   rec,
-  pending = false,
+  rank,
+  origin,
 }: {
   rec: Recommendation;
-  pending?: boolean;
+  /** Position to show instead of `rec.rank`. */
+  rank?: number;
+  /** The session this pick came from, shown as a link. */
+  origin?: { label: string; onOpen: () => void };
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<"open" | "dismiss" | null>(null);
@@ -125,7 +130,7 @@ export default function RecommendationCard({
     : reviews.find((r) => r.sourceUrl === rec.url);
 
   const onOpen = async () => {
-    if (busy || pending) return;
+    if (busy) return;
     setError(null);
     if (inLibraryReview) {
       router.push(`/review/${inLibraryReview.id}`);
@@ -142,7 +147,7 @@ export default function RecommendationCard({
   };
 
   const onDismiss = async () => {
-    if (busy || pending) return;
+    if (busy) return;
     setBusy("dismiss");
     setError(null);
     try {
@@ -154,9 +159,10 @@ export default function RecommendationCard({
   };
 
   const kind = classifySource(rec);
-  const isTop = rec.rank === 1;
+  const shownRank = rank ?? rec.rank;
+  const isTop = shownRank === 1;
   const year = yearLabel(rec);
-  const locked = busy !== null || pending;
+  const locked = busy !== null;
   // Who, when, where: one plain line under the title.
   const meta = [
     rec.authors ? authorsLabel(rec.authors) : null,
@@ -165,7 +171,7 @@ export default function RecommendationCard({
   ].filter(Boolean);
 
   return (
-    <article className="grid grid-cols-[20px_1fr] gap-x-4 px-6 py-5">
+    <article className="grid grid-cols-[24px_1fr] gap-x-4 px-6 py-5">
       <span
         className={cn(
           "pt-px text-right text-[15px] font-semibold tabular-nums",
@@ -173,7 +179,7 @@ export default function RecommendationCard({
         )}
         title="Agent's preference order"
       >
-        {rec.rank > 0 ? rec.rank : ""}
+        {shownRank > 0 ? shownRank : ""}
       </span>
 
       <div className="min-w-0">
@@ -245,22 +251,32 @@ export default function RecommendationCard({
 
           <span className="flex-1" />
 
-          {!pending ? (
+          {origin ? (
             <button
               type="button"
-              onClick={onDismiss}
-              disabled={busy !== null}
-              aria-label="Dismiss"
-              title="Not interested"
-              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              onClick={origin.onOpen}
+              title={`Open the research session: ${origin.label}`}
+              className="inline-flex h-8 min-w-0 max-w-[45%] items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
-              {busy === "dismiss" ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <X className="size-3.5" strokeWidth={2} />
-              )}
+              <Compass className="size-3.5 shrink-0" strokeWidth={1.75} />
+              <span className="truncate">{origin.label}</span>
             </button>
           ) : null}
+
+          <button
+            type="button"
+            onClick={onDismiss}
+            disabled={busy !== null}
+            aria-label="Dismiss"
+            title="Not interested"
+            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {busy === "dismiss" ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <X className="size-3.5" strokeWidth={2} />
+            )}
+          </button>
         </div>
 
         {error ? (

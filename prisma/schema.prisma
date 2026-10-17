@@ -297,7 +297,7 @@ model Document {
   /// legacy per-user caches (which never stored the text); the next open
   /// uploads it.
   text      String?
-  charCount Int      @default(0)
+  charCount Int     @default(0)
   title     String?
   /// Citation-token → page map from the per-page LLM pass (short docs).
   pageMap   Json?
@@ -436,11 +436,17 @@ model DiscoverQuery {
   /// failed before producing recommendations.
   status    String   @default("running")
   createdAt DateTime
+  /// Project this research belongs to. Null = not in a project. Reviews
+  /// opened from its recommendations are filed into the same project.
+  /// SetNull so deleting a project keeps its research.
+  projectId String?
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   recommendations Recommendation[]
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([projectId])
 }
 
 /// One paper pick from a DiscoverQuery's curated list. The first-class
@@ -482,8 +488,9 @@ model Project {
   name      String
   createdAt DateTime @default(now())
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviews Review[]
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews         Review[]
+  discoverQueries DiscoverQuery[]
 
   @@index([userId])
 }
