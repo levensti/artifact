@@ -49,6 +49,8 @@ function rec(over: Partial<Recommendation>): Recommendation {
     publishedYear: null,
     venue: null,
     citationCount: null,
+    judgeScore: null,
+    judgeDetail: null,
     dismissedAt: null,
     createdAt: "",
     ...over,

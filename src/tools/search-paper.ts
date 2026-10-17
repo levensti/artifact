@@ -57,7 +57,7 @@ export const searchPaperTool: ToolDefinition = {
     return {
       content:
         "Error: this document has no search index (it is short enough to be " +
-        "fully in context — read it directly).",
+        "fully in context; read it directly).",
       ok: false,
     };
   },

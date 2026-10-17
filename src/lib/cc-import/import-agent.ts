@@ -422,7 +422,7 @@ function serializeCombinedTranscript(sessions: ParsedCcSession[]): string {
     "",
     "The sessions below are ordered oldest-first. Each is delimited by",
     "a `=== SESSION <n> ===` marker. Treat them as related context that",
-    "may or may not share a topic — synthesize across them where it",
+    "may or may not share a topic; synthesize across them where it",
     "makes sense, and separate where it doesn't.",
     "",
   ].join("\n");
@@ -483,7 +483,7 @@ function buildCombinedPrompt(args: {
       .at(-1) ?? new Date().toISOString()
   ).slice(0, 10);
 
-  return `You are the journal agent for a research and learning workspace. The user just imported ${sessions.length} Claude Code transcripts in a single batch and asked you to COMBINE them into the journal — treat them as related context and synthesize across them rather than writing one entry per session.
+  return `You are the journal agent for a research and learning workspace. The user just imported ${sessions.length} Claude Code transcripts in a single batch and asked you to COMBINE them into the journal: treat them as related context and synthesize across them rather than writing one entry per session.
 
 The full transcripts are in your system context, wrapped in <paper> tags. They are delimited internally by \`=== SESSION <n> ===\` markers and ordered oldest-first. Ignore the literal "<paper>" framing.
 
@@ -493,9 +493,9 @@ ${JSON.stringify(sessionSummaries, null, 2)}
 EXISTING JOURNAL ENTRIES (${knownPages.length}):
 ${JSON.stringify(knownPages, null, 2)}
 
-YOUR TASK — synthesize, don't enumerate. Options:
+YOUR TASK: synthesize, don't enumerate. Options:
   1. CREATE ONE new session entry that captures the through-line across all these sessions. This is the expected default when the sessions share a topic or arc.
-  2. CREATE A SMALL NUMBER of session entries (2-3 max) if the batch truly contains clearly distinct topics. Only do this if the split is obvious — when in doubt, prefer one synthesized entry.
+  2. CREATE A SMALL NUMBER of session entries (2-3 max) if the batch truly contains clearly distinct topics. Only do this if the split is obvious; when in doubt, prefer one synthesized entry.
   3. UPDATE an existing session entry if this batch is a clear continuation of something already in the journal. Preserve existing structure and voice; integrate new material rather than appending a dated footer.
   4. Do NOTHING if none of it is worth journaling.
 
@@ -503,7 +503,8 @@ Do NOT write one entry per input session. The user explicitly chose "combined" t
 
 DOMAIN NEUTRALITY:
   - Do NOT assume these are coding sessions. Infer topics from the transcripts themselves.
-  - Do NOT mention "Claude Code", "the CLI", or "multiple sessions" in the entry content. The journal is the user's own knowledge record — frame it as what *they* explored and learned, not how they got there.
+  - Do NOT mention "Claude Code", "the CLI", or "multiple sessions" in the entry content. The journal is the user's own knowledge record: frame it as what *they* explored and learned, not how they got there.
+  - Never use em dashes (—) in entry content; use commas, colons, or parentheses.
 
 SLUG RULES:
   - Session slugs MUST start with "session-" and be kebab-case. Include a date and a short topic hint, e.g. "session-${latestDate}-rlhf-basics". Use the latest session's date when in doubt.
@@ -516,7 +517,7 @@ CONTENT STYLE:
   - Do NOT use [[slug]] syntax anywhere.
   - Do NOT invent links to /review/<id>.
 
-Return ONLY JSON of this shape — no markdown fences, no prose outside:
+Return ONLY JSON of this shape, with no markdown fences and no prose outside:
 {
   "notes": "one-line reasoning for debugging",
   "upserts": [
@@ -538,7 +539,7 @@ function buildPrompt(args: {
   knownPages: RunAgentArgs["knownPages"];
 }): string {
   const { session, knownPages } = args;
-  return `You are the journal agent for a research and learning workspace. The user just imported a transcript of a conversation they had with Claude Code (a separate CLI tool). Your job is to decide what — if anything — should be written into their personal study journal based on this conversation.
+  return `You are the journal agent for a research and learning workspace. The user just imported a transcript of a conversation they had with Claude Code (a separate CLI tool). Your job is to decide what (if anything) should be written into their personal study journal based on this conversation.
 
 The full transcript is in your system context, wrapped in <paper> tags. Treat it as the conversation; ignore the literal "<paper>" framing.
 
@@ -561,13 +562,14 @@ EXISTING JOURNAL ENTRIES (${knownPages.length}):
 ${JSON.stringify(knownPages, null, 2)}
 
 DECIDE what (if anything) should change in the journal. Options:
-  1. CREATE a new session entry capturing what the user worked on or learned in this conversation. Multiple session entries are allowed if the conversation spans clearly distinct topics — prefer topic-sharded sessions over one omnibus page.
+  1. CREATE a new session entry capturing what the user worked on or learned in this conversation. Multiple session entries are allowed if the conversation spans clearly distinct topics; prefer topic-sharded sessions over one omnibus page.
   2. UPDATE an existing session entry if this conversation is a clear continuation of one already in the journal (e.g. same topic, same week). Preserve the existing structure and voice; integrate new material rather than appending a dated footer.
   3. Do NOTHING if the conversation is too small, too incoherent, or too off-topic to add useful signal to a study journal. (Returning an empty upserts list is a valid outcome.)
 
 DOMAIN NEUTRALITY:
   - Do NOT assume this is a coding session. Users use Claude Code for ramping up on new topics, debugging, writing, research, system design, math, and many other things. Infer the topic from the transcript itself.
-  - Do NOT mention "Claude Code" or "the CLI" in the entry content. The journal is the user's own knowledge record — frame everything as what *they* explored and learned, not what tool they used to do it.
+  - Do NOT mention "Claude Code" or "the CLI" in the entry content. The journal is the user's own knowledge record: frame everything as what *they* explored and learned, not what tool they used to do it.
+  - Never use em dashes (—) in entry content; use commas, colons, or parentheses.
 
 SLUG RULES:
   - Session slugs MUST start with "session-" and be kebab-case. Include the date and a short topic hint, e.g. "session-${(session.meta.lastActivityAt ?? new Date().toISOString()).slice(0, 10)}-rlhf-basics".
@@ -578,9 +580,9 @@ CONTENT STYLE:
   - 2-3 paragraphs of narrative in second-person ("you explored…", "you worked through…").
   - Then bulleted sections like ## Concepts, ## Decisions, ## Open questions where they add value.
   - Do NOT use [[slug]] syntax anywhere.
-  - Do NOT invent links to /review/<id> — this conversation didn't come from an Artifact review session.
+  - Do NOT invent links to /review/<id>; this conversation didn't come from an Artifact review session.
 
-Return ONLY JSON of this shape — no markdown fences, no prose outside:
+Return ONLY JSON of this shape, with no markdown fences and no prose outside:
 {
   "notes": "one-line reasoning for debugging",
   "upserts": [

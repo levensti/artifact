@@ -53,6 +53,20 @@ function isRead(s: AgentStep): s is ToolStep {
   return s.kind === "tool_call" && s.name === "paper_details";
 }
 
+/** The funnel's screening step (see src/server/discover-funnel.ts). */
+function isScreen(s: AgentStep): s is ToolStep {
+  return s.kind === "tool_call" && s.name === "screen_sources";
+}
+
+/** "Screened 124 sources. Shortlisted 18 …" → the two counts. */
+function screenCounts(step: ToolStep): { screened: number; shortlisted: number | null } {
+  const total = Number(step.input.candidates) || 0;
+  const out = step.output ?? "";
+  const screened = Number(out.match(/Screened (\d+)/)?.[1] ?? total);
+  const shortlisted = out.match(/Shortlisted (\d+)/)?.[1];
+  return { screened, shortlisted: shortlisted ? Number(shortlisted) : null };
+}
+
 function submitIndex(steps: AgentStep[]): number {
   return steps.findIndex(
     (s) => s.kind === "tool_call" && s.name === "submit_picks",
@@ -88,6 +102,13 @@ export function liveStatusLine(steps: AgentStep[]): string {
   if (reads.length > 0) {
     const done = reads.filter((s) => !!s.output).length;
     return `Reading papers · ${plural(done, "paper", "papers")} checked`;
+  }
+  const screenStep = steps.find(isScreen);
+  if (screenStep) {
+    const { screened, shortlisted } = screenCounts(screenStep);
+    return screenStep.output
+      ? `Choosing the reading list · ${shortlisted ?? 0} shortlisted`
+      : `Grading ${plural(screened, "source", "sources")}`;
   }
   const searches = steps.filter(isSearch);
   if (searches.length > 0) {
@@ -316,8 +337,11 @@ function ResearchTrace({
   const latestNote = notes[notes.length - 1];
   if (searches.length === 0 && reads.length === 0) return null;
 
+  const screenStep = steps.find(isScreen);
+  const screen = screenStep ? screenCounts(screenStep) : null;
   const summary = [
     plural(searches.length, "search", "searches"),
+    screen ? `${plural(screen.screened, "source", "sources")} graded` : null,
     reads.length > 0 ? `${plural(reads.length, "paper", "papers")} checked` : null,
   ]
     .filter(Boolean)
@@ -353,6 +377,30 @@ function ResearchTrace({
             >
               {latestNote}
             </p>
+          ) : null}
+          {screenStep && screen ? (
+            <TraceGroup title="Grading">
+              <li className="flex items-center gap-3 px-2 py-1.5">
+                <span className="flex size-4 shrink-0 items-center justify-center">
+                  <StatusMark state={stepState(screenStep)} />
+                </span>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 text-[14px]",
+                    screenStep.output ? "text-foreground/85" : "thinking-shimmer",
+                  )}
+                >
+                  {screenStep.output
+                    ? `Graded ${plural(screen.screened, "source", "sources")} on their content`
+                    : `Grading ${plural(screen.screened, "source", "sources")} on their content`}
+                </span>
+                {screen.shortlisted !== null ? (
+                  <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                    {screen.shortlisted} shortlisted
+                  </span>
+                ) : null}
+              </li>
+            </TraceGroup>
           ) : null}
           {reads.length > 0 ? (
             <TraceGroup title="Papers checked">

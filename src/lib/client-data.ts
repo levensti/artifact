@@ -29,6 +29,7 @@ import {
   PROJECTS_UPDATED_EVENT,
 } from "@/lib/storage-events";
 import { apiFetch } from "@/lib/client/api";
+import type { JudgeDetail } from "@/lib/judge-rubric";
 
 interface SettingsCache {
   /** User's optional Fireworks key override (server falls back to env). */
@@ -506,6 +507,8 @@ export interface FinalizePayload {
     publishedYear?: number | null;
     venue?: string | null;
     citationCount?: number | null;
+    judgeScore?: number;
+    judgeDetail?: JudgeDetail;
   }>;
   /** Optional auxiliary text (Plan + Verify line + agent's closing line). */
   notes?: string | null;
@@ -585,6 +588,28 @@ export async function setDiscoverQueryProject(
     );
     dispatch(REVIEWS_UPDATED_EVENT);
   }
+}
+
+/**
+ * Ask the server to judge the unscored picks of some briefs (picks saved
+ * before the judge existed). Updates the cache with the new scores and
+ * order. Resolves to false when no judge is configured.
+ */
+export async function judgeBriefs(queryIds: string[]): Promise<boolean> {
+  if (queryIds.length === 0) return true;
+  const { available, recommendations } = await apiFetch<{
+    available: boolean;
+    recommendations: Recommendation[];
+  }>("/api/recommendations/judge", {
+    method: "POST",
+    body: { queryIds },
+  });
+  if (recommendations.length > 0) {
+    const byId = new Map(recommendations.map((r) => [r.id, r]));
+    recommendationsCache = recommendationsCache.map((r) => byId.get(r.id) ?? r);
+    dispatch(DISCOVER_UPDATED_EVENT);
+  }
+  return available;
 }
 
 export async function deleteDiscoverQuery(queryId: string): Promise<void> {

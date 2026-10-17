@@ -20,6 +20,8 @@ import { normalizeArxivId } from "@/lib/arxiv";
 import { arxivIdFromUrl, type ParsedPick } from "@/lib/picks-parser";
 import { HttpError } from "./api";
 import { sendSlackEvent, SlackEventType } from "./notifications";
+import { judgeAvailable, judgePicks } from "./judge";
+import { orderByJudge, type JudgeDetail } from "@/lib/judge-rubric";
 
 /* ── Reviews ──────────────────────────────────────────────────── */
 
@@ -893,6 +895,8 @@ interface RecommendationRow {
   publishedYear: number | null;
   venue: string | null;
   citationCount: number | null;
+  judgeScore: number | null;
+  judgeDetail: unknown;
   dismissedAt: Date | null;
   createdAt: Date;
 }
@@ -922,6 +926,8 @@ function rowToRecommendation(r: RecommendationRow): Recommendation {
     publishedYear: r.publishedYear,
     venue: r.venue,
     citationCount: r.citationCount,
+    judgeScore: r.judgeScore,
+    judgeDetail: (r.judgeDetail as JudgeDetail | null) ?? null,
     dismissedAt: r.dismissedAt ? r.dismissedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
   };
@@ -1030,6 +1036,12 @@ export async function finalizeDiscoverQuery(
           publishedYear: pick.publishedYear ?? null,
           venue: pick.venue ?? null,
           citationCount: pick.citationCount ?? null,
+          // Screened by the funnel: keep its content-based score. Picks
+          // without one are judged below.
+          judgeScore: pick.judgeScore ?? null,
+          ...(pick.judgeDetail
+            ? { judgeDetail: pick.judgeDetail as Prisma.InputJsonValue }
+            : {}),
           createdAt: now,
         },
       });
@@ -1038,10 +1050,121 @@ export async function finalizeDiscoverQuery(
     return { query: updated, recs: created };
   });
 
+  // Score the picks and reorder them by the judge. Best-effort: without a
+  // key, or if judging fails, the agent's order stands.
+  const recommendations =
+    result.recs.length > 0
+      ? await judgeQueryRecommendations(queryId)
+      : [];
+
   return {
     query: rowToDiscoverQuery(result.query),
-    recommendations: result.recs.map(rowToRecommendation),
+    recommendations:
+      recommendations.length > 0
+        ? recommendations
+        : result.recs.map(rowToRecommendation),
   };
+}
+
+/**
+ * Judge a brief's unscored picks and, once every pick has a score, renumber
+ * `rank` in the judge's order. The judge sees the brief's question and its
+ * project's name, so scores are comparable across a project's briefs.
+ * Returns the brief's recommendations (empty when judging is unavailable).
+ * Never throws: judging only ever improves on the agent's order.
+ */
+async function judgeQueryRecommendations(
+  queryId: string,
+): Promise<Recommendation[]> {
+  if (!judgeAvailable()) return [];
+  try {
+    const query = await prisma.discoverQuery.findUnique({
+      where: { id: queryId },
+      select: { query: true, project: { select: { name: true } } },
+    });
+    if (!query) return [];
+    const recs = await prisma.recommendation.findMany({
+      where: { queryId },
+      orderBy: { rank: "asc" },
+    });
+    const unscored = recs.filter((r) => r.judgeScore === null);
+    if (unscored.length > 0) {
+      const results = await judgePicks(
+        { question: query.query, projectName: query.project?.name ?? null },
+        unscored.map((r) => ({
+          title: r.title,
+          url: r.url,
+          rationale: r.rationale,
+          arxivId: r.arxivId,
+          authors: r.authors,
+          publishedYear: r.publishedYear,
+          venue: r.venue,
+        })),
+      );
+      await Promise.all(
+        unscored.map((r, i) => {
+          const result = results[i];
+          if (!result) return null;
+          r.judgeScore = result.score;
+          r.judgeDetail = result.detail as unknown as Prisma.JsonValue;
+          return prisma.recommendation.update({
+            where: { id: r.id },
+            data: {
+              judgeScore: result.score,
+              judgeDetail: result.detail as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }),
+      );
+    }
+
+    // Renumber only when every pick is scored; a partial result would push
+    // the unscored ones to the bottom for no reason.
+    if (recs.every((r) => r.judgeScore !== null)) {
+      const ordered = orderByJudge(recs, (r) => r.judgeScore);
+      const changed = ordered.filter((r, i) => r.rank !== i + 1);
+      if (changed.length > 0) {
+        await prisma.$transaction(
+          ordered.map((r, i) =>
+            prisma.recommendation.update({
+              where: { id: r.id },
+              data: { rank: i + 1 },
+            }),
+          ),
+        );
+        ordered.forEach((r, i) => (r.rank = i + 1));
+      }
+      return ordered.map(rowToRecommendation);
+    }
+    return recs.map(rowToRecommendation);
+  } catch (err) {
+    console.error("Judging recommendations failed", {
+      queryId,
+      error: err instanceof Error ? err.message : err,
+    });
+    return [];
+  }
+}
+
+/**
+ * Judge the unscored picks of some of the user's briefs (picks saved before
+ * the judge existed, or whose judging failed). Returns the briefs' updated
+ * recommendations; `available` is false when no judge is configured.
+ */
+export async function judgeBriefs(
+  userId: string,
+  queryIds: string[],
+): Promise<{ available: boolean; recommendations: Recommendation[] }> {
+  if (!judgeAvailable()) return { available: false, recommendations: [] };
+  const owned = await prisma.discoverQuery.findMany({
+    where: { id: { in: queryIds }, userId },
+    select: { id: true },
+  });
+  const updated: Recommendation[] = [];
+  for (const q of owned) {
+    updated.push(...(await judgeQueryRecommendations(q.id)));
+  }
+  return { available: true, recommendations: updated };
 }
 
 export async function listDiscoverQueries(

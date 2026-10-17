@@ -171,7 +171,7 @@ function resolvePaperLookup(raw: string): {
 export const paperDetailsTool: ToolDefinition = {
   name: "paper_details",
   description:
-    "Fetch the full abstract, TLDR (one-sentence Semantic Scholar summary), full author list, year, venue, citation count, and reference count for a paper given an arXiv id/URL, Semantic Scholar URL, Semantic Scholar paper id, CorpusID, or DOI. Use this in the Verify stage of discovery to confirm a candidate actually addresses the user's interest before recommending it — title alone is often misleading. Issue multiple calls in parallel to verify several candidates at once.",
+    "Fetch the full abstract, TLDR (one-sentence Semantic Scholar summary), full author list, year, venue, citation count, and reference count for a paper given an arXiv id/URL, Semantic Scholar URL, Semantic Scholar paper id, CorpusID, or DOI. Use this in the Verify stage of discovery to confirm a candidate actually addresses the user's interest before recommending it; title alone is often misleading. Issue multiple calls in parallel to verify several candidates at once.",
   parameters: {
     type: "object",
     properties: {

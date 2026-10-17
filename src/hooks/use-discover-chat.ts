@@ -11,7 +11,9 @@ import {
   hasUsableProvider,
   resolveModelCredentials,
 } from "@/lib/keys";
-import type { StreamEvent } from "@/lib/stream-types";
+import type { ScreenScore, StreamEvent } from "@/lib/stream-types";
+import type { JudgeDetail } from "@/lib/judge-rubric";
+import { normalizeArxivId } from "@/lib/arxiv";
 import { processStreamEvent, type AgentStep } from "@/hooks/use-chat";
 import {
   buildPaperMetadataPool,
@@ -75,6 +77,39 @@ export interface SubmitOptions {
   promptText?: string;
   /** Project the new brief belongs to. */
   projectId?: string | null;
+  /** Inputs for the screening funnel: the short question to judge against,
+   *  the project's name, and sources it already has. */
+  discover?: DiscoverRequestOptions;
+}
+
+export interface DiscoverRequestOptions {
+  question?: string;
+  projectName?: string | null;
+  exclude?: { arxivIds: string[]; urls: string[] };
+}
+
+/** Attach the funnel's screening scores to the picks they belong to, matched
+ *  by arXiv id, else by canonical URL. Picks without one (e.g. from a
+ *  targeted search in the final pass) are judged when they're saved. */
+function attachScreenScores(
+  picks: StructuredPick[],
+  scores: ScreenScore[],
+): StructuredPick[] {
+  if (scores.length === 0) return picks;
+  const byKey = new Map<string, ScreenScore>();
+  for (const s of scores) {
+    if (s.arxivId) byKey.set(`a:${normalizeArxivId(s.arxivId)}`, s);
+    byKey.set(`u:${canonicalUrl(s.url)}`, s);
+  }
+  return picks.map((pick) => {
+    const aid = pick.arxivId || arxivIdFromUrl(pick.url);
+    const match =
+      (aid ? byKey.get(`a:${normalizeArxivId(aid)}`) : undefined) ??
+      byKey.get(`u:${canonicalUrl(pick.url)}`);
+    return match
+      ? { ...pick, judgeScore: match.score, judgeDetail: match.detail }
+      : pick;
+  });
 }
 
 interface UseDiscoverChatOptions {
@@ -188,6 +223,13 @@ function humanToolLine(c: Extract<AgentStep, { kind: "tool_call" }>): string {
       }
       return `- Read ${paperId || "a paper"}`;
     }
+    case "screen_sources": {
+      const graded = out.match(/Screened (\d+)/)?.[1];
+      const kept = out.match(/Shortlisted (\d+)/)?.[1];
+      return graded
+        ? `- Graded ${graded} sources${kept ? ` — ${kept} shortlisted` : ""}`
+        : "";
+    }
     case "submit_picks":
       return "";
     default:
@@ -205,6 +247,9 @@ interface StructuredPick {
   publishedYear?: number | null;
   venue?: string | null;
   citationCount?: number | null;
+  /** Screening score from the funnel, when the pick came from its shortlist. */
+  judgeScore?: number;
+  judgeDetail?: JudgeDetail;
 }
 
 /**
@@ -305,11 +350,7 @@ export function useDiscoverChat({
   // is the (optional) context-augmented prompt actually sent to the agent —
   // both are preserved so a follow-up resumed after an Exa decision keeps
   // its context.
-  const lastSubmitRef = useRef<{
-    text: string;
-    promptText?: string;
-    projectId?: string | null;
-  } | null>(
+  const lastSubmitRef = useRef<{ text: string; opts: SubmitOptions } | null>(
     null,
   );
   // Pending resume queued while a stream was still in flight. Fires from
@@ -317,12 +358,9 @@ export function useDiscoverChat({
   // card hides immediately on key-add but submit() early-returns due to
   // isStreaming, leaving the user without a retry.
   const abortRef = useRef<AbortController | null>(null);
-  const pendingResumeRef = useRef<{
-    skipWebSearch: boolean;
-    text: string;
-    promptText?: string;
-    projectId?: string | null;
-  } | null>(null);
+  const pendingResumeRef = useRef<{ text: string; opts: SubmitOptions } | null>(
+    null,
+  );
 
   const hasKeyForModel = modelReady && hasUsableProvider();
 
@@ -335,11 +373,7 @@ export function useDiscoverChat({
       if (!trimmed || isStreaming || !modelReady) return;
       if (!hasUsableProvider()) return;
 
-      lastSubmitRef.current = {
-        text: trimmed,
-        promptText: opts?.promptText,
-        projectId: opts?.projectId,
-      };
+      lastSubmitRef.current = { text: trimmed, opts: { ...opts } };
 
       // Pre-flight: if neither the user nor the server has an Exa key,
       // pause and surface the prompt card. Otherwise the agent dispatches
@@ -363,6 +397,7 @@ export function useDiscoverChat({
 
       let queryId: string | null = null;
       let steps: AgentStep[] = [];
+      let screenScores: ScreenScore[] = [];
       let streamSucceeded = false;
       const controller = new AbortController();
       abortRef.current = controller;
@@ -389,6 +424,7 @@ export function useDiscoverChat({
             mode: "discover",
             ...(exaKey ? { exaApiKey: exaKey } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
+            ...(opts?.discover ? { discover: opts.discover } : {}),
           }),
           signal: controller.signal,
         });
@@ -405,6 +441,10 @@ export function useDiscoverChat({
         await parseNDJSONStream(response.body, (event) => {
           if (event.type === "heartbeat") return; // liveness only
           if (event.type === "error") throw new Error(event.message);
+          if (event.type === "screen_scores") {
+            screenScores = event.scores;
+            return;
+          }
           steps = processStreamEvent(steps, event);
           setLiveSteps([...steps]);
         });
@@ -431,7 +471,10 @@ export function useDiscoverChat({
             finalText = stepsToFinalText(steps);
             const structured = extractStructuredPicks(steps);
             const enrichedStructured = structured
-              ? enrichStructuredPicks(structured, steps)
+              ? attachScreenScores(
+                  enrichStructuredPicks(structured, steps),
+                  screenScores,
+                )
               : null;
             structuredPickCount =
               enrichedStructured?.length ?? structured?.length ?? 0;
@@ -481,19 +524,18 @@ export function useDiscoverChat({
       const last = lastSubmitRef.current;
       const target = text ?? last?.text ?? null;
       if (!target) return;
-      const promptText = text ? undefined : last?.promptText;
-      const projectId = text ? undefined : last?.projectId;
+      // A fresh query keeps nothing; a replay keeps its project, context,
+      // and funnel inputs.
+      const opts: SubmitOptions = {
+        ...(text ? {} : last?.opts),
+        skipWebSearch,
+      };
       if (isStreaming) {
         // Queue and let the effect below fire when the stream ends.
-        pendingResumeRef.current = {
-          skipWebSearch,
-          text: target,
-          promptText,
-          projectId,
-        };
+        pendingResumeRef.current = { text: target, opts };
         return;
       }
-      void submit(target, { skipWebSearch, promptText, projectId });
+      void submit(target, opts);
     },
     [isStreaming, submit],
   );
@@ -503,11 +545,7 @@ export function useDiscoverChat({
     const pending = pendingResumeRef.current;
     if (!pending) return;
     pendingResumeRef.current = null;
-    void submit(pending.text, {
-      skipWebSearch: pending.skipWebSearch,
-      promptText: pending.promptText,
-      projectId: pending.projectId,
-    });
+    void submit(pending.text, pending.opts);
   }, [isStreaming, submit]);
 
   const stop = useCallback(() => {

@@ -50,6 +50,7 @@ import {
   getReadingSystemPrompt,
   runReadingAgent,
   type ReadingAgentParams,
+  type DiscoverOptions,
 } from "@/server/reading-agent";
 import type { ChatMessage, ContextMetadata } from "@/lib/review-types";
 
@@ -106,6 +107,15 @@ interface ChatRequest {
    * the document having a chunk index, so it self-disables in this mode.
    */
   mode?: "discover";
+  /**
+   * Discover only: inputs for the screening funnel (the short question to
+   * judge against, the project, and sources the project already has).
+   */
+  discover?: {
+    question?: string;
+    projectName?: string | null;
+    exclude?: { arxivIds?: string[]; urls?: string[] };
+  };
   /**
    * User-provided Exa API key. When absent the `web_search` tool returns
    * a sentinel that the chat UI surfaces as a configure card.
@@ -298,6 +308,7 @@ export async function POST(req: NextRequest) {
     exaApiKey,
     skipWebSearch,
     mode,
+    discover,
   } = body;
 
   // Server-owned path: the main review chat sends a single `userMessage` + a
@@ -547,6 +558,7 @@ export async function POST(req: NextRequest) {
           exaApiKey: trimmedExaKey || undefined,
           skipWebSearch,
           mode,
+          discover: mode === "discover" ? sanitizeDiscover(discover) : undefined,
           emit,
         });
       } catch (err) {
@@ -626,4 +638,24 @@ export async function POST(req: NextRequest) {
   });
 
   return new Response(stream, { headers: NDJSON_HEADERS });
+}
+
+/** Keep only well-formed funnel inputs from the request body: strings,
+ *  bounded in length and count. The client builds these, but they flow into
+ *  prompts and judge requests, so nothing unexpected gets through. */
+function sanitizeDiscover(raw: ChatRequest["discover"]): DiscoverOptions {
+  const str = (v: unknown, max: number) =>
+    typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined;
+  const list = (v: unknown, max: number) =>
+    Array.isArray(v)
+      ? v.flatMap((x) => (typeof x === "string" && x.trim() ? [x.trim().slice(0, 500)] : [])).slice(0, max)
+      : [];
+  return {
+    question: str(raw?.question, 2000),
+    projectName: str(raw?.projectName, 200) ?? null,
+    exclude: {
+      arxivIds: list(raw?.exclude?.arxivIds, 200),
+      urls: list(raw?.exclude?.urls, 200),
+    },
+  };
 }

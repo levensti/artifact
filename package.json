@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval:elaip_bench": "tsx --env-file-if-exists=.env eval/elaip_bench/run.ts",
+    "eval:discover_funnel": "tsx --conditions=react-server --env-file-if-exists=.env eval/discover_funnel/run.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

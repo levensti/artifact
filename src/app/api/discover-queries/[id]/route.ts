@@ -6,6 +6,9 @@ import { parsePicks, type ParsedPick } from "@/lib/picks-parser";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+// Finalizing judges the picks (one TypeSafe call each, a few at a time).
+export const maxDuration = 120;
+
 const pickSchema = z.object({
   url: z.string().min(1),
   title: z.string().min(1),
@@ -16,6 +19,17 @@ const pickSchema = z.object({
   publishedYear: z.number().int().nullable().optional(),
   venue: z.string().nullable().optional(),
   citationCount: z.number().int().nullable().optional(),
+  /** Screening score from the discover funnel's judge, 0 to 1. */
+  judgeScore: z.number().min(0).max(1).optional(),
+  judgeDetail: z
+    .object({
+      model: z.string(),
+      dimensions: z.record(
+        z.string(),
+        z.object({ score: z.number(), confidence: z.number() }),
+      ),
+    })
+    .optional(),
 });
 
 const finalizeSchema = z.object({
@@ -51,6 +65,8 @@ export const POST = authedRoute(
         publishedYear: p.publishedYear ?? null,
         venue: p.venue ?? null,
         citationCount: p.citationCount ?? null,
+        judgeScore: p.judgeScore ?? null,
+        judgeDetail: p.judgeDetail,
       }));
     } else if (body.text) {
       // Fallback: parse Markdown picks from the agent text. Kept as a
