@@ -15,7 +15,7 @@ import {
   House,
   Pencil,
   Share2,
-  Compass,
+  Library,
   FlaskConical,
   Folder,
   FolderOpen,
@@ -47,7 +47,7 @@ import {
 } from "@/lib/client-data";
 import type { Project } from "@/lib/review-types";
 import {
-  DISCOVER_HOME_EVENT,
+  ARTIFACTS_HOME_EVENT,
   PROJECTS_UPDATED_EVENT,
   USER_UPDATED_EVENT,
   WIKI_UPDATED_EVENT,
@@ -232,12 +232,12 @@ export default function Sidebar({
     router.push(`/review/${reviewId}`);
   };
 
-  const handleDiscoverClick = useCallback(() => {
-    if (pathname === "/discover") {
-      window.dispatchEvent(new Event(DISCOVER_HOME_EVENT));
+  const handleArtifactsClick = useCallback(() => {
+    if (pathname === "/artifacts") {
+      window.dispatchEvent(new Event(ARTIFACTS_HOME_EVENT));
       return;
     }
-    router.push("/discover");
+    router.push("/artifacts");
   }, [pathname, router]);
 
   const startRenaming = useCallback((id: string, currentTitle: string) => {
@@ -584,19 +584,18 @@ export default function Sidebar({
           </button>
           <button
             type="button"
-            onClick={handleDiscoverClick}
-            aria-label="Discover"
+            onClick={handleArtifactsClick}
             className={cn(
               "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
-              pathname === "/discover"
+              pathname === "/artifacts"
                 ? "sb-row-active text-foreground font-medium"
                 : "text-foreground/80 hover:text-foreground",
             )}
           >
             <span className="flex w-5 shrink-0 items-center justify-center">
-              <Compass className="size-4 opacity-70" strokeWidth={1.75} />
+              <Library className="size-4 opacity-70" strokeWidth={1.75} />
             </span>
-            <span className="truncate">Discover</span>
+            <span className="truncate">Artifacts</span>
           </button>
           {JOURNAL_TAB_ENABLED ? (
             <button

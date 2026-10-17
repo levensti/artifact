@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowUp, KeyRound, Mic, MicOff, Square } from "lucide-react";
+import { ArrowLeft, Square } from "lucide-react";
 import { hasUsableProvider } from "@/lib/keys";
 import {
   ensureDiscoverLoaded,
@@ -23,161 +17,33 @@ import ResearchBrief from "./research-brief";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import { useDiscoverChat } from "@/hooks/use-discover-chat";
-import { useSpeechInput } from "@/hooks/use-speech-input";
 import { useSettingsOpener } from "./settings-opener-context";
 import PageHeader from "./page-header";
-import { cn } from "@/lib/utils";
-import { DISCOVER_HOME_EVENT } from "@/lib/storage-events";
+import ResearchComposer from "./research-composer";
+import { ARTIFACTS_HOME_EVENT } from "@/lib/storage-events";
+import { takePendingResearch } from "@/lib/pending-research";
 
 /* ------------------------------------------------------------------ */
-/*  Composer — the research kickoff card                               */
+/*  Empty state                                                        */
 /* ------------------------------------------------------------------ */
 
-function Composer({
-  disabled,
-  isStreaming,
-  hint,
-  onSubmit,
-}: {
-  disabled: boolean;
-  isStreaming: boolean;
-  hint: string;
-  onSubmit: (text: string) => void;
-}) {
-  const [text, setText] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const canSend = !disabled && !isStreaming && text.trim().length > 0;
-  const inert = disabled || isStreaming;
-
-  useLayoutEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const MAX = 160;
-    el.style.height = "auto";
-    const next = Math.min(el.scrollHeight, MAX);
-    el.style.height = `${next}px`;
-    el.style.overflowY = el.scrollHeight > MAX ? "auto" : "hidden";
-  }, [text]);
-
-  const dictation = useSpeechInput(setText);
-  const { listening, stop: stopDictation } = dictation;
-  useEffect(() => {
-    if (inert && listening) stopDictation();
-  }, [inert, listening, stopDictation]);
-
-  const send = useCallback(() => {
-    if (!canSend) return;
-    stopDictation();
-    const trimmed = text.trim();
-    setText("");
-    onSubmit(trimmed);
-  }, [canSend, text, onSubmit, stopDictation]);
-
-  const onKey = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        send();
-      }
-    },
-    [send],
-  );
-
+function EmptyArtifacts() {
   return (
-    <div
-      className={cn(
-        "flex items-end rounded-lg border bg-card transition-colors",
-        disabled
-          ? "border-border/50 opacity-60"
-          : isStreaming
-            ? "border-border/50 opacity-90"
-            : "border-border focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/15",
-      )}
-      style={{ boxShadow: disabled ? undefined : "var(--shadow-sm)" }}
-    >
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => {
-          // Typing takes over from dictation; otherwise the next interim
-          // result would overwrite the edit.
-          if (listening) stopDictation();
-          setText(e.target.value);
-        }}
-        onKeyDown={onKey}
-        placeholder={listening ? "Listening…" : hint}
-        rows={1}
-        disabled={inert}
-        className="block max-h-40 min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3 pr-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
-      />
-      <div className="m-[5px] flex shrink-0 items-center gap-1">
-        {dictation.supported && (
-          <button
-            type="button"
-            onClick={() => (listening ? stopDictation() : dictation.start(text))}
-            disabled={inert}
-            aria-pressed={listening}
-            aria-label={
-              listening
-                ? "Stop dictation"
-                : dictation.error === "blocked"
-                  ? "Microphone access is blocked"
-                  : "Dictate"
-            }
-            title={
-              listening
-                ? "Stop dictation"
-                : dictation.error === "blocked"
-                  ? "Microphone access is blocked. Allow it in your browser's site settings."
-                  : "Dictate"
-            }
-            className={cn(
-              "inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-              listening
-                ? "bg-destructive/10 text-destructive hover:bg-destructive/15"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {listening ? (
-              <Square className="size-3 animate-pulse fill-current" />
-            ) : dictation.error === "blocked" ? (
-              <MicOff className="size-3.5" />
-            ) : (
-              <Mic className="size-3.5" />
-            )}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={send}
-          disabled={!canSend}
-          aria-label="Research"
-          title="Research"
-          className={cn(
-            "inline-flex size-7 items-center justify-center rounded-md transition-colors",
-            canSend
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "cursor-default bg-muted text-muted-foreground/60",
-          )}
+    <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
+      <p className="text-[15px] font-medium text-foreground">
+        Nothing here yet
+      </p>
+      <p className="mx-auto mt-1.5 max-w-[420px] text-[14px] leading-relaxed text-muted-foreground">
+        Ask a question on{" "}
+        <Link
+          href="/"
+          className="underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
         >
-          <ArrowUp className="size-3.5" strokeWidth={2.25} />
-        </button>
-      </div>
+          Home
+        </Link>
+        . The research brief and reading list it produces are saved here.
+      </p>
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Heading + suggestions                                              */
-/* ------------------------------------------------------------------ */
-
-function EmptyHeading() {
-  return (
-    <p className="-mt-1.5 max-w-[600px] text-[15px] leading-[1.6] text-muted-foreground">
-      Ask a research question. The agent plans a search, reads across arXiv and
-      the web, verifies what it finds, then writes you a short briefing with a
-      ranked reading list.
-    </p>
   );
 }
 
@@ -185,6 +51,11 @@ function EmptyHeading() {
 /*  Panel                                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The Artifacts page: everything Artifact has made for you. Today that's
+ * research briefs (started from Home); browse lists them, and `?brief=<id>`
+ * focuses one.
+ */
 export default function DiscoverPanel() {
   const [hydrated, setHydrated] = useState(false);
   const [modelReady, setModelReady] = useState(false);
@@ -194,18 +65,27 @@ export default function DiscoverPanel() {
   const searchParams = useSearchParams();
   const focusedId = searchParams.get("brief");
   const setFocusedId = useCallback(
-    (id: string | null) => {
+    (id: string | null, opts?: { replace?: boolean }) => {
       if (id === focusedId) return;
-      router.push(
-        id ? `/discover?brief=${encodeURIComponent(id)}` : "/discover",
-        { scroll: false },
-      );
+      const href = id
+        ? `/artifacts?brief=${encodeURIComponent(id)}`
+        : "/artifacts";
+      if (opts?.replace) router.replace(href, { scroll: false });
+      else router.push(href, { scroll: false });
     },
     [focusedId, router],
   );
   // Set while a follow-up is starting: the parent brief the new run belongs
   // under. Consumed once the run's query id exists.
   const pendingParentRef = useRef<string | null>(null);
+  // A question asked on Home, waiting for hydration before it can start.
+  const [handoff, setHandoff] = useState<string | null>(() =>
+    takePendingResearch(),
+  );
+  // True from submitting a new question until its brief is in the URL. The
+  // run gets its id a beat before the router catches up; without this the
+  // list flashes in between.
+  const [awaitingFocus, setAwaitingFocus] = useState(false);
   const { openSettings } = useSettingsOpener();
 
   useEffect(() => {
@@ -243,17 +123,19 @@ export default function DiscoverPanel() {
       pendingParentRef.current = null;
       setFocusedId(parent);
     } else {
-      setFocusedId(chat.liveQueryId);
+      // From the list (a question handed off from Home), replace the entry
+      // so Back returns to where the question was asked.
+      setFocusedId(chat.liveQueryId, { replace: focusedId === null });
     }
     // Only react to a new live run, not to URL changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.liveQueryId]);
 
   useEffect(() => {
-    const handleDiscoverHome = () => setFocusedId(null);
-    window.addEventListener(DISCOVER_HOME_EVENT, handleDiscoverHome);
+    const handleArtifactsHome = () => setFocusedId(null);
+    window.addEventListener(ARTIFACTS_HOME_EVENT, handleArtifactsHome);
     return () =>
-      window.removeEventListener(DISCOVER_HOME_EVENT, handleDiscoverHome);
+      window.removeEventListener(ARTIFACTS_HOME_EVENT, handleArtifactsHome);
   }, [setFocusedId]);
 
   const handleSubmit = useCallback(
@@ -263,10 +145,32 @@ export default function DiscoverPanel() {
         return;
       }
       pendingParentRef.current = null;
+      setAwaitingFocus(true);
       void chat.submit(text);
     },
     [canSubmit, chat, openSettings],
   );
+
+  // Start the question handed off from Home once keys and data are loaded.
+  // submit()'s state updates land in the same batch as clearing the handoff,
+  // so the view goes straight from "Loading…" to the live run.
+  useEffect(() => {
+    if (!hydrated || !handoff) return;
+    handleSubmit(handoff);
+    setHandoff(null);
+  }, [hydrated, handoff, handleSubmit]);
+
+  // Stop holding the focus view once the brief is in the URL, or once it's
+  // clear no run is coming (submit bailed or failed before creating one).
+  useEffect(() => {
+    if (!awaitingFocus) return;
+    if (
+      focusedId !== null ||
+      (!chat.isStreaming && !chat.pendingExaDecision && !handoff)
+    ) {
+      setAwaitingFocus(false);
+    }
+  }, [awaitingFocus, focusedId, chat.isStreaming, chat.pendingExaDecision, handoff]);
 
   const handleFollowup = useCallback(
     (parentId: string, text: string) => {
@@ -287,16 +191,14 @@ export default function DiscoverPanel() {
     [canSubmit, chat, openSettings],
   );
 
-  const composerHint = canSubmit
-    ? "What do you want to explore?"
-    : "Add a Fireworks API key in Settings to start";
-
   // Browse vs focus. A brief is in focus when the URL names one, plus the
   // moments before a run has a query id to put there (awaiting the web-search
   // decision, or the run's row still being created). Leaving a running brief
   // is allowed: its history tile shows it as live.
   const inFocus =
     focusedId !== null ||
+    handoff !== null ||
+    awaitingFocus ||
     !!chat.pendingExaDecision ||
     (chat.isStreaming && !chat.liveQueryId);
   const focusedThread = focusedId
@@ -315,149 +217,145 @@ export default function DiscoverPanel() {
     (focusedThread.root.query.id === chat.liveQueryId ||
       focusedThread.followups.some((f) => f.query.id === chat.liveQueryId));
   const hasHistory = threads.length > 0;
+  // The question being started, before its brief exists.
+  const pendingQuestion =
+    chat.pendingExaDecision?.text ??
+    chat.liveQueryText ??
+    handoff ??
+    null;
 
   return (
     <div
       className="h-full overflow-y-auto"
       style={{ background: "var(--reader-mat)" }}
     >
-      {/* The header lives in-canvas at the top of the browse column, Claude-
-          style (page title + action, then the composer beneath). The column
-          spec is kept identical to Journal so navigating between the two pages
-          doesn't shift the title or input. */}
+      {/* The column spec matches Home and Journal so navigating between
+          pages doesn't shift the title. */}
       <ExaKeyResumeProvider
         resumeAfterExaDecision={chat.resumeAfterExaDecision}
       >
         <div className="mx-auto w-full max-w-4xl px-6 pb-16 pt-12 sm:px-8 sm:pt-14">
           {inFocus ? (
             /* ── Focus: one research session owns the canvas ── */
-            <div className="space-y-5">
-              <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex h-8 items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setFocusedId(null)}
-                  className="inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
+                  className="-ml-2 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
                 >
                   <ArrowLeft className="size-3.5" strokeWidth={2} />
-                  All research
+                  All artifacts
                 </button>
-                {focusedIsLive ? (
+                {focusedIsLive || (!focusedThread && chat.isStreaming) ? (
                   <button
                     type="button"
                     onClick={chat.stop}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted"
+                    className="-mr-2 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
                   >
                     <Square className="size-2.5 fill-current" strokeWidth={0} />
-                    Stop
+                    Stop research
                   </button>
                 ) : null}
               </div>
 
-              {chat.error ? (
-                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
-                  {chat.error}
-                </div>
-              ) : null}
-
-              {focusedThread ? (
-                <>
-                  <ResearchBrief
-                    pinned
-                    run={focusedThread.root}
-                    followups={focusedThread.followups}
-                    defaultCollapsed={false}
-                    hasExaKey={hasExaKey}
-                    onRetry={handleSubmit}
-                  />
-                  {chat.pendingExaDecision ? (
-                    <ExaKeyPromptCard queryText={chat.pendingExaDecision.text} />
-                  ) : !focusedIsLive && canSubmit ? (
-                    <div className="border-t border-border pt-5">
-                      <Composer
-                        disabled={false}
-                        isStreaming={chat.isStreaming}
-                        hint="Ask a follow-up: go deeper, narrow the scope, compare…"
-                        onSubmit={(text) =>
-                          handleFollowup(focusedThread.root.query.id, text)
-                        }
-                      />
-                    </div>
-                  ) : null}
-                </>
-              ) : chat.pendingExaDecision ? (
-                <div className="space-y-3">
-                  <div className="flex items-start gap-2">
-                    <span className="landing-pulse-dot mt-2 block shrink-0" />
-                    <p className="text-[19px] font-semibold leading-snug text-foreground">
-                      {chat.pendingExaDecision.text}
-                    </p>
+              <div className="mt-8">
+                {chat.error ? (
+                  <div className="mb-8 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-[13px] text-destructive">
+                    {chat.error}
                   </div>
-                  <ExaKeyPromptCard queryText={chat.pendingExaDecision.text} />
-                </div>
-              ) : chat.isStreaming || !hydrated ? (
-                <p className="text-[13px] text-muted-foreground">
-                  {chat.isStreaming ? "Starting research…" : "Loading…"}
-                </p>
-              ) : (
-                <p className="text-[13px] text-muted-foreground">
-                  This brief isn&rsquo;t available. It may have been deleted.
-                </p>
-              )}
+                ) : null}
+
+                {focusedThread ? (
+                  <>
+                    <ResearchBrief
+                      run={focusedThread.root}
+                      followups={focusedThread.followups}
+                      hasExaKey={hasExaKey}
+                      onRetry={handleSubmit}
+                    />
+                    {chat.pendingExaDecision ? (
+                      <div className="mt-12">
+                        <ExaKeyPromptCard
+                          queryText={chat.pendingExaDecision.text}
+                        />
+                      </div>
+                    ) : !focusedIsLive && canSubmit ? (
+                      <div className="mt-16 border-t border-border pt-10">
+                        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+                          Ask a follow-up
+                        </h2>
+                        <p className="mt-1 text-[14px] text-muted-foreground">
+                          Go deeper, narrow the scope, or compare. The answer is
+                          added below this brief.
+                        </p>
+                        <div className="mt-4">
+                          <ResearchComposer
+                            disabled={false}
+                            isStreaming={chat.isStreaming}
+                            hint="e.g. Which of these matter most for inference speed?"
+                            onSubmit={(text) =>
+                              handleFollowup(focusedThread.root.query.id, text)
+                            }
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : pendingQuestion ? (
+                  /* The brief's row doesn't exist yet: render its title and
+                     status in place so the page doesn't change shape when
+                     it arrives. */
+                  <div>
+                    <h1 className="max-w-[30ch] text-[30px] font-semibold leading-[1.2] tracking-[-0.025em] text-foreground">
+                      {pendingQuestion}
+                    </h1>
+                    {chat.pendingExaDecision ? (
+                      <div className="mt-10">
+                        <ExaKeyPromptCard
+                          queryText={chat.pendingExaDecision.text}
+                        />
+                      </div>
+                    ) : (
+                      <p className="mt-3 flex items-center gap-2 text-[14px] text-primary">
+                        <span className="landing-pulse-dot" aria-hidden />
+                        Planning the search
+                      </p>
+                    )}
+                  </div>
+                ) : !hydrated ? null : (
+                  <p className="text-[14px] text-muted-foreground">
+                    This brief isn&rsquo;t available. It may have been deleted.
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
-            /* ── Browse: kickoff + recent research ── */
-            <div className="space-y-5">
-              <PageHeader title="Discover" />
-
-              {!hasHistory ? <EmptyHeading /> : null}
-
-              <Composer
-                disabled={!canSubmit}
-                isStreaming={chat.isStreaming}
-                hint={composerHint}
-                onSubmit={handleSubmit}
-              />
+            /* ── Browse: saved artifacts ── */
+            <div className="space-y-8">
+              <PageHeader title="Artifacts" />
 
               {chat.error ? (
-                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
+                <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-[13px] text-destructive">
                   {chat.error}
                 </div>
               ) : null}
 
-              {hydrated && !modelReady ? (
-                <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-                  <div className="flex items-start gap-3">
-                    <KeyRound
-                      className="mt-0.5 size-4 shrink-0 text-primary/80"
-                      strokeWidth={1.75}
-                    />
-                    <div className="min-w-0 flex-1 text-[12.5px] leading-relaxed">
-                      <p className="font-medium text-foreground">
-                        Add an API key to start
-                      </p>
-                      <p className="text-muted-foreground">
-                        Discover uses the same Fireworks key as the rest of
-                        Artifact. Add one in{" "}
-                        <button
-                          type="button"
-                          onClick={() => openSettings()}
-                          className="underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
-                        >
-                          settings
-                        </button>{" "}
-                        to begin researching.
-                      </p>
-                    </div>
+              {!hydrated ? null : hasHistory ? (
+                <section>
+                  <h2 className="flex items-baseline gap-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+                    Research briefs
+                    <span className="text-[13px] font-normal tabular-nums text-muted-foreground">
+                      {threads.length}
+                    </span>
+                  </h2>
+                  <div className="mt-4">
+                    <RecentBriefsList threads={threads} onOpen={setFocusedId} />
                   </div>
-                </div>
-              ) : null}
-
-              {/* Recent research — quiet, browsable history */}
-              {hasHistory ? (
-                <div className="pt-1">
-                  <RecentBriefsList threads={threads} onOpen={setFocusedId} />
-                </div>
-              ) : null}
+                </section>
+              ) : (
+                <EmptyArtifacts />
+              )}
             </div>
           )}
         </div>

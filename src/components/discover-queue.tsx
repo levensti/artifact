@@ -18,7 +18,6 @@ import type { AgentStep } from "@/hooks/use-chat";
 import { normalizeArxivId } from "@/lib/arxiv";
 import { groupIntoThreads } from "@/lib/discover-threads";
 import { hasUsableExaKey } from "@/lib/keys";
-import { MonoLabel } from "./folio";
 import type { BriefRunData } from "./research-brief";
 
 /* ------------------------------------------------------------------ */
@@ -175,67 +174,40 @@ function RecentRow({
   const picks = root.recommendations.length;
   const accepted = root.acceptedCount;
   const errored = q.status === "errored";
-  const hasMeta = picks > 0 || accepted > 0 || followups.length > 0;
+  const meta = [
+    relativeTime(q.createdAt),
+    picks > 0 ? `${picks} source${picks === 1 ? "" : "s"}` : "No sources",
+    accepted > 0 ? `${accepted} in library` : null,
+    followups.length > 0
+      ? `${followups.length} follow-up${followups.length === 1 ? "" : "s"}`
+      : null,
+  ].filter(Boolean);
 
   return (
     <button
       type="button"
       onClick={() => onOpen(q.id)}
-      className="group flex h-full w-full flex-col rounded-lg border border-border bg-card px-5 py-4 text-left transition-colors duration-150 hover:border-foreground/20 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+      className="group flex h-full min-h-[148px] w-full flex-col rounded-xl border border-border bg-card px-5 py-5 text-left transition-colors duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
     >
-      {/* Status / time */}
-      <div className="mb-2.5 flex items-center gap-2">
-        {live ? (
-          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-primary">
-            <span className="landing-pulse-dot" />
-            Researching
-          </span>
-        ) : (
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {relativeTime(q.createdAt)}
-          </span>
-        )}
-      </div>
-
       {/* Query */}
-      <p className="line-clamp-3 text-[14px] font-medium leading-snug text-foreground">
+      <p className="line-clamp-3 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
         {q.query}
       </p>
 
-      {/* Footer meta */}
-      <div className="mt-auto flex items-center gap-x-1.5 pt-3.5 font-mono text-[11px] text-muted-foreground">
-        {errored ? (
+      {/* Footer: when it ran and what came of it */}
+      <div className="mt-auto flex flex-wrap items-center gap-x-1.5 pt-5 text-[13px] text-muted-foreground">
+        {live ? (
+          <span className="inline-flex items-center gap-1.5 text-primary">
+            <span className="landing-pulse-dot" />
+            Researching
+          </span>
+        ) : errored ? (
           <span className="inline-flex items-center gap-1 text-destructive/85">
-            <AlertCircle className="size-3" strokeWidth={2} />
+            <AlertCircle className="size-3.5" strokeWidth={2} />
             Errored
           </span>
-        ) : hasMeta ? (
-          <span className="flex flex-wrap items-center gap-x-1.5">
-            {picks > 0 ? (
-              <span>
-                {picks} pick{picks === 1 ? "" : "s"}
-              </span>
-            ) : null}
-            {accepted > 0 ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>{accepted} in library</span>
-              </>
-            ) : null}
-            {followups.length > 0 ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>
-                  {followups.length} follow-up
-                  {followups.length === 1 ? "" : "s"}
-                </span>
-              </>
-            ) : null}
-          </span>
         ) : (
-          <span className="text-muted-foreground/70">
-            {live ? "Working…" : "No picks yet"}
-          </span>
+          <span>{meta.join(" · ")}</span>
         )}
       </div>
     </button>
@@ -262,13 +234,10 @@ export function RecentBriefsList({
   if (threads.length === 0) return null;
 
   return (
-    <div className="space-y-2.5">
-      <MonoLabel>Recent sessions</MonoLabel>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {sorted.map((t) => (
-          <RecentRow key={t.root.query.id} thread={t} onOpen={onOpen} />
-        ))}
-      </div>
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {sorted.map((t) => (
+        <RecentRow key={t.root.query.id} thread={t} onOpen={onOpen} />
+      ))}
     </div>
   );
 }

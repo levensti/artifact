@@ -96,16 +96,19 @@ function yearLabel(rec: Recommendation): string | null {
 /* ------------------------------------------------------------------ */
 
 /**
- * One row in a brief's ranked reading list (rendered inside the list's
- * hairline-divided panel, the same anatomy as the landing's Discover feed).
- * Rank #1 gets the accent rank and the filled primary action so the eye
- * lands on the single best thing to read; lower ranks get a bordered one. "In library" is detected against the reviews cache
- * so a re-surfaced paper shows the badge before any click.
+ * One row in a brief's ranked reading list. Rank #1 gets the accent rank and
+ * the filled primary action so the eye lands on the single best thing to
+ * read; lower ranks get a bordered one. "In library" is detected against the
+ * reviews cache so a re-surfaced paper shows the badge before any click.
+ * `pending` is a pick the agent has chosen but that isn't saved yet: it
+ * renders identically with its actions disabled.
  */
 export default function RecommendationCard({
   rec,
+  pending = false,
 }: {
   rec: Recommendation;
+  pending?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<"open" | "dismiss" | null>(null);
@@ -122,7 +125,7 @@ export default function RecommendationCard({
     : reviews.find((r) => r.sourceUrl === rec.url);
 
   const onOpen = async () => {
-    if (busy) return;
+    if (busy || pending) return;
     setError(null);
     if (inLibraryReview) {
       router.push(`/review/${inLibraryReview.id}`);
@@ -139,7 +142,7 @@ export default function RecommendationCard({
   };
 
   const onDismiss = async () => {
-    if (busy) return;
+    if (busy || pending) return;
     setBusy("dismiss");
     setError(null);
     try {
@@ -153,75 +156,71 @@ export default function RecommendationCard({
   const kind = classifySource(rec);
   const isTop = rec.rank === 1;
   const year = yearLabel(rec);
+  const locked = busy !== null || pending;
+  // Who, when, where: one plain line under the title.
+  const meta = [
+    rec.authors ? authorsLabel(rec.authors) : null,
+    year,
+    kind === "Paper" ? "arXiv" : sourceLabel(rec.url),
+  ].filter(Boolean);
 
   return (
-    <article className="grid grid-cols-[28px_1fr] gap-x-3 px-4 py-4">
+    <article className="grid grid-cols-[20px_1fr] gap-x-4 px-6 py-5">
       <span
         className={cn(
-          "pt-0.5 font-mono text-[11.5px] tabular-nums",
-          isTop ? "text-primary" : "text-muted-foreground",
+          "pt-px text-right text-[15px] font-semibold tabular-nums",
+          isTop ? "text-primary" : "text-muted-foreground/70",
         )}
         title="Agent's preference order"
       >
-        {rec.rank > 0 ? String(rec.rank).padStart(2, "0") : "·"}
+        {rec.rank > 0 ? rec.rank : ""}
       </span>
 
       <div className="min-w-0">
-        <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
+        <h3 className="text-[16px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
           {rec.title}
         </h3>
 
-        {rec.authors ? (
-          <p
-            className="mt-0.5 truncate text-[12.5px] leading-snug text-muted-foreground"
-            title={rec.authors}
-          >
-            {authorsLabel(rec.authors)}
-          </p>
-        ) : null}
+        <p
+          className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] leading-snug text-muted-foreground"
+          title={rec.authors ?? undefined}
+        >
+          {meta.map((part, i) => (
+            <span key={i} className="inline-flex items-center gap-x-1.5">
+              {i > 0 ? <span aria-hidden>·</span> : null}
+              {part}
+            </span>
+          ))}
+          {inLibraryReview ? (
+            <span className="inline-flex items-center gap-1 text-success">
+              <span aria-hidden className="text-muted-foreground">·</span>
+              <Check className="size-3" strokeWidth={2.5} />
+              In library
+            </span>
+          ) : null}
+        </p>
 
         {rec.rationale ? (
           <p
-            className="mt-1.5 text-[13.5px] leading-relaxed text-foreground/85"
+            className="mt-2.5 max-w-[68ch] text-[14.5px] leading-[1.65] text-foreground/85"
             style={{ fontFamily: "var(--font-reading)" }}
           >
             {rec.rationale}
           </p>
         ) : null}
 
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground">
-          <span>{kind}</span>
-          <span aria-hidden>·</span>
-          <span>{rec.arxivId ? `arXiv:${rec.arxivId}` : sourceLabel(rec.url)}</span>
-          {year ? (
-            <>
-              <span aria-hidden>·</span>
-              <span className="tabular-nums">{year}</span>
-            </>
-          ) : null}
-          {inLibraryReview ? (
-            <>
-              <span aria-hidden>·</span>
-              <span className="inline-flex items-center gap-0.5 text-success">
-                <Check className="size-3" strokeWidth={2.5} />
-                In library
-              </span>
-            </>
-          ) : null}
-        </div>
-
         {/* Action row */}
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-4 flex items-center gap-2">
           <button
             type="button"
             onClick={onOpen}
-            disabled={busy !== null}
+            disabled={locked}
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12.5px] font-medium transition-colors",
+              "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors disabled:cursor-default",
               isTop
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "border border-border bg-card text-foreground hover:bg-muted",
-              busy !== null && "opacity-70",
+              locked && "opacity-60",
             )}
           >
             {busy === "open" ? (
@@ -237,7 +236,7 @@ export default function RecommendationCard({
               href={rec.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <ExternalLink className="size-3" strokeWidth={2} />
               Source
@@ -246,24 +245,26 @@ export default function RecommendationCard({
 
           <span className="flex-1" />
 
-          <button
-            type="button"
-            onClick={onDismiss}
-            disabled={busy !== null}
-            aria-label="Dismiss"
-            title="Not interested"
-            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-          >
-            {busy === "dismiss" ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <X className="size-3.5" strokeWidth={2} />
-            )}
-          </button>
+          {!pending ? (
+            <button
+              type="button"
+              onClick={onDismiss}
+              disabled={busy !== null}
+              aria-label="Dismiss"
+              title="Not interested"
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {busy === "dismiss" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <X className="size-3.5" strokeWidth={2} />
+              )}
+            </button>
+          ) : null}
         </div>
 
         {error ? (
-          <p className="mt-1.5 text-[11px] text-destructive">{error}</p>
+          <p className="mt-1.5 text-[12px] text-destructive">{error}</p>
         ) : null}
       </div>
     </article>

@@ -21,6 +21,12 @@ const nextConfig: NextConfig = {
         destination: "/review/:id",
         permanent: false,
       },
+      // Discover became Artifacts; `?brief=` carries over automatically.
+      {
+        source: "/discover",
+        destination: "/artifacts",
+        permanent: false,
+      },
     ];
   },
 };

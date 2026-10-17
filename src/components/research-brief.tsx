@@ -3,11 +3,13 @@
 import { useState } from "react";
 import {
   AlertCircle,
+  ArrowUpRight,
   ChevronDown,
   ChevronRight,
-  CornerDownRight,
+  Globe,
   MessageCircleQuestion,
   RotateCcw,
+  Search,
   SearchX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,28 +17,18 @@ import { setRecommendationDismissed } from "@/lib/client-data";
 import type { DiscoverQuery, Recommendation } from "@/lib/discover-types";
 import type { AgentStep } from "@/hooks/use-chat";
 import MarkdownMessage from "./markdown-message";
-import RecommendationCard from "./recommendation-card";
-import { DiscoverLiveProgress } from "./discover-picks";
+import { DiscoverLiveProgress, liveStatusLine } from "./discover-picks";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
-import { MonoLabel } from "./folio";
+import {
+  BriefSection,
+  OverviewProse,
+  ReadingList,
+  picksCount,
+} from "./brief-parts";
 
 /* ------------------------------------------------------------------ */
-/*  Time + notes helpers                                               */
+/*  Notes helpers                                                      */
 /* ------------------------------------------------------------------ */
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
 
 function notesIndicateExaKeyMissing(notes: string | null | undefined): boolean {
   return !!notes && /exa key required/i.test(notes);
@@ -73,7 +65,7 @@ export interface BriefRunData {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Synthesis + reading list + disclosures                             */
+/*  Overview + research log                                            */
 /* ------------------------------------------------------------------ */
 
 /** A bare confirmation isn't a synthesis worth showing. */
@@ -82,121 +74,154 @@ function isTrivialSynthesis(prose: string): boolean {
   return t.length === 0 || /^(picks submitted|submitted|done|here you go)[.!]?$/i.test(t);
 }
 
-/** Full-width synthesis (single-column contexts): the boxed treatment. */
-function Synthesis({ prose }: { prose: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3.5">
-      <div className="mb-2">
-        <MonoLabel>Overview</MonoLabel>
-      </div>
-      <div
-        className="text-[13.5px] leading-relaxed text-foreground/90"
-        style={{ fontFamily: "var(--font-reading)" }}
-      >
-        <MarkdownMessage content={prose} />
-      </div>
-    </div>
-  );
+/**
+ * Older briefs saved every text segment the agent wrote, numbered ("1. the
+ * searches were noisy… 2. <explainer>"). The explainer is always the last
+ * segment (it's written after submit_picks), so show only that.
+ */
+function overviewFromProse(prose: string): string {
+  if (!/^1\.\s/.test(prose) || !/\n\n2\.\s/.test(prose)) return prose;
+  const segments = prose.split(/\n\n(?=\d+\.\s)/);
+  return segments[segments.length - 1].replace(/^\d+\.\s+/, "").trim();
 }
 
-/** Editorial lede (focus view): a concise standfirst directly under the
- *  title that frames what the reading list collectively covers. Clamped to a
- *  few lines at a comfortable reading measure so it sets context without
- *  burying the materials; the full synthesis expands in place. */
-function OverviewLede({ prose }: { prose: string }) {
-  const [expanded, setExpanded] = useState(false);
-  // Heuristic: only offer the toggle when there's meaningfully more to read
-  // than the 3-line clamp reveals, so short overviews don't get a dead toggle.
-  const isLong = prose.length > 240;
-  return (
-    <div className="max-w-[64ch]">
-      <MonoLabel tone="accent">Overview</MonoLabel>
-      <div
-        className={cn(
-          "mt-2.5 text-[15px] leading-[1.65] text-foreground/90",
-          isLong && !expanded && "line-clamp-3",
-        )}
-        style={{ fontFamily: "var(--font-reading)" }}
-      >
-        <MarkdownMessage content={prose} />
-      </div>
-      {isLong ? (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-primary/85 transition-colors hover:text-primary"
-        >
-          {expanded ? "Show less" : "Read full overview"}
-          <ChevronDown
-            className={cn(
-              "size-3 transition-transform",
-              expanded && "rotate-180",
-            )}
-            strokeWidth={2.25}
-          />
-        </button>
-      ) : null}
-    </div>
-  );
+interface LogEntry {
+  kind: "search" | "web" | "read";
+  text: string;
+  detail: string | null;
 }
 
-/** The agent's research trajectory — searches run, papers read — rendered
- *  from the persisted "What I did" log. Collapsed by default; this is the
- *  "how it got here" transparency for a finished brief. */
-function ResearchLog({ log }: { log: string }) {
+/** Parses the saved "What I did" log ("- Searched arXiv for “q” — 8 found",
+ *  "- Read 1706.03762") back into rows. */
+function parseLog(log: string): LogEntry[] {
+  const entries: LogEntry[] = [];
+  for (const raw of log.split("\n")) {
+    const line = raw.trim().replace(/^-\s*/, "");
+    if (!line || line.startsWith("**")) continue;
+    const search = line.match(
+      /^Searched (arXiv|the web)(?: for “(.+)”)?(?: — (\d+) found)?/,
+    );
+    if (search) {
+      entries.push({
+        kind: search[1] === "arXiv" ? "search" : "web",
+        text: search[2] ?? "Search",
+        detail: search[3] !== undefined ? `${search[3]} results` : null,
+      });
+      continue;
+    }
+    const read = line.match(/^Read (.+)$/);
+    if (read) {
+      entries.push({ kind: "read", text: read[1], detail: null });
+    }
+  }
+  return entries;
+}
+
+/** The finished brief's research trajectory, in the same shape as the live
+ *  trace: papers checked first, then searches. Folded by default. */
+function ResearchLog({
+  log,
+  recs,
+}: {
+  log: string;
+  recs: Recommendation[];
+}) {
   const [open, setOpen] = useState(false);
-  const body = log.replace(ACTIVITY_MARKER, "").trim();
-  const steps = body
-    .split("\n")
-    .filter((l) => l.trim().startsWith("-")).length;
+  const entries = parseLog(log);
+  const reads = entries.filter((e) => e.kind === "read");
+  const searches = entries.filter((e) => e.kind !== "read");
+  if (entries.length === 0) return null;
+  const titleFor = (id: string) =>
+    recs.find((r) => r.arxivId === id)?.title ?? `arXiv:${id}`;
+  const summary = [
+    `${searches.length} ${searches.length === 1 ? "search" : "searches"}`,
+    reads.length > 0
+      ? `${reads.length} ${reads.length === 1 ? "paper" : "papers"} checked`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div>
+    <section>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/75 transition-colors hover:text-foreground"
+        aria-expanded={open}
+        className="-mx-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[15px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
-        {open ? (
-          <ChevronDown className="size-3" />
-        ) : (
-          <ChevronRight className="size-3" />
-        )}
-        How I researched{steps > 0 ? ` · ${steps} step${steps === 1 ? "" : "s"}` : ""}
+        <ChevronRight
+          className={cn(
+            "size-4 text-muted-foreground transition-transform",
+            open && "rotate-90",
+          )}
+          strokeWidth={2}
+        />
+        Research
+        <span className="text-[13px] font-normal text-muted-foreground">
+          {summary}
+        </span>
       </button>
       {open ? (
-        <div className="mt-1.5 rounded-md border border-border/40 bg-card/60 px-3 py-2 text-[12px]">
-          <MarkdownMessage content={body} />
+        <div className="mt-4 space-y-6">
+          {reads.length > 0 ? (
+            <div>
+              <h3 className="px-2 text-[13px] font-medium text-muted-foreground">
+                Papers checked
+              </h3>
+              <ul className="mt-1.5">
+                {reads.map((e, i) => (
+                  <li key={i}>
+                    <a
+                      href={`https://arxiv.org/abs/${e.text}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-[14px] text-foreground/85 transition-colors hover:bg-muted/50"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {titleFor(e.text)}
+                      </span>
+                      <ArrowUpRight className="size-3 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {searches.length > 0 ? (
+            <div>
+              <h3 className="px-2 text-[13px] font-medium text-muted-foreground">
+                Searches
+              </h3>
+              <ul className="mt-1.5">
+                {searches.map((e, i) => {
+                  const Icon = e.kind === "web" ? Globe : Search;
+                  return (
+                    <li
+                      key={i}
+                      className="flex items-center gap-3 px-2 py-1.5 text-[14px]"
+                    >
+                      <Icon
+                        className="size-3.5 shrink-0 text-muted-foreground/70"
+                        strokeWidth={1.9}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-foreground/85">
+                        {e.text}
+                      </span>
+                      {e.detail ? (
+                        <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                          {e.detail}
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function ReadingList({ recs }: { recs: Recommendation[] }) {
-  return (
-    <div className="space-y-3">
-      <MonoLabel>
-        Reading list · {recs.length} paper{recs.length === 1 ? "" : "s"}
-      </MonoLabel>
-      <ol
-        className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
-        style={{ boxShadow: "var(--shadow-sm)" }}
-      >
-        {recs.map((rec, i) => (
-          <li
-            key={rec.id}
-            style={{
-              animation: "fadeIn 360ms var(--ease-out) both",
-              // Cap the stagger so a long list doesn't trail off — the first
-              // few reveal in sequence, the rest land together.
-              animationDelay: `${Math.min(i, 5) * 45}ms`,
-            }}
-          >
-            <RecommendationCard rec={rec} />
-          </li>
-        ))}
-      </ol>
-    </div>
+    </section>
   );
 }
 
@@ -221,12 +246,12 @@ function DismissedList({ dismissed }: { dismissed: Recommendation[] }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/75 transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1 rounded-md text-[13px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         {open ? (
-          <ChevronDown className="size-3" />
+          <ChevronDown className="size-3.5" />
         ) : (
-          <ChevronRight className="size-3" />
+          <ChevronRight className="size-3.5" />
         )}
         Dismissed ({dismissed.length})
       </button>
@@ -237,7 +262,7 @@ function DismissedList({ dismissed }: { dismissed: Recommendation[] }) {
               key={rec.id}
               className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted/40"
             >
-              <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground line-through">
+              <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground line-through">
                 {rec.title}
               </span>
               <button
@@ -293,7 +318,7 @@ function EmptyState({
     <button
       type="button"
       onClick={() => setShowDetails((v) => !v)}
-      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground"
+      className="inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
     >
       {showDetails ? (
         <ChevronDown className="size-3" />
@@ -317,18 +342,21 @@ function EmptyState({
   // answers.
   if (prose) {
     return (
-      <div className="rounded-lg border border-border/50 bg-muted/15 px-3.5 py-3">
+      <div className="rounded-xl border border-border bg-card px-5 py-4">
         <div className="flex items-start gap-2.5">
           <MessageCircleQuestion
             className="mt-0.5 size-4 shrink-0 text-primary/70"
             strokeWidth={2}
           />
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] leading-relaxed text-foreground/90">
+            <div
+              className="max-w-[68ch] text-[15px] leading-[1.65] text-foreground/90"
+              style={{ fontFamily: "var(--font-reading)" }}
+            >
               <MarkdownMessage content={prose} />
             </div>
             <p
-              className="mt-2 text-[12px] leading-relaxed text-muted-foreground"
+              className="mt-2 text-[13px] leading-relaxed text-muted-foreground"
               style={{ fontFamily: "var(--font-reading)" }}
             >
               Reply below to point it in a direction, or retry for a best-effort
@@ -361,7 +389,7 @@ function EmptyState({
       : "Retry, or rephrase to narrow the angle.";
 
   return (
-    <div className="rounded-lg border border-border/50 bg-muted/15 px-3.5 py-3">
+    <div className="rounded-xl border border-border bg-card px-5 py-4">
       <div className="flex items-start gap-2.5">
         <span className="mt-0.5 shrink-0 text-muted-foreground/70">
           {errored ? (
@@ -371,12 +399,12 @@ function EmptyState({
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium leading-snug text-foreground/90">
+          <p className="text-[15px] font-medium leading-snug text-foreground">
             {title}
           </p>
           {hint ? (
             <p
-              className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground"
+              className="mt-1 text-[14px] leading-relaxed text-muted-foreground"
               style={{ fontFamily: "var(--font-reading)" }}
             >
               {hint}
@@ -393,24 +421,17 @@ function EmptyState({
   );
 }
 
-/** Renders a single run's outcome: live progress, or the finished brief
- *  body, or a calm empty state.
- *
- *  Finished layout: the reading list is the payoff, so in the focus view
- *  (`wide`) it owns the primary column directly under the title, while the
- *  Overview and the research trajectory move into a sticky right rail — the
- *  context is one glance to the side instead of a tall block the reader has to
- *  scroll past. Narrow contexts (queue cards, follow-ups) stack single-column. */
+/** Renders a single run's outcome: live progress, the finished brief, or a
+ *  calm empty state. Live and finished share one shape (Overview, Reading
+ *  list, Research) so a run completing doesn't rearrange the page. */
 function RunBody({
   run,
   hasExaKey,
   onRetry,
-  wide = false,
 }: {
   run: BriefRunData;
   hasExaKey: boolean;
   onRetry?: (text: string) => void;
-  wide?: boolean;
 }) {
   if (run.liveSteps) {
     return <DiscoverLiveProgress steps={run.liveSteps} />;
@@ -430,46 +451,91 @@ function RunBody({
   }
 
   const { prose, log } = splitNotes(query.notes);
-  const synthesis = prose && !isTrivialSynthesis(prose) ? prose : null;
+  const synthesis =
+    prose && !isTrivialSynthesis(prose) ? overviewFromProse(prose) : null;
 
-  // Compact contexts (queue cards, threaded follow-ups): keep the boxed
-  // synthesis stacked above a tight list — these live in narrow space.
-  if (!wide) {
-    return (
-      <div className="space-y-4">
-        {synthesis ? <Synthesis prose={synthesis} /> : null}
-        {log ? <ResearchLog log={log} /> : null}
-        <ReadingList recs={recommendations} />
-        {dismissed.length > 0 ? <DismissedList dismissed={dismissed} /> : null}
-      </div>
-    );
-  }
-
-  // Focus view: an editorial brief, single column at the app's reading width.
-  // A concise overview lede frames the set, the reading list is the spacious
-  // body, and the agent's trajectory sits quietly at the foot as provenance.
   return (
-    <div className="space-y-7">
-      {synthesis ? <OverviewLede prose={synthesis} /> : null}
-
-      <div className="space-y-3">
-        <ReadingList recs={recommendations} />
-        {dismissed.length > 0 ? <DismissedList dismissed={dismissed} /> : null}
-      </div>
-
-      {log ? (
-        <div className="border-t border-border/50 pt-4">
-          <ResearchLog log={log} />
-        </div>
+    <div className="space-y-12">
+      {synthesis ? (
+        <BriefSection title="Overview">
+          <OverviewProse prose={synthesis} />
+        </BriefSection>
       ) : null}
+
+      <BriefSection
+        title="Reading list"
+        count={picksCount(recommendations.length)}
+      >
+        <ReadingList recs={recommendations} />
+        {dismissed.length > 0 ? (
+          <div className="mt-3">
+            <DismissedList dismissed={dismissed} />
+          </div>
+        ) : null}
+      </BriefSection>
+
+      {log ? <ResearchLog log={log} recs={recommendations} /> : null}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Follow-up                                                          */
+/*  Research brief                                                     */
 /* ------------------------------------------------------------------ */
 
+/** The status line under a question: live progress, or when it ran and
+ *  what came of it. */
+function RunStatus({ run, large }: { run: BriefRunData; large?: boolean }) {
+  const { query } = run;
+  const picks = run.recommendations.length;
+  const accepted = run.acceptedCount;
+  const parts: string[] = [];
+  if (run.liveSteps) {
+    return (
+      <p
+        className={cn(
+          "flex items-center gap-2 text-primary",
+          large ? "mt-3 text-[14px]" : "mt-1.5 text-[13px]",
+        )}
+      >
+        <span className="landing-pulse-dot" aria-hidden />
+        {liveStatusLine(run.liveSteps)}
+      </p>
+    );
+  }
+  parts.push(
+    new Date(query.createdAt).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year:
+        new Date(query.createdAt).getFullYear() === new Date().getFullYear()
+          ? undefined
+          : "numeric",
+    }),
+  );
+  if (picks > 0) parts.push(picksCount(picks));
+  if (accepted > 0) parts.push(`${accepted} in library`);
+  return (
+    <p
+      className={cn(
+        "flex flex-wrap items-center gap-x-2 text-muted-foreground",
+        large ? "mt-3 text-[14px]" : "mt-1.5 text-[13px]",
+      )}
+      title={new Date(query.createdAt).toLocaleString()}
+    >
+      {parts.join(" · ")}
+      {query.status === "errored" ? (
+        <span className="inline-flex items-center gap-1 text-destructive/85">
+          <AlertCircle className="size-3.5" strokeWidth={2} />
+          Errored
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+/** A follow-up continues the brief below it: its question as a heading, then
+ *  the same sections as the brief it refines. */
 function FollowupRun({
   run,
   hasExaKey,
@@ -480,158 +546,51 @@ function FollowupRun({
   onRetry?: (text: string) => void;
 }) {
   return (
-    <div className="ml-1 space-y-2 border-l-2 border-border/60 pl-3.5">
-      <div className="flex items-start gap-1.5">
-        <CornerDownRight
-          className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/55"
-          strokeWidth={2}
-        />
-        <p
-          className="text-[13px] font-semibold leading-snug text-foreground"
-          style={{ fontFamily: "var(--font-reading)" }}
-        >
-          {run.query.query}
-        </p>
-      </div>
-      <div className="pl-5">
+    <section className="border-t border-border pt-12">
+      <p className="text-[13px] font-medium text-muted-foreground">Follow-up</p>
+      <h2 className="mt-1 text-[21px] font-semibold leading-snug tracking-[-0.015em] text-foreground">
+        {run.query.query}
+      </h2>
+      <RunStatus run={run} />
+      <div className="mt-8">
         <RunBody run={run} hasExaKey={hasExaKey} onRetry={onRetry} />
       </div>
-    </div>
+    </section>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Research brief                                                     */
-/* ------------------------------------------------------------------ */
 
 export default function ResearchBrief({
   run,
   followups,
-  defaultCollapsed,
-  pinned = false,
   hasExaKey,
   onRetry,
 }: {
   run: BriefRunData;
   followups: BriefRunData[];
-  defaultCollapsed: boolean;
-  /** Focus view: always-open, no collapse chrome. */
-  pinned?: boolean;
   hasExaKey: boolean;
   /** Re-run a query that came back empty or errored. */
   onRetry: (text: string) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const { query } = run;
-  const isLive = !!run.liveSteps;
-  const accepted = run.acceptedCount;
-  const open = pinned || !collapsed;
-
-  const meta = (
-    <span className="min-w-0 flex-1">
-      <span
-        className={cn(
-          "block font-semibold text-foreground",
-          pinned
-            ? "text-[26px] leading-[1.15] tracking-[-0.025em]"
-            : "text-[15px] leading-snug tracking-[-0.01em]",
-        )}
-      >
-        {query.query}
-      </span>
-      <span
-        className={cn(
-          "flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground",
-          pinned ? "mt-2 text-[12px]" : "mt-1 text-[11px]",
-        )}
-      >
-        <span title={new Date(query.createdAt).toLocaleString()}>
-          {isLive ? "Researching now" : relativeTime(query.createdAt)}
-        </span>
-        {!isLive && run.recommendations.length > 0 ? (
-          <>
-            <span aria-hidden>·</span>
-            <span>
-              {run.recommendations.length} pick
-              {run.recommendations.length === 1 ? "" : "s"}
-              {accepted > 0 ? ` · ${accepted} in library` : ""}
-            </span>
-          </>
-        ) : null}
-        {query.status === "errored" ? (
-          <>
-            <span aria-hidden>·</span>
-            <span className="inline-flex items-center gap-0.5 text-destructive/85">
-              <AlertCircle className="size-3" strokeWidth={2} />
-              errored
-            </span>
-          </>
-        ) : null}
-      </span>
-    </span>
-  );
-
   return (
-    <section
-      className={cn(
-        pinned
-          ? cn("relative", isLive && "pl-5")
-          : "rounded-lg border border-border bg-card px-4 py-3.5",
-      )}
-      style={pinned ? undefined : { animation: "fadeIn 220ms ease-out" }}
-    >
-      {/* The brief's single live indicator: one pulse dot in the left gutter,
-          vertically centered on the title. Everything else (subtitle, the live
-          status line, the work timeline) aligns to the content column to its
-          right — no stacked decorative dots. */}
-      {pinned && isLive ? (
-        <span
-          className="landing-pulse-dot absolute left-1.5 top-3"
-          aria-hidden
-        />
-      ) : null}
+    <article>
       <header>
-        {pinned ? (
-          meta
-        ) : (
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            className="flex w-full items-start gap-2 text-left"
-          >
-            <span className="mt-0.5 shrink-0 text-muted-foreground/60">
-              {isLive ? (
-                <span className="landing-pulse-dot mt-1 block" />
-              ) : collapsed ? (
-                <ChevronRight className="size-4" strokeWidth={2} />
-              ) : (
-                <ChevronDown className="size-4" strokeWidth={2} />
-              )}
-            </span>
-            {meta}
-          </button>
-        )}
+        <h1 className="max-w-[30ch] text-[30px] font-semibold leading-[1.2] tracking-[-0.025em] text-foreground">
+          {run.query.query}
+        </h1>
+        <RunStatus run={run} large />
       </header>
 
-      {open ? (
-        <div className="mt-3.5 space-y-4">
-          <RunBody
-            run={run}
+      <div className="mt-10 space-y-12">
+        <RunBody run={run} hasExaKey={hasExaKey} onRetry={onRetry} />
+        {followups.map((f) => (
+          <FollowupRun
+            key={f.query.id}
+            run={f}
             hasExaKey={hasExaKey}
             onRetry={onRetry}
-            wide={pinned}
           />
-
-          {followups.map((f) => (
-            <FollowupRun
-              key={f.query.id}
-              run={f}
-              hasExaKey={hasExaKey}
-              onRetry={onRetry}
-            />
-          ))}
-        </div>
-      ) : null}
-    </section>
+        ))}
+      </div>
+    </article>
   );
 }

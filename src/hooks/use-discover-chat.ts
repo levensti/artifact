@@ -107,16 +107,24 @@ export interface UseDiscoverChatReturn {
 }
 
 /**
- * The agent emits one text segment per round (between tool batches). Joining
- * them with "" produces a wall of prose; rendering them as a numbered
- * Markdown list preserves the round boundaries and reads as the timeline
- * it actually is. Empty segments are dropped so we don't get blank steps.
+ * The text saved as the brief's overview. Once picks are submitted, only what
+ * the agent wrote after `submit_picks` counts: that's the explainer, and the
+ * earlier segments are working notes ("let me verify…"), not brief content.
+ * Without picks (a clarifying reply, a stopped run), keep every segment as a
+ * numbered list so the round boundaries survive. Empty segments are dropped.
  */
 function stepsToFinalText(steps: AgentStep[]): string {
+  const submitAt = steps.findIndex(
+    (s) => s.kind === "tool_call" && s.name === "submit_picks",
+  );
   const segments = steps
-    .filter((s): s is Extract<AgentStep, { kind: "text" }> => s.kind === "text")
+    .filter(
+      (s, i): s is Extract<AgentStep, { kind: "text" }> =>
+        s.kind === "text" && (submitAt === -1 || i > submitAt),
+    )
     .map((s) => s.text.trim())
     .filter(Boolean);
+  if (submitAt !== -1) return segments.join("\n\n");
   if (segments.length === 0) return "";
   if (segments.length === 1) return segments[0];
   return segments.map((text, i) => `${i + 1}. ${text}`).join("\n\n");
