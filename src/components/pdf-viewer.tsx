@@ -51,6 +51,9 @@ const ZOOM_STEP = 0.2;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_DEBOUNCE_MS = 140;
+/** Pause in a panel resize before pages re-rasterize at the new width;
+ *  until then the current rasters are CSS-scaled to fit. */
+const RESIZE_DEBOUNCE_MS = 160;
 /** US Letter, used for page slots until the real page sizes are known. */
 const DEFAULT_ASPECT = 11 / 8.5;
 /** pdf.js's own default ceiling on canvas size; past this, rendering a
@@ -119,6 +122,9 @@ export default function PdfViewer({
   const [liveZoom, setLiveZoom] = useState(1);
   const [committedZoom, setCommittedZoom] = useState(1);
   const [containerWidth, setContainerWidth] = useState(0);
+  /** The container width pages are rasterized at; trails `containerWidth`
+   *  by `RESIZE_DEBOUNCE_MS` the way `committedZoom` trails `liveZoom`. */
+  const [committedWidth, setCommittedWidth] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -154,15 +160,17 @@ export default function PdfViewer({
     return () => ro.disconnect();
   }, []);
 
-  const fitWidth = Math.max(0, containerWidth - H_PADDING);
-  const widthAt = (zoom: number) =>
-    containerWidth > 0 ? Math.max(120, Math.floor(fitWidth * clampZoom(zoom))) : 400;
-  // Slots are laid out at the live width so the document reflows the moment
-  // the user zooms; pdf.js rasterizes at the committed width and the canvas
-  // is CSS-scaled to fill the slot until the debounce commits.
-  const slotWidth = widthAt(liveZoom);
-  const renderWidth = widthAt(committedZoom);
-  const previewScale = slotWidth / renderWidth;
+  const widthAt = (container: number, zoom: number) =>
+    container > 0
+      ? Math.max(120, Math.floor(Math.max(0, container - H_PADDING) * clampZoom(zoom)))
+      : 400;
+  // Slots are laid out at the live zoom and container width so the document
+  // reflows the moment either changes; pdf.js rasterizes at the committed
+  // ones and the canvas is CSS-scaled to fill the slot until the debounces
+  // commit. Re-rasterizing on every frame of a panel drag is what made the
+  // pages flash.
+  const slotWidth = widthAt(containerWidth, liveZoom);
+  const renderWidth = widthAt(committedWidth || containerWidth, committedZoom);
   const aspectOf = (pageNum: number) =>
     pageAspects[pageNum - 1] ?? pageAspects[0] ?? DEFAULT_ASPECT;
 
@@ -234,6 +242,21 @@ export default function PdfViewer({
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
   }, [captureZoomAnchor]);
+
+  // Re-rasterize once a panel resize settles. The first measurement commits
+  // immediately so the initial render isn't delayed.
+  useEffect(() => {
+    if (containerWidth === committedWidth) return;
+    if (committedWidth === 0) {
+      setCommittedWidth(containerWidth);
+      return;
+    }
+    const id = window.setTimeout(
+      () => setCommittedWidth(containerWidth),
+      RESIZE_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [containerWidth, committedWidth]);
 
   // Coalesce rapid zoom clicks into one rasterization.
   useEffect(() => {
@@ -856,23 +879,13 @@ export default function PdfViewer({
                 style={{ width: slotWidth, height: slotHeight }}
               >
                 {renderedPages.has(pageNum) && (
-                  // Rasterized at the committed width, CSS-scaled to the slot
-                  // during the debounce window; resolves to scale 1 on commit.
-                  <div
-                    className="absolute left-0 top-0"
-                    style={{
-                      width: renderWidth,
-                      transform: previewScale === 1 ? undefined : `scale(${previewScale})`,
-                      transformOrigin: "0 0",
-                    }}
-                  >
-                    <PdfPage
-                      pageNumber={pageNum}
-                      width={renderWidth}
-                      height={renderWidth * aspectOf(pageNum)}
-                      customTextRenderer={customTextRenderer}
-                    />
-                  </div>
+                  <BufferedPage
+                    pageNumber={pageNum}
+                    width={renderWidth}
+                    slotWidth={slotWidth}
+                    aspect={aspectOf(pageNum)}
+                    customTextRenderer={customTextRenderer}
+                  />
                 )}
                 {pageAnnotations.map((ann) => {
                   const isActive = ann.id === activeAnnotationId;
@@ -907,6 +920,62 @@ export default function PdfViewer({
 }
 
 /**
+ * A page's raster, double-buffered across width changes. Resizing a pdf.js
+ * canvas clears it before the new render lands, which flashes the page
+ * white, so the raster at the previous width stays on screen until the one
+ * at the new width has rendered, then they swap. Each layer is CSS-scaled
+ * from the width it was drawn at to the slot.
+ */
+function BufferedPage({
+  pageNumber,
+  width,
+  slotWidth,
+  aspect,
+  customTextRenderer,
+}: {
+  pageNumber: number;
+  /** Width to rasterize at (the committed width). */
+  width: number;
+  /** Width of the slot the page is shown in (the live width). */
+  slotWidth: number;
+  aspect: number;
+  customTextRenderer: (item: { str: string }) => string;
+}) {
+  // The width whose raster has finished; null until the first render lands.
+  const [shownWidth, setShownWidth] = useState<number | null>(null);
+  const onRendered = useCallback((w: number) => setShownWidth(w), []);
+  const layer = (w: number, pending: boolean) => (
+    <div
+      key={w}
+      className="absolute left-0 top-0"
+      style={{
+        width: w,
+        transform: slotWidth === w ? undefined : `scale(${slotWidth / w})`,
+        transformOrigin: "0 0",
+        // The incoming raster draws invisibly over the current one.
+        opacity: pending ? 0 : undefined,
+        pointerEvents: pending ? "none" : undefined,
+      }}
+    >
+      <PdfPage
+        pageNumber={pageNumber}
+        width={w}
+        height={w * aspect}
+        customTextRenderer={customTextRenderer}
+        onRendered={onRendered}
+      />
+    </div>
+  );
+  if (shownWidth === null || shownWidth === width) return layer(width, false);
+  return (
+    <>
+      {layer(shownWidth, false)}
+      {layer(width, true)}
+    </>
+  );
+}
+
+/**
  * One rasterized page. Memoized so live-zoom renders, which only resize the
  * slots, don't reconcile every mounted <Page>.
  */
@@ -915,11 +984,14 @@ const PdfPage = memo(function PdfPage({
   width,
   height,
   customTextRenderer,
+  onRendered,
 }: {
   pageNumber: number;
   width: number;
   height: number;
   customTextRenderer: (item: { str: string }) => string;
+  /** Called with `width` once the canvas has finished rendering. */
+  onRendered: (width: number) => void;
 }) {
   // Cap the backing store at pdf.js's canvas limit so 300% on a retina
   // screen doesn't allocate a 40-megapixel canvas per page.
@@ -932,6 +1004,7 @@ const PdfPage = memo(function PdfPage({
       devicePixelRatio={devicePixelRatio}
       loading={null}
       customTextRenderer={customTextRenderer}
+      onRenderSuccess={() => onRendered(width)}
     />
   );
 });

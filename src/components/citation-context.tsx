@@ -42,18 +42,26 @@ interface CitationContextValue {
    */
   documentStatus: DocumentStatus | null;
   /**
-   * Which step chat is waiting on while `parseReady` is false:
-   * extracting text in the browser, registering the document with the
-   * server, or (short papers) building the page map. Null when ready.
-   * `registration_failed` keeps chat locked until the failsafe, with the
-   * error in `registrationError`.
+   * Which step chat is waiting on while `parseReady` is false: extracting
+   * text in the browser, registering the document with the server, or
+   * indexing it (chat reads documents only through retrieval; progress is
+   * `documentStatus.indexProgress`). Null when ready. `registration_failed`
+   * keeps chat locked until the failsafe, with the error in
+   * `registrationError`; `index_failed` keeps it locked until a reload
+   * retries, with the error in `documentStatus.indexError`.
    */
-  preparingPhase: "extracting" | "registering" | "page_map" | "registration_failed" | null;
+  preparingPhase:
+    | "extracting"
+    | "registering"
+    | "indexing"
+    | "registration_failed"
+    | "index_failed"
+    | null;
   registrationError: string | null;
   /**
-   * True once the parse the chat depends on is loaded — full parse for long
-   * papers, page map for short ones. Also true when there's no paper or no
-   * model selected (nothing to wait for); the chat handles those states.
+   * True once the document's index is ready, so chat can retrieve from it.
+   * Also true when there's no paper or no model selected (nothing to wait
+   * for); the chat handles those states.
    */
   parseReady: boolean;
   /**
@@ -222,8 +230,13 @@ export function CitationContextProvider({
     const run = async () => {
       try {
         // Reopen: the server already has this document. Skip the upload and
-        // use its status + sections directly.
-        if (preloaded) {
+        // use its status + sections directly, unless its index never got
+        // built (queued or failed): registering again re-queues it, and chat
+        // can't open without it.
+        const indexMissing =
+          preloaded?.status.indexStatus === "pending" ||
+          preloaded?.status.indexStatus === "failed";
+        if (preloaded && !indexMissing) {
           setDocumentStatus(preloaded.status);
           setSectionPageMap(sectionsToPageMap(preloaded.sections));
           if (isDocumentIndexing(preloaded.status)) {
@@ -347,37 +360,25 @@ export function CitationContextProvider({
     if (!paperText || !modelReady) return null;
     if (registrationError) return "registration_failed";
     if (!isDocumentReady(documentStatus)) return "registering";
-    if (documentStatus?.mode === "retrieval") return null;
-    if (pageMapError || pageMap !== null) return null;
-    return "page_map";
-  }, [paperLoading, paperText, modelReady, registrationError, documentStatus, pageMap, pageMapError]);
+    if (documentStatus?.indexStatus === "failed") return "index_failed";
+    if (isDocumentIndexing(documentStatus)) return "indexing";
+    return null;
+  }, [paperLoading, paperText, modelReady, registrationError, documentStatus]);
 
   const parseReady = useMemo(() => {
     if (paperLoading) return false;
     if (!paperText) return true;
     if (!modelReady) return true;
-    if (timedOutFor === paperText) return true;
-    // The server must hold the text before chat can see the paper at all. A
-    // long document's index building is not a gate: chat answers from the
-    // leading slice meanwhile and the header shows progress.
-    if (!isDocumentReady(documentStatus)) return false;
-    // Retrieval mode needs no page map up front: passages come from the
-    // chunk index and section chips from the section tree.
-    if (documentStatus?.mode === "retrieval") return true;
-    // Page-map failure is terminal: unlock chat in degraded mode rather than
-    // sitting on the banner until the 40s failsafe. The user sees the error
-    // and can still chat — citations just fall back to regex resolution.
-    if (pageMapError) return true;
-    return pageMap !== null;
-  }, [
-    paperLoading,
-    paperText,
-    modelReady,
-    pageMap,
-    pageMapError,
-    timedOutFor,
-    documentStatus,
-  ]);
+    // Registration stuck or failed: the failsafe unlocks chat without the
+    // paper rather than spinning forever.
+    if (registrationError || !isDocumentReady(documentStatus)) {
+      return timedOutFor === paperText;
+    }
+    // Chat reads the document only through retrieval, so it waits for the
+    // index (no failsafe: a book can take minutes). The page map isn't a
+    // gate; it loads in the background and only sharpens citation chips.
+    return documentStatus?.indexStatus === "ready";
+  }, [paperLoading, paperText, modelReady, timedOutFor, documentStatus, registrationError]);
 
   const scrollToPage = useCallback(
     (page: number, anchorText?: string | string[], anchorBlock: "start" | "center" = "start") => {

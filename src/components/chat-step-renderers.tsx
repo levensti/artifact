@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  LayoutPanelTop,
   Loader2,
   Search,
   Wrench,
@@ -14,6 +15,9 @@ import { cn } from "@/lib/utils";
 import ShimmerStatus from "./shimmer-status";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
+import { artifactFromToolInput, CREATE_ARTIFACT_TOOL } from "@/lib/artifacts";
+import type { ToolProgress } from "@/lib/stream-types";
+import { ArtifactCard } from "./artifact-view";
 import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
@@ -25,6 +29,7 @@ const TOOL_LABELS: Record<string, [string, string]> = {
   arxiv_search: ["Searching arXiv", "Searched arXiv"],
   web_search: ["Searching the web", "Searched the web"],
   search_paper: ["Searching the paper", "Searched the paper"],
+  create_artifact: ["Building the artifact", "Built the artifact"],
 };
 
 function toolLabel(name: string, done: boolean): string {
@@ -59,6 +64,13 @@ export const TurnStartContext = createContext<number | null>(null);
  * rather than hung.
  */
 export function ThinkingIndicator() {
+  const elapsed = useTurnElapsed();
+  const label = elapsed >= 1 ? `Thinking · ${formatElapsed(elapsed)}` : "Thinking";
+  return <ShimmerStatus label={label} />;
+}
+
+/** Seconds since the turn started (or since mount outside a turn), ticking. */
+function useTurnElapsed(): number {
   const turnStart = useContext(TurnStartContext);
   const [elapsed, setElapsed] = useState(() =>
     turnStart ? Math.floor((Date.now() - turnStart) / 1000) : 0,
@@ -70,8 +82,66 @@ export function ThinkingIndicator() {
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, [turnStart]);
-  const label = elapsed >= 1 ? `Thinking · ${formatElapsed(elapsed)}` : "Thinking";
-  return <ShimmerStatus label={label} />;
+  return elapsed;
+}
+
+/* ------------------------------------------------------------------ */
+/*  ArtifactBuildingCard                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Stands in for an artifact while the model writes it (its arguments are
+ * streaming): the title once it's written, then each section as it lands, so
+ * a long generation reads as visible progress rather than "Thinking".
+ */
+function ArtifactBuildingCard({ progress }: { progress?: ToolProgress }) {
+  const elapsed = useTurnElapsed();
+  const title = progress?.title;
+  const steps = progress?.steps ?? [];
+
+  const label = title ? `Building "${title}"` : "Building an artifact";
+  return (
+    <div className="my-2 rounded-lg border border-border bg-card px-3.5 py-3">
+      <div className="flex items-center gap-2">
+        <LayoutPanelTop
+          className="size-3.5 shrink-0 text-muted-foreground"
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <ShimmerStatus label={label} />
+        </div>
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/70">
+          {formatElapsed(elapsed)}
+        </span>
+      </div>
+      {steps.length > 0 ? (
+        <ul className="mt-2 space-y-1 pl-[22px] text-[12px] leading-snug">
+          {steps.map((step, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              {step.done ? (
+                <Check
+                  className="mt-px size-3 shrink-0 text-success"
+                  strokeWidth={2.5}
+                  aria-label="Written"
+                />
+              ) : (
+                <Loader2
+                  className="mt-px size-3 shrink-0 animate-spin text-muted-foreground/70"
+                  aria-label="Writing"
+                />
+              )}
+              <span
+                className={step.done ? "text-muted-foreground" : "text-foreground"}
+              >
+                {step.label}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function formatElapsed(seconds: number): string {
@@ -90,11 +160,16 @@ export function ToolCallStep({
   input,
   output,
   isLive,
+  building,
+  progress,
 }: {
   name: string;
   input: Record<string, unknown>;
   output?: string;
   isLive?: boolean;
+  /** Arguments still streaming (live steps only). */
+  building?: boolean;
+  progress?: ToolProgress;
 }) {
   const [open, setOpen] = useState(false);
   const Icon = TOOL_ICONS[name] ?? Wrench;
@@ -112,6 +187,14 @@ export function ToolCallStep({
   // before the rest of the rendering so the user sees one clean prompt.
   if (name === "web_search" && output?.trim() === EXA_KEY_REQUIRED_SENTINEL) {
     return <ExaKeyPromptCard />;
+  }
+
+  // create_artifact: the call's input is the artifact itself, so show its
+  // preview card (it's also saved to the Artifacts tab when the turn ends).
+  if (name === CREATE_ARTIFACT_TOOL) {
+    if (building) return <ArtifactBuildingCard progress={progress} />;
+    const artifact = artifactFromToolInput(input);
+    if (artifact) return <ArtifactCard artifact={artifact} className="my-2" />;
   }
 
   return (
@@ -202,6 +285,8 @@ export function AgentSteps({ steps }: { steps: AgentStep[] }) {
                 input={step.input}
                 output={step.output}
                 isLive
+                building={step.building}
+                progress={step.progress}
               />
             );
         }

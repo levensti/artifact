@@ -7,11 +7,7 @@
  * metering, transcript persistence, context budgeting) is HTTP plumbing that
  * is NOT part of the agent.
  *
- * Both callers go through here so they can't drift: the `/api/chat` route wraps
- * it with the plumbing above, and offline eval harnesses import and call it
- * directly with just a key (no dev server, no auth, no DB). It is deliberately
- * free of any `server-only` / DB / Next-runtime imports so it runs unchanged in
- * a plain Node/tsx process.
+ * The `/api/chat` route wraps it with the plumbing above.
  */
 
 import type { StreamEvent } from "@/lib/stream-types";
@@ -27,8 +23,7 @@ import { runDiscoverFunnel } from "./discover-funnel";
 // through the same module it runs the agent from.
 export { getReadingSystemPrompt };
 
-/** Registered only when the document has a chunk index (long documents); a
- *  short document is fully in context and the tool would have nothing to do. */
+/** Registered only when the turn has a document to search (its chunk index). */
 const CHUNK_INDEX_TOOLS = new Set(["search_paper"]);
 
 /** Discover's structured-output tool; the reading surfaces never register it
@@ -50,22 +45,14 @@ export interface ReadingAgentParams {
   conversation: TranscriptMessage[];
   /** Resolved Fireworks key. */
   apiKey: string;
-  /** Optional model override for offline evals; app traffic uses the fixed model. */
-  model?: string;
-  /** Full paper/page text (short-source mode). */
-  paperContext?: string;
   /**
-   * Passages retrieved for this turn (long-source mode). `null` means
-   * retrieval ran and nothing cleared the floor; `undefined` means the turn
-   * is not in retrieval mode.
+   * Passages retrieved for this turn. `null` means retrieval ran and nothing
+   * cleared the floor; `undefined` means there's no document in this turn.
    */
   retrievedContext?: string | null;
-  /** Appended to the paper block, e.g. "only the first N pages are available
-   *  while indexing finishes". */
-  paperNote?: string;
   /** Document title, when known. */
   documentTitle?: string;
-  /** Table of contents (retrieval mode), one heading per line with page. */
+  /** Table of contents, one heading per line with page. */
   tableOfContents?: string;
   /** Vector search over the document's chunks; enables `search_paper`. */
   searchChunks?: (query: string, k: number) => Promise<ChunkHit[]>;
@@ -110,10 +97,7 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
   const {
     conversation,
     apiKey,
-    model,
-    paperContext,
     retrievedContext,
-    paperNote,
     documentTitle,
     tableOfContents,
     searchChunks,
@@ -135,7 +119,6 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     await runDiscoverFunnel({
       conversation,
       apiKey,
-      model,
       question: discover?.question?.trim() || lastUser?.content || "",
       projectName: discover?.projectName ?? null,
       exclude: discover?.exclude,
@@ -151,7 +134,6 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     skipWebSearch,
   });
   const toolContext: ToolContext = {
-    paperContext,
     searchChunks,
     paperTitle,
     arxivId,
@@ -164,14 +146,8 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     conversation,
     apiKey,
     systemPrompt,
-    paperContext || retrievedContext !== undefined
-      ? {
-          text: paperContext,
-          retrieved: retrievedContext,
-          title: documentTitle,
-          tableOfContents,
-          note: paperNote,
-        }
+    retrievedContext !== undefined
+      ? { retrieved: retrievedContext, title: documentTitle, tableOfContents }
       : undefined,
     tools,
     toolContext,
@@ -179,6 +155,5 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     // Reading surfaces draw visuals; pin the format rules with recency so
     // old in-conversation examples can't override them.
     { trailingSystemReminder: visualFormatReminder() },
-    model,
   );
 }

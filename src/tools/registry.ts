@@ -11,6 +11,7 @@ import { webSearchTool } from "./web-search";
 import { searchPaperTool } from "./search-paper";
 import { paperDetailsTool } from "./paper-details";
 import { submitPicksTool } from "./submit-picks";
+import { createArtifactTool } from "./create-artifact";
 
 /* ------------------------------------------------------------------ */
 /*  Register tools here                                                */
@@ -30,6 +31,9 @@ const ALL_TOOLS: ToolDefinition[] = [
   // Discovery structured-output tool — gated to discover mode in the
   // chat route so it isn't visible to the paper-reading agent.
   submitPicksTool,
+  // Reading structured-output tool: interactive learning material, saved
+  // to the review's Artifacts tab by the chat route.
+  createArtifactTool,
 ];
 
 /* ------------------------------------------------------------------ */

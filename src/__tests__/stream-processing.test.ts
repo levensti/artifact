@@ -116,3 +116,55 @@ describe("stepsToContent", () => {
     expect(stepsToContent(steps)).toBe("");
   });
 });
+
+describe("processStreamEvent: streaming tool calls", () => {
+  const start = { type: "tool_call_start", id: "c1", name: "create_artifact" } as const;
+
+  it("opens a building step that the final tool_call completes in place", () => {
+    let steps = processStreamEvent([{ kind: "thinking" }], start);
+    expect(steps).toEqual([
+      { kind: "tool_call", id: "c1", name: "create_artifact", input: {}, building: true },
+    ]);
+    steps = processStreamEvent(steps, {
+      type: "tool_call_progress",
+      id: "c1",
+      name: "create_artifact",
+      progress: { title: "Overview", steps: [] },
+    });
+    expect(steps[0]).toMatchObject({ building: true, progress: { title: "Overview" } });
+    steps = processStreamEvent(steps, {
+      type: "tool_call",
+      id: "c1",
+      name: "create_artifact",
+      input: { title: "Overview" },
+    });
+    expect(steps).toEqual([
+      { kind: "tool_call", id: "c1", name: "create_artifact", input: { title: "Overview" } },
+    ]);
+  });
+
+  it("turns an artifact cut off by the end of the round into a note", () => {
+    let steps = processStreamEvent([], start);
+    steps = processStreamEvent(steps, {
+      type: "tool_call_progress",
+      id: "c1",
+      name: "create_artifact",
+      progress: { title: "Overview", steps: [] },
+    });
+    steps = processStreamEvent(steps, { type: "done" });
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({ kind: "text" });
+    expect(stepsToContent(steps)).toContain('"Overview" was cut off');
+    expect(stepsToBlocks(steps)).toEqual([
+      { type: "text_segment", content: (steps[0] as { text: string }).text },
+    ]);
+  });
+
+  it("drops other unfinished tools when the next round starts", () => {
+    const steps = processStreamEvent(
+      processStreamEvent([], { type: "tool_call_start", id: "s1", name: "arxiv_search" }),
+      { type: "turn_start" },
+    );
+    expect(steps).toEqual([{ kind: "thinking" }]);
+  });
+});

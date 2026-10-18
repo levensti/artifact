@@ -1,16 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { buildPaperBlock } from "@/app/api/chat/paper-block";
-import { formatRetrievedBlock } from "@/server/retrieval";
+import { formatRetrievedBlock, parsePlannedQueries } from "@/server/retrieval";
 describe("buildPaperBlock", () => {
-  it("returns null with nothing", () => {
+  it("returns null with no document", () => {
     expect(buildPaperBlock(undefined)).toBeNull();
-    expect(buildPaperBlock({})).toBeNull();
   });
-  it("full text mode injects the text verbatim", () => {
-    const b = buildPaperBlock({ text: "hello world" })!;
-    expect(b).toBe("<paper>\nhello world\n</paper>");
-  });
-  it("retrieval mode carries title, ToC, passages, and the citation rule", () => {
+  it("carries title, ToC, passages, and the citation rule", () => {
     const b = buildPaperBlock({
       retrieved: "## §1 Intro\n(p. 1) passage",
       title: "A Paper",
@@ -22,15 +17,29 @@ describe("buildPaperBlock", () => {
     expect(b).toContain("`search_paper`");
     expect(b).toContain("Never invent a section number");
   });
-  it("retrieval mode with no hits says so", () => {
+  it("says so when nothing was retrieved", () => {
     const b = buildPaperBlock({ retrieved: null })!;
-    expect(b).toContain("(no passages matched this question)");
+    expect(b).toContain("(no passages were retrieved for this message)");
     expect(b).not.toContain("<table_of_contents>");
   });
-  it("partial mode appends the note", () => {
-    const b = buildPaperBlock({ text: "start", note: "still indexing" })!;
-    expect(b).toContain("start");
-    expect(b).toContain("<note>still indexing</note>");
+});
+
+describe("parsePlannedQueries", () => {
+  it("reads, trims, dedupes, and caps the planner's queries", () => {
+    expect(
+      parsePlannedQueries(
+        '{"queries": [" problem and motivation ", "core method", "core method", 3, "", "a", "b", "c", "d"]}',
+      ),
+    ).toEqual(["problem and motivation", "core method", "a", "b", "c", "d"]);
+  });
+  it("accepts an empty plan and tolerates prose or fences around the JSON", () => {
+    expect(parsePlannedQueries('{"queries": []}')).toEqual([]);
+    expect(parsePlannedQueries('```json\n{"queries": ["loss"]}\n```')).toEqual(["loss"]);
+  });
+  it("rejects output that isn't a plan", () => {
+    expect(parsePlannedQueries(undefined)).toBeNull();
+    expect(parsePlannedQueries("loss function")).toBeNull();
+    expect(parsePlannedQueries('{"query": "loss"}')).toBeNull();
   });
 });
 

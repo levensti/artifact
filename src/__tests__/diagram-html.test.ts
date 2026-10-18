@@ -162,3 +162,46 @@ describe("sanitizeDiagramHtml — style policy", () => {
     expect(out.html).toContain('stroke="var(--chart-3)"');
   });
 });
+
+describe("sanitizeDiagramHtml — artifact mode", () => {
+  const artifact = (src: string) =>
+    sanitizeDiagramHtml(src, win, { artifact: true });
+
+  it("keeps document structure and disclosure only in artifact mode", () => {
+    const src =
+      '<section><h3>Method</h3><details open><summary>How it works</summary>' +
+      "<p>Two stages.</p><ul><li>Encode</li></ul></details></section>";
+    expect(artifact(src).html).toBe(src.replace("<details open>", '<details open="">'));
+    const plain = sanitize(src).html;
+    expect(plain).not.toContain("<details");
+    expect(plain).not.toContain("<h3>");
+  });
+
+  it("drops open on anything but details", () => {
+    expect(artifact('<div open="x">a</div>').html).toBe("<div>a</div>");
+  });
+
+  it("wraps paper references in chip buttons", () => {
+    const out = artifact("<p>See §3.2 and Fig. 4 for the loss.</p>");
+    expect(out.html).toBe(
+      '<p>See <button type="button" class="citation-chip" data-cite-kind="section" data-cite-value="3.2">§3.2</button>' +
+        ' and <button type="button" class="citation-chip" data-cite-kind="figure" data-cite-value="4">Fig. 4</button>' +
+        " for the loss.</p>",
+    );
+  });
+
+  it("never chips text inside svg, code, or summary", () => {
+    const out = artifact(
+      "<summary>§2 Setup</summary><code>Fig. 1</code>" +
+        '<svg viewBox="0 0 10 10"><text x="1" y="5">§1</text></svg>',
+    );
+    expect(out.html).not.toContain("citation-chip");
+  });
+
+  it("still strips scripts, handlers, and links in artifact mode", () => {
+    const out = artifact(
+      '<details ontoggle="alert(1)"><summary>x</summary><a href="https://e.com">l</a><script>1</script></details>',
+    );
+    expect(out.html).toBe("<details><summary>x</summary>l</details>");
+  });
+});

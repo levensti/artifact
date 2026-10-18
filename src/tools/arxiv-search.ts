@@ -6,7 +6,8 @@
  * and doesn't aggressively rate-limit like arXiv's export endpoint.
  */
 
-import type { ToolDefinition } from "./types";
+import type { ToolContext, ToolDefinition } from "./types";
+import { judgeAvailable, judgePicks } from "@/server/judge";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
 import { SEMANTIC_SCHOLAR_BASE, semanticScholarHeaders } from "@/lib/semantic-scholar";
 
@@ -309,6 +310,71 @@ export function formatPaperSearch(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Relevance screening (Jev)                                          */
+/* ------------------------------------------------------------------ */
+
+/** Pool fetched when screening, so dropping weak hits still leaves enough. */
+const SCREEN_POOL = 20;
+/** Same bars as the discover funnel's screen step. */
+const SCREEN_FLOOR = 0.5;
+const CREDIBILITY_FLOOR = 1.5;
+/** Keep at least this many results even when few clear the floors. */
+const SCREEN_MIN = 3;
+
+/**
+ * Grade a search pool with the Jev judge against the query, read in the
+ * context of the paper being reviewed, and return the best `maxResults` in
+ * score order. Drops the paper itself. Falls back to the search engine's
+ * order when the judge returns nothing usable.
+ */
+async function screenForReader(
+  query: string,
+  results: PaperResult[],
+  maxResults: number,
+  context: ToolContext,
+): Promise<{ results: PaperResult[]; screened: boolean }> {
+  const ownId = context.arxivId?.replace(/v\d+$/, "");
+  const pool = results.filter(
+    (r) => !ownId || r.arxivId?.replace(/v\d+$/, "") !== ownId,
+  );
+  const paper = context.paperTitle ?? `arXiv:${context.arxivId}`;
+  const question = `${query} (for a reader of the paper "${paper}")`;
+  const scores = await judgePicks(
+    { question },
+    pool.map((r) => ({
+      title: r.title,
+      url: r.url,
+      content: r.abstract || null,
+      arxivId: r.arxivId,
+      authors: r.authors.join(", ") || null,
+      publishedYear: r.year,
+      venue: r.venue,
+      citationCount: r.citationCount,
+    })),
+  );
+  if (scores.every((s) => s === null)) {
+    return { results: pool.slice(0, maxResults), screened: false };
+  }
+
+  const ranked = pool
+    .map((r, i) => ({ r, i, s: scores[i] }))
+    .sort((a, b) => (b.s?.score ?? -1) - (a.s?.score ?? -1) || a.i - b.i);
+  // Like the funnel: skip weak-credibility sources while enough remain, then
+  // apply the score floor, topping up from the best of the rest if needed.
+  const min = Math.min(SCREEN_MIN, maxResults);
+  const credible = ranked.filter(
+    (x) => (x.s?.detail.dimensions.credibility?.score ?? 4) >= CREDIBILITY_FLOOR,
+  );
+  const base = credible.length >= min ? credible : ranked;
+  const passing = base.filter((x) => (x.s?.score ?? -1) >= SCREEN_FLOOR);
+  const chosen = passing.length >= min ? passing : base.slice(0, min);
+  return {
+    results: chosen.slice(0, maxResults).map((x) => x.r),
+    screened: true,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Tool definition                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -340,10 +406,30 @@ export const arxivSearchTool: ToolDefinition = {
     required: ["query"],
   },
 
-  async execute(input: Record<string, unknown>) {
+  async execute(input: Record<string, unknown>, context: ToolContext) {
     const query = String(input.query ?? "").trim();
     if (!query) return { content: "Error: query parameter is required.", ok: false };
     const maxResults = Math.max(1, Math.min(20, Number(input.max_results) || 8));
-    return formatPaperSearch(query, await searchPapers(query, maxResults));
+    // Screen only in a paper chat, where "relevant" has an anchor. Without a
+    // judge, or outside a paper (the discover funnel screens on its own),
+    // keep the search engine's order.
+    if (!judgeAvailable() || !(context.paperTitle || context.arxivId)) {
+      return formatPaperSearch(query, await searchPapers(query, maxResults));
+    }
+
+    const outcome = await searchPapers(query, SCREEN_POOL);
+    if (outcome.results.length === 0) return formatPaperSearch(query, outcome);
+    const { results, screened } = await screenForReader(
+      query,
+      outcome.results,
+      maxResults,
+      context,
+    );
+    const formatted = formatPaperSearch(query, { ...outcome, results });
+    if (!screened || typeof formatted !== "string") return formatted;
+    return formatted.replace(
+      /^(Found \d+ papers for .*?\(via [^)]+\)\.)/,
+      `$1 Screened ${outcome.results.length} results for relevance; best first.`,
+    );
   },
 };

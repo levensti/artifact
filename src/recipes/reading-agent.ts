@@ -4,9 +4,7 @@ import { promptFromRecipe } from "./types";
 /**
  * The reading agent: the agentic loop a user actually talks to while reading a
  * paper or web page (src/app/api/chat). Its system prompt is assembled here
- * from shared blocks so the eval harness can exercise the EXACT prompt
- * production runs — the prompts used to live inline in the chat route, which is
- * not importable outside Next (it pulls in the DB, auth, and rate limiter).
+ * from shared blocks.
  *
  * `prompts` slots:
  *   paper / web            — the reading surface system prompts (same agent,
@@ -150,6 +148,41 @@ Example scatter:
 Choosing a visual: a standard bar/line/pie of plain numbers → \`\`\`chart (see the chart reference); any other visual (flows, architectures, scatter or custom plots, matrices, timelines, geometric intuition) → \`\`\`diagram; comparison grids of text/flags → Markdown table; ≤ 3 items or what one sentence can state → prose. At most one visual per answer unless asked. \`\`\`mermaid is a RETIRED format you may still see in older turns; never emit it.`;
 
 /**
+ * Artifact reference: the `create_artifact` tool's HTML. Same GenUI
+ * vocabulary and sanitizer as DIAGRAM_GUIDE, in artifact mode (document
+ * tags, details/summary, paper references turned into PDF-jumping chips).
+ * Rendered in the Artifacts tab beside the PDF, whose width the user sets.
+ */
+const ARTIFACT_GUIDE = `Artifact reference. \`create_artifact\` builds interactive learning material the user opens in their Artifacts tab, beside the document so they can follow its references side by side. Use it when the user asks for an overview, artifact, explainer, cheat sheet, or study material, never for ordinary answers. Write its arguments in order, title, then summary, then html: the user watches the title and each section's summary line appear while you write. After it returns, reply with at most two sentences pointing to it; never repeat its contents.
+
+The html uses everything in the diagram reference (dx-* blocks, inline SVG, theme-bound colors, same stripped features) plus document elements: section, h2, h3, h4, p, ul, ol, li, blockquote, code, sub, sup, and details/summary for expandable parts.
+- It renders in a side panel 360px wide by default that the user can widen to about 980px, so the layout must reflow: tiles in a dx-row wrap onto new lines when narrow, svg scales to fit. Never set fixed widths. Keep rows to 2 to 4 tiles and diagrams to stacks or rows of at most 3 boxes.
+- The panel already shows the title and summary above it. Don't repeat them; open with the content.
+- Interactivity is details/summary: put depth behind a summary line so the page skims at the top level. Add the open attribute to the one section a reader should see first.
+- Paper references written as plain text (§3.2, Fig. 4, Table 2, Ref. [12]) become chips that jump the PDF to that spot. Cite generously in body text, never inside summary (it isn't linked there).
+- No LaTeX or $…$ (not rendered here): write math in plain Unicode with sub/sup, e.g. L<sub>CE</sub> + λ·L<sub>KL</sub>.
+- No markdown inside the html.
+
+Skimmable paper overview (the usual request). Write for someone who will NOT read the paper:
+1. A short p: what the paper does and why it matters, in 2 to 3 sentences.
+2. A dx-row of 2 to 4 dx-node tiles with the headline facts (a key number or claim as the main text, what it measures as dx-sub). Accent only the single most important one.
+3. The core idea as a visual: a dx-stack/dx-row flow of the method, or an SVG when the idea is geometric or a plot.
+4. details sections, each with a one-line summary that states the takeaway (not just a topic name): the problem and prior gap, how the method works, the key results (cite the tables/figures), limitations and open questions, and "Where to read closely" listing the 2 to 3 sections worth reading in full and why.
+5. Optionally a details "Terms" glossary: ul of term and one-line meaning.
+Budget: aim for what a reader can skim in 3 minutes. Concrete numbers and named components beat adjectives.
+
+Example skeleton:
+
+<p>…what and why…</p>
+<div class="dx-row">
+  <div class="dx-node dx-accent">2.1× faster<span class="dx-sub">training throughput vs. FSDP (Table 3)</span></div>
+  <div class="dx-node">−0.2 ppl<span class="dx-sub">same quality at 7B</span></div>
+</div>
+<div class="dx-stack">…method flow…</div>
+<details open><summary>The problem: replicas fail together</summary><p>… (§2.1) …</p></details>
+<details><summary>Results: faster with no quality loss</summary><ul><li>… Fig. 5 …</li></ul></details>`;
+
+/**
  * The native chart fence: the deterministic fast path for the three standard
  * chart shapes. The model emits a tiny JSON data spec and the app renders it
  * with its own theme-native components (see chart-spec.ts and
@@ -207,18 +240,18 @@ function buildReadingPrompt(kind: ReadingKind): string {
     ? "You are a research assistant working alongside someone reading an academic paper. Your job: help them understand the paper deeply and the ideas around it: explain, search, discover, connect."
     : "You are a research assistant working alongside someone reading a web page (an article, blog post, or documentation). Your job: help them understand it deeply and the ideas around it: explain, search, discover, connect.";
 
-  // Both surfaces support long-mode: a short source arrives as full text; a
-  // long one arrives as passages retrieved for the current question (plus a
-  // summary + ToC when a structured parse exists), with the source-internal
-  // tools registered for follow-up retrieval.
+  // Both surfaces read through retrieval: passages retrieved for the current
+  // message plus the ToC, with `search_paper` registered for more.
   const sourceInContext = `How the ${noun} appears in your context:
-- For a short ${noun}, the source block contains the full text. Read it directly.
-- For a long ${noun}, the source block contains its table of contents and passages retrieved for the current question, in document order, each tagged with its section and page range. Ground your answer in those passages and cite their sections and pages. If they don't cover the question, call \`search_paper\` with a different query to retrieve more. Don't pretend to have read what isn't in context.`;
+- You never see the whole ${noun}. The source block contains its table of contents and passages retrieved for the current message, in document order, each tagged with its section and page range.
+- Ground your answer in those passages and cite their sections and pages. If they don't cover what the user asked, call \`search_paper\` (several queries in one parallel turn if the question spans sections) before answering. Requests that span the whole ${noun}, like an overview or an artifact, usually need a search per major section the passages don't already cover.
+- Don't pretend to have read what isn't in context.`;
 
   const tools = `Tools:
-- \`search_paper\`: retrieve more passages from the ${noun} (long-${noun} mode only)
+- \`search_paper\`: retrieve more passages from the ${noun}
 - \`arxiv_search\`: search Semantic Scholar + arXiv for papers
-- ${WEB_SEARCH_NOTE}`;
+- ${WEB_SEARCH_NOTE}
+- \`create_artifact\`: build interactive learning material, such as a skimmable overview of the ${noun} (see the artifact reference)`;
 
   const grounding = isPaper
     ? `Citations:
@@ -252,6 +285,7 @@ function buildReadingPrompt(kind: ReadingKind): string {
     format,
     DIAGRAM_GUIDE,
     CHART_GUIDE,
+    ARTIFACT_GUIDE,
     NEVER_INVENT,
   ].join("\n\n");
 }
@@ -327,8 +361,7 @@ export const readingAgentRecipe: Recipe = {
 /**
  * Pick the system prompt for a surface: discover mode → the discover funnel's
  * final-pass prompt (the one model loop it runs); a web source → the page
- * prompt; otherwise the paper prompt. Both the chat route and the eval
- * resolve the prompt through this so they can never select differently.
+ * prompt; otherwise the paper prompt.
  */
 export function getReadingSystemPrompt(
   sourceUrl: string | undefined,

@@ -40,8 +40,6 @@ export interface ToolParameters {
 /* ------------------------------------------------------------------ */
 
 export interface ToolContext {
-  /** Full text of the paper being reviewed (may be empty if PDF not yet parsed). */
-  paperContext?: string;
   /** Title of the current paper. */
   paperTitle?: string;
   /** arXiv ID of the current paper (if applicable). */
@@ -55,8 +53,8 @@ export interface ToolContext {
   exaApiKey?: string;
   /**
    * Vector search over the document's chunk index, when the document is
-   * indexed. `search_paper` prefers this over lexical scoring. Supplied by
-   * the chat route (which has the DB); absent in offline evals.
+   * indexed; `search_paper` is registered only when it's present.
+   * Supplied by the chat route (which has the DB).
    */
   searchChunks?: (
     query: string,

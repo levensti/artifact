@@ -41,10 +41,10 @@ import {
   EMBEDDING_TOKEN_WEIGHT,
 } from "@/server/rate-limit";
 import * as store from "@/server/store";
+import { artifactFromToolInput, CREATE_ARTIFACT_TOOL } from "@/lib/artifacts";
 import * as docs from "@/server/documents";
 import { retrieveContext } from "@/server/retrieval";
 import { embedTexts } from "@/server/embeddings";
-import { documentMode, RETRIEVAL_THRESHOLD_CHARS } from "@/lib/documents";
 import { buildPaperBlock, type PaperBlockInput } from "./paper-block";
 import {
   getReadingSystemPrompt,
@@ -135,19 +135,14 @@ interface ChatRequest {
 /* ------------------------------------------------------------------ */
 
 interface ResolvedPaper {
-  /** What the agent receives (paper text / retrieved passages / tools). */
+  /** What the agent receives (retrieved passages, outline, search tool). */
   agent?: Pick<
     ReadingAgentParams,
-    | "paperContext"
-    | "retrievedContext"
-    | "paperNote"
-    | "documentTitle"
-    | "tableOfContents"
-    | "searchChunks"
+    "retrievedContext" | "documentTitle" | "tableOfContents" | "searchChunks"
   >;
   /** The same, shaped for `buildPaperBlock` (context budgeting). */
   block?: PaperBlockInput;
-  /** Cost-weighted tokens spent before the stream (rewrite + embedding). */
+  /** Cost-weighted tokens spent before the stream (planning + embedding). */
   meteredTokens?: number;
 }
 
@@ -156,11 +151,11 @@ interface ResolvedPaper {
  *
  *   - no hash / unknown document / no text yet → nothing (chat proceeds
  *     without a paper; the client uploads text on open),
- *   - short document → the full stored text,
- *   - long + indexed → passages retrieved for the latest user message,
- *     plus a `search_paper` closure for follow-up retrieval,
- *   - long + not yet indexed → the leading slice with a note, so chat
- *     degrades instead of blocking on the index.
+ *   - indexed → passages retrieved for the latest user message plus the
+ *     table of contents, and a `search_paper` closure for more,
+ *   - not indexed yet, or indexing failed → a 409 the client shows. Chat
+ *     reads documents only through retrieval, and the client keeps the
+ *     composer locked until the index is ready, so this is a backstop.
  *
  * Also links the review to the document when it isn't yet (the hash only
  * exists client-side, so the edge is created lazily on first contact).
@@ -181,31 +176,25 @@ async function resolvePaper(params: {
   const title = doc.title ?? undefined;
   if (!doc.text) return {};
 
-  if (documentMode(doc.charCount) === "full") {
-    return {
-      agent: { paperContext: doc.text, documentTitle: title },
-      block: { text: doc.text, title },
-    };
-  }
-
   if (doc.indexStatus !== "ready") {
-    const note =
+    throw new HttpError(
+      409,
       doc.indexStatus === "failed"
-        ? "This document is long and building its search index failed, so only the beginning of the text is in context."
-        : "This document is long and its search index is still being built, so only the beginning of the text is in context for now.";
-    const text = doc.text.slice(0, RETRIEVAL_THRESHOLD_CHARS);
-    return {
-      agent: { paperContext: text, paperNote: note, documentTitle: title },
-      block: { text, note, title },
-    };
+        ? `This document couldn't be indexed for chat${doc.indexError ? ` (${doc.indexError})` : ""}. Reload the page to try again.`
+        : "This document is still being indexed for chat. Try again in a moment.",
+    );
   }
 
-  const [retrieval, tableOfContents] = await Promise.all([
-    retrieveContext({ documentId: doc.id, apiKey, conversation }),
-    docs.tableOfContents(doc.id),
-  ]);
+  // The planner aims its searches with the outline, so fetch it first.
+  const tableOfContents = await docs.tableOfContents(doc.id);
+  const retrieval = await retrieveContext({
+    documentId: doc.id,
+    apiKey,
+    conversation,
+    tableOfContents,
+  });
   let meteredTokens =
-    retrieval.rewriteTokens + retrieval.embedUsage.tokens * EMBEDDING_TOKEN_WEIGHT;
+    retrieval.planTokens + retrieval.embedUsage.tokens * EMBEDDING_TOKEN_WEIGHT;
   const searchChunks = async (query: string, k: number) => {
     const [vector] = await embedTexts(apiKey, [query], (u) => {
       meteredTokens += u.tokens * EMBEDDING_TOKEN_WEIGHT;
@@ -353,8 +342,7 @@ export async function POST(req: NextRequest) {
     typeof exaApiKey === "string" ? exaApiKey.trim() : "";
   // The system prompt is resolved up front only to budget the conversation to
   // the context window below. Tool selection and the ToolContext are built
-  // inside runReadingAgent so the route and the offline eval harness exercise
-  // the exact same agent setup and can't drift.
+  // inside runReadingAgent.
   const systemPrompt = getReadingSystemPrompt(sourceUrl, mode);
 
   // Resolve the conversation to send the model. Server-owned path: load it
@@ -510,6 +498,13 @@ export async function POST(req: NextRequest) {
       // Largest measured context size this turn (the last round is fullest),
       // persisted so the client meter is accurate after a refresh.
       let lastContextTokens = persist?.priorMeta?.lastContextTokens ?? 0;
+      // `create_artifact` calls this turn, saved to the review once each one
+      // returns. Tracked apart from `steps` so selection threads (stateless,
+      // no `persist`) save their artifacts too.
+      const artifactCalls = new Map<
+        string,
+        { input: Record<string, unknown>; done: boolean }
+      >();
       const emit = (event: StreamEvent) => {
         try {
           controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
@@ -517,6 +512,12 @@ export async function POST(req: NextRequest) {
           /* controller may be closed */
         }
         if (persist) steps = processStreamEvent(steps, event);
+        if (event.type === "tool_call" && event.name === CREATE_ARTIFACT_TOOL) {
+          artifactCalls.set(event.id, { input: event.input, done: false });
+        } else if (event.type === "tool_result") {
+          const call = artifactCalls.get(event.id);
+          if (call) call.done = true;
+        }
         if (event.type === "cache_stats") {
           // Cost-weighted: cache reads count at 10% (see meteredTokens).
           // cacheCreationTokens is omitted because it's always 0 for the
@@ -591,8 +592,12 @@ export async function POST(req: NextRequest) {
       if (persist) {
         const content = stepsToContent(steps);
         let finalMessages = persist.base;
-        if (content.trim()) {
-          const blocks = stepsToBlocks(steps);
+        const blocks = stepsToBlocks(steps);
+        // A turn that only built an artifact still keeps its preview card.
+        const madeArtifact = blocks.some(
+          (b) => b.type === "tool_call" && b.name === CREATE_ARTIFACT_TOOL,
+        );
+        if (content.trim() || madeArtifact) {
           const assistantMsg: ChatMessage = {
             id: assistantMessageId || crypto.randomUUID(),
             role: "assistant",
@@ -622,6 +627,24 @@ export async function POST(req: NextRequest) {
           // Non-fatal: the client already has the turn on screen. Worst case
           // it's missing on next load; better than failing the request.
           console.error("Failed to persist chat turn:", e);
+        }
+      }
+
+      // Save artifacts to the review's Artifacts tab (best-effort, like the
+      // turn itself). Skips calls that never returned or had no content.
+      const artifacts = [...artifactCalls]
+        .filter(([, call]) => call.done)
+        .flatMap(([id, call]) => {
+          const content = artifactFromToolInput(call.input);
+          return content ? [{ ...content, sourceCallId: id }] : [];
+        });
+      if (artifacts.length > 0 && reviewId && mode !== "discover") {
+        try {
+          const ownerId =
+            persist?.userId ?? meterUserId ?? (await requireUserId());
+          await store.saveArtifacts(ownerId, reviewId, artifacts);
+        } catch (e) {
+          console.error("Failed to save artifacts:", e);
         }
       }
 

@@ -19,6 +19,7 @@ import {
 import { normalizeArxivId } from "@/lib/arxiv";
 import type { Recommendation } from "@/lib/discover-types";
 import { JUDGE_DIMENSIONS } from "@/lib/judge-rubric";
+import InlineMarkdown from "./inline-markdown";
 
 /* ------------------------------------------------------------------ */
 /*  Source heuristics                                                  */
@@ -227,12 +228,10 @@ export default function RecommendationCard({
         </p>
 
         {rec.rationale ? (
-          <p
-            className="mt-2.5 max-w-[68ch] text-[14.5px] leading-[1.65] text-foreground/85"
-            style={{ fontFamily: "var(--font-reading)" }}
-          >
-            {rec.rationale}
-          </p>
+          <InlineMarkdown
+            content={rec.rationale}
+            className="mt-2.5 max-w-[68ch] text-[14.5px] leading-[1.65] text-foreground/85 [font-family:var(--font-reading)]"
+          />
         ) : null}
 
         {/* Action row */}

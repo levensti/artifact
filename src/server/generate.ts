@@ -5,14 +5,9 @@
  *
  * This is pure provider I/O — no auth, no rate-limit metering, no HTTP framing.
  * The `/api/generate` route wraps these functions with per-user key resolution
- * and budget metering; offline eval harnesses import and call them directly with
- * a Fireworks key. Both paths therefore exercise the EXACT same prompt and
- * paper wrapping, with nothing re-implemented on either side.
- *
- * Deliberately free of any `server-only` / DB / Next-runtime imports so it runs
- * unchanged in a plain Node/tsx process (the evals) as well as in the route. The
- * billing math stays in the route, which is why these functions return the raw
- * provider `usage` object rather than a metered token count.
+ * and budget metering. The billing math stays in the route, which is why these
+ * functions return the raw provider `usage` object rather than a metered token
+ * count.
  */
 
 import { parseApiErrorMessage } from "@/lib/api-utils";
@@ -34,8 +29,8 @@ const FIREWORKS_CHAT_COMPLETIONS_URL = `${FIREWORKS_BASE_URL}/chat/completions`;
 /**
  * Ceiling for a non-streaming generation, which returns only once the whole
  * completion is ready. Generous (a long answer over a big paper is fine) but
- * bounded, so a hung connection fails fast instead of parking the request — or,
- * in the eval, a worker — forever. Streaming has no such cap: a long stream is
+ * bounded, so a hung connection fails fast instead of parking the request
+ * forever. Streaming has no such cap: a long stream is
  * legitimate and aborting mid-response would truncate it.
  */
 const GENERATE_TIMEOUT_MS = 120_000;

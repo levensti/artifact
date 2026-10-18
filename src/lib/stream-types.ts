@@ -9,6 +9,24 @@ import type { JudgeDetail } from "./judge-rubric";
 export type StreamEvent =
   | { type: "turn_start" }
   | { type: "text_delta"; text: string }
+  | {
+      /**
+       * The model has started writing a tool call (its name arrived) while
+       * the arguments are still streaming. A `tool_call` with the same id
+       * follows once they're complete, unless the round is cut off.
+       */
+      type: "tool_call_start";
+      id: string;
+      name: string;
+    }
+  | {
+      /** What's been written so far of a streaming tool call, for tools that
+       *  report progress (create_artifact). Throttled; sent only on change. */
+      type: "tool_call_progress";
+      id: string;
+      name: string;
+      progress: ToolProgress;
+    }
   | { type: "tool_call"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; id: string; name: string; output: string }
   | {
@@ -72,6 +90,13 @@ export type StreamEvent =
       scores: ScreenScore[];
     }
   | { type: "done" };
+
+/** Progress of a tool call whose arguments are still streaming. */
+export interface ToolProgress {
+  title?: string;
+  /** Milestones written so far; the last one may still be in progress. */
+  steps: Array<{ label: string; done: boolean }>;
+}
 
 export interface ScreenScore {
   arxivId: string | null;

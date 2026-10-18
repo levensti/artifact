@@ -16,7 +16,6 @@ import {
   Pencil,
   Share2,
   Library,
-  FlaskConical,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -37,7 +36,6 @@ import {
 } from "@/lib/reviews";
 import {
   assignReviewToProject,
-  getCurrentUser,
   getProjectsSnapshot,
   getWikiCacheSnapshot,
   loadWikiPages,
@@ -46,10 +44,8 @@ import type { Project } from "@/lib/review-types";
 import {
   ARTIFACTS_HOME_EVENT,
   PROJECTS_UPDATED_EVENT,
-  USER_UPDATED_EVENT,
   WIKI_UPDATED_EVENT,
 } from "@/lib/storage-events";
-import { isAdminEmail } from "@/lib/admin";
 import {
   getWikiIngestError,
   getWikiIngestSnapshot,
@@ -83,17 +79,6 @@ function subscribeSidebar(onStoreChange: () => void) {
     window.removeEventListener(WIKI_UPDATED_EVENT, onStoreChange);
     window.removeEventListener(PROJECTS_UPDATED_EVENT, onStoreChange);
   };
-}
-
-// Whether the signed-in user may see the Evals tab. Server routes enforce the
-// same check; this only governs nav visibility.
-function subscribeUser(onStoreChange: () => void) {
-  if (typeof window === "undefined") return () => {};
-  window.addEventListener(USER_UPDATED_EVENT, onStoreChange);
-  return () => window.removeEventListener(USER_UPDATED_EVENT, onStoreChange);
-}
-function isAdminSnapshot() {
-  return isAdminEmail(getCurrentUser()?.email);
 }
 
 function sidebarSnapshot() {
@@ -187,11 +172,6 @@ export default function Sidebar({
     subscribeWikiStatus,
     getWikiIngestError,
     () => null,
-  );
-  const isAdmin = useSyncExternalStore(
-    subscribeUser,
-    isAdminSnapshot,
-    () => false,
   );
   const ingestActive = activeIngests.length > 0;
   const ingestLabel = useMemo(() => {
@@ -651,26 +631,6 @@ export default function Sidebar({
             </div>
           ) : null}
 
-          {isAdmin ? (
-            <button
-              type="button"
-              onClick={() => router.push("/evals")}
-              className={cn(
-                "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
-                pathname === "/evals"
-                  ? "sb-row-active text-foreground font-medium"
-                  : "text-foreground/80 hover:text-foreground",
-              )}
-            >
-              <span className="flex w-5 shrink-0 items-center justify-center">
-                <FlaskConical
-                  className="size-4 opacity-70"
-                  strokeWidth={1.75}
-                />
-              </span>
-              <span className="truncate">Evals</span>
-            </button>
-          ) : null}
 
         </div>
 

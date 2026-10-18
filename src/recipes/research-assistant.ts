@@ -10,9 +10,8 @@ export const RESEARCH_ASSISTANT_PROMPTS = {
 
 /**
  * The recipe behind the app's `generate()` entrypoint (src/server/generate.ts):
- * a generic research assistant that answers a single prompt about a paper. This
- * is the system-under-test the ELAIPBench eval exercises, so its prompt lives
- * here, versioned, rather than inline in the entrypoint.
+ * a generic research assistant that answers a single prompt about a paper. Its
+ * prompt lives here, versioned, rather than inline in the entrypoint.
  */
 export const researchAssistantRecipe: Recipe = {
   name: "research-assistant",

@@ -5,7 +5,8 @@
  * `agent-loop.ts`; this file just supplies a `ProviderAdapter`.
  */
 
-import type { StreamEvent } from "@/lib/stream-types";
+import type { StreamEvent, ToolProgress } from "@/lib/stream-types";
+import { artifactProgress, CREATE_ARTIFACT_TOOL } from "@/lib/artifacts";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
 import {
@@ -71,8 +72,8 @@ export async function runFireworksAgentLoop(
   toolContext: ToolContext,
   emit: (e: StreamEvent) => void,
   options?: AgentLoopOptions,
-  model = getFireworksModel(),
 ) {
+  const model = getFireworksModel();
   const paperBlock = buildPaperBlock(paper);
   const baseSystem = systemPrompt + TOOL_RESULT_GUARDRAIL;
   const systemContent = paperBlock ? `${baseSystem}\n\n${paperBlock}` : baseSystem;
@@ -228,6 +229,14 @@ export async function runFireworksAgentLoop(
  */
 const HEARTBEAT_INTERVAL_MS = 10_000;
 
+/** Minimum gap between `tool_call_progress` events for one tool call. */
+const PROGRESS_INTERVAL_MS = 400;
+
+/** Tools whose partial arguments are worth reporting while they stream. */
+const PROGRESS_REPORTERS: Record<string, (partialArgs: string) => ToolProgress> = {
+  [CREATE_ARTIFACT_TOOL]: artifactProgress,
+};
+
 async function parseOpenAISSE(
   body: ReadableStream<Uint8Array>,
   emit: (e: StreamEvent) => void,
@@ -242,6 +251,10 @@ async function parseOpenAISSE(
   let finishReason = "stop";
   let usage: ChatUsage | undefined;
   let lastHeartbeat = Date.now();
+  // Per tool-call index: whether tool_call_start went out, and the last
+  // progress sent (time + serialized) so unchanged progress isn't resent.
+  const started = new Set<number>();
+  const lastProgress = new Map<number, { at: number; sent: string }>();
 
   await readSSEStream<OpenAIStreamEvent>(body, (event) => {
     // Final chunk: choices is empty array, usage is populated.
@@ -285,6 +298,26 @@ async function parseOpenAISSE(
         if (tc.id) existing.id = tc.id;
         if (tc.function?.name) existing.function.name = tc.function.name;
         if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+
+        // Announce the call as soon as it has an id and a name, so the UI can
+        // show what's being worked on while the arguments stream. The final
+        // `tool_call` (emitted by the agent loop) reuses this id.
+        const { id, function: fn } = existing;
+        if (!id || !fn.name) continue;
+        if (!started.has(idx)) {
+          started.add(idx);
+          emit({ type: "tool_call_start", id, name: fn.name });
+        }
+        const report = PROGRESS_REPORTERS[fn.name];
+        const prev = lastProgress.get(idx);
+        if (report && (!prev || Date.now() - prev.at >= PROGRESS_INTERVAL_MS)) {
+          const progress = report(fn.arguments);
+          const sent = JSON.stringify(progress);
+          if (sent !== prev?.sent) {
+            emit({ type: "tool_call_progress", id, name: fn.name, progress });
+          }
+          lastProgress.set(idx, { at: Date.now(), sent });
+        }
       }
     }
   });
