@@ -194,7 +194,8 @@ function ChatInput({
             ? `Couldn't index the document for chat${documentStatus?.indexError ? `: ${documentStatus.indexError}` : ""}. Reload the page to try again.`
             : `Indexing paper for chat · ${documentStatus?.indexProgress ?? 0}%`;
   const preparingFailed =
-    preparingPhase === "registration_failed" || preparingPhase === "index_failed";
+    preparingPhase === "registration_failed" ||
+    preparingPhase === "index_failed";
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -1144,8 +1145,9 @@ export default function ChatPanel({
                   reminder of what the assistant can do. */}
               {(chat.messages.length > 0 || chatThreadAnnotationId) && (
                 <p className="px-1 text-[11px] leading-snug text-muted-foreground/70">
-                  Your assistant can help you dive deeper, draw diagrams, find
-                  related papers, work through the math, write code, and more.
+                  Your assistant can help you dive deeper, generate interactive
+                  learning materials (artifacts), draw diagrams, find related
+                  papers, work through the math, and more.
                 </p>
               )}
               <div className="flex items-center justify-between gap-2">
