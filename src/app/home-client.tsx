@@ -96,7 +96,7 @@ function HomeBody() {
       className="flex h-full flex-col overflow-y-auto"
       style={{ background: "var(--reader-mat)" }}
     >
-      {/* Same content column as Artifacts/Journal so navigating between pages
+      {/* Same content column as Projects so navigating between pages
           doesn't reflow the layout. */}
       <div className="mx-auto w-full max-w-4xl space-y-5 px-6 pb-16 pt-12 sm:px-8 sm:pt-14">
         {/* Title mirrors the shared PageHeader (size, weight, and top

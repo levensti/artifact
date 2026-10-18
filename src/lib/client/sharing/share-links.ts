@@ -7,7 +7,7 @@
 import { apiFetch } from "@/lib/client/api";
 import type { PaperReview } from "@/lib/review-types";
 
-export type ShareKind = "review" | "wiki";
+export type ShareKind = "review";
 
 /**
  * Whether a review can be shared. Locally-uploaded PDFs can't —
@@ -28,7 +28,6 @@ export interface CreateShareResult {
 export interface ImportShareResult {
   kind: ShareKind;
   finalReviewId?: string;
-  importedSlugs?: string[];
   alreadyOwner?: boolean;
 }
 
@@ -40,22 +39,13 @@ export interface ShareSummary {
   lastAccessAt: string | null;
   accessCount: number;
   importCount: number;
-  target: { reviewId?: string; wikiSlug?: string; title: string | null };
+  target: { reviewId?: string; title: string | null };
 }
 
-interface CreateReviewShareInput {
+export interface CreateShareInput {
   kind: "review";
   reviewId: string;
 }
-
-interface CreateWikiShareInput {
-  kind: "wiki";
-  wikiSlug: string;
-  /** 0 = root only (default). Clamped to [0, 3] server-side. */
-  wikiDepth?: number;
-}
-
-export type CreateShareInput = CreateReviewShareInput | CreateWikiShareInput;
 
 export async function createShareLink(
   input: CreateShareInput,

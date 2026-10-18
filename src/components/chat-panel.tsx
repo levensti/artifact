@@ -14,7 +14,6 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import {
   ArrowDown,
   ArrowLeft,
-  // BookmarkPlus,
   Info,
   Loader2,
   MessageSquareQuote,
@@ -45,7 +44,6 @@ import { useSpeechInput } from "@/hooks/use-speech-input";
 import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import ChatEmptyState from "./chat-empty-state";
 import { ChatMessageBubble } from "./chat-message-bubble";
-import JournalCheckpointModal from "./journal-checkpoint-modal";
 import { MonoLabel } from "@/components/folio";
 import { useChat } from "@/hooks/use-chat";
 import { refreshArtifacts } from "@/hooks/use-artifacts";
@@ -645,7 +643,6 @@ export default function ChatPanel({
   // button keys off this real position rather than `pinnedToBottom`, which
   // can flip false on a mousedown even while you're sitting at the bottom.
   const [atBottom, setAtBottom] = useState(true);
-  const [checkpointOpen, setCheckpointOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const handleConfirmClear = useCallback(() => {
@@ -1170,16 +1167,6 @@ export default function ChatPanel({
                     New chat
                   </button>
                 )}
-                {/* <button
-                type="button"
-                onClick={() => setCheckpointOpen(true)}
-                disabled={chat.isStreaming}
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] text-muted-foreground/60 transition-colors hover:bg-muted/70 hover:text-foreground/80 disabled:opacity-50"
-                title="Summarize this chat into a journal entry"
-              >
-                <BookmarkPlus className="size-2.5" strokeWidth={1.75} />
-                Jot a journal entry
-              </button> */}
               </div>
             </>
           }
@@ -1190,16 +1177,6 @@ export default function ChatPanel({
             onQuote={handleQuoteSelection}
           />
         )}
-        {checkpointOpen ? (
-          <JournalCheckpointModal
-            reviewId={reviewId}
-            arxivId={arxivId}
-            paperTitle={paperTitle}
-            annotations={annotations}
-            modelReady={modelReady}
-            onClose={() => setCheckpointOpen(false)}
-          />
-        ) : null}
         <Dialog
           open={confirmClearOpen}
           onOpenChange={(next) => {

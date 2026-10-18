@@ -61,13 +61,8 @@ export function buildShareMetadata({
   ogPath,
 }: BuildMetadataArgs): Metadata {
   const sharer = preview.sharerFirstName ?? "Someone";
-  const isReview = preview.payload.kind === "review";
-  const subject = isReview
-    ? (preview.payload as Extract<SharePreview["payload"], { kind: "review" }>).title
-    : (preview.payload as Extract<SharePreview["payload"], { kind: "wiki" }>).rootTitle;
-  const action = isReview ? "shared a paper review" : "shared a journal entry";
-  const title = `${sharer} ${action} on Artifact`;
-  const description = subject;
+  const title = `${sharer} shared a review on Artifact`;
+  const description = preview.payload.title;
   // Cache-bust when the share is recreated after revocation by piggybacking
   // on the creation timestamp.
   const ogVersion = String(new Date(preview.createdAt).getTime());
@@ -88,7 +83,7 @@ export function buildShareMetadata({
       title,
       description,
       type: "article",
-      images: [{ url: ogUrl, width: 1200, height: 630, alt: subject }],
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: description }],
     },
     twitter: {
       card: "summary_large_image",

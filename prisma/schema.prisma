@@ -27,11 +27,6 @@ model User {
   sessions Session[]
 
   reviews           Review[]
-  deepDives         DeepDive[]
-  wikiPages         WikiPage[]
-  wikiPageSources   WikiPageSource[]
-  wikiBacklinks     WikiBacklink[]
-  wikiRevisions     WikiRevision[]
   apiKeys           ApiKey[]
   inferenceProfiles InferenceProfile[]
   preferences       UserPreferences?
@@ -114,8 +109,6 @@ model Review {
   messages           ReviewMessages?
   annotations        ReviewAnnotations?
   artifacts          ReviewArtifact[]
-  deepDives          DeepDive[]
-  wikiSources        WikiPageSource[]
   shares             Share[]
   fromRecommendation Recommendation?    @relation(fields: [fromRecommendationId], references: [id], onDelete: SetNull)
   project            Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -164,89 +157,6 @@ model ReviewArtifact {
 
   @@unique([reviewId, sourceCallId])
   @@index([reviewId, createdAt])
-}
-
-model DeepDive {
-  id          String   @id @default(uuid())
-  userId      String
-  reviewId    String
-  paperTitle  String
-  arxivId     String
-  topic       String
-  explanation String
-  createdAt   DateTime
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([userId, reviewId])
-}
-
-model WikiPage {
-  id        String   @id @default(uuid())
-  userId    String
-  slug      String
-  title     String
-  content   String
-  pageType  String
-  createdAt DateTime
-  updatedAt DateTime
-
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sources   WikiPageSource[]
-  backlinks WikiBacklink[]
-  revisions WikiRevision[]
-  shares    Share[]
-
-  @@unique([userId, slug])
-  @@index([userId, updatedAt])
-  @@index([userId, pageType])
-}
-
-model WikiPageSource {
-  id       String   @id @default(uuid())
-  userId   String
-  pageId   String
-  reviewId String
-  passage  String?
-  addedAt  DateTime
-
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  page   WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  review Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-
-  @@unique([pageId, reviewId])
-  @@index([userId, reviewId])
-}
-
-model WikiBacklink {
-  id         String @id @default(uuid())
-  userId     String
-  sourceId   String
-  targetSlug String
-
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  source WikiPage @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-
-  @@unique([sourceId, targetSlug])
-  @@index([userId, targetSlug])
-}
-
-model WikiRevision {
-  id       String   @id @default(uuid())
-  userId   String
-  pageId   String
-  slug     String
-  title    String
-  content  String
-  pageType String
-  savedAt  DateTime
-
-  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  page WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
-
-  @@index([pageId, savedAt])
 }
 
 /// API key for an external service (LLM provider or tool). The `value`
@@ -407,20 +317,15 @@ model DocumentChunk {
   @@unique([documentId, ordinal])
 }
 
-/// A shareable link pointing at one review or one wiki page. The token
-/// is the primary key (uuid v4 → 122 bits, URL-safe) and `kind`
-/// discriminates which FK is populated. `onDelete: Cascade` from Review
-/// and WikiPage means deleting the underlying record automatically
-/// invalidates all of its shares — no orphans, no manual cleanup.
+/// A shareable link pointing at one review. The token is the primary key
+/// (uuid v4 → 122 bits, URL-safe). `onDelete: Cascade` from Review means
+/// deleting the review automatically invalidates all of its shares — no
+/// orphans, no manual cleanup.
 model Share {
   token        String    @id @default(uuid())
   userId       String
-  kind         String // "review" | "wiki"
+  kind         String // always "review"
   reviewId     String?
-  wikiPageId   String?
-  /// For wiki shares: how many `[[slug]]` hops to traverse when cloning
-  /// linked pages. Default 0 (root only); user opts in to deeper sharing.
-  wikiDepth    Int?
   createdAt    DateTime  @default(now())
   /// Soft-delete. Lookups filter on `revokedAt = null`.
   revokedAt    DateTime?
@@ -431,13 +336,11 @@ model Share {
   /// when the recipient deletes their cloned copy.
   importCount  Int       @default(0)
 
-  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  review Review?   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  page   WikiPage? @relation(fields: [wikiPageId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review Review? @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([reviewId])
-  @@index([wikiPageId])
 }
 
 /// One Discover turn: the user types a query, the agent searches and

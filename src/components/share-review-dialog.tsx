@@ -145,8 +145,8 @@ export default function ShareReviewDialog({
               color: "color-mix(in srgb, var(--foreground) 70%, transparent)",
             }}
           >
-            Anyone with the link can import a copy with chats, annotations, and
-            deep dives intact.
+            Anyone with the link can import a copy with its chats and
+            annotations intact.
           </DialogDescription>
         </DialogHeader>
 

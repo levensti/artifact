@@ -6,17 +6,10 @@ import {
   listSharesForUser,
 } from "@/server/shares";
 
-const createSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("review"),
-    reviewId: z.string().min(1),
-  }),
-  z.object({
-    kind: z.literal("wiki"),
-    wikiSlug: z.string().min(1),
-    wikiDepth: z.number().int().min(0).max(3).optional(),
-  }),
-]);
+const createSchema = z.object({
+  kind: z.literal("review"),
+  reviewId: z.string().min(1),
+});
 
 export const POST = authedRoute(async (userId, request: Request) => {
   const parsed = createSchema.parse(await request.json());

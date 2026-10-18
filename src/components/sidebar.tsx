@@ -2,16 +2,13 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  FilePen,
   FilePlus,
-  AlertCircle,
   House,
   Pencil,
   Share2,
@@ -27,14 +24,6 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
-import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
-import {
-  getWikiIngestError,
-  getWikiIngestSnapshot,
-  reportWikiIngestError,
-  subscribeWikiStatus,
-} from "@/lib/wiki-status";
 import { cn } from "@/lib/utils";
 import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -47,18 +36,14 @@ import { MonoLabel } from "./folio";
 function subscribeSidebar(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-  window.addEventListener(WIKI_UPDATED_EVENT, onStoreChange);
   return () => {
     window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
-    window.removeEventListener(WIKI_UPDATED_EVENT, onStoreChange);
   };
 }
 
 function sidebarSnapshot() {
-  const wikiPages = getWikiCacheSnapshot() ?? [];
   return JSON.stringify({
     reviews: getReviews(),
-    wikiPageCount: wikiPages.length,
     hydrated: areReviewsHydrated(),
   });
 }
@@ -66,7 +51,6 @@ function sidebarSnapshot() {
 function sidebarServerSnapshot() {
   return JSON.stringify({
     reviews: [],
-    wikiPageCount: 0,
     hydrated: false,
   });
 }
@@ -98,9 +82,6 @@ function ReviewsListSkeleton() {
   );
 }
 
-// TODO: Re-enable the Journal tab once the journal experience is ready.
-// Flip this to `true` to restore the nav item (the button is otherwise intact).
-const JOURNAL_TAB_ENABLED: boolean = false;
 
 interface SidebarProps {
   collapsed: boolean;
@@ -117,41 +98,17 @@ export default function Sidebar({
     sidebarSnapshot,
     sidebarServerSnapshot,
   );
-  const { reviews, wikiPageCount, reviewsHydrated } = useMemo(() => {
+  const { reviews, reviewsHydrated } = useMemo(() => {
     const parsed = JSON.parse(snapshotJson) as {
       reviews: PaperReview[];
-      wikiPageCount: number;
       hydrated: boolean;
     };
     return {
       reviews: parsed.reviews ?? [],
-      wikiPageCount: parsed.wikiPageCount ?? 0,
       reviewsHydrated: parsed.hydrated ?? false,
     };
   }, [snapshotJson]);
 
-  // Ambient ingest status — shows a pulsing dot + label beside the
-  // Journal button whenever a background wiki operation is in flight.
-  const activeIngests = useSyncExternalStore(
-    subscribeWikiStatus,
-    getWikiIngestSnapshot,
-    getWikiIngestSnapshot,
-  );
-  const ingestError = useSyncExternalStore(
-    subscribeWikiStatus,
-    getWikiIngestError,
-    () => null,
-  );
-  const ingestActive = activeIngests.length > 0;
-  const ingestLabel = useMemo(() => {
-    if (activeIngests.length === 0) return null;
-    if (activeIngests.length === 1) {
-      const only = activeIngests[0];
-      if (only.kind === "journal") return "Journaling…";
-      return "Syncing…";
-    }
-    return `${activeIngests.length} running`;
-  }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
   const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -160,13 +117,6 @@ export default function Sidebar({
   const router = useRouter();
   const pathname = usePathname();
 
-  // Ensure wiki cache is populated so the snapshot picks up page counts
-  useEffect(() => {
-    void loadWikiPages().catch(() => {
-      // Sidebar polls on a cadence via WIKI_UPDATED_EVENT — failures here
-      // are non-fatal and would otherwise pollute devtools with noise.
-    });
-  }, []);
 
   const handleReviewCreated = (reviewId: string) => {
     setShowNewReview(false);
@@ -445,61 +395,6 @@ export default function Sidebar({
             </span>
             <span className="truncate">Projects</span>
           </button>
-          {JOURNAL_TAB_ENABLED ? (
-            <button
-              type="button"
-              onClick={() => router.push("/journal")}
-              className={cn(
-                "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
-                pathname === "/journal"
-                  ? "sb-row-active text-foreground font-medium"
-                  : "text-foreground/80 hover:text-foreground",
-              )}
-            >
-              <span className="relative flex w-5 shrink-0 items-center justify-center">
-                <FilePen
-                  className="size-4 opacity-70"
-                  strokeWidth={1.75}
-                />
-                {ingestActive ? (
-                  <span
-                    aria-hidden
-                    className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-primary animate-pulse"
-                  />
-                ) : null}
-              </span>
-              <span className="truncate">Journal</span>
-              {ingestActive ? (
-                <span className="ml-auto font-mono text-[11px] text-primary animate-pulse">
-                  {ingestLabel}
-                </span>
-              ) : null}
-              {wikiPageCount > 0 && !ingestActive ? (
-                <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
-                  {wikiPageCount}
-                </span>
-              ) : null}
-            </button>
-          ) : null}
-          {ingestError ? (
-            <div
-              className="mx-1 mt-2 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[10px] leading-snug text-destructive"
-              role="status"
-            >
-              <AlertCircle className="mt-px size-3 shrink-0" strokeWidth={2} />
-              <span className="min-w-0 flex-1 truncate" title={ingestError}>
-                Ingest failed: {ingestError}
-              </span>
-              <button
-                type="button"
-                onClick={() => reportWikiIngestError(null)}
-                className="shrink-0 opacity-60 hover:opacity-100"
-                aria-label="Dismiss"
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
 
 
         </div>
