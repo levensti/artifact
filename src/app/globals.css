@@ -780,6 +780,40 @@
   border-color: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
 }
 
+/* ── Research brief overview (OverviewProse) ─────────────────── */
+/* Reading size and rhythm; the first paragraph is the lede. */
+.brief-overview .chat-markdown {
+  font-size: 1rem;
+  line-height: 1.72;
+}
+.brief-overview .chat-markdown > p + p {
+  margin-top: 0.9em;
+}
+.brief-overview .chat-markdown > p:first-child {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--foreground);
+}
+/* Citations of the reading list: a superscript rank linking to the entry. */
+.chat-markdown a.pick-ref {
+  position: relative;
+  top: -0.45em;
+  margin-left: 0.12em;
+  padding: 0 0.28em;
+  border: 0;
+  border-radius: 3px;
+  font-size: 0.68em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  text-decoration: none;
+}
+.chat-markdown a.pick-ref:hover {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
 /* ── arXiv chips: bare arxiv.org/abs/ID links ─────────────────── */
 .chat-markdown a.arxiv-chip,
 .inline-markdown a.arxiv-chip {

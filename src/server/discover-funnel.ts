@@ -4,7 +4,8 @@
  *
  *   1. Plan     LLM turns the question into ~6-8 paper and ~3-5 web queries.
  *   2. Search   all queries run in parallel; results are pooled and deduped
- *               (up to ~150 candidates), minus anything the project has.
+ *               (at most 8×20 papers + 5×10 web results before dedupe), minus
+ *               anything the project has. Every unique candidate is graded.
  *   3. Screen   Jev grades every candidate on its content (abstract or page
  *               text) against the question. The top 20 scoring >= 0.5 make
  *               the shortlist (at least 6, so a thin pool still yields one),
@@ -54,7 +55,10 @@ const PAPER_RESULTS_PER_QUERY = 20;
 const WEB_RESULTS_PER_QUERY = 10;
 /** Paper searches run a few at a time to stay polite to Semantic Scholar. */
 const PAPER_SEARCH_CONCURRENCY = 4;
-const MAX_POOL = 150;
+/** Safety bound on the graded pool. Above the most the searches can
+ *  return (8×20 + 5×10 = 210), so in practice every unique source is
+ *  graded; it only guards against the query limits being raised. */
+const MAX_POOL = 300;
 const SHORTLIST_SIZE = 20;
 const SHORTLIST_FLOOR = 0.5;
 /** A shortlist never shrinks below this, even when few clear the floor. */

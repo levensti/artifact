@@ -12,7 +12,8 @@ import {
 import { cn } from "@/lib/utils";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
-import type { PaperMeta } from "@/lib/discover-paper-metadata";
+import { canonicalUrl, type PaperMeta } from "@/lib/discover-paper-metadata";
+import { normalizeArxivId } from "@/lib/arxiv";
 import { buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
@@ -95,20 +96,24 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** One line describing where the run is, shown under the brief's title. */
+/** Under a running brief's question: the step log below says what's
+ *  happening, so this only sets expectations. */
+export const LIVE_RUN_NOTE =
+  "Usually takes a minute or two. You can keep working elsewhere in Artifact.";
+
+/** One line describing where the run is, for places that show a running
+ *  brief without its step log (the project overview). */
 export function liveStatusLine(steps: AgentStep[]): string {
   if (submitIndex(steps) !== -1) return "Writing the overview";
   const reads = steps.filter(isRead);
-  if (reads.length > 0) {
-    const done = reads.filter((s) => !!s.output).length;
-    return `Reading papers · ${plural(done, "paper", "papers")} checked`;
+  if (reads.length > 0 && reads.some((s) => !s.output)) {
+    return "Reading the strongest papers closely";
   }
   const screenStep = steps.find(isScreen);
   if (screenStep) {
-    const { screened, shortlisted } = screenCounts(screenStep);
     return screenStep.output
-      ? `Choosing the reading list · ${shortlisted ?? 0} shortlisted`
-      : `Grading ${plural(screened, "source", "sources")}`;
+      ? "Choosing the reading list"
+      : `Grading ${plural(screenCounts(screenStep).screened, "source", "sources")}`;
   }
   const searches = steps.filter(isSearch);
   if (searches.length > 0) {
@@ -320,102 +325,138 @@ function TraceGroup({ title, children }: { title: string; children: ReactNode })
   );
 }
 
-/** What the agent is doing: papers checked first (the strong signal), then
- *  the searches behind them. Folded to a one-line summary so the page holds
- *  still while the run works; open it to watch. */
-function ResearchTrace({
+/* ------------------------------------------------------------------ */
+/*  Shortlist data                                                     */
+/* ------------------------------------------------------------------ */
+
+/** A scored source on the shortlist (attached to the screening step). */
+interface ShortlistEntry {
+  arxivId: string | null;
+  url: string;
+  score: number;
+}
+
+function shortlistOf(step: ToolStep | undefined): ShortlistEntry[] {
+  const raw = step?.input.shortlist;
+  return Array.isArray(raw) ? (raw as ShortlistEntry[]) : [];
+}
+
+/** The picks the agent submitted, as match keys (arXiv id or canonical URL). */
+function pickedKeys(steps: AgentStep[]): Set<string> | null {
+  const i = submitIndex(steps);
+  if (i === -1) return null;
+  const picks = (steps[i] as ToolStep).input.picks;
+  const keys = new Set<string>();
+  if (Array.isArray(picks)) {
+    for (const p of picks as Array<{ arxivId?: string; url?: string }>) {
+      if (p.arxivId) keys.add(`arxiv:${normalizeArxivId(p.arxivId)}`);
+      if (p.url) keys.add(`url:${canonicalUrl(p.url)}`);
+    }
+  }
+  return keys;
+}
+
+function entryKeys(e: { arxivId: string | null; url: string }): string[] {
+  return [
+    e.arxivId ? `arxiv:${normalizeArxivId(e.arxivId)}` : null,
+    e.url ? `url:${canonicalUrl(e.url)}` : null,
+  ].filter((k): k is string => k !== null);
+}
+
+/** How many picks the agent submitted. */
+function pickCount(steps: AgentStep[]): number {
+  const i = submitIndex(steps);
+  const picks = i === -1 ? null : (steps[i] as ToolStep).input.picks;
+  return Array.isArray(picks) ? picks.length : 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shortlist: the graded sources, and the agent choosing from them    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The sources that cleared grading, best first, each with its relevance
+ * score as a bar. Once the agent submits its reading list, the picks are
+ * marked and the rest step back, so the reader watches the choice land.
+ */
+function Shortlist({
   steps,
   pool,
 }: {
   steps: AgentStep[];
   pool: ReturnType<typeof buildPoolFromSteps>;
 }) {
-  const [open, setOpen] = useState(false);
-  const searches = steps.filter(isSearch);
-  const reads = steps.filter(isRead);
-  const notes = workingNotes(steps);
-  const latestNote = notes[notes.length - 1];
-  if (searches.length === 0 && reads.length === 0) return null;
-
   const screenStep = steps.find(isScreen);
-  const screen = screenStep ? screenCounts(screenStep) : null;
-  const summary = [
-    plural(searches.length, "search", "searches"),
-    screen ? `${plural(screen.screened, "source", "sources")} graded` : null,
-    reads.length > 0 ? `${plural(reads.length, "paper", "papers")} checked` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const entries = shortlistOf(screenStep);
+  const picked = pickedKeys(steps);
+  const byKey = useMemo(() => {
+    const map = new Map<string, PaperMeta>();
+    for (const [id, meta] of pool.byArxivId) map.set(`arxiv:${normalizeArxivId(id)}`, meta);
+    for (const [url, meta] of pool.byUrl) map.set(`url:${url}`, meta);
+    return map;
+  }, [pool]);
+  if (entries.length === 0) return null;
+  const ranked = [...entries].sort((a, b) => b.score - a.score);
 
   return (
     <section>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="-mx-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[15px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-      >
-        <ChevronRight
-          className={cn(
-            "size-4 text-muted-foreground transition-transform",
-            open && "rotate-90",
-          )}
-          strokeWidth={2}
-        />
-        Research
-        <span className="text-[13px] font-normal text-muted-foreground">
-          {summary}
-        </span>
-      </button>
-
-      {open ? (
-        <div className="mt-4 space-y-6">
-          {latestNote ? (
-            <p
-              className="max-w-[68ch] border-l-2 border-border pl-4 text-[14px] leading-[1.6] text-muted-foreground"
-              style={{ fontFamily: "var(--font-reading)" }}
-            >
-              {latestNote}
-            </p>
-          ) : null}
-          {screenStep && screen ? (
-            <TraceGroup title="Grading">
-              <li className="flex items-center gap-3 px-2 py-1.5">
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                  <StatusMark state={stepState(screenStep)} />
+      <ol>
+        {ranked.map((e) => {
+          const keys = entryKeys(e);
+          const meta = keys.map((k) => byKey.get(k)).find(Boolean);
+          const isPick = !!picked && keys.some((k) => picked.has(k));
+          const title = meta?.title ?? (e.arxivId ? `arXiv:${e.arxivId}` : e.url);
+          const href = meta?.url ?? e.url;
+          return (
+            <li key={keys[0] ?? e.url}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "group grid grid-cols-[16px_minmax(0,1fr)_88px] items-center gap-3 rounded-md px-2 py-1.5 transition-[background-color,opacity] duration-300 hover:bg-muted/50",
+                  picked && !isPick && "opacity-45",
+                )}
+              >
+                <span className="flex items-center justify-center">
+                  {isPick ? (
+                    <Check className="size-3.5 text-primary" strokeWidth={2.5} aria-label="Picked" />
+                  ) : meta && !meta.arxivId ? (
+                    <Globe className="size-3 text-muted-foreground/60" strokeWidth={1.9} aria-label="Web" />
+                  ) : null}
                 </span>
                 <span
                   className={cn(
-                    "min-w-0 flex-1 text-[14px]",
-                    screenStep.output ? "text-foreground/85" : "thinking-shimmer",
+                    "truncate text-[14px]",
+                    isPick ? "font-medium text-foreground" : "text-foreground/85",
                   )}
                 >
-                  {screenStep.output
-                    ? `Graded ${plural(screen.screened, "source", "sources")} on their content`
-                    : `Grading ${plural(screen.screened, "source", "sources")} on their content`}
+                  {title}
+                  {meta?.year ? (
+                    <span className="ml-2 text-[13px] tabular-nums text-muted-foreground">
+                      {meta.year}
+                    </span>
+                  ) : null}
                 </span>
-                {screen.shortlisted !== null ? (
-                  <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
-                    {screen.shortlisted} shortlisted
+                <span
+                  className="flex items-center gap-2"
+                  title={`Relevance ${e.score.toFixed(2)}`}
+                >
+                  <span className="h-1 flex-1 overflow-hidden rounded-full bg-border/70">
+                    <span
+                      className={cn("block h-full rounded-full", isPick ? "bg-primary" : "bg-primary/45")}
+                      style={{ width: `${Math.round(Math.max(0, Math.min(1, e.score)) * 100)}%` }}
+                    />
                   </span>
-                ) : null}
-              </li>
-            </TraceGroup>
-          ) : null}
-          {reads.length > 0 ? (
-            <TraceGroup title="Papers checked">
-              {reads.map((s) => (
-                <ReadRow key={s.id} step={s} pool={pool} />
-              ))}
-            </TraceGroup>
-          ) : null}
-          <TraceGroup title="Searches">
-            {searches.map((s) => (
-              <SearchRow key={s.id} step={s} />
-            ))}
-          </TraceGroup>
-        </div>
-      ) : null}
+                  <span className="w-7 text-right text-[12px] tabular-nums text-muted-foreground">
+                    {e.score.toFixed(2)}
+                  </span>
+                </span>
+              </a>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }
@@ -424,11 +465,132 @@ function ResearchTrace({
 /*  Live run                                                           */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Research log: the run as a sequence of steps                       */
+/* ------------------------------------------------------------------ */
+
+type StepState = "done" | "active" | "pending";
+
+/** Searches listed before "Show all": the newest, where the action is. */
+const SEARCHES_SHOWN = 6;
+
+export function StepMarker({ state }: { state: StepState }) {
+  if (state === "done") {
+    return <Check className="size-3.5 text-primary/80" strokeWidth={2.5} aria-hidden />;
+  }
+  if (state === "active") {
+    return (
+      <span
+        aria-hidden
+        className="block size-2 rounded-full bg-primary"
+        style={{ animation: "discover-phase-pulse 1.4s ease-in-out infinite" }}
+      />
+    );
+  }
+  return <span aria-hidden className="block size-[7px] rounded-full border border-muted-foreground/40" />;
+}
+
 /**
- * The in-flight research run. Nothing streams into the page: the brief's
- * status line says what the agent is doing, this block holds a fixed place
- * for the result, and the research trace is folded unless the reader opens
- * it. The overview and reading list appear together once the run is saved.
+ * One step on the rail. The current step opens its details; finished steps
+ * fold to their one-line account and can be reopened; upcoming steps say
+ * what will happen.
+ */
+export function LogStep({
+  state,
+  title,
+  last,
+  children,
+  stayOpen,
+}: {
+  state: StepState;
+  title: string;
+  last?: boolean;
+  /** Details: shown while the step is current, on request once it's done. */
+  children?: ReactNode;
+  /** Keep the details open after the step finishes (the shortlist). */
+  stayOpen?: boolean;
+}) {
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const hasDetails = !!children && state !== "pending";
+  const open =
+    hasDetails && (toggled ?? (state === "active" || (state === "done" && !!stayOpen)));
+  const titleClass = cn(
+    "text-[15px] leading-snug",
+    state === "active"
+      ? "font-medium text-primary"
+      : state === "done"
+        ? "text-foreground"
+        : "text-muted-foreground",
+  );
+  return (
+    <li className={cn("relative pl-8", last ? "" : "pb-6")}>
+      {!last ? (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute left-[7px] top-6 bottom-1 w-px",
+            state === "done" ? "bg-primary/35" : "bg-border",
+          )}
+        />
+      ) : null}
+      <span className="absolute left-0 top-[3px] flex size-[15px] items-center justify-center">
+        <StepMarker state={state} />
+      </span>
+      {hasDetails && state === "done" ? (
+        <button
+          type="button"
+          onClick={() => setToggled(!open)}
+          aria-expanded={open}
+          className={cn(
+            "-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+            titleClass,
+          )}
+        >
+          {title}
+          <ChevronRight
+            className={cn("size-3.5 text-muted-foreground transition-transform", open && "rotate-90")}
+            strokeWidth={2}
+          />
+        </button>
+      ) : (
+        <p className={titleClass}>{title}</p>
+      )}
+      {open ? <div className="mt-3">{children}</div> : null}
+    </li>
+  );
+}
+
+function SearchList({ searches }: { searches: ToolStep[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const newest = [...searches].reverse();
+  const shown = showAll ? newest : newest.slice(0, SEARCHES_SHOWN);
+  return (
+    <ul className="-ml-2">
+      {shown.map((s) => (
+        <SearchRow key={s.id} step={s} />
+      ))}
+      {newest.length > SEARCHES_SHOWN ? (
+        <li>
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="mt-1 rounded-md px-2 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          >
+            {showAll ? "Show fewer" : `Show all ${newest.length} searches`}
+          </button>
+        </li>
+      ) : null}
+    </ul>
+  );
+}
+
+/**
+ * The in-flight research run as a log of its steps (plan, search, grade,
+ * choose, write; see src/server/discover-funnel.ts). Every step is on the
+ * rail from the start, so the page shows the whole route even while it's
+ * planning; each step's line fills in with what it did, and the current
+ * step opens its details. The overview and reading list replace this once
+ * the run is saved.
  */
 export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
   const pool = useMemo(() => buildPoolFromSteps(steps), [steps]);
@@ -439,22 +601,84 @@ export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
       s.output?.trim() === EXA_KEY_REQUIRED_SENTINEL,
   );
 
+  const searches = steps.filter(isSearch);
+  const searchesDone = searches.filter((s) => !!s.output).length;
+  const found = searches.reduce((n, s) => n + (resultCount(s.name, s.output) ?? 0), 0);
+  const screenStep = steps.find(isScreen);
+  const screen = screenStep ? screenCounts(screenStep) : null;
+  const reads = steps.filter(isRead);
+  const hasShortlist = shortlistOf(screenStep).length > 0;
+  const picks = pickedKeys(steps) ? pickCount(steps) : null;
+  const notes = workingNotes(steps);
+  const latestNote = notes[notes.length - 1];
+
+  // The furthest step reached; earlier steps are done.
+  const reached =
+    picks !== null ? 4 : screenStep?.output ? 3 : screenStep ? 2 : searches.length > 0 ? 1 : 0;
+  const state = (i: number): StepState =>
+    i < reached ? "done" : i === reached ? "active" : "pending";
+
+  const note = latestNote ? (
+    <p
+      className="mb-3 max-w-[64ch] border-l-2 border-primary/30 pl-3 text-[14px] leading-[1.65] text-foreground/75"
+      style={{ fontFamily: "var(--font-reading)" }}
+    >
+      {latestNote}
+    </p>
+  ) : null;
+
+  const searchTitle =
+    state(1) === "pending"
+      ? "Search papers and the web"
+      : state(1) === "active"
+        ? `Searching · ${searchesDone} of ${searches.length} done${found > 0 ? `, ${plural(found, "result", "results")}` : ""}`
+        : `Searched ${searches.length} ways, ${plural(found, "result", "results")}`;
+  const gradeTitle = !screen
+    ? "Grade every source on its content"
+    : screenStep?.output
+      ? `Graded ${plural(screen.screened, "unique source", "unique sources")}, kept the best ${screen.shortlisted ?? 0}`
+      : `Grading ${plural(screen.screened, "unique source", "unique sources")} on their content`;
+  const chooseTitle =
+    picks !== null
+      ? `Picked ${picks} for the reading list`
+      : state(3) === "active"
+        ? reads.some((r) => !r.output)
+          ? "Reading the strongest papers closely"
+          : "Choosing the reading list from the shortlist"
+        : "Choose the reading list";
+
   return (
-    <div className="space-y-8">
-      <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
-        <p className="text-[15px] font-medium text-foreground">
-          Researching your question
-        </p>
-        <p className="mx-auto mt-1.5 max-w-[440px] text-[14px] leading-relaxed text-muted-foreground">
-          The overview and reading list will appear here when it&rsquo;s done,
-          usually in a minute or two. You can keep working elsewhere in
-          Artifact while it runs.
-        </p>
-      </div>
-
+    <div className="space-y-6">
       {exaMissing ? <ExaKeyPromptCard /> : null}
-
-      <ResearchTrace steps={steps} pool={pool} />
+      <ol aria-label="Research steps">
+        <LogStep
+          state={state(0)}
+          title={state(0) === "active" ? "Planning the searches" : `Planned ${plural(searches.length, "search", "searches")}`}
+        />
+        <LogStep state={state(1)} title={searchTitle}>
+          {state(1) === "active" ? note : null}
+          {searches.length > 0 ? <SearchList searches={searches} /> : null}
+        </LogStep>
+        <LogStep state={state(2)} title={gradeTitle} />
+        <LogStep state={state(3)} title={chooseTitle} stayOpen>
+          {state(3) === "active" ? note : null}
+          {hasShortlist ? <Shortlist steps={steps} pool={pool} /> : null}
+          {reads.length > 0 ? (
+            <div className="mt-4">
+              <TraceGroup title="Read closely">
+                {reads.map((s) => (
+                  <ReadRow key={s.id} step={s} pool={pool} />
+                ))}
+              </TraceGroup>
+            </div>
+          ) : null}
+        </LogStep>
+        <LogStep
+          state={state(4)}
+          title={state(4) === "active" ? "Writing the overview" : "Write the overview"}
+          last
+        />
+      </ol>
     </div>
   );
 }

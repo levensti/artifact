@@ -118,9 +118,10 @@ function rankTitle(rec: Recommendation): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * One row in a brief's ranked reading list. Rank #1 gets the accent rank and
- * the filled primary action so the eye lands on the single best thing to
- * read; lower ranks get a bordered one. "In library" is detected against the
+ * One entry in a brief's ranked reading list: rank, title, and the action to
+ * start reading, then who wrote it and why it's here (clamped to two lines).
+ * Rank #1 gets the accent rank and the filled primary action so the eye
+ * lands on the single best thing to read; lower ranks get a bordered one. "In library" is detected against the
  * reviews cache so a re-surfaced paper shows the badge before any click.
  * In a project's combined list, `rank` overrides the pick's own position and
  * `origin` links back to the research session it came from.
@@ -139,6 +140,7 @@ export default function RecommendationCard({
   const router = useRouter();
   const [busy, setBusy] = useState<"open" | "dismiss" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const reviews = getReviewsSnapshot();
   const inLibraryReview = rec.arxivId
@@ -191,11 +193,17 @@ export default function RecommendationCard({
     kind === "Paper" ? "arXiv" : sourceLabel(rec.url),
   ].filter(Boolean);
 
+  const longRationale = (rec.rationale?.length ?? 0) > 200;
+  // Secondary actions stay out of the way until the row is hovered or
+  // focused; on touch screens (no hover) they're always shown.
+  const quiet =
+    "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100";
+
   return (
-    <article className="grid grid-cols-[24px_1fr] gap-x-4 px-6 py-5">
+    <article className="group grid grid-cols-[28px_minmax(0,1fr)] gap-x-3 py-4">
       <span
         className={cn(
-          "pt-px text-right text-[15px] font-semibold tabular-nums",
+          "pt-[2px] text-right text-[14px] font-semibold tabular-nums",
           isTop ? "text-primary" : "text-muted-foreground/70",
         )}
         title={rankTitle(rec)}
@@ -204,12 +212,67 @@ export default function RecommendationCard({
       </span>
 
       <div className="min-w-0">
-        <h3 className="text-[16px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
-          {rec.title}
-        </h3>
+        <div className="flex items-start gap-3">
+          <h3 className="min-w-0 flex-1 text-[15.5px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
+            {rec.title}
+          </h3>
+          <div className="-mt-0.5 flex shrink-0 items-center gap-0.5">
+            {rec.url && !inLibraryReview ? (
+              <a
+                href={rec.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open the source"
+                title="Open the source"
+                className={cn(
+                  "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                  quiet,
+                )}
+              >
+                <ExternalLink className="size-3.5" strokeWidth={2} />
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={onDismiss}
+              disabled={busy !== null}
+              aria-label="Dismiss"
+              title="Not interested"
+              className={cn(
+                "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground",
+                quiet,
+              )}
+            >
+              {busy === "dismiss" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <X className="size-3.5" strokeWidth={2} />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onOpen}
+              disabled={locked}
+              className={cn(
+                "ml-1 inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium transition-colors disabled:cursor-default",
+                isTop
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "border border-border bg-card text-foreground hover:bg-muted",
+                locked && "opacity-60",
+              )}
+            >
+              {busy === "open" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <ArrowRight className="size-3.5" strokeWidth={2} />
+              )}
+              {inLibraryReview ? "Open review" : "Start review"}
+            </button>
+          </div>
+        </div>
 
         <p
-          className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] leading-snug text-muted-foreground"
+          className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] leading-snug text-muted-foreground"
           title={rec.authors ?? undefined}
         >
           {meta.map((part, i) => (
@@ -228,75 +291,37 @@ export default function RecommendationCard({
         </p>
 
         {rec.rationale ? (
-          <InlineMarkdown
-            content={rec.rationale}
-            className="mt-2.5 max-w-[68ch] text-[14.5px] leading-[1.65] text-foreground/85 [font-family:var(--font-reading)]"
-          />
+          <div className="mt-2 max-w-[68ch]">
+            <InlineMarkdown
+              content={rec.rationale}
+              className={cn(
+                "text-[14px] leading-[1.6] text-foreground/80 [font-family:var(--font-reading)]",
+                longRationale && !expanded && "line-clamp-2",
+              )}
+            />
+            {longRationale ? (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="mt-0.5 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {expanded ? "Less" : "More"}
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
-        {/* Action row */}
-        <div className="mt-4 flex items-center gap-2">
+        {origin ? (
           <button
             type="button"
-            onClick={onOpen}
-            disabled={locked}
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors disabled:cursor-default",
-              isTop
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "border border-border bg-card text-foreground hover:bg-muted",
-              locked && "opacity-60",
-            )}
+            onClick={origin.onOpen}
+            title={`Open the research session: ${origin.label}`}
+            className="-ml-1.5 mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[12.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
           >
-            {busy === "open" ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <ArrowRight className="size-3.5" strokeWidth={2} />
-            )}
-            {inLibraryReview ? "Open review" : "Start review"}
+            <Compass className="size-3.5 shrink-0" strokeWidth={1.75} />
+            <span className="truncate">{origin.label}</span>
           </button>
-
-          {rec.url && !inLibraryReview ? (
-            <a
-              href={rec.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <ExternalLink className="size-3" strokeWidth={2} />
-              Source
-            </a>
-          ) : null}
-
-          <span className="flex-1" />
-
-          {origin ? (
-            <button
-              type="button"
-              onClick={origin.onOpen}
-              title={`Open the research session: ${origin.label}`}
-              className="inline-flex h-8 min-w-0 max-w-[45%] items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-            >
-              <Compass className="size-3.5 shrink-0" strokeWidth={1.75} />
-              <span className="truncate">{origin.label}</span>
-            </button>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={onDismiss}
-            disabled={busy !== null}
-            aria-label="Dismiss"
-            title="Not interested"
-            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-          >
-            {busy === "dismiss" ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <X className="size-3.5" strokeWidth={2} />
-            )}
-          </button>
-        </div>
+        ) : null}
 
         {error ? (
           <p className="mt-1.5 text-[12px] text-destructive">{error}</p>

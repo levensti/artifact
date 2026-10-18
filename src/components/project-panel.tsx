@@ -39,10 +39,14 @@ import type { Recommendation } from "@/lib/discover-types";
 import type { PaperReview } from "@/lib/review-types";
 import { useDiscoverChat } from "@/hooks/use-discover-chat";
 import { takePendingResearch } from "@/lib/pending-research";
+import {
+  DiscoverLiveProgress,
+  LIVE_RUN_NOTE,
+  liveStatusLine,
+} from "./discover-picks";
 import { useProjects } from "@/hooks/use-projects";
 import { useDiscoverBriefs, type ThreadView } from "./discover-queue";
 import { BriefSection } from "./brief-parts";
-import { liveStatusLine } from "./discover-picks";
 import RecommendationCard from "./recommendation-card";
 import ResearchBrief from "./research-brief";
 import ResearchComposer from "./research-composer";
@@ -244,10 +248,12 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
   const [deleting, setDeleting] = useState(false);
   const pendingParentRef = useRef<string | null>(null);
   // A question asked on Home, which created this project for it; started
-  // once keys and data are loaded. Its brief opens as soon as the run exists.
-  const [handoff, setHandoff] = useState<string | null>(() =>
-    takePendingResearch(),
-  );
+  // once keys and data are loaded. Its brief opens as soon as the run exists,
+  // and until then the page already shows it starting (`startingQuestion`)
+  // rather than flashing the empty overview.
+  const [initialHandoff] = useState<string | null>(() => takePendingResearch());
+  const [handoff, setHandoff] = useState(initialHandoff);
+  const [startingQuestion, setStartingQuestion] = useState(initialHandoff);
   const handoffRunRef = useRef(false);
 
   useEffect(() => {
@@ -291,6 +297,9 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
     if (!chat.liveQueryId) return;
     if (handoffRunRef.current) {
       handoffRunRef.current = false;
+      // The starting view stays up until the URL catches up (below);
+      // clearing it here left a beat with neither, which flashed the
+      // empty overview.
       setOpenId(chat.liveQueryId, { replace: true });
       return;
     }
@@ -319,7 +328,15 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
     handoffRunRef.current = canSubmit;
     search(handoff);
     setHandoff(null);
+    // No key: search() opened Settings instead, so there's no run to show.
+    if (!canSubmit) setStartingQuestion(null);
   }, [hydrated, handoff, search, canSubmit]);
+
+  // The run failed before it existed: drop back to the overview, which
+  // shows the error.
+  useEffect(() => {
+    if (chat.error) setStartingQuestion(null);
+  }, [chat.error]);
 
   const followup = useCallback(
     (parentId: string, text: string) => {
@@ -426,6 +443,42 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
         <p className="mt-3 text-[15px] text-muted-foreground">
           It may have been deleted. Its research is still in Artifacts.
         </p>
+      </Canvas>
+    );
+  }
+
+  /* ── The question from Home, starting ── */
+
+  // Its brief is open now: the starting view's job is done. Adjusted during
+  // render so there's no frame between the two views.
+  if (startingQuestion && openId) setStartingQuestion(null);
+
+  if (startingQuestion && !openId) {
+    const steps = chat.liveSteps ?? [];
+    return (
+      <Canvas>
+        <div className="flex h-8 items-center">
+          <button
+            type="button"
+            onClick={() => setStartingQuestion(null)}
+            className={`-ml-2 ${QUIET_BUTTON}`}
+          >
+            <ArrowLeft className="size-3.5" strokeWidth={2} />
+            {project?.name ?? "Project"}
+          </button>
+        </div>
+        <div className="mt-8">
+          <h1 className="max-w-[30ch] text-[30px] font-semibold leading-[1.2] tracking-[-0.025em] text-foreground">
+            {startingQuestion}
+          </h1>
+          <p className="mt-3 flex items-center gap-2 text-[14px] text-muted-foreground">
+            <span className="landing-pulse-dot" aria-hidden />
+            {LIVE_RUN_NOTE}
+          </p>
+          <div className="mt-10">
+            <DiscoverLiveProgress steps={steps} />
+          </div>
+        </div>
       </Canvas>
     );
   }
@@ -634,10 +687,7 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
                     : plural(readingList.length, "source", "sources")
                 }
               >
-                <ol
-                  className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
-                  style={{ boxShadow: "var(--shadow-sm)" }}
-                >
+                <ol className="divide-y divide-border border-y border-border">
                   {readingList.map((entry, i) => (
                     <li key={entry.rec.id}>
                       <RecommendationCard

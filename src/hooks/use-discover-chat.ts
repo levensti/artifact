@@ -450,6 +450,15 @@ export function useDiscoverChat({
           if (event.type === "error") throw new Error(event.message);
           if (event.type === "screen_scores") {
             screenScores = event.scores;
+            // Also hand the shortlist to the live view, on the screening
+            // step it came from, so the brief can show it while the agent
+            // chooses.
+            steps = steps.map((s) =>
+              s.kind === "tool_call" && s.name === "screen_sources"
+                ? { ...s, input: { ...s.input, shortlist: event.scores } }
+                : s,
+            );
+            setLiveSteps([...steps]);
             return;
           }
           steps = processStreamEvent(steps, event);
