@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { Prisma } from "@prisma/client";
 import type { Annotation } from "@/lib/annotations";
 import type { DeepDiveSession } from "@/lib/deep-dives";
+import type { ArtifactContent, ReviewArtifact } from "@/lib/artifacts";
 import type {
   ChatMessage,
   ContextMetadata,
@@ -290,6 +291,49 @@ export async function setMessages(
       userId,
     );
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Artifacts                                                          */
+/* ------------------------------------------------------------------ */
+
+function toArtifact(row: {
+  id: string;
+  reviewId: string;
+  title: string;
+  summary: string;
+  html: string;
+  createdAt: Date;
+}): ReviewArtifact {
+  return { ...row, createdAt: row.createdAt.toISOString() };
+}
+
+/** A review's artifacts, newest first. */
+export async function listArtifacts(
+  userId: string,
+  reviewId: string,
+): Promise<ReviewArtifact[]> {
+  await assertReviewOwned(userId, reviewId);
+  const rows = await prisma.reviewArtifact.findMany({
+    where: { reviewId },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(toArtifact);
+}
+
+/** Save artifacts produced in a chat turn. `sourceCallId` dedupes a retried
+ *  persist of the same turn. */
+export async function saveArtifacts(
+  userId: string,
+  reviewId: string,
+  artifacts: Array<ArtifactContent & { sourceCallId: string }>,
+): Promise<void> {
+  if (artifacts.length === 0) return;
+  await assertReviewOwned(userId, reviewId);
+  await prisma.reviewArtifact.createMany({
+    data: artifacts.map((a) => ({ ...a, reviewId })),
+    skipDuplicates: true,
+  });
 }
 
 export async function getAnnotations(

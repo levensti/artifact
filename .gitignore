@@ -29,5 +29,3 @@ next-env.d.ts
 # supabase CLI local state (config.toml, migrations, scratch dirs)
 /supabase
 
-# Discover funnel eval output (local; the eval reads the latest run as its baseline)
-eval/discover_funnel/results/

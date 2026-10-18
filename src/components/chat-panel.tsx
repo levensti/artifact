@@ -48,6 +48,7 @@ import { ChatMessageBubble } from "./chat-message-bubble";
 import JournalCheckpointModal from "./journal-checkpoint-modal";
 import { MonoLabel } from "@/components/folio";
 import { useChat } from "@/hooks/use-chat";
+import { refreshArtifacts } from "@/hooks/use-artifacts";
 
 // Streaming bubbles call this from a useLayoutEffect on each typewriter
 // advance so the scroll runs *after* the new content has been committed
@@ -151,43 +152,6 @@ function ChatQuotePopover({
 /*  Chat input                                                         */
 /* ------------------------------------------------------------------ */
 
-/**
- * Index progress for a long document. Chat is already usable while this
- * shows (the server answers from the opening of the document); the pill just
- * tells the reader that deeper passages become searchable shortly. Renders
- * nothing for short documents, once the index is ready, or before the
- * document is registered.
- */
-function IndexingPill() {
-  const { documentStatus } = useCitationContext();
-  if (!documentStatus || documentStatus.mode !== "retrieval") return null;
-  if (documentStatus.indexStatus === "indexing") {
-    return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] text-muted-foreground"
-        title="The full text becomes searchable when indexing finishes. Until then, answers use the opening of the document."
-      >
-        <Loader2 className="size-3 animate-spin" aria-hidden />
-        Indexing · {documentStatus.indexProgress}%
-      </span>
-    );
-  }
-  if (documentStatus.indexStatus === "failed") {
-    return (
-      <span
-        className="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
-        title={
-          documentStatus.indexError ??
-          "Indexing failed; answers use the opening of the document."
-        }
-      >
-        Index unavailable
-      </span>
-    );
-  }
-  return null;
-}
-
 function ChatInput({
   input,
   setInput,
@@ -197,7 +161,7 @@ function ChatInput({
   isPreparingPaper,
   chatThreadAnnotationId,
   focusToken,
-  hideHeader,
+  footer,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -209,12 +173,12 @@ function ChatInput({
   chatThreadAnnotationId: string | null;
   /** Increment to imperatively focus the composer (e.g. after a quote insert). */
   focusToken: number;
-  /** When the panel header is hidden the indexing pill renders here instead. */
-  hideHeader?: boolean;
+  /** Housekeeping line (context meter, new chat) rendered under the box. */
+  footer?: React.ReactNode;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollComposerIntoViewRef = useRef(false);
-  const { pageMapProgress, pageMapError, preparingPhase, registrationError } =
+  const { documentStatus, pageMapError, preparingPhase, registrationError } =
     useCitationContext();
   // Chat is available by default (platform key); only the paper-preparation
   // steps gate input. Provider/usage failures surface inline on the message.
@@ -226,7 +190,12 @@ function ChatInput({
         ? "Preparing document for chat…"
         : preparingPhase === "registration_failed"
           ? `Couldn't prepare the document: ${registrationError ?? "unknown error"}`
-          : "Indexing paper for chat…";
+          : preparingPhase === "index_failed"
+            ? `Couldn't index the document for chat${documentStatus?.indexError ? `: ${documentStatus.indexError}` : ""}. Reload the page to try again.`
+            : `Indexing paper for chat · ${documentStatus?.indexProgress ?? 0}%`;
+  const preparingFailed =
+    preparingPhase === "registration_failed" ||
+    preparingPhase === "index_failed";
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -301,8 +270,8 @@ function ChatInput({
               : listening
                 ? "Listening…"
                 : chatThreadAnnotationId
-                ? "Reply in this selection thread…"
-                : "Ask about the paper…"
+                  ? "Reply in this selection thread…"
+                  : "Ask about the paper…"
           }
           rows={1}
           className={cn(
@@ -323,7 +292,9 @@ function ChatInput({
                   ? "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
                   : "text-muted-foreground hover:text-foreground",
               )}
-              onClick={() => (listening ? stopDictation() : dictation.start(input))}
+              onClick={() =>
+                listening ? stopDictation() : dictation.start(input)
+              }
               disabled={inputLocked}
               aria-pressed={listening}
               aria-label={
@@ -360,7 +331,9 @@ function ChatInput({
                 : "bg-muted text-muted-foreground/60",
             )}
             onClick={send}
-            disabled={inputLocked || !modelReady || !input.trim() || isStreaming}
+            disabled={
+              inputLocked || !modelReady || !input.trim() || isStreaming
+            }
             aria-label={
               !modelReady
                 ? "Choose a model to send"
@@ -378,11 +351,7 @@ function ChatInput({
         </div>
       </div>
       <div className="mt-1.5 space-y-0.5">
-        {hideHeader && (
-          <div className="flex justify-center">
-            <IndexingPill />
-          </div>
-        )}
+        {footer}
         {pageMapError && !isPreparingPaper && (
           <p className="px-1 text-center text-[11px] leading-snug text-warning">
             Page index unavailable: {pageMapError} Chat still works; citation
@@ -392,25 +361,23 @@ function ChatInput({
         {isPreparingPaper && (
           <div className="px-1">
             <p
-              className={`text-center text-[11px] leading-snug inline-flex w-full items-center justify-center gap-1.5 ${preparingPhase === "registration_failed" ? "text-warning" : "text-muted-foreground"}`}
+              className={`text-center text-[11px] leading-snug inline-flex w-full items-center justify-center gap-1.5 ${preparingFailed ? "text-warning" : "text-muted-foreground"}`}
             >
-              {preparingPhase !== "registration_failed" && (
+              {!preparingFailed && (
                 <Loader2 className="size-3 animate-spin" aria-hidden />
               )}
               {preparingLabel}
             </p>
-            {preparingPhase === "page_map" &&
+            {preparingPhase === "indexing" &&
               (() => {
-                const total = pageMapProgress?.total ?? 0;
-                const done = pageMapProgress?.done ?? 0;
-                const pct = total > 0 ? (done / total) * 100 : 0;
+                const pct = documentStatus?.indexProgress ?? 0;
                 return (
                   <div
                     className="mx-auto mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-border"
                     role="progressbar"
                     aria-valuemin={0}
-                    aria-valuemax={total || 1}
-                    aria-valuenow={done}
+                    aria-valuemax={100}
+                    aria-valuenow={pct}
                   >
                     <div
                       className="h-full bg-foreground/70 transition-[width] duration-200 ease-out"
@@ -558,7 +525,7 @@ function ContextMeter({
 }) {
   if (isCompacting) {
     return (
-      <div className="flex items-center justify-center gap-1.5 px-4 pb-1 pt-0.5 text-[10.5px] text-muted-foreground">
+      <div className="flex items-center gap-1.5 px-1 text-[10.5px] text-muted-foreground">
         <Loader2 className="size-2.5 animate-spin" aria-hidden />
         Compacting earlier messages…
       </div>
@@ -576,7 +543,7 @@ function ContextMeter({
   // Approximate — the total is measured, the parts are estimated.
   const breakdown = buildUsageBreakdown(usage);
   return (
-    <div className="flex items-center justify-between gap-2 px-4 pb-1 pt-0.5 text-[10.5px] text-muted-foreground">
+    <div className="flex items-center justify-between gap-2 px-1 text-[10.5px] text-muted-foreground">
       {note ? (
         <span className="text-foreground/70">{note}</span>
       ) : (
@@ -723,6 +690,16 @@ export default function ChatPanel({
     // jump-to-latest button reflects where the view actually is.
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight <= 2);
   }, [chat.messages, displayThread, chat.isStreaming]);
+
+  // The chat route saves any artifact a turn created when the turn ends, so
+  // refetch the Artifacts tab then.
+  const artifactsStreamingRef = useRef(false);
+  useEffect(() => {
+    if (artifactsStreamingRef.current && !chat.isStreaming) {
+      refreshArtifacts(reviewId);
+    }
+    artifactsStreamingRef.current = chat.isStreaming;
+  }, [chat.isStreaming, reviewId]);
 
   // Called by the streaming bubble after each typewriter advance commits.
   // Stable identity so the consumer's useLayoutEffect dep list stays clean.
@@ -1008,7 +985,6 @@ export default function ChatPanel({
                 Explore the frontier
               </span>
             </div>
-            <IndexingPill />
           </div>
         )}
 
@@ -1074,9 +1050,16 @@ export default function ChatPanel({
                   <>
                     {chat.messages.length === 0 && (
                       <ChatEmptyState
+                        canFill={!isPreparingPaper}
                         canSend={
                           modelReady && !chat.isStreaming && !isPreparingPaper
                         }
+                        onFill={(prompt) => {
+                          // Fill the composer rather than sending, so the
+                          // user can edit the preset first.
+                          chat.setInput(prompt);
+                          setComposerFocusToken((t) => t + 1);
+                        }}
                         onSend={chat.submitChat}
                       />
                     )}
@@ -1147,25 +1130,47 @@ export default function ChatPanel({
             </div>
           </div>
         )}
-        {!chatThreadAnnotationId &&
-          (chat.messages.length > 0 ||
-            annotations.some(
-              (a) => a.kind === "ask_ai" && a.thread.length > 0,
-            )) && (
-            <div className="px-3 pt-1 flex justify-end gap-1">
-              {chat.messages.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmClearOpen(true)}
-                  disabled={chat.isStreaming}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] text-muted-foreground/60 transition-colors hover:bg-muted/70 hover:text-foreground/80 disabled:opacity-50"
-                  title="Start a new chat"
-                >
-                  <PenLine className="size-2.5" strokeWidth={1.75} />
-                  New chat
-                </button>
+        <ChatInput
+          input={chat.input}
+          setInput={chat.setInput}
+          sendMessage={sendWithQuote}
+          isStreaming={chat.isStreaming}
+          modelReady={modelReady}
+          isPreparingPaper={isPreparingPaper}
+          chatThreadAnnotationId={chatThreadAnnotationId}
+          focusToken={composerFocusToken}
+          footer={
+            <>
+              {/* Once the empty state's starters are gone, keep a quiet
+                  reminder of what the assistant can do. */}
+              {(chat.messages.length > 0 || chatThreadAnnotationId) && (
+                <p className="px-1 text-[11px] leading-snug text-muted-foreground/70">
+                  Your assistant can help you dive deeper, generate interactive
+                  learning materials (artifacts), draw diagrams, find related
+                  papers, work through the math, and more.
+                </p>
               )}
-              {/* <button
+              <div className="flex items-center justify-between gap-2">
+                <ContextMeter
+                  usage={chat.contextUsage}
+                  isCompacting={chat.isCompacting}
+                  note={chat.compactionNote}
+                  onCompact={() => void chat.compact()}
+                  disabled={chat.isStreaming || !modelReady}
+                />
+                {!chatThreadAnnotationId && chat.messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClearOpen(true)}
+                    disabled={chat.isStreaming}
+                    className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] text-muted-foreground/60 transition-colors hover:bg-muted/70 hover:text-foreground/80 disabled:opacity-50"
+                    title="Start a new chat"
+                  >
+                    <PenLine className="size-2.5" strokeWidth={1.75} />
+                    New chat
+                  </button>
+                )}
+                {/* <button
                 type="button"
                 onClick={() => setCheckpointOpen(true)}
                 disabled={chat.isStreaming}
@@ -1175,25 +1180,9 @@ export default function ChatPanel({
                 <BookmarkPlus className="size-2.5" strokeWidth={1.75} />
                 Jot a journal entry
               </button> */}
-            </div>
-          )}
-        <ContextMeter
-          usage={chat.contextUsage}
-          isCompacting={chat.isCompacting}
-          note={chat.compactionNote}
-          onCompact={() => void chat.compact()}
-          disabled={chat.isStreaming || !modelReady}
-        />
-        <ChatInput
-          input={chat.input}
-          setInput={chat.setInput}
-          sendMessage={sendWithQuote}
-          isStreaming={chat.isStreaming}
-          modelReady={modelReady}
-          isPreparingPaper={isPreparingPaper}
-          hideHeader={hideHeader}
-          chatThreadAnnotationId={chatThreadAnnotationId}
-          focusToken={composerFocusToken}
+              </div>
+            </>
+          }
         />
         {snippetSel && (
           <ChatQuotePopover

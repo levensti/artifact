@@ -8,9 +8,7 @@
  * screened. Judging is an enhancement: with no key, or when TypeSafe fails,
  * callers keep the agent's own order.
  *
- * Server code only (`JEV_API_KEY` never leaves the server), but free of the
- * `server-only` import so the offline evals can run it, like embeddings.ts.
- * Without a key, nothing is graded: the funnel passes sources through
+ * Server code only (`JEV_API_KEY` never leaves the server). Without a key, nothing is graded: the funnel passes sources through
  * unscored and the agent's order stands.
  *
  * Throughput: the account allows 80 requests and 100k input tokens per

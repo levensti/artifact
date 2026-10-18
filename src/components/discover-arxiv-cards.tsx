@@ -6,6 +6,7 @@ import { Check, ExternalLink, Plus, Loader2 } from "lucide-react";
 import { createOrGetReview, getReviewByArxivId } from "@/lib/reviews";
 import { normalizeArxivId } from "@/lib/arxiv";
 import { cn } from "@/lib/utils";
+import InlineMarkdown from "./inline-markdown";
 import {
   parseArxivSearchOutput,
   type PaperMeta,
@@ -148,9 +149,10 @@ export function PaperCard({
             </p>
           ) : null}
           {rationale ? (
-            <p className="mt-1.5 text-[11.5px] leading-relaxed text-foreground/85">
-              {rationale}
-            </p>
+            <InlineMarkdown
+              content={rationale}
+              className="mt-1.5 text-[11.5px] leading-relaxed text-foreground/85"
+            />
           ) : paper.abstract ? (
             <p className="mt-1.5 line-clamp-3 text-[11.5px] leading-relaxed text-foreground/75">
               {paper.abstract}

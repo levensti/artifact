@@ -1,9 +1,5 @@
 /**
- * A Recipe is the code-side definition of a system-under-test: a named,
- * versioned bundle of the prompts an agent runs with. It is the source of
- * truth that the `Recipe` row in the database (see prisma/schema.prisma)
- * points at by `name` — an eval run records which recipe it exercised, so a
- * score is reproducible from (benchmark, recipe, datasetVersion).
+ * A Recipe is a named, versioned bundle of the prompts an agent runs with.
  *
  * `prompts` is a name -> prompt-text map rather than a single string because
  * one agent can run several distinct prompts (e.g. a system prompt plus a

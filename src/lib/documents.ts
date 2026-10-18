@@ -2,21 +2,10 @@
  * Shared (client-safe) types and constants for content-addressed documents.
  *
  * A document is the extracted text of a paper or web page, identified by the
- * sha256 of that text. Short documents are injected into chat whole; long
- * ones are indexed into semantic chunks with embeddings and served by
- * retrieval. The threshold lives here so the server (which decides the mode)
- * and the client (which gates chat readiness on indexing) agree.
+ * sha256 of that text. Every document is indexed into semantic chunks with
+ * embeddings, and chat reads it only through retrieval: the client keeps chat
+ * locked until the index is ready.
  */
-
-/**
- * Char-count threshold above which chat switches from full-text injection to
- * retrieval. ~40k tokens: a normal arXiv paper (15–25k tokens) fits whole,
- * which beats retrieval in quality; textbooks, theses, and long reports go
- * through the chunk index.
- */
-export const RETRIEVAL_THRESHOLD_CHARS = 160_000;
-
-export type DocumentMode = "full" | "retrieval";
 
 /**
  * Normalize extracted text before it is hashed or stored. pdf.js emits NUL
@@ -26,10 +15,6 @@ export type DocumentMode = "full" | "retrieval";
  */
 export function sanitizeExtractedText(text: string): string {
   return text.replace(/\u0000/g, "");
-}
-
-export function documentMode(charCount: number): DocumentMode {
-  return charCount >= RETRIEVAL_THRESHOLD_CHARS ? "retrieval" : "full";
 }
 
 export type DocumentIndexStatus = "pending" | "indexing" | "ready" | "failed";
@@ -47,7 +32,6 @@ export interface DocumentOutlineEntry {
 export interface DocumentStatus {
   id: string;
   hash: string;
-  mode: DocumentMode;
   charCount: number;
   /** False for rows backfilled from the legacy caches until text is uploaded. */
   hasText: boolean;

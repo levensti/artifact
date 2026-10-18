@@ -63,9 +63,12 @@ export function isDocumentReady(status: DocumentStatus | null): boolean {
   return !!status && status.hasText;
 }
 
-/** Whether to keep polling: a long document whose index is still building. */
+/** Whether the index is still to come (queued or building): keep polling,
+ *  and keep chat locked, since chat reads the document only via retrieval. */
 export function isDocumentIndexing(status: DocumentStatus | null): boolean {
-  return !!status && status.mode === "retrieval" && status.indexStatus === "indexing";
+  return (
+    !!status && (status.indexStatus === "indexing" || status.indexStatus === "pending")
+  );
 }
 
 export interface CitableSection {

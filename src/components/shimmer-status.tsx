@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The assistant's single in-progress indicator: a short label that shimmers
+ * Your assistant's single in-progress indicator: a short label that shimmers
  * while work is happening. One component for every transient status —
  * "Thinking", "Drawing the flowchart", etc. — so they look and feel identical
  * and only the copy changes.

@@ -1,6 +1,5 @@
 /**
- * Recipe registry. Add a recipe here so it can be looked up by name (the same
- * name stored on the `Recipe` row an eval run references).
+ * Recipe registry. Add a recipe here so it can be looked up by name.
  */
 import type { Recipe } from "./types";
 import { researchAssistantRecipe } from "./research-assistant";

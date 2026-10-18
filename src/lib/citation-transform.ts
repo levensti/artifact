@@ -106,3 +106,43 @@ function safeDecode(s: string): string {
     return s;
   }
 }
+
+export interface CitationMatch extends CitationLinkInfo {
+  start: number;
+  end: number;
+  /** Display text, normalized the same way `transformCitations` labels links. */
+  label: string;
+}
+
+/**
+ * Locate citation tokens in plain text, for surfaces that aren't markdown
+ * (artifact HTML wraps each match in a chip after sanitizing). Same patterns
+ * and labels as `transformCitations`; overlapping matches keep the first.
+ */
+export function findCitations(text: string): CitationMatch[] {
+  const patterns: Array<[RegExp, CitationKind, (v: string) => string]> = [
+    [SECTION_RE, "section", (v) => `§${v}`],
+    [FIGURE_RE, "figure", (v) => `Fig. ${v}`],
+    [TABLE_RE, "table", (v) => `Table ${v}`],
+    [REF_RE, "ref", (v) => `Ref. [${v}]`],
+  ];
+  const found: CitationMatch[] = [];
+  for (const [re, kind, label] of patterns) {
+    for (const m of text.matchAll(new RegExp(re.source, re.flags))) {
+      const start = m.index ?? 0;
+      found.push({
+        kind,
+        value: m[1],
+        start,
+        end: start + m[0].length,
+        label: label(m[1]),
+      });
+    }
+  }
+  found.sort((a, b) => a.start - b.start);
+  const kept: CitationMatch[] = [];
+  for (const m of found) {
+    if (kept.length === 0 || m.start >= kept[kept.length - 1].end) kept.push(m);
+  }
+  return kept;
+}

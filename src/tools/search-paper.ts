@@ -2,8 +2,8 @@
  * Tool: search_paper
  *
  * Vector search over the document's semantic chunks, with section and page
- * provenance. Registered only for long documents (the ones served by
- * retrieval); a short document is fully in context and needs no search.
+ * provenance. Registered whenever the turn has an indexed document, which
+ * is every document chat can read.
  */
 
 import { formatPages } from "@/lib/documents";

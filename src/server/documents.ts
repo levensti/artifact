@@ -10,7 +10,6 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import type { PageMap } from "@/lib/review-types";
 import {
-  documentMode,
   type ChunkHit,
   type DocumentOutlineEntry,
   type DocumentStatus,
@@ -34,7 +33,6 @@ export function toStatus(doc: DocumentRow): DocumentStatus {
   return {
     id: doc.id,
     hash: doc.hash,
-    mode: documentMode(doc.charCount),
     charCount: doc.charCount,
     hasText: doc.text !== null,
     hasPageMap: doc.pageMap !== null,

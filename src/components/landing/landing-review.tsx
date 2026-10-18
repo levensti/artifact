@@ -16,7 +16,7 @@ export function LandingReview() {
             num="02"
             kicker="Review"
             title="Highlight a sentence. Ask about it."
-            lede="The assistant has the full text in context. Ask for a derivation, pull definitions side by side, or highlight any passage to open a thread that stays pinned to it. Every answer cites its source: click the chip, land on the passage."
+            lede="Your assistant has the full text in context. Ask for a derivation, pull definitions side by side, or highlight any passage to open a thread that stays pinned to it. Every answer cites its source: click the chip, land on the passage."
           />
         </div>
       </div>

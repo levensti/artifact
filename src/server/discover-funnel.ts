@@ -17,9 +17,6 @@
  * scores travel to the client in a `screen_scores` event and are saved with
  * the picks. Searches emit the same tool events as the agent's own searches,
  * so the research trace renders unchanged, plus one `screen_sources` step.
- *
- * Free of `server-only` / DB / Next-runtime imports, like reading-agent.ts,
- * so the offline evals run it in-process.
  */
 
 import type { StreamEvent, ScreenScore } from "@/lib/stream-types";
@@ -86,7 +83,6 @@ export interface FunnelParams {
   conversation: TranscriptMessage[];
   /** Fireworks key. */
   apiKey: string;
-  model?: string;
   /** The question screening judges against: short, without the prompt's
    *  context scaffolding. */
   question: string;
@@ -210,7 +206,7 @@ async function planSearches(p: FunnelParams): Promise<SearchPlan> {
           Authorization: `Bearer ${p.apiKey}`,
         },
         body: JSON.stringify({
-          model: p.model ?? getFireworksModel(),
+          model: getFireworksModel(),
           messages: [
             {
               role: "system",
@@ -544,6 +540,5 @@ export async function runDiscoverFunnel(p: FunnelParams): Promise<void> {
         maxNudges: 2,
       },
     },
-    p.model,
   );
 }

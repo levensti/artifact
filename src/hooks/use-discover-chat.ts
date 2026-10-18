@@ -440,6 +440,13 @@ export function useDiscoverChat({
 
         await parseNDJSONStream(response.body, (event) => {
           if (event.type === "heartbeat") return; // liveness only
+          // Early tool-call events: the research trace and picks read each
+          // call's full input, so wait for the complete tool_call.
+          if (
+            event.type === "tool_call_start" ||
+            event.type === "tool_call_progress"
+          )
+            return;
           if (event.type === "error") throw new Error(event.message);
           if (event.type === "screen_scores") {
             screenScores = event.scores;
