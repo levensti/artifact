@@ -458,14 +458,15 @@ model DiscoverQuery {
   /// failed before producing recommendations.
   status    String   @default("running")
   createdAt DateTime
-  /// Project this research belongs to. Null = not in a project. Reviews
+  /// Project this research belongs to. Every brief is started inside a
+  /// project (asking on Home creates one); null only on legacy rows. Reviews
   /// opened from its recommendations are filed into the same project.
-  /// SetNull so deleting a project keeps its research.
+  /// Cascade: a brief has nowhere to appear without its project.
   projectId String?
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   recommendations Recommendation[]
-  project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([projectId])

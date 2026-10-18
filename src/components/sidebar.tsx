@@ -15,15 +15,8 @@ import {
   House,
   Pencil,
   Share2,
-  Library,
-  Folder,
   FolderOpen,
-  FolderPlus,
-  FolderInput,
-  FolderX,
-  ChevronRight,
-  MoreHorizontal,
-  Trash2,
+  Plus,
 } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { canShareReview } from "@/lib/client/sharing/share-links";
@@ -34,18 +27,8 @@ import {
   REVIEWS_UPDATED_EVENT,
   type PaperReview,
 } from "@/lib/reviews";
-import {
-  assignReviewToProject,
-  getProjectsSnapshot,
-  getWikiCacheSnapshot,
-  loadWikiPages,
-} from "@/lib/client-data";
-import type { Project } from "@/lib/review-types";
-import {
-  ARTIFACTS_HOME_EVENT,
-  PROJECTS_UPDATED_EVENT,
-  WIKI_UPDATED_EVENT,
-} from "@/lib/storage-events";
+import { getWikiCacheSnapshot, loadWikiPages } from "@/lib/client-data";
+import { WIKI_UPDATED_EVENT } from "@/lib/storage-events";
 import {
   getWikiIngestError,
   getWikiIngestSnapshot,
@@ -55,17 +38,9 @@ import {
 import { cn } from "@/lib/utils";
 import { localDateKey, localDateKeyFromIso } from "@/lib/date-keys";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import NewReviewDialog from "./new-review-dialog";
 import ShareReviewDialog from "./share-review-dialog";
 import UserMenu from "./user-menu";
-import { DeleteProjectDialog, ProjectDialog } from "./project-dialogs";
 import { BrandGlyph } from "./brand-panel";
 import { MonoLabel } from "./folio";
 
@@ -73,11 +48,9 @@ function subscribeSidebar(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
   window.addEventListener(WIKI_UPDATED_EVENT, onStoreChange);
-  window.addEventListener(PROJECTS_UPDATED_EVENT, onStoreChange);
   return () => {
     window.removeEventListener(REVIEWS_UPDATED_EVENT, onStoreChange);
     window.removeEventListener(WIKI_UPDATED_EVENT, onStoreChange);
-    window.removeEventListener(PROJECTS_UPDATED_EVENT, onStoreChange);
   };
 }
 
@@ -85,7 +58,6 @@ function sidebarSnapshot() {
   const wikiPages = getWikiCacheSnapshot() ?? [];
   return JSON.stringify({
     reviews: getReviews(),
-    projects: getProjectsSnapshot(),
     wikiPageCount: wikiPages.length,
     hydrated: areReviewsHydrated(),
   });
@@ -94,7 +66,6 @@ function sidebarSnapshot() {
 function sidebarServerSnapshot() {
   return JSON.stringify({
     reviews: [],
-    projects: [],
     wikiPageCount: 0,
     hydrated: false,
   });
@@ -146,16 +117,14 @@ export default function Sidebar({
     sidebarSnapshot,
     sidebarServerSnapshot,
   );
-  const { reviews, projects, wikiPageCount, reviewsHydrated } = useMemo(() => {
+  const { reviews, wikiPageCount, reviewsHydrated } = useMemo(() => {
     const parsed = JSON.parse(snapshotJson) as {
       reviews: PaperReview[];
-      projects: Project[];
       wikiPageCount: number;
       hydrated: boolean;
     };
     return {
       reviews: parsed.reviews ?? [],
-      projects: parsed.projects ?? [],
       wikiPageCount: parsed.wikiPageCount ?? 0,
       reviewsHydrated: parsed.hydrated ?? false,
     };
@@ -185,12 +154,6 @@ export default function Sidebar({
   }, [activeIngests]);
   const [showNewReview, setShowNewReview] = useState(false);
   const [shareTarget, setShareTarget] = useState<PaperReview | null>(null);
-  const [showNewProject, setShowNewProject] = useState(false);
-  const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [deletingProject, setDeletingProject] = useState<Project | null>(null);
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
-    new Set(),
-  );
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLTextAreaElement>(null);
@@ -209,14 +172,6 @@ export default function Sidebar({
     setShowNewReview(false);
     router.push(`/review/${reviewId}`);
   };
-
-  const handleArtifactsClick = useCallback(() => {
-    if (pathname === "/artifacts") {
-      window.dispatchEvent(new Event(ARTIFACTS_HOME_EVENT));
-      return;
-    }
-    router.push("/artifacts");
-  }, [pathname, router]);
 
   const startRenaming = useCallback((id: string, currentTitle: string) => {
     setRenamingId(id);
@@ -257,21 +212,9 @@ export default function Sidebar({
     [reviews],
   );
 
-  const projectReviews = useMemo(() => {
-    const map = new Map<string, PaperReview[]>();
-    for (const p of projects) map.set(p.id, []);
-    for (const r of byRecency) {
-      if (r.projectId && map.has(r.projectId)) {
-        map.get(r.projectId)!.push(r);
-      }
-    }
-    return map;
-  }, [byRecency, projects]);
-
   const grouped = useMemo(() => {
-    const ungrouped = byRecency.filter((r) => !r.projectId);
     const byDate = new Map<string, PaperReview[]>();
-    for (const r of ungrouped) {
+    for (const r of byRecency) {
       const dateKey = localDateKeyFromIso(r.updatedAt);
       const list = byDate.get(dateKey) ?? [];
       list.push(r);
@@ -420,69 +363,6 @@ export default function Sidebar({
             <Share2 className="size-3" strokeWidth={2} />
           </button>
         ) : null}
-        {projects.length > 0 && !isRenaming ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-              title="Move to project"
-              aria-label={`Move ${review.title} to project`}
-              className={cn(
-                "mt-px inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60",
-                isActive
-                  ? "opacity-90"
-                  : "opacity-0 group-hover:opacity-90 group-focus-within:opacity-90",
-              )}
-            >
-              <FolderInput className="size-3" strokeWidth={2} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              side="right"
-              align="start"
-              className="min-w-44 max-w-72"
-            >
-              {projects.map((p) => (
-                <DropdownMenuItem
-                  key={p.id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (review.projectId !== p.id) {
-                      void assignReviewToProject(review.id, p.id);
-                    }
-                  }}
-                >
-                  <Folder
-                    className="mr-2 size-3.5 shrink-0"
-                    strokeWidth={1.75}
-                  />
-                  <span className="truncate">{p.name}</span>
-                  {review.projectId === p.id && (
-                    <span className="ml-auto text-[10px] text-muted-foreground">
-                      ✓
-                    </span>
-                  )}
-                </DropdownMenuItem>
-              ))}
-              {review.projectId ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void assignReviewToProject(review.id, null);
-                    }}
-                  >
-                    <FolderX
-                      className="mr-2 size-3.5 shrink-0"
-                      strokeWidth={1.75}
-                    />
-                    Remove from project
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
       </div>
     );
   };
@@ -552,28 +432,18 @@ export default function Sidebar({
           </button>
           <button
             type="button"
-            onClick={() => setShowNewReview(true)}
-            className="sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px] text-foreground/80 hover:text-foreground"
-          >
-            <span className="flex w-5 shrink-0 items-center justify-center">
-              <FilePlus className="size-4 opacity-70" strokeWidth={1.75} />
-            </span>
-            <span className="truncate">Start a review</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleArtifactsClick}
+            onClick={() => router.push("/projects")}
             className={cn(
               "sb-row flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-[13.5px]",
-              pathname === "/artifacts"
+              pathname === "/projects" || pathname.startsWith("/projects/")
                 ? "sb-row-active text-foreground font-medium"
                 : "text-foreground/80 hover:text-foreground",
             )}
           >
             <span className="flex w-5 shrink-0 items-center justify-center">
-              <Library className="size-4 opacity-70" strokeWidth={1.75} />
+              <FolderOpen className="size-4 opacity-70" strokeWidth={1.75} />
             </span>
-            <span className="truncate">Artifacts</span>
+            <span className="truncate">Projects</span>
           </button>
           {JOURNAL_TAB_ENABLED ? (
             <button
@@ -634,151 +504,37 @@ export default function Sidebar({
 
         </div>
 
-        {/* Hairline divider between nav and the reviews list. The date-group
-            labels (e.g. "May 23") organize the list, so no "Reviews" header. */}
-        <div className="mx-3 mt-3 mb-1.5 shrink-0 border-t border-sidebar-border/60" />
+        {/* Hairline divider between nav and the reviews list, whose header
+            holds the start-a-review action. Date-group labels (e.g. "May 23")
+            organize the list below it. */}
+        <div className="mx-3 mt-3 shrink-0 border-t border-sidebar-border/60" />
+        <div className="flex shrink-0 items-center justify-between px-4 pb-1 pt-2.5">
+          <MonoLabel>Reviews</MonoLabel>
+          <button
+            type="button"
+            onClick={() => setShowNewReview(true)}
+            title="Start a review"
+            aria-label="Start a review"
+            className="flex size-5 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring/60"
+          >
+            <Plus className="size-3.5" strokeWidth={2} />
+          </button>
+        </div>
 
         <ScrollArea className="min-h-0 flex-1 px-2 pb-2 pt-1">
-          {/* Projects section — collapsible folders. Sits above the flat
-              date-grouped list; each folder holds its own review rows. */}
-          {projects.length > 0 || reviewsHydrated ? (
-            <div className="mb-3">
-              <div className="flex items-center justify-between px-2 py-1">
-                <MonoLabel>Projects</MonoLabel>
-                <button
-                  type="button"
-                  onClick={() => setShowNewProject(true)}
-                  title="New project"
-                  aria-label="New project"
-                  className="flex size-5 items-center justify-center rounded text-muted-foreground/60 hover:bg-sidebar-accent hover:text-foreground"
-                >
-                  <FolderPlus className="size-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
-              {projects.map((project) => {
-                const isCollapsed = collapsedProjects.has(project.id);
-                const items = projectReviews.get(project.id) ?? [];
-                const isActive = pathname === `/projects/${project.id}`;
-                return (
-                  <div key={project.id} className="mb-1">
-                    <div
-                      className={cn(
-                        "group flex items-center gap-0.5 rounded-md px-1 py-0.5",
-                        isActive
-                          ? "bg-sidebar-accent"
-                          : "hover:bg-sidebar-accent/50",
-                      )}
-                    >
-                      {/* The chevron expands the folder; the name opens the
-                          project's page. */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCollapsedProjects((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(project.id)) next.delete(project.id);
-                            else next.add(project.id);
-                            return next;
-                          })
-                        }
-                        aria-label={
-                          isCollapsed
-                            ? `Show papers in ${project.name}`
-                            : `Hide papers in ${project.name}`
-                        }
-                        aria-expanded={!isCollapsed}
-                        className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/50 hover:bg-sidebar-accent hover:text-foreground"
-                      >
-                        <ChevronRight
-                          className={cn(
-                            "size-3 transition-transform duration-150",
-                            !isCollapsed && "rotate-90",
-                          )}
-                          strokeWidth={2}
-                        />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/projects/${project.id}`)}
-                        className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left"
-                      >
-                        {isCollapsed ? (
-                          <Folder
-                            className="size-3.5 shrink-0 text-muted-foreground"
-                            strokeWidth={1.75}
-                          />
-                        ) : (
-                          <FolderOpen
-                            className="size-3.5 shrink-0 text-muted-foreground"
-                            strokeWidth={1.75}
-                          />
-                        )}
-                        <span
-                          className={cn(
-                            "truncate text-[12.5px] font-medium",
-                            isActive ? "text-foreground" : "text-foreground/80",
-                          )}
-                        >
-                          {project.name}
-                        </span>
-                      </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100"
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`${project.name} options`}
-                        >
-                          <MoreHorizontal
-                            className="size-3.5"
-                            strokeWidth={2}
-                          />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-40">
-                          <DropdownMenuItem
-                            onClick={() => setEditingProject(project)}
-                          >
-                            <Pencil className="mr-2 size-3.5" /> Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => setDeletingProject(project)}
-                          >
-                            <Trash2 className="mr-2 size-3.5" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    {!isCollapsed && (
-                      <div className="ml-5 flex flex-col gap-0.5 pl-1 pt-0.5">
-                        {items.length === 0 ? (
-                          <p className="px-2 py-1 text-[12px] text-muted-foreground/70">
-                            No papers yet
-                          </p>
-                        ) : (
-                          items.map(renderReviewRow)
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-
           {/* Until the list has hydrated, an empty `reviews` means "still
               loading", not "none" — show a skeleton so we never flash the
               empty state on refresh when reviews actually exist. */}
           {!reviewsHydrated && grouped.length === 0 ? (
             <ReviewsListSkeleton />
-          ) : grouped.length === 0 && projects.length === 0 ? (
+          ) : grouped.length === 0 ? (
             <div className="mx-2 mt-8 flex flex-col items-center gap-2 text-center">
               <FilePlus
                 className="size-5 text-muted-foreground/50"
                 strokeWidth={1.5}
               />
               <p className="text-[12px] leading-relaxed text-muted-foreground/70">
-                Your reviews will appear here.
+                Reviews you start appear here. Start one with + above.
               </p>
             </div>
           ) : null}
@@ -806,29 +562,6 @@ export default function Sidebar({
         review={shareTarget}
         onClose={() => setShareTarget(null)}
       />
-      <ProjectDialog
-        mode="create"
-        open={showNewProject}
-        onClose={() => setShowNewProject(false)}
-      />
-      {editingProject && (
-        <ProjectDialog
-          mode="edit"
-          project={editingProject}
-          open={true}
-          onClose={() => setEditingProject(null)}
-        />
-      )}
-      {deletingProject && (
-        <DeleteProjectDialog
-          project={deletingProject}
-          paperCount={projectReviews.get(deletingProject.id)?.length ?? 0}
-          onClose={() => setDeletingProject(null)}
-          onDeleted={() => {
-            if (pathname === `/projects/${deletingProject.id}`) router.push("/");
-          }}
-        />
-      )}
     </>
   );
 }

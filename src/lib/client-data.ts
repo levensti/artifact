@@ -281,11 +281,13 @@ export async function deleteProject(id: string): Promise<void> {
   await apiFetch(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
   projectsCache = projectsCache.filter((p) => p.id !== id);
   dispatch(PROJECTS_UPDATED_EVENT);
-  // Its research is kept but unlinked (SetNull), mirror that locally.
-  if (discoverQueriesCache.some((q) => q.projectId === id)) {
-    discoverQueriesCache = discoverQueriesCache.map((q) =>
-      q.projectId === id ? { ...q, projectId: null } : q,
-    );
+  // Its research briefs are deleted with it (Cascade); mirror that locally.
+  const gone = new Set(
+    discoverQueriesCache.filter((q) => q.projectId === id).map((q) => q.id),
+  );
+  if (gone.size > 0) {
+    discoverQueriesCache = discoverQueriesCache.filter((q) => !gone.has(q.id));
+    recommendationsCache = recommendationsCache.filter((r) => !gone.has(r.queryId));
     dispatch(DISCOVER_UPDATED_EVENT);
   }
   // Reviews that belonged to this project now have projectId=null — refresh.

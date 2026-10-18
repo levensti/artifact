@@ -103,11 +103,14 @@ export function ProjectDialog(
 export function DeleteProjectDialog({
   project,
   paperCount,
+  briefCount,
   onClose,
   onDeleted,
 }: {
   project: Project;
   paperCount: number;
+  /** Research briefs in the project, which are deleted with it. */
+  briefCount: number;
   onClose: () => void;
   onDeleted?: () => void;
 }) {
@@ -137,10 +140,12 @@ export function DeleteProjectDialog({
           Delete project?
         </h2>
         <p className="mb-5 text-[13px] leading-relaxed text-muted-foreground">
-          &ldquo;{project.name}&rdquo; will be deleted.
+          &ldquo;{project.name}&rdquo; will be deleted
+          {briefCount > 0
+            ? `, along with its ${briefCount === 1 ? "research brief" : `${briefCount} research briefs`}.`
+            : "."}
           {paperCount > 0 &&
-            ` ${paperCount} ${paperCount === 1 ? "paper" : "papers"} will be ungrouped but not deleted.`}{" "}
-          Its research briefs stay in Artifacts.
+            ` ${paperCount === 1 ? "Its review is kept" : `Its ${paperCount} reviews are kept`}, outside any project.`}
         </p>
         <div className="flex justify-end gap-2">
           <button

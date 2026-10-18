@@ -53,17 +53,13 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
           </div>
 
           <header className="mb-7">
-            <p className="landing-label">
-              <b>[■]</b>{" "}
-              {isSignup ? "Create your account" : "Sign in"}
-            </p>
-            <h1 className="landing-h2 mt-4">
-              {isSignup ? "Set up your reading workspace." : "Welcome back."}
+            <h1 className="landing-h2">
+              {isSignup ? "Create your account" : "Sign in to Artifact"}
             </h1>
             <p className="landing-lede mt-3 text-[15px]">
               {isSignup
-                ? "Use your email, or continue with Google. Free usage on us every day."
-                : "Sign in to continue studying."}
+                ? "Review papers, PDFs, and web pages with an assistant that cites the page for every answer. Free to start, no API key needed."
+                : "Your reviews, projects, and notes are waiting."}
             </p>
           </header>
 
@@ -76,17 +72,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
             </div>
           ) : null}
 
-          <CredentialsForm mode={mode} callbackUrl={target} />
-
-          {/* Hairline divider */}
-          <div className="mt-7 flex items-center gap-3">
-            <span className="h-px flex-1 bg-border" />
-            <span className="landing-label">or</span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
           <form
-            className="mt-6"
             action={async () => {
               "use server";
               await signIn("google", { redirectTo: target });
@@ -97,11 +83,18 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
               className="flex h-9 w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-card px-4 text-[14px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
             >
               <GoogleMark />
-              <span>
-                {isSignup ? "Sign up with Google" : "Continue with Google"}
-              </span>
+              <span>Continue with Google</span>
             </button>
           </form>
+
+          {/* Hairline divider */}
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-border" />
+            <span className="landing-label">or use email</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <CredentialsForm mode={mode} callbackUrl={target} />
 
           <p className="mt-7 text-[14px] text-muted-foreground">
             {isSignup ? "Already have an account?" : "New to Artifact?"}{" "}
@@ -120,11 +113,7 @@ export default async function AuthPage({ mode, searchParams }: AuthPageProps) {
 
 function GoogleMark() {
   return (
-    <svg
-      viewBox="0 0 18 18"
-      aria-hidden
-      className="size-4"
-    >
+    <svg viewBox="0 0 18 18" aria-hidden className="size-4">
       <path
         fill="#EA4335"
         d="M9 3.48c1.69 0 2.83.73 3.48 1.34l2.54-2.48C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.96l2.91 2.26C4.6 5.05 6.62 3.48 9 3.48z"
