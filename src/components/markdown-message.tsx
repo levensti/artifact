@@ -126,6 +126,30 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
                 </a>
               );
             }
+            // A brief's overview cites its reading list as `[2](#pick-<id>)`
+            // (see OverviewProse): a superscript rank that scrolls to the
+            // entry and flashes it, without touching the URL.
+            if (props.href?.startsWith("#pick-")) {
+              const targetId = props.href.slice(1);
+              return (
+                <a
+                  href={props.href}
+                  className="pick-ref"
+                  aria-label={`Reading list item ${String(props.children)}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const el = document.getElementById(targetId);
+                    if (!el) return;
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    el.classList.remove("page-flash");
+                    void el.offsetWidth;
+                    el.classList.add("page-flash");
+                  }}
+                >
+                  {props.children}
+                </a>
+              );
+            }
             // Route relative/in-app paths through next/link so citations
             // like [Title](/review/abc) feel native instead of popping a
             // new tab. External URLs still open in a new tab.

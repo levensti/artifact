@@ -17,7 +17,7 @@ import { setRecommendationDismissed } from "@/lib/client-data";
 import type { DiscoverQuery, Recommendation } from "@/lib/discover-types";
 import type { AgentStep } from "@/hooks/use-chat";
 import MarkdownMessage from "./markdown-message";
-import { DiscoverLiveProgress, liveStatusLine } from "./discover-picks";
+import { DiscoverLiveProgress, LIVE_RUN_NOTE, LogStep } from "./discover-picks";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import BriefProjectControl from "./brief-project-control";
 import {
@@ -128,8 +128,9 @@ function parseLog(log: string): LogEntry[] {
   return entries;
 }
 
-/** The finished brief's research trajectory, in the same shape as the live
- *  trace: papers checked first, then searches. Folded by default. */
+/** The finished brief's research, on the same step rail as the live run:
+ *  what was searched, graded, read closely, and picked. Searches and close
+ *  reads open on request. */
 function ResearchLog({
   log,
   recs,
@@ -137,7 +138,6 @@ function ResearchLog({
   log: string;
   recs: Recommendation[];
 }) {
-  const [open, setOpen] = useState(false);
   const entries = parseLog(log);
   const reads = entries.filter((e) => e.kind === "read");
   const searches = entries.filter((e) => e.kind === "search" || e.kind === "web");
@@ -145,112 +145,73 @@ function ResearchLog({
   if (entries.length === 0) return null;
   const titleFor = (id: string) =>
     recs.find((r) => r.arxivId === id)?.title ?? `arXiv:${id}`;
-  const summary = [
-    `${searches.length} ${searches.length === 1 ? "search" : "searches"}`,
-    grading ? `${grading.text} sources graded` : null,
-    reads.length > 0
-      ? `${reads.length} ${reads.length === 1 ? "paper" : "papers"} checked`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const found = searches.reduce(
+    (n, e) => n + (Number(e.detail?.match(/\d+/)?.[0]) || 0),
+    0,
+  );
+  const plural = (n: number, one: string, many: string) =>
+    `${n} ${n === 1 ? one : many}`;
 
   return (
     <section>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="-mx-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[15px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-      >
-        <ChevronRight
-          className={cn(
-            "size-4 text-muted-foreground transition-transform",
-            open && "rotate-90",
-          )}
-          strokeWidth={2}
-        />
-        Research
-        <span className="text-[13px] font-normal text-muted-foreground">
-          {summary}
-        </span>
-      </button>
-      {open ? (
-        <div className="mt-4 space-y-6">
-          {grading ? (
-            <div>
-              <h3 className="px-2 text-[13px] font-medium text-muted-foreground">
-                Grading
-              </h3>
-              <p className="mt-1.5 flex items-center gap-3 px-2 py-1.5 text-[14px]">
-                <span className="min-w-0 flex-1 text-foreground/85">
-                  Graded {grading.text} sources on their content
-                </span>
-                {grading.detail ? (
-                  <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
-                    {grading.detail}
-                  </span>
-                ) : null}
-              </p>
-            </div>
-          ) : null}
-          {reads.length > 0 ? (
-            <div>
-              <h3 className="px-2 text-[13px] font-medium text-muted-foreground">
-                Papers checked
-              </h3>
-              <ul className="mt-1.5">
-                {reads.map((e, i) => (
-                  <li key={i}>
-                    <a
-                      href={`https://arxiv.org/abs/${e.text}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-[14px] text-foreground/85 transition-colors hover:bg-muted/50"
-                    >
-                      <span className="min-w-0 flex-1 truncate">
-                        {titleFor(e.text)}
+      <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+        How it was researched
+      </h2>
+      <ol className="mt-4">
+        {searches.length > 0 ? (
+          <LogStep
+            state="done"
+            title={`Searched ${searches.length} ways${found > 0 ? `, ${plural(found, "result", "results")}` : ""}`}
+          >
+            <ul className="-ml-2">
+              {searches.map((e, i) => {
+                const Icon = e.kind === "web" ? Globe : Search;
+                return (
+                  <li key={i} className="flex items-center gap-3 px-2 py-1.5 text-[14px]">
+                    <Icon className="size-3.5 shrink-0 text-muted-foreground/70" strokeWidth={1.9} />
+                    <span className="min-w-0 flex-1 truncate text-foreground/85">{e.text}</span>
+                    {e.detail ? (
+                      <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                        {e.detail}
                       </span>
-                      <ArrowUpRight className="size-3 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70" />
-                    </a>
+                    ) : null}
                   </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {searches.length > 0 ? (
-            <div>
-              <h3 className="px-2 text-[13px] font-medium text-muted-foreground">
-                Searches
-              </h3>
-              <ul className="mt-1.5">
-                {searches.map((e, i) => {
-                  const Icon = e.kind === "web" ? Globe : Search;
-                  return (
-                    <li
-                      key={i}
-                      className="flex items-center gap-3 px-2 py-1.5 text-[14px]"
-                    >
-                      <Icon
-                        className="size-3.5 shrink-0 text-muted-foreground/70"
-                        strokeWidth={1.9}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-foreground/85">
-                        {e.text}
-                      </span>
-                      {e.detail ? (
-                        <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
-                          {e.detail}
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+                );
+              })}
+            </ul>
+          </LogStep>
+        ) : null}
+        {grading ? (
+          <LogStep
+            state="done"
+            title={`Graded ${plural(Number(grading.text), "unique source", "unique sources")}${grading.detail ? `, kept the best ${grading.detail.match(/\d+/)?.[0] ?? ""}` : ""}`}
+          />
+        ) : null}
+        {reads.length > 0 ? (
+          <LogStep state="done" title={`Read ${plural(reads.length, "paper", "papers")} closely`}>
+            <ul className="-ml-2">
+              {reads.map((e, i) => (
+                <li key={i}>
+                  <a
+                    href={`https://arxiv.org/abs/${e.text}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-[14px] text-foreground/85 transition-colors hover:bg-muted/50"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{titleFor(e.text)}</span>
+                    <ArrowUpRight className="size-3 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </LogStep>
+        ) : null}
+        <LogStep
+          state="done"
+          title={`Picked ${plural(recs.length, "source", "sources")} for the reading list`}
+          last
+        />
+      </ol>
     </section>
   );
 }
@@ -488,7 +449,7 @@ function RunBody({
     <div className="space-y-12">
       {synthesis ? (
         <BriefSection title="Overview">
-          <OverviewProse prose={synthesis} />
+          <OverviewProse prose={synthesis} recs={recommendations} />
         </BriefSection>
       ) : null}
 
@@ -524,12 +485,12 @@ function RunStatus({ run, large }: { run: BriefRunData; large?: boolean }) {
     return (
       <p
         className={cn(
-          "flex items-center gap-2 text-primary",
+          "flex items-center gap-2 text-muted-foreground",
           large ? "mt-3 text-[14px]" : "mt-1.5 text-[13px]",
         )}
       >
         <span className="landing-pulse-dot" aria-hidden />
-        {liveStatusLine(run.liveSteps)}
+        {LIVE_RUN_NOTE}
       </p>
     );
   }

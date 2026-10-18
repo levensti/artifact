@@ -29,7 +29,10 @@ const PROJECT_NAME_MAX = 60;
 /** A project name from a research question: the question itself, cut at a
  *  word boundary when long, without a trailing question mark. */
 function projectNameFrom(question: string): string {
-  const text = question.trim().replace(/\s+/g, " ").replace(/[?.!]+$/, "");
+  const text = question
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[?.!]+$/, "");
   if (text.length <= PROJECT_NAME_MAX) return text;
   const cut = text.slice(0, PROJECT_NAME_MAX);
   const atWord = cut.slice(0, cut.lastIndexOf(" ")) || cut;
@@ -96,20 +99,16 @@ function HomeBody() {
       className="flex h-full flex-col overflow-y-auto"
       style={{ background: "var(--reader-mat)" }}
     >
-      {/* Same content column as Projects so navigating between pages
-          doesn't reflow the layout. */}
-      <div className="mx-auto w-full max-w-4xl space-y-5 px-6 pb-16 pt-12 sm:px-8 sm:pt-14">
-        {/* Title mirrors the shared PageHeader (size, weight, and top
-            position) so navigating between pages doesn't shift the header. */}
-        <div>
+      {/* One job, so the prompt sits in the middle of the page, lifted a
+          little above true center where the eye lands. */}
+      <div className="mx-auto flex min-h-full w-full max-w-160 flex-col justify-center gap-5 px-6 pb-[14vh] pt-12 sm:px-8">
+        <div className="text-center">
           <h1 className="text-[27px] font-semibold leading-tight tracking-[-0.022em] text-foreground">
             What do you want to explore?
           </h1>
-          <p className="mt-1.5 max-w-150 text-[15px] leading-[1.6] text-muted-foreground">
-            Not sure which exact paper or resource to read? Ask about a topic,
-            method, or open question. Artifact finds the best resources and
-            writes a short brief with a ranked reading list, saved as a new
-            project you can keep adding to.
+          <p className="mt-1.5 text-[15px] leading-[1.6] text-muted-foreground">
+            Artifact will curate a personalized reading list to help you become
+            an expert.
           </p>
         </div>
 
