@@ -16,6 +16,7 @@ import { GripVertical, Loader2, MessageSquare, Share2, StickyNote, X } from "luc
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel, { type RightPanelTab } from "@/components/right-panel";
 import PaperProjectCrumb from "@/components/paper-project-crumb";
+import PdfSkeleton from "@/components/pdf-skeleton";
 import { CitationContextProvider } from "@/components/citation-context";
 import NoteHoverCard, { type HoverAnchor } from "@/components/note-hover-card";
 import SelectionPopover from "@/components/selection-popover";
@@ -36,6 +37,8 @@ import { arxivPdfUrl, BREAKPOINTS } from "@/lib/utils";
 
 const ASSISTANT_COLLAPSED_KEY = "artifact-assistant-panel-collapsed";
 const ASSISTANT_WIDTH_KEY = "artifact-assistant-panel-width";
+/** Assistant panel width before a saved one is read (and on the server). */
+const DEFAULT_PANEL_WIDTH = 440;
 
 import { hasUsableProvider } from "@/lib/keys";
 import type { TextSelectionInfo } from "@/components/pdf-viewer";
@@ -88,12 +91,7 @@ function isPlaceholderReviewTitle(
 
 const PdfViewer = dynamic(() => import("@/components/pdf-viewer"), {
   ssr: false,
-  loading: () => (
-    <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
-      <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
-      Loading PDF viewer…
-    </div>
-  ),
+  loading: () => <PdfSkeleton />,
 });
 
 const WebViewer = dynamic(() => import("@/components/web-viewer"), {
@@ -218,7 +216,7 @@ export default function ReviewPage() {
     null,
   );
   const [panelWidth, setPanelWidth] = useState(() => {
-    if (typeof window === "undefined") return 440;
+    if (typeof window === "undefined") return DEFAULT_PANEL_WIDTH;
     try {
       const saved = window.localStorage.getItem(ASSISTANT_WIDTH_KEY);
       if (saved) {
@@ -578,8 +576,26 @@ export default function ReviewPage() {
   if (!clientReady || !dataReady || !review) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-          Loading…
+        {/* The review's own layout, empty: the document on the left, the
+            assistant panel on the right (wide screens). */}
+        <div className="flex h-full overflow-hidden">
+          <div className="min-w-0 flex-1">
+            <PdfSkeleton label="Loading review" />
+          </div>
+          <div
+            className="hidden shrink-0 flex-col border-l border-border/80 bg-background lg:flex"
+            // The saved width comes from localStorage, which the server
+            // can't see: render the default until the client has taken over,
+            // or hydration mismatches.
+            style={{ width: `${clientReady ? panelWidth : DEFAULT_PANEL_WIDTH}px` }}
+            aria-hidden
+          >
+            <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
+              <div className="h-7 w-20 rounded-md bg-muted" />
+              <div className="h-7 w-14 rounded-md bg-muted/60" />
+              <div className="h-7 w-16 rounded-md bg-muted/60" />
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -633,10 +649,7 @@ export default function ReviewPage() {
                 toolbarActions={shareButton}
               />
             ) : (
-              <div className="flex h-full min-h-[200px] items-center justify-center gap-2 bg-(--reader-mat) text-muted-foreground text-sm">
-                <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
-                Loading PDF…
-              </div>
+              <PdfSkeleton />
             )}
           </div>
         </div>

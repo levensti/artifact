@@ -2,11 +2,12 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import ToolbarTitle from "@/components/viewer-toolbar-title";
+import PdfSkeleton, { SheetLines } from "@/components/pdf-skeleton";
 import type { DocumentOutlineEntry } from "@/lib/documents";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, Loader2, FileWarning, Search, X } from "lucide-react";
+import { ChevronUp, ChevronDown, ZoomIn, ZoomOut, FileWarning, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { highlightBackground, type Annotation } from "@/lib/annotations";
@@ -834,11 +835,7 @@ export default function PdfViewer({
       )}
 
       <div ref={containerRef} data-pdf-container className="flex-1 overflow-auto min-h-0">
-        {loading && !loadError && (
-          <div className="flex items-center justify-center h-full min-h-[200px]">
-            <Loader2 className="animate-spin text-primary" size={28} />
-          </div>
-        )}
+        {loading && !loadError && <PdfSkeleton toolbar={false} />}
         {loadError && (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-8">
             <FileWarning className="text-destructive" size={28} />
@@ -969,7 +966,17 @@ function BufferedPage({
       />
     </div>
   );
-  if (shownWidth === null || shownWidth === width) return layer(width, false);
+  // Before the first raster lands, the slot shows faint text lines (the
+  // loading skeleton's), so a page appears as it draws, not as a white box.
+  if (shownWidth === null) {
+    return (
+      <>
+        <SheetLines />
+        {layer(width, false)}
+      </>
+    );
+  }
+  if (shownWidth === width) return layer(width, false);
   return (
     <>
       {layer(shownWidth, false)}
