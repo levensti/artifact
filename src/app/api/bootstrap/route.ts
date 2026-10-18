@@ -13,10 +13,9 @@ export const GET = authedRoute(async (userId) => {
   // Discover (queries + recommendations) is intentionally NOT bootstrapped:
   // only the /discover route reads it, so it's lazy-loaded there via
   // /api/discover-queries instead of riding in every page's bootstrap.
-  const [reviews, settings, deepDives, projects, session] = await Promise.all([
+  const [reviews, settings, projects, session] = await Promise.all([
     store.listReviews(userId),
     store.getSettings(userId),
-    store.listDeepDives(userId),
     store.listProjects(userId),
     auth(),
   ]);
@@ -37,7 +36,6 @@ export const GET = authedRoute(async (userId) => {
     // Same shape, for tool keys (Exa). Lets the client suppress the
     // "add a key" prompt when the server already has one in env.
     platformTools: platformToolAvailability(),
-    deepDives,
     projects,
     user,
   });

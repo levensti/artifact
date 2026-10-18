@@ -12,8 +12,7 @@ interface PageHeaderProps {
 }
 
 /**
- * The shared in-canvas page header used across content pages (Discover,
- * Journal). Following the app-shell pattern most sidebar dashboards use: a
+ * The shared in-canvas page header used across content pages (Projects). Following the app-shell pattern most sidebar dashboards use: a
  * large page title on the left with the primary action on the same baseline to
  * the right, sitting inside the content column (not a separate chrome bar). The
  * page's prominent input (search / composer) goes directly beneath it. The

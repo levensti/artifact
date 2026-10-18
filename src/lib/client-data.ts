@@ -3,7 +3,7 @@
  * routes (see src/app/api/*) which back onto Postgres via Prisma.
  *
  * In-memory caches sit in front of the network so that UI render paths
- * can call `getReviewsSnapshot()` / `getWikiCacheSnapshot()` synchronously,
+ * can call `getReviewsSnapshot()` synchronously,
  * the same way they did when the data lived in IndexedDB.
  */
 
@@ -15,15 +15,11 @@ import type {
   Project,
 } from "@/lib/review-types";
 import type { Annotation } from "@/lib/annotations";
-import type { DeepDiveSession } from "@/lib/deep-dives";
-import type { WikiPage, WikiPageType } from "@/lib/wiki";
 import type { DiscoverQuery, Recommendation } from "@/lib/discover-types";
 import {
   REVIEWS_UPDATED_EVENT,
   ANNOTATIONS_UPDATED_EVENT,
-  DEEP_DIVES_UPDATED_EVENT,
   KEYS_UPDATED_EVENT,
-  WIKI_UPDATED_EVENT,
   USER_UPDATED_EVENT,
   DISCOVER_UPDATED_EVENT,
   PROJECTS_UPDATED_EVENT,
@@ -82,7 +78,6 @@ let reviewsCache: PaperReview[] = [];
  */
 let reviewsHydrated = false;
 let settingsCache: SettingsCache = EMPTY_SETTINGS;
-let deepDivesCache: DeepDiveSession[] = [];
 let discoverQueriesCache: DiscoverQuery[] = [];
 let recommendationsCache: Recommendation[] = [];
 let projectsCache: Project[] = [];
@@ -108,7 +103,6 @@ export async function hydrateClientStore(): Promise<void> {
       settings: SettingsCache;
       platformFireworks?: boolean;
       platformTools?: PlatformToolsCache;
-      deepDives: DeepDiveSession[];
       projects: Project[];
       user: CurrentUser | null;
     }>("/api/bootstrap");
@@ -118,14 +112,12 @@ export async function hydrateClientStore(): Promise<void> {
     settingsHydrated = true;
     platformFireworksCache = boot.platformFireworks ?? false;
     platformToolsCache = boot.platformTools ?? {};
-    deepDivesCache = boot.deepDives;
     projectsCache = boot.projects ?? [];
     currentUser = boot.user;
     messagesCache.clear();
     annotationsCache.clear();
     dispatch(REVIEWS_UPDATED_EVENT);
     dispatch(KEYS_UPDATED_EVENT);
-    dispatch(DEEP_DIVES_UPDATED_EVENT);
     dispatch(PROJECTS_UPDATED_EVENT);
     dispatch(USER_UPDATED_EVENT);
   })();
@@ -414,32 +406,6 @@ export async function saveAnnotations(
   dispatch(ANNOTATIONS_UPDATED_EVENT);
 }
 
-/* ── Deep dives ── */
-
-export function getDeepDivesSnapshot(): DeepDiveSession[] {
-  return deepDivesCache;
-}
-
-export async function refreshDeepDives(): Promise<void> {
-  const { deepDives } = await apiFetch<{ deepDives: DeepDiveSession[] }>(
-    "/api/deep-dives",
-  );
-  deepDivesCache = deepDives;
-  dispatch(DEEP_DIVES_UPDATED_EVENT);
-}
-
-export async function saveDeepDive(
-  payload: Omit<DeepDiveSession, "id" | "createdAt">,
-): Promise<DeepDiveSession> {
-  const { deepDive } = await apiFetch<{ deepDive: DeepDiveSession }>(
-    "/api/deep-dives",
-    { method: "POST", body: payload },
-  );
-  deepDivesCache = [deepDive, ...deepDivesCache.filter((d) => d.id !== deepDive.id)];
-  dispatch(DEEP_DIVES_UPDATED_EVENT);
-  return deepDive;
-}
-
 /* ── Discover queries + recommendations ──────────────────────── */
 
 export function getDiscoverQueriesSnapshot(): DiscoverQuery[] {
@@ -464,9 +430,9 @@ let discoverHydrated = false;
 let discoverInflight: Promise<void> | null = null;
 
 /**
- * Lazy, deduped discover load. The /discover route calls this on mount so the
+ * Lazy, deduped discover load. Project pages call this on mount so the
  * discover queries + recommendations stay out of the app-wide bootstrap that
- * every page (the overview, a review, the journal) pays for.
+ * every page pays for.
  */
 export async function ensureDiscoverLoaded(): Promise<void> {
   if (typeof window === "undefined") return;
@@ -623,217 +589,6 @@ export async function deleteDiscoverQuery(queryId: string): Promise<void> {
     (r) => r.queryId !== queryId,
   );
   dispatch(DISCOVER_UPDATED_EVENT);
-}
-
-/* ── Wiki (ambient knowledge base) ──────────────────────────────── */
-
-let wikiPagesCache: WikiPage[] | null = null;
-let wikiPagesInflight: Promise<WikiPage[]> | null = null;
-// Generation counter — bumped by `invalidateWikiCache()` so an in-flight
-// load started before the invalidation doesn't overwrite the fresh
-// cache with stale data when it eventually resolves.
-let wikiCacheGeneration = 0;
-const wikiIngestedCache = new Map<string, boolean>();
-
-function notifyWikiUpdated(): void {
-  dispatch(WIKI_UPDATED_EVENT);
-}
-
-function upsertWikiPageInCache(page: WikiPage): void {
-  if (!wikiPagesCache) {
-    wikiPagesCache = [page];
-    return;
-  }
-  const idx = wikiPagesCache.findIndex((p) => p.slug === page.slug);
-  if (idx >= 0) {
-    wikiPagesCache = [
-      ...wikiPagesCache.slice(0, idx),
-      page,
-      ...wikiPagesCache.slice(idx + 1),
-    ];
-  } else {
-    wikiPagesCache = [...wikiPagesCache, page];
-  }
-}
-
-export function getWikiCacheSnapshot(): WikiPage[] | null {
-  return wikiPagesCache;
-}
-
-export async function loadWikiPages(): Promise<WikiPage[]> {
-  if (wikiPagesCache) return wikiPagesCache;
-  if (wikiPagesInflight) return wikiPagesInflight;
-  const gen = wikiCacheGeneration;
-  wikiPagesInflight = (async () => {
-    try {
-      const { pages } = await apiFetch<{ pages: WikiPage[] }>("/api/wiki/pages");
-      if (gen !== wikiCacheGeneration) return pages;
-      wikiPagesCache = pages;
-      notifyWikiUpdated();
-      return pages;
-    } finally {
-      if (gen === wikiCacheGeneration) wikiPagesInflight = null;
-    }
-  })();
-  return wikiPagesInflight;
-}
-
-export async function loadWikiPage(slug: string): Promise<WikiPage | null> {
-  if (!slug?.trim()) return null;
-  if (wikiPagesCache) {
-    const hit = wikiPagesCache.find((p) => p.slug === slug);
-    if (hit) return hit;
-  }
-  const { page } = await apiFetch<{ page: WikiPage | null }>(
-    `/api/wiki/pages/${encodeURIComponent(slug)}`,
-  );
-  if (page) upsertWikiPageInCache(page);
-  return page;
-}
-
-export interface SaveWikiPageInput {
-  slug: string;
-  title: string;
-  content: string;
-  pageType: WikiPageType;
-  /** Optional: link this page to a review/paper as a source. */
-  reviewId?: string;
-}
-
-export async function saveWikiPage(input: SaveWikiPageInput): Promise<WikiPage> {
-  const { page } = await apiFetch<{ page: WikiPage }>(
-    `/api/wiki/pages/${encodeURIComponent(input.slug)}`,
-    {
-      method: "PUT",
-      body: {
-        title: input.title,
-        content: input.content,
-        pageType: input.pageType,
-        reviewId: input.reviewId,
-      },
-    },
-  );
-  if (input.reviewId) wikiIngestedCache.set(input.reviewId, true);
-  upsertWikiPageInCache(page);
-  notifyWikiUpdated();
-  return page;
-}
-
-export async function updateWikiPage(
-  slug: string,
-  patch: { title?: string; content?: string; pageType?: WikiPageType },
-): Promise<WikiPage> {
-  const existing = await loadWikiPage(slug);
-  if (!existing) throw new Error(`updateWikiPage: page not found: ${slug}`);
-  return saveWikiPage({
-    slug,
-    title: patch.title ?? existing.title,
-    content: patch.content ?? existing.content,
-    pageType: patch.pageType ?? existing.pageType,
-  });
-}
-
-export async function deleteWikiPage(slug: string): Promise<void> {
-  await apiFetch(`/api/wiki/pages/${encodeURIComponent(slug)}`, {
-    method: "DELETE",
-  });
-  if (wikiPagesCache) {
-    wikiPagesCache = wikiPagesCache.filter((p) => p.slug !== slug);
-  }
-  notifyWikiUpdated();
-}
-
-export async function checkWikiIngested(reviewId: string): Promise<boolean> {
-  if (!reviewId?.trim()) return false;
-  const cached = wikiIngestedCache.get(reviewId);
-  if (cached !== undefined) return cached;
-  const { ingested } = await apiFetch<{ ingested: boolean }>(
-    `/api/wiki/ingested?reviewId=${encodeURIComponent(reviewId)}`,
-  );
-  wikiIngestedCache.set(reviewId, ingested);
-  return ingested;
-}
-
-export function invalidateWikiCache(): void {
-  wikiCacheGeneration++;
-  wikiPagesCache = null;
-  wikiPagesInflight = null;
-  notifyWikiUpdated();
-}
-
-export interface WikiFinalizePage {
-  slug: string;
-  title: string;
-  content: string;
-  pageType: WikiPageType;
-  source?: { reviewId: string; passage?: string };
-}
-
-export interface WikiFinalizeInput {
-  pages: WikiFinalizePage[];
-}
-
-export async function finalizeWikiIngest(
-  input: WikiFinalizeInput,
-): Promise<{ savedSlugs: string[] }> {
-  const res = await apiFetch<{ savedSlugs: string[] }>("/api/wiki/ingest", {
-    method: "POST",
-    body: input,
-  });
-  invalidateWikiCache();
-  for (const page of input.pages) {
-    if (page.source?.reviewId) wikiIngestedCache.set(page.source.reviewId, true);
-  }
-  return res;
-}
-
-export interface WikiBacklink {
-  sourceSlug: string;
-  sourceTitle: string;
-  sourcePageType: WikiPageType;
-}
-
-export interface WikiPageSource {
-  reviewId: string;
-  reviewTitle: string | null;
-  reviewArxivId: string | null;
-  passage: string | null;
-  addedAt: string | null;
-}
-
-export interface WikiRevisionSummary {
-  id: string;
-  savedAt: string;
-  contentLength: number;
-}
-
-export interface WikiPageMetadata {
-  backlinks: WikiBacklink[];
-  sources: WikiPageSource[];
-  revisions: WikiRevisionSummary[];
-}
-
-export async function loadWikiPageMetadata(
-  slug: string,
-): Promise<WikiPageMetadata> {
-  return apiFetch<WikiPageMetadata>(
-    `/api/wiki/pages/${encodeURIComponent(slug)}/metadata`,
-  );
-}
-
-export interface WikiRevision {
-  id: string;
-  slug: string;
-  title: string;
-  content: string;
-  savedAt: string;
-}
-
-export async function loadWikiRevision(id: string): Promise<WikiRevision | null> {
-  const { revision } = await apiFetch<{ revision: WikiRevision | null }>(
-    `/api/wiki/revisions/${id}`,
-  );
-  return revision;
 }
 
 /* ── Settings / keys ── */

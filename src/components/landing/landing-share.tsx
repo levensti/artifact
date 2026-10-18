@@ -12,7 +12,7 @@ export function LandingShare() {
           num="03"
           kicker="Share"
           title="Send a colleague your read on a paper."
-          lede="One link carries the whole bundle: every highlight, every margin note, every chat and deep dive. A colleague imports it into their own workspace and keeps going where you left off."
+          lede="One link carries the whole bundle: every highlight, every margin note, every chat. A colleague imports it into their own workspace and keeps going where you left off."
         />
 
         <ShareCard />
@@ -93,9 +93,6 @@ function ShareCard() {
           <BundleStat>
             <Stat>3</Stat> chat threads
           </BundleStat>
-          <BundleStat>
-            <Stat>2</Stat> deep dives
-          </BundleStat>
         </div>
 
         <div
@@ -106,7 +103,7 @@ function ShareCard() {
         >
           <ShareBullet
             title="Everything travels"
-            body="Annotations, notes, chats, and deep dives arrive intact."
+            body="Highlights, notes, and chats arrive intact."
           />
           <ShareBullet
             title="Import and continue"

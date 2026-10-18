@@ -37,7 +37,7 @@ export function useSettingsOpener(): SettingsOpenerContextValue {
 /**
  * Same as `useSettingsOpener`, but returns null when no provider is mounted.
  * Useful for components rendered both inside and outside the dashboard
- * shell (e.g. markdown rendered inside the wiki page chrome).
+ * shell (e.g. markdown rendered outside the app layout).
  */
 export function useSettingsOpenerOptional(): SettingsOpenerContextValue | null {
   return useContext(SettingsOpenerContext);

@@ -3,6 +3,16 @@
 import { useEffect, useState } from "react";
 import { createProject, deleteProject, updateProject } from "@/lib/client-data";
 import type { Project } from "@/lib/review-types";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 /* ── ProjectDialog ───────────────────────────────────────────── */
 
@@ -45,56 +55,44 @@ export function ProjectDialog(
     }
   };
 
-  if (!props.open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={props.onClose}
+    <Dialog
+      open={props.open}
+      onOpenChange={(next) => {
+        if (!next) props.onClose();
+      }}
     >
-      <div
-        className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="mb-4 text-[15px] font-semibold tracking-[-0.01em]">
-          {props.mode === "create" ? "New project" : "Rename project"}
-        </h2>
-        <form
-          onSubmit={(e) => void handleSubmit(e)}
-          className="flex flex-col gap-3"
-        >
-          <div>
-            <label className="mb-1 block text-[12px] font-medium text-muted-foreground">
-              Name
-            </label>
-            <input
-              autoFocus
-              onFocus={(e) => e.currentTarget.select()}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. My thesis, NLP papers…"
-              className="h-8 w-full rounded-lg border bg-background px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div className="mt-1 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={props.onClose}
-              className="rounded-md px-4 py-2 text-[13px] text-muted-foreground hover:bg-muted"
-            >
+      <DialogContent className="sm:max-w-sm">
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>
+              {props.mode === "create" ? "New project" : "Rename project"}
+            </DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            aria-label="Project name"
+            onFocus={(e) => e.currentTarget.select()}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. My thesis, Agent memory…"
+            // A name field, not a login: keep browser autofill and password
+            // managers from attaching to it.
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={props.onClose}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim() || saving}
-              className="rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" disabled={!name.trim() || saving}>
               {saving ? "Saving…" : props.mode === "create" ? "Create" : "Save"}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -128,44 +126,37 @@ export function DeleteProjectDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !deleting) onClose();
+      }}
     >
-      <div
-        className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="mb-2 text-[15px] font-semibold tracking-[-0.01em]">
-          Delete project?
-        </h2>
-        <p className="mb-5 text-[13px] leading-relaxed text-muted-foreground">
-          &ldquo;{project.name}&rdquo; will be deleted
-          {briefCount > 0
-            ? `, along with its ${briefCount === 1 ? "research brief" : `${briefCount} research briefs`}.`
-            : "."}
-          {paperCount > 0 &&
-            ` ${paperCount === 1 ? "Its review is kept" : `Its ${paperCount} reviews are kept`}, outside any project.`}
-        </p>
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={deleting}
-            className="rounded-md px-4 py-2 text-[13px] text-muted-foreground hover:bg-muted disabled:opacity-50"
-          >
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Delete project?</DialogTitle>
+          <DialogDescription>
+            &ldquo;{project.name}&rdquo; will be deleted
+            {briefCount > 0
+              ? `, along with its ${briefCount === 1 ? "research brief" : `${briefCount} research briefs`}.`
+              : "."}
+            {paperCount > 0 &&
+              ` ${paperCount === 1 ? "Its review is kept" : `Its ${paperCount} reviews are kept`}, outside any project.`}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={deleting}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="destructive"
             onClick={() => void handleConfirm()}
             disabled={deleting}
-            className="rounded-md bg-destructive px-4 py-2 text-[13px] font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
           >
             {deleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

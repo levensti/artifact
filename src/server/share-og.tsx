@@ -5,22 +5,15 @@ import { getSharePreview } from "./shares";
 const WIDTH = 1200;
 const HEIGHT = 630;
 
-/// Render the 1200×630 OG image for a share token. The kind label
-/// (Paper review / Journal entry) and content are driven entirely by
-/// the share's stored kind.
+/// Render the 1200×630 OG image for a review share token.
 export async function renderShareOgImage(token: string): Promise<Response> {
   const preview = await getSharePreview(token).catch(() => null);
   if (!preview) return renderFallback();
 
   const sharer = preview.sharerFirstName ?? "Someone";
-  const isReview = preview.payload.kind === "review";
-  const subtitle = isReview ? "shared a paper review" : "shared a journal entry";
-  const title = isReview
-    ? (preview.payload as Extract<typeof preview.payload, { kind: "review" }>).title
-    : (preview.payload as Extract<typeof preview.payload, { kind: "wiki" }>).rootTitle;
-  const sourceLine = isReview
-    ? buildReviewSource(preview.payload as Extract<typeof preview.payload, { kind: "review" }>)
-    : buildWikiSubLine(preview.payload as Extract<typeof preview.payload, { kind: "wiki" }>);
+  const subtitle = "shared a review";
+  const title = preview.payload.title;
+  const sourceLine = buildReviewSource(preview.payload);
 
   return new ImageResponse(
     (
@@ -68,7 +61,7 @@ export async function renderShareOgImage(token: string): Promise<Response> {
             opacity: 0.75,
           }}
         >
-          {isReview ? "Paper review" : "Journal entry"}
+          Review
         </div>
 
         <div
@@ -195,18 +188,6 @@ function buildReviewSource(payload: {
     }
   }
   return "";
-}
-
-function buildWikiSubLine(payload: {
-  pageType: string;
-  pageCount: number;
-  depth: number;
-}): string {
-  const kind = payload.pageType === "digest" ? "Weekly digest" : "Study session";
-  if (payload.depth > 0 && payload.pageCount > 1) {
-    return `${kind} · ${payload.pageCount} pages`;
-  }
-  return kind;
 }
 
 function truncate(s: string, max: number): string {

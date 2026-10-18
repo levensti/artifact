@@ -8,14 +8,9 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import {
-  transformWikiLinks,
-  wikiSlugFromHref,
-} from "@/lib/wiki-link-transform";
-import {
   citationFromHref,
   transformCitations,
 } from "@/lib/citation-transform";
-import WikiLinkHover from "./wiki-link-hover";
 import CitationChip from "./citation-chip";
 import HtmlDiagram from "./html-diagram";
 import ChartBlock from "./chart-block";
@@ -33,8 +28,8 @@ const CODE_SEGMENT_RE =
   /(```[\s\S]*?```|```[\s\S]*$|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
 
 /**
- * Apply a text transform everywhere EXCEPT inside code. Citation/wiki-link
- * rewriting must not touch fenced or inline code — otherwise a diagram label
+ * Apply a text transform everywhere EXCEPT inside code. Citation rewriting
+ * must not touch fenced or inline code — otherwise a diagram label
  * like "Fig. 1" or "Section 3" gets turned into a markdown link inside the
  * ```diagram / ```chart source and the block no longer renders.
  */
@@ -70,14 +65,11 @@ interface MarkdownMessageProps {
 
 export default function MarkdownMessage({ content }: MarkdownMessageProps) {
   const streaming = useContext(MarkdownStreamingContext);
-  // Normalize [[slug]] tokens and (§N) / (Fig. N) / (Ref. [key]) citation
-  // tokens into markdown links so the renderer can pick them up and swap
-  // them for rich chip components. Runs once per content change.
+  // Normalize (§N) / (Fig. N) / (Ref. [key]) citation tokens into markdown
+  // links so the renderer can pick them up and swap them for rich chip
+  // components. Runs once per content change.
   const processed = useMemo(
-    () =>
-      transformOutsideCode(content, (text) =>
-        transformCitations(transformWikiLinks(text)),
-      ),
+    () => transformOutsideCode(content, transformCitations),
     [content],
   );
   const settingsOpener = useSettingsOpenerOptional();
@@ -89,12 +81,6 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
         rehypePlugins={[rehypeKatex]}
         components={{
           a: (props) => {
-            const slug = wikiSlugFromHref(props.href);
-            if (slug) {
-              return (
-                <WikiLinkHover slug={slug}>{props.children}</WikiLinkHover>
-              );
-            }
             const citation = citationFromHref(props.href);
             if (citation) {
               return (

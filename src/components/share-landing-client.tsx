@@ -4,11 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BookMarked,
   ChevronRight,
   ExternalLink,
   Loader2,
-  Sparkles,
 } from "lucide-react";
 import type { SharePreview } from "@/server/shares";
 import { apiFetch } from "@/lib/client/api";
@@ -35,9 +33,8 @@ interface Props {
 }
 
 interface ImportResult {
-  kind: "review" | "wiki";
+  kind: "review";
   finalReviewId?: string;
-  importedSlugs?: string[];
   alreadyOwner?: boolean;
 }
 
@@ -92,7 +89,6 @@ export default function ShareLandingClient({
   if (!preview) return null;
 
   const sharerName = preview.sharerFirstName ?? "Someone";
-  const isReview = preview.payload.kind === "review";
 
   return (
     <main
@@ -112,13 +108,13 @@ export default function ShareLandingClient({
 
           <p className="landing-label">
             <b>[■]</b>{" "}
-            {isReview ? "Shared paper review" : "Shared journal entry"}
+            Shared review
           </p>
 
           <h1 className="landing-h2 mt-4">
             {sharerName} shared{" "}
             <span className="text-muted-foreground">
-              {isReview ? "a paper review" : "a journal entry"}
+              a review
             </span>{" "}
             with you.
           </h1>
@@ -129,11 +125,7 @@ export default function ShareLandingClient({
           </p>
 
           <div className="mt-7">
-            {preview.payload.kind === "review" ? (
-              <ReviewCard payload={preview.payload} />
-            ) : (
-              <WikiCard payload={preview.payload} />
-            )}
+            <ReviewCard payload={preview.payload} />
           </div>
 
           <div className="mt-6">
@@ -154,46 +146,31 @@ export default function ShareLandingClient({
 
 /* ── Resource cards ────────────────────────────────────────────── */
 
-function KindGlyph({
-  kind,
-  isDigest,
-}: {
-  kind: "review" | "wiki";
-  isDigest?: boolean;
-}) {
-  // Inline SVG matches the journal/landing chip-glyph rhythm.
-  if (kind === "review") {
-    return (
-      <svg
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="size-3"
-        aria-hidden
-      >
-        <path d="M3 2.5h6.5L13 6v7.5H3z" />
-        <path d="M9.5 2.5V6H13" />
-      </svg>
-    );
-  }
-  if (isDigest) {
-    return <Sparkles className="size-3" strokeWidth={1.8} aria-hidden />;
-  }
-  return <BookMarked className="size-3" strokeWidth={1.8} aria-hidden />;
+function ReviewGlyph() {
+  // Inline SVG matches the landing's chip-glyph rhythm.
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-3"
+      aria-hidden
+    >
+      <path d="M3 2.5h6.5L13 6v7.5H3z" />
+      <path d="M9.5 2.5V6H13" />
+    </svg>
+  );
 }
 
 function CardChrome({
-  kind,
   kindLabel,
   children,
   accent,
 }: {
-  kind: "review" | "wiki";
   kindLabel: string;
-  isDigest?: boolean;
   children: React.ReactNode;
   accent?: boolean;
 }) {
@@ -223,7 +200,7 @@ function CardChrome({
             color: "color-mix(in srgb, var(--primary) 70%, transparent)",
           }}
         >
-          <KindGlyph kind={kind} isDigest={kindLabel === "Weekly digest"} />
+          <ReviewGlyph />
         </span>
         <MonoLabel>{kindLabel}</MonoLabel>
       </header>
@@ -247,7 +224,7 @@ function ReviewCard({
     : (payload.sourceUrl ?? null);
 
   return (
-    <CardChrome kind="review" kindLabel="Paper review">
+    <CardChrome kindLabel="Review">
       <h2
         className="text-[16.5px] font-semibold leading-[1.3] tracking-[-0.012em] text-foreground"
         style={{ textWrap: "balance" }}
@@ -282,7 +259,7 @@ function ReviewCard({
 function CountPills({
   counts,
 }: {
-  counts: { messages: number; annotations: number; deepDives: number };
+  counts: { messages: number; annotations: number };
 }) {
   const items: Array<{ label: string; value: number }> = [];
   if (counts.messages > 0) {
@@ -295,12 +272,6 @@ function CountPills({
     items.push({
       label: counts.annotations === 1 ? "annotation" : "annotations",
       value: counts.annotations,
-    });
-  }
-  if (counts.deepDives > 0) {
-    items.push({
-      label: counts.deepDives === 1 ? "deep dive" : "deep dives",
-      value: counts.deepDives,
     });
   }
   if (items.length === 0) return null;
@@ -329,54 +300,6 @@ function CountPills({
   );
 }
 
-function WikiCard({
-  payload,
-}: {
-  payload: Extract<SharePreview["payload"], { kind: "wiki" }>;
-}) {
-  const isDigest = payload.pageType === "digest";
-  return (
-    <CardChrome
-      kind="wiki"
-      kindLabel={isDigest ? "Weekly digest" : "Study session"}
-      accent={isDigest}
-    >
-      <h2
-        className="text-[16.5px] font-semibold leading-[1.3] tracking-[-0.012em] text-foreground"
-        style={{ textWrap: "balance" }}
-      >
-        {payload.rootTitle}
-      </h2>
-      {payload.excerpt ? (
-        <p
-          className="mt-3 line-clamp-4 text-[13px] leading-[1.6]"
-          style={{
-            fontFamily: "var(--font-reading)",
-            color:
-              "color-mix(in srgb, var(--muted-foreground) 95%, transparent)",
-          }}
-        >
-          {payload.excerpt}
-        </p>
-      ) : null}
-      {payload.depth > 0 && payload.pageCount > 1 ? (
-        <p
-          className="mt-4 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px]"
-          style={{
-            background: "var(--badge-accent-bg)",
-            color: "var(--badge-accent-fg)",
-          }}
-        >
-          + {payload.pageCount - 1} linked{" "}
-          {payload.pageCount - 1 === 1 ? "page" : "pages"}
-        </p>
-      ) : null}
-    </CardChrome>
-  );
-}
-
-/* ── CTA ───────────────────────────────────────────────────────── */
-
 function CtaArea({
   landingPath,
   isAuthed,
@@ -397,17 +320,7 @@ function CtaArea({
   const cb = `?callbackUrl=${encodeURIComponent(callbackUrl)}`;
 
   if (isOwner) {
-    const targetHref =
-      preview.payload.kind === "review"
-        ? `/review/${(preview.payload as Extract<SharePreview["payload"], { kind: "review" }>).reviewId}`
-        : `/journal?page=${encodeURIComponent(
-            (
-              preview.payload as Extract<
-                SharePreview["payload"],
-                { kind: "wiki" }
-              >
-            ).rootSlug,
-          )}`;
+    const targetHref = `/review/${preview.payload.reviewId}`;
     return (
       <div className="space-y-3">
         <p
@@ -615,18 +528,5 @@ function navigateToImported(
   router: ReturnType<typeof useRouter>,
   result: ImportResult,
 ) {
-  if (result.kind === "review" && result.finalReviewId) {
-    router.push(`/review/${result.finalReviewId}`);
-    return;
-  }
-  if (result.kind === "wiki") {
-    const slug = result.importedSlugs?.[0];
-    if (slug) {
-      router.push(`/journal?page=${encodeURIComponent(slug)}`);
-      return;
-    }
-    router.push("/journal");
-    return;
-  }
-  router.push("/");
+  router.push(result.finalReviewId ? `/review/${result.finalReviewId}` : "/");
 }
