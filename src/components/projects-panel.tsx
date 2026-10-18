@@ -52,6 +52,32 @@ function useLibraryVersion(): number {
 }
 
 /**
+ * Placeholder while projects load, in the list's own shape (same panel, a
+ * folder, a title and a meta line per row) so the page doesn't jump when
+ * the real rows arrive.
+ */
+function ProjectsSkeleton() {
+  const widths = ["46%", "62%", "38%"];
+  return (
+    <ul
+      className="animate-pulse divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+      style={{ boxShadow: "var(--shadow-sm)" }}
+      aria-label="Loading projects"
+    >
+      {widths.map((w, i) => (
+        <li key={i} className="flex items-center gap-4 px-6 py-4">
+          <div className="size-4 shrink-0 rounded bg-muted-foreground/10" />
+          <div className="min-w-0 flex-1">
+            <div className="h-3.5 rounded-full bg-muted-foreground/15" style={{ width: w }} />
+            <div className="mt-2 h-2.5 w-40 rounded-full bg-muted-foreground/10" />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * The Projects page: every project with what it holds, newest activity
  * first. A project is where research happens (asking on Home starts one) and
  * where papers are filed; opening one leads to its page.
@@ -68,6 +94,9 @@ export default function ProjectsPanel() {
     void (async () => {
       try {
         await Promise.all([hydrateClientStore(), ensureDiscoverLoaded()]);
+      } catch (err) {
+        // Show what loaded (or the empty state) rather than a skeleton forever.
+        console.error("Failed to load projects:", err);
       } finally {
         if (!cancelled) setHydrated(true);
       }
@@ -126,7 +155,9 @@ export default function ProjectsPanel() {
           }
         />
 
-        {!hydrated ? null : summaries.length === 0 ? (
+        {!hydrated ? (
+          <ProjectsSkeleton />
+        ) : summaries.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
             <p className="text-[15px] font-medium text-foreground">
               No projects yet
