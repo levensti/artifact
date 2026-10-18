@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Folder } from "lucide-react";
-import { useProjects } from "@/hooks/use-projects";
 import {
   getDiscoverQueriesSnapshot,
   getRecommendationsSnapshot,
@@ -44,20 +42,6 @@ function dateBucket(iso: string): DateBucket {
   if (then >= startOfYesterday) return "yesterday";
   if (then >= startOfWeek) return "this-week";
   return "earlier";
-}
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 /* ------------------------------------------------------------------ */
@@ -156,106 +140,4 @@ export function useDiscoverBriefs(
   }, [queries, recs, reviews, liveQueryId, liveSteps]);
 
   return { threads, hasExaKey };
-}
-
-/* ------------------------------------------------------------------ */
-/*  Recent briefs list (browse view)                                   */
-/* ------------------------------------------------------------------ */
-
-function RecentRow({
-  thread,
-  projectName,
-  onOpen,
-}: {
-  thread: ThreadView;
-  projectName: string | null;
-  onOpen: (id: string) => void;
-}) {
-  const { root, followups } = thread;
-  const q = root.query;
-  const live = !!root.liveSteps;
-  const picks = root.recommendations.length;
-  const accepted = root.acceptedCount;
-  const errored = q.status === "errored";
-  const meta = [
-    relativeTime(q.createdAt),
-    picks > 0 ? `${picks} source${picks === 1 ? "" : "s"}` : "No sources",
-    accepted > 0 ? `${accepted} in library` : null,
-    followups.length > 0
-      ? `${followups.length} follow-up${followups.length === 1 ? "" : "s"}`
-      : null,
-  ].filter(Boolean);
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(q.id)}
-      className="group flex h-full min-h-[148px] w-full flex-col rounded-xl border border-border bg-card px-5 py-5 text-left transition-colors duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-    >
-      {projectName ? (
-        <p className="mb-2 flex items-center gap-1.5 text-[13px] text-muted-foreground">
-          <Folder className="size-3.5 shrink-0" strokeWidth={1.75} />
-          <span className="truncate">{projectName}</span>
-        </p>
-      ) : null}
-
-      {/* Query */}
-      <p className="line-clamp-3 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
-        {q.query}
-      </p>
-
-      {/* Footer: when it ran and what came of it */}
-      <div className="mt-auto flex flex-wrap items-center gap-x-1.5 pt-5 text-[13px] text-muted-foreground">
-        {live ? (
-          <span className="inline-flex items-center gap-1.5 text-primary">
-            <span className="landing-pulse-dot" />
-            Researching
-          </span>
-        ) : errored ? (
-          <span className="inline-flex items-center gap-1 text-destructive/85">
-            <AlertCircle className="size-3.5" strokeWidth={2} />
-            Errored
-          </span>
-        ) : (
-          <span>{meta.join(" · ")}</span>
-        )}
-      </div>
-    </button>
-  );
-}
-
-export function RecentBriefsList({
-  threads,
-  onOpen,
-}: {
-  threads: ThreadView[];
-  onOpen: (id: string) => void;
-}) {
-  const sorted = useMemo(
-    () =>
-      [...threads].sort(
-        (a, b) =>
-          new Date(b.root.query.createdAt).getTime() -
-          new Date(a.root.query.createdAt).getTime(),
-      ),
-    [threads],
-  );
-
-  const projects = useProjects();
-  if (threads.length === 0) return null;
-
-  return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {sorted.map((t) => (
-        <RecentRow
-          key={t.root.query.id}
-          thread={t}
-          projectName={
-            projects.find((p) => p.id === t.root.query.projectId)?.name ?? null
-          }
-          onOpen={onOpen}
-        />
-      ))}
-    </div>
-  );
 }

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard-layout";
 import ResearchComposer from "@/components/research-composer";
 import { useSettingsOpener } from "@/components/settings-opener-context";
-import { hydrateClientStore } from "@/lib/client-data";
+import { createProject, hydrateClientStore } from "@/lib/client-data";
 import { hasUsableProvider } from "@/lib/keys";
 import { setPendingResearch } from "@/lib/pending-research";
 import { KEYS_UPDATED_EVENT } from "@/lib/storage-events";
@@ -23,10 +23,23 @@ export default function HomeClient() {
   );
 }
 
+/** Longest project name derived from a question, before it's cut at a word. */
+const PROJECT_NAME_MAX = 60;
+
+/** A project name from a research question: the question itself, cut at a
+ *  word boundary when long, without a trailing question mark. */
+function projectNameFrom(question: string): string {
+  const text = question.trim().replace(/\s+/g, " ").replace(/[?.!]+$/, "");
+  if (text.length <= PROJECT_NAME_MAX) return text;
+  const cut = text.slice(0, PROJECT_NAME_MAX);
+  const atWord = cut.slice(0, cut.lastIndexOf(" ")) || cut;
+  return `${atWord}…`;
+}
+
 /**
- * Home is a single prompt: ask what you want to learn. The research run
- * itself lives on Artifacts, so submitting hands the question off and
- * navigates there, where the brief streams in and is saved.
+ * Home is a single prompt: ask what you want to learn. Every brief lives in
+ * a project, so submitting creates one named from the question, hands the
+ * question off, and navigates there, where the brief streams in and is saved.
  */
 function HomeBody() {
   const router = useRouter();
@@ -52,17 +65,30 @@ function HomeBody() {
     };
   }, []);
 
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const handleSubmit = useCallback(
     (text: string) => {
-      if (!hydrated) return;
+      if (!hydrated || starting) return;
       if (!modelReady) {
         openSettings();
         return;
       }
-      setPendingResearch(text);
-      router.push("/artifacts");
+      setStarting(true);
+      setStartError(null);
+      void createProject(projectNameFrom(text))
+        .then((project) => {
+          setPendingResearch(text);
+          router.push(`/projects/${project.id}`);
+        })
+        .catch((err) => {
+          setStartError(
+            err instanceof Error ? err.message : "Couldn't start the research.",
+          );
+          setStarting(false);
+        });
     },
-    [hydrated, modelReady, openSettings, router],
+    [hydrated, starting, modelReady, openSettings, router],
   );
 
   return (
@@ -81,14 +107,15 @@ function HomeBody() {
           </h1>
           <p className="mt-1.5 max-w-150 text-[15px] leading-[1.6] text-muted-foreground">
             Not sure which exact paper or resource to read? Ask about a topic,
-            method, or open question. Artifact will help find the best resources
-            and write a short brief with a ranked reading list.
+            method, or open question. Artifact finds the best resources and
+            writes a short brief with a ranked reading list, saved as a new
+            project you can keep adding to.
           </p>
         </div>
 
         <ResearchComposer
-          disabled={hydrated && !modelReady}
-          isStreaming={false}
+          disabled={(hydrated && !modelReady) || starting}
+          isStreaming={starting}
           hint={
             !hydrated || modelReady
               ? "e.g. How have attention mechanisms evolved over time?"
@@ -97,6 +124,10 @@ function HomeBody() {
           onSubmit={handleSubmit}
           autoFocus
         />
+
+        {startError ? (
+          <p className="text-[13px] text-destructive">{startError}</p>
+        ) : null}
 
         {hydrated && !modelReady ? (
           <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">

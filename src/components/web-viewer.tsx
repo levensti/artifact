@@ -70,6 +70,8 @@ interface WebViewerProps {
   /** Document title shown in the toolbar's title bar (hidden on narrow
    *  viewports). */
   toolbarTitle?: string;
+  /** Leads the toolbar title, e.g. the paper's project breadcrumb. */
+  toolbarCrumb?: ReactNode;
   /** Right-aligned toolbar actions, e.g. Share. */
   toolbarActions?: ReactNode;
 }
@@ -85,6 +87,7 @@ export default function WebViewer({
   onAnnotationClick,
   onAnnotationHover,
   toolbarTitle,
+  toolbarCrumb,
   toolbarActions,
 }: WebViewerProps) {
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
@@ -291,7 +294,7 @@ export default function WebViewer({
         <span className="min-w-0 max-w-[40%] shrink truncate font-mono text-[11px] text-muted-foreground">
           {siteName}
         </span>
-        <ToolbarTitle title={toolbarTitle} />
+        <ToolbarTitle title={toolbarTitle} crumb={toolbarCrumb} />
         <a
           href={sourceUrl}
           target="_blank"

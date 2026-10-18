@@ -42,6 +42,8 @@ interface PdfViewerProps {
   /** Document title shown in the toolbar's title bar (hidden on narrow
    *  viewports). */
   toolbarTitle?: string;
+  /** Leads the toolbar title, e.g. the paper's project breadcrumb. */
+  toolbarCrumb?: ReactNode;
   /** Right-aligned toolbar actions, e.g. Share. */
   toolbarActions?: ReactNode;
 }
@@ -108,6 +110,7 @@ export default function PdfViewer({
   onAnnotationClick,
   onAnnotationHover,
   toolbarTitle,
+  toolbarCrumb,
   toolbarActions,
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
@@ -740,7 +743,7 @@ export default function PdfViewer({
             <ChevronDown size={14} />
           </Button>
         </div>
-        <ToolbarTitle title={toolbarTitle} />
+        <ToolbarTitle title={toolbarTitle} crumb={toolbarCrumb} />
         <div className="flex h-7 sm:h-8 shrink-0 items-center rounded-md border border-border bg-card">
           <Button
             variant="ghost"

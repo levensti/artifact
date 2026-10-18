@@ -1,7 +1,7 @@
 /**
- * One-shot handoff for a research question asked on Home. Home stashes the
- * text and navigates to /artifacts, where the panel that owns the research
- * run picks it up and starts it. Module state (not the URL) so a refresh or
+ * One-shot handoff for a research question asked on Home. Home creates a
+ * project for it, stashes the text, and navigates to the project, whose page
+ * picks it up and starts the run. Module state (not the URL) so a refresh or
  * Back never re-submits the same question.
  */
 

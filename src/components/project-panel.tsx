@@ -38,6 +38,7 @@ import {
 import type { Recommendation } from "@/lib/discover-types";
 import type { PaperReview } from "@/lib/review-types";
 import { useDiscoverChat } from "@/hooks/use-discover-chat";
+import { takePendingResearch } from "@/lib/pending-research";
 import { useProjects } from "@/hooks/use-projects";
 import { useDiscoverBriefs, type ThreadView } from "./discover-queue";
 import { BriefSection } from "./brief-parts";
@@ -242,6 +243,12 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const pendingParentRef = useRef<string | null>(null);
+  // A question asked on Home, which created this project for it; started
+  // once keys and data are loaded. Its brief opens as soon as the run exists.
+  const [handoff, setHandoff] = useState<string | null>(() =>
+    takePendingResearch(),
+  );
+  const handoffRunRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,22 +273,33 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
   );
 
   const setOpenId = useCallback(
-    (id: string | null) => {
+    (id: string | null, opts?: { replace?: boolean }) => {
       if (id === openId) return;
       const base = `/projects/${projectId}`;
-      router.push(id ? `${base}?brief=${encodeURIComponent(id)}` : base);
+      const href = id ? `${base}?brief=${encodeURIComponent(id)}` : base;
+      if (opts?.replace) router.replace(href);
+      else router.push(href);
     },
     [openId, projectId, router],
   );
 
   // A follow-up is threaded under the session it continues. A new search
   // doesn't navigate anywhere: it shows as the status row on the overview.
+  // The question handed off from Home opens its brief, replacing the entry
+  // so Back returns to Home.
   useEffect(() => {
     if (!chat.liveQueryId) return;
+    if (handoffRunRef.current) {
+      handoffRunRef.current = false;
+      setOpenId(chat.liveQueryId, { replace: true });
+      return;
+    }
     const parent = pendingParentRef.current;
     if (!parent) return;
     linkThread(chat.liveQueryId, parent);
     pendingParentRef.current = null;
+    // Only react to a new live run, not to URL changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.liveQueryId]);
 
   const search = useCallback(
@@ -295,6 +313,13 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
     },
     [canSubmit, chat, openSettings, projectId],
   );
+
+  useEffect(() => {
+    if (!hydrated || !handoff) return;
+    handoffRunRef.current = canSubmit;
+    search(handoff);
+    setHandoff(null);
+  }, [hydrated, handoff, search, canSubmit]);
 
   const followup = useCallback(
     (parentId: string, text: string) => {
@@ -482,7 +507,7 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
   /* ── Overview ── */
 
   const counts = [
-    reviewCount > 0 ? plural(reviewCount, "paper", "papers") : null,
+    reviewCount > 0 ? plural(reviewCount, "review", "reviews") : null,
     projectThreads.length > 0
       ? plural(projectThreads.length, "research session", "research sessions")
       : null,
@@ -543,7 +568,7 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
             onSubmit={search}
           />
           <p className="mt-2 pl-1 text-[13px] text-muted-foreground">
-            New finds join the reading list below. Papers already in the
+            New finds join the reading list below. Sources already in the
             project are skipped.
           </p>
         </div>
@@ -631,8 +656,8 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
 
             {otherReviews.length > 0 ? (
               <BriefSection
-                title="Other papers"
-                count={plural(otherReviews.length, "paper", "papers")}
+                title="Other reviews"
+                count={plural(otherReviews.length, "review", "reviews")}
               >
                 <ListPanel>
                   {otherReviews.map((r) => (
@@ -670,8 +695,9 @@ export default function ProjectPanel({ projectId }: { projectId: string }) {
         <DeleteProjectDialog
           project={project}
           paperCount={reviewCount}
+          briefCount={projectThreads.length}
           onClose={() => setDeleting(false)}
-          onDeleted={() => router.push("/")}
+          onDeleted={() => router.push("/projects")}
         />
       ) : null}
     </ExaKeyResumeProvider>

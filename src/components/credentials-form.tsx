@@ -40,7 +40,7 @@ export function CredentialsForm({ mode, callbackUrl }: Props) {
       ) : null}
 
       {isSignup ? (
-        <Field label="Full name" htmlFor="name">
+        <Field label="Name" htmlFor="name" optional>
           <Input
             // Remount on a new echoed value from the server action so Base UI
             // doesn't warn about `defaultValue` changing post-mount.
@@ -49,7 +49,7 @@ export function CredentialsForm({ mode, callbackUrl }: Props) {
             name="name"
             type="text"
             autoComplete="name"
-            placeholder="What should we call you?"
+            placeholder="Shown on reviews you share"
             defaultValue={state.name ?? ""}
             className="h-9"
           />
@@ -116,7 +116,7 @@ function PasswordInput({ isSignup }: { isSignup: boolean }) {
         autoComplete={isSignup ? "new-password" : "current-password"}
         required
         minLength={isSignup ? 8 : undefined}
-        placeholder={isSignup ? "Pick a strong password" : "Your password"}
+        placeholder={isSignup ? undefined : "Your password"}
         className="h-9 pr-10"
       />
       <button

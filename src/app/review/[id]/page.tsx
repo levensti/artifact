@@ -15,6 +15,7 @@ import { useParams, useRouter } from "next/navigation";
 import { GripVertical, Loader2, MessageSquare, Share2, StickyNote, X } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import RightPanel, { type RightPanelTab } from "@/components/right-panel";
+import PaperProjectCrumb from "@/components/paper-project-crumb";
 import { CitationContextProvider } from "@/components/citation-context";
 import NoteHoverCard, { type HoverAnchor } from "@/components/note-hover-card";
 import SelectionPopover from "@/components/selection-popover";
@@ -602,6 +603,12 @@ export default function ReviewPage() {
                 onAnnotationClick={handleAnnotationClick}
                 onAnnotationHover={handleViewerHover}
                 toolbarTitle={review.title}
+                toolbarCrumb={
+                  <PaperProjectCrumb
+                    reviewId={review.id}
+                    projectId={review.projectId ?? null}
+                  />
+                }
                 toolbarActions={shareButton}
               />
             ) : pdfUrl ? (
@@ -617,6 +624,12 @@ export default function ReviewPage() {
                 onAnnotationClick={handleAnnotationClick}
                 onAnnotationHover={handleViewerHover}
                 toolbarTitle={review.title}
+                toolbarCrumb={
+                  <PaperProjectCrumb
+                    reviewId={review.id}
+                    projectId={review.projectId ?? null}
+                  />
+                }
                 toolbarActions={shareButton}
               />
             ) : (

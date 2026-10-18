@@ -1424,7 +1424,9 @@ export async function updateProject(
 export async function deleteProject(userId: string, id: string): Promise<void> {
   const existing = await prisma.project.findFirst({ where: { id, userId } });
   if (!existing) throw new HttpError(404, `Project not found: ${id}`);
-  // SetNull on Review.projectId is handled by the DB constraint — papers survive.
+  // The DB constraints do the rest: its papers are unfiled (SetNull on
+  // Review.projectId) and its research briefs are deleted (Cascade on
+  // DiscoverQuery.projectId, and on to their recommendations).
   await prisma.project.delete({ where: { id } });
 }
 

@@ -43,20 +43,59 @@ export function BrandMark() {
   );
 }
 
+/** What Artifact does, in the order a new reader meets it. */
 const FEATURES: Array<{ title: string; body: string }> = [
   {
-    title: "Open anything you want to read",
-    body: "arXiv papers, technical blogs, your own PDFs, or any URL. Highlight a passage to ask about it.",
+    title: "Answers that cite the page",
+    body: "Start a review of an arXiv paper, a PDF, or any web page and ask about it. Every answer links back to the passage it came from, and a highlight starts a thread pinned to that spot.",
   },
   {
-    title: "Discover what to read next",
-    body: "Describe a topic and a research agent returns a ranked shortlist, each with a reason to care.",
+    title: "Skim before you commit",
+    body: "Get an interactive overview of a whole paper or article in about a minute, kept beside it so you can jump straight to the sections that matter.",
   },
   {
-    title: "Free usage every day",
-    body: "A daily allowance on us, no key required. Bring your own Fireworks key when you need more.",
+    title: "A question becomes a project",
+    body: "Describe what you want to learn and a research agent writes a brief with a ranked reading list, filed in a project alongside your reviews.",
+  },
+  {
+    title: "Free to start",
+    body: "A daily allowance on us, no API key needed. Add your own Fireworks key when you want more.",
   },
 ];
+
+/** What a returning reader's account holds, so signing in has a reason. */
+const SAVED: Array<{ title: string; body: string }> = [
+  {
+    title: "Reviews",
+    body: "Your highlights, notes, and conversations, on the page where you left them.",
+  },
+  {
+    title: "Projects",
+    body: "Research briefs, reading lists, and the reviews filed with them.",
+  },
+  {
+    title: "Artifacts",
+    body: "Overviews and explainers built from what you read.",
+  },
+];
+
+/** A spec-sheet list: title over a line of detail, hairline-separated. */
+function SpecList({ items }: { items: Array<{ title: string; body: string }> }) {
+  return (
+    <ul className="landing-grid mt-9 bg-card">
+      {items.map((f) => (
+        <li key={f.title} className="px-4 py-3.5">
+          <div className="text-[13.5px] font-medium tracking-[-0.006em] text-foreground">
+            {f.title}
+          </div>
+          <p className="mt-0.5 text-[12.5px] leading-[1.5] text-muted-foreground">
+            {f.body}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function SignupPitch() {
   return (
@@ -65,30 +104,9 @@ export function SignupPitch() {
         <b>[■]</b> Open source research workspace
       </p>
       <h2 className="landing-h2 mt-4">
-        Read papers with an assistant that has{" "}
-        <span className="text-muted-foreground">the whole text.</span>
+        Understand what you read faster, with sources you can check.
       </h2>
-
-      <ol className="landing-grid mt-9 bg-card">
-        {FEATURES.map((f, i) => (
-          <li key={f.title} className="grid grid-cols-[28px_1fr] gap-x-3 px-4 py-3.5">
-            <span
-              className="pt-px font-mono text-[11.5px] text-muted-foreground"
-              style={{ fontFeatureSettings: '"tnum"' }}
-            >
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <div>
-              <div className="text-[13.5px] font-medium tracking-[-0.006em] text-foreground">
-                {f.title}
-              </div>
-              <p className="mt-0.5 text-[12.5px] leading-[1.5] text-muted-foreground">
-                {f.body}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <SpecList items={FEATURES} />
     </div>
   );
 }
@@ -97,45 +115,13 @@ export function SigninWelcome() {
   return (
     <div className="max-w-md">
       <p className="landing-label">
-        <b>[■]</b> Welcome back
+        <b>[■]</b> Your workspace
       </p>
-      <h2 className="landing-h2 mt-4">
-        Pick up{" "}
-        <span className="text-muted-foreground">where you left off.</span>
-      </h2>
+      <h2 className="landing-h2 mt-4">Pick up where you left off.</h2>
       <p className="landing-lede mt-4">
-        Your reviews, notes, and threads are right where you left them.
+        Everything you read and build in Artifact is saved to your account.
       </p>
-
-      {/* A margin note, drawn the way the landing's workspace mock draws
-          one: quiet proof of what the workspace holds. */}
-      <figure
-        className="mt-9 rounded-lg border bg-card p-4"
-        style={{
-          borderColor: "color-mix(in srgb, var(--border) 80%, transparent)",
-          boxShadow: "var(--shadow-sm)",
-        }}
-      >
-        <figcaption
-          className="font-mono text-[9.5px] uppercase"
-          style={{
-            letterSpacing: "0.1em",
-            color: "color-mix(in srgb, var(--muted-foreground) 75%, transparent)",
-          }}
-        >
-          p. 4 · Margin note
-        </figcaption>
-        <blockquote
-          className="mt-2 text-[13px] italic leading-[1.6]"
-          style={{
-            fontFamily: "var(--font-reading)",
-            color: "color-mix(in srgb, var(--foreground) 80%, transparent)",
-          }}
-        >
-          The contamination story feels optimistic: new issues leak into
-          pretraining faster than they assume.
-        </blockquote>
-      </figure>
+      <SpecList items={SAVED} />
     </div>
   );
 }
