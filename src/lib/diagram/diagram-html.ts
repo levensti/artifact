@@ -22,7 +22,6 @@
  * and the configured instance is cached.
  */
 import DOMPurify, { type WindowLike } from "dompurify";
-import { findCitations } from "@/lib/citation-transform";
 
 const ALLOWED_TAGS = [
   // structure + text
@@ -52,26 +51,6 @@ const ALLOWED_TAGS = [
   "polygon",
   "text",
   "tspan",
-];
-
-/** Artifact mode adds document structure: headings, prose, lists, and
- *  native disclosure (details/summary) for interactivity without script. */
-const ARTIFACT_TAGS = [
-  ...ALLOWED_TAGS,
-  "section",
-  "h2",
-  "h3",
-  "h4",
-  "p",
-  "ul",
-  "ol",
-  "li",
-  "blockquote",
-  "code",
-  "sub",
-  "sup",
-  "details",
-  "summary",
 ];
 
 /** SVG geometry/presentation attributes (always lowercase for matching;
@@ -107,7 +86,7 @@ const SVG_ATTRS = [
   "transform",
 ];
 
-const ALLOWED_ATTR = ["class", "style", "open", ...SVG_ATTRS];
+const ALLOWED_ATTR = ["class", "style", ...SVG_ATTRS];
 
 /** Inline-style properties the model may set: layout, sizing, borders,
  *  typography scale, and SVG paint. Notably absent: position, inset,
@@ -257,11 +236,6 @@ function createPurify(win: WindowLike) {
         const kept = sanitizeStyle(value);
         if (kept) el.setAttribute("style", kept);
         else el.removeAttribute("style");
-      } else if (name === "open") {
-        // Boolean attribute: a section the artifact shows expanded. Only
-        // meaningful on details; dropped anywhere else.
-        if (el.tagName.toLowerCase() === "details") el.setAttribute("open", "");
-        else el.removeAttribute("open");
       } else if (!safeValue(value)) {
         // SVG attribute (the only others DOMPurify lets through) with an
         // out-of-policy value, e.g. fill="#888".
@@ -274,50 +248,9 @@ function createPurify(win: WindowLike) {
 
 let browserPurify: ReturnType<typeof createPurify> | null = null;
 
-/** Elements whose text is never turned into citation chips. */
-const NO_CHIP_ANCESTORS = "svg, code, summary";
-
-/**
- * Wrap paper references (§3.2, Fig. 4, Table 2, Ref. [12]) in text nodes with
- * chip buttons carrying data-cite-kind / data-cite-value. Runs after
- * sanitizing, so these app-built elements are the only ones with a non-dx
- * class; the renderer resolves and navigates them (ArtifactView).
- */
-function wrapCitations(root: Element): void {
-  const doc = root.ownerDocument;
-  const walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */);
-  const nodes: Text[] = [];
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text);
-  for (const node of nodes) {
-    if (node.parentElement?.closest(NO_CHIP_ANCESTORS)) continue;
-    const text = node.data;
-    const matches = findCitations(text);
-    if (matches.length === 0) continue;
-    const frag = doc.createDocumentFragment();
-    let at = 0;
-    for (const m of matches) {
-      if (m.start > at) frag.appendChild(doc.createTextNode(text.slice(at, m.start)));
-      const chip = doc.createElement("button");
-      chip.setAttribute("type", "button");
-      chip.setAttribute("class", "citation-chip");
-      chip.setAttribute("data-cite-kind", m.kind);
-      chip.setAttribute("data-cite-value", m.value);
-      chip.textContent = m.label;
-      frag.appendChild(chip);
-      at = m.end;
-    }
-    if (at < text.length) frag.appendChild(doc.createTextNode(text.slice(at)));
-    node.replaceWith(frag);
-  }
-}
-
 export function sanitizeDiagramHtml(
   source: string,
   win?: WindowLike,
-  options: {
-    /** Artifact mode: document tags, disclosure, and citation chips. */
-    artifact?: boolean;
-  } = {},
 ): SanitizedDiagram {
   const w =
     win ??
@@ -327,13 +260,12 @@ export function sanitizeDiagramHtml(
   const purify = win ? createPurify(win) : (browserPurify ??= createPurify(w));
 
   const fragment = purify.sanitize(source, {
-    ALLOWED_TAGS: options.artifact ? ARTIFACT_TAGS : ALLOWED_TAGS,
+    ALLOWED_TAGS,
     ALLOWED_ATTR,
     RETURN_DOM_FRAGMENT: true,
   });
   const container = fragment.ownerDocument.createElement("div");
   container.appendChild(fragment);
-  if (options.artifact) wrapCitations(container);
 
   const text = (container.textContent ?? "").trim();
   const title = container.querySelector(".dx-title")?.textContent?.trim();

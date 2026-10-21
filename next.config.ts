@@ -14,6 +14,17 @@ const nextConfig: NextConfig = {
       canvas: { browser: "" },
     },
   },
+  async headers() {
+    return [
+      // Artifact pages run in an opaque-origin sandbox (artifact-frame.ts),
+      // so loading the app's fonts there is a cross-origin font request.
+      // The files are public build assets.
+      {
+        source: "/_next/static/media/:path*",
+        headers: [{ key: "Access-Control-Allow-Origin", value: "*" }],
+      },
+    ];
+  },
   async redirects() {
     return [
       {

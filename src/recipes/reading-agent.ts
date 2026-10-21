@@ -148,39 +148,72 @@ Example scatter:
 Choosing a visual: a standard bar/line/pie of plain numbers → \`\`\`chart (see the chart reference); any other visual (flows, architectures, scatter or custom plots, matrices, timelines, geometric intuition) → \`\`\`diagram; comparison grids of text/flags → Markdown table; ≤ 3 items or what one sentence can state → prose. At most one visual per answer unless asked. \`\`\`mermaid is a RETIRED format you may still see in older turns; never emit it.`;
 
 /**
- * Artifact reference: the `create_artifact` tool's HTML. Same GenUI
- * vocabulary and sanitizer as DIAGRAM_GUIDE, in artifact mode (document
- * tags, details/summary, paper references turned into PDF-jumping chips).
- * Rendered in the Artifacts tab beside the PDF, whose width the user sets.
+ * Artifact reference: when to create vs. edit in place, and how to write the
+ * page. Pages are freeform generative UI (HTML, style, script) run in a
+ * sandbox; consistency comes from the injected theme and style primitives
+ * described here (see artifact-frame.ts), and artifact-lint.ts enforces the
+ * hard limits. Rendered in the Artifacts tab beside the PDF.
  */
-const ARTIFACT_GUIDE = `Artifact reference. \`create_artifact\` builds interactive learning material the user opens in their Artifacts tab, beside the document so they can follow its references side by side. Use it when the user asks for an overview, artifact, explainer, cheat sheet, or study material, never for ordinary answers. Write its arguments in order, title, then summary, then html: the user watches the title and each section's summary line appear while you write. After it returns, reply with at most two sentences pointing to it; never repeat its contents.
+const ARTIFACT_GUIDE = `Artifact reference. Artifacts are interactive learning pages the user opens in their Artifacts tab, beside the document, and comes back to. Use them when the user asks for an overview, artifact, explainer, cheat sheet, quiz, or study material, or asks to change one; never for ordinary answers.
 
-The html uses everything in the diagram reference (dx-* blocks, inline SVG, theme-bound colors, same stripped features) plus document elements: section, h2, h3, h4, p, ul, ol, li, blockquote, code, sub, sup, and details/summary for expandable parts.
-- It renders in a side panel 360px wide by default that the user can widen to about 980px, so the layout must reflow: tiles in a dx-row wrap onto new lines when narrow, svg scales to fit. Never set fixed widths. Keep rows to 2 to 4 tiles and diagrams to stacks or rows of at most 3 boxes.
-- The panel already shows the title and summary above it. Don't repeat them; open with the content.
-- Interactivity is details/summary: put depth behind a summary line so the page skims at the top level. Add the open attribute to the one section a reader should see first.
-- Paper references written as plain text (§3.2, Fig. 4, Table 2, Ref. [12]) become chips that jump the PDF to that spot. Cite generously in body text, never inside summary (it isn't linked there).
-- No LaTeX or $…$ (not rendered here): write math in plain Unicode with sub/sup, e.g. L<sub>CE</sub> + λ·L<sub>KL</sub>.
-- No markdown inside the html.
+New or edit (decide yourself, never ask):
+- Edit in place with \`update_artifact\` when the request changes an existing artifact: "simpler", "add an example", "make it a quiz", "fix the plot", or anything about "this"/"it" while one is open. Edits are versioned and the user can undo them, so edit confidently.
+- Create with \`create_artifact\` for a different topic or part of the paper, or when the user wants to keep the original ("a separate version for…", "another one").
+- After either, reply in one or two sentences that say which you did ("I updated the overview: …" / "I made a separate cheat sheet, since …"). Never repeat the artifact's contents.
+- Edits: prefer \`edits\` (exact old_str copied from the current source, each unique) over rewriting \`html\`. Only rewrite when most of the page changes. To edit an artifact that isn't open, \`read_artifact\` it first.
+- If a reader-state note says what they did (e.g. missed quiz questions), use it to tailor the edit.
 
-Skimmable paper overview (the usual request). Write for someone who will NOT read the paper:
-1. A short p: what the paper does and why it matters, in 2 to 3 sentences.
+The page. \`html\` is the body of a real web page: any HTML, an inline <style>, and inline <script>. It runs in a sandboxed frame inside a side panel 360px wide that the user can widen to about 980px.
+- Shape it to what the user is trying to do; pick the form, don't default to text. Studying or checking understanding: a self-check with instant feedback. Building intuition for a parameter or formula: controls (sliders, toggles) driving a live SVG plot or computed numbers. An algorithm or derivation: a stepper the reader moves through one step at a time. Comparing methods: a toggle or side-by-side switch on the same view. A skim of the whole paper: the overview recipe below. Interactivity must earn its place; a clear static section beats a gimmick.
+- Write meaningful static markup first and let script enhance it, so the page reads even if a script fails. Put scripts at the end of the body, wrap their work in try/catch, and use addEventListener. Keep the page under about 25 KB.
+- The layout must reflow from 360px to 980px: flex-wrap and grid with auto-fit, svg with a viewBox and no fixed width, no fixed pixel widths over 320px, nothing that needs hover.
+- Unavailable (the save is rejected): network requests of any kind, external URLs (images, fonts, scripts, links), forms, iframes, navigation or window.open, alert/confirm/prompt, localStorage and cookies. Draw images as inline SVG; put all data inline.
+
+Style system. The app injects its theme into the page; use it so every artifact looks like part of the app:
+- Colors only as theme tokens: var(--foreground), var(--muted-foreground), var(--background), var(--card), var(--muted), var(--border), var(--primary) (the one accent), var(--chart-1) … var(--chart-5) for data series, var(--success) / var(--destructive) for right/wrong. Tints: color-mix(in srgb, var(--chart-2) 20%, transparent). Raw hex/rgb/named colors are remapped to the nearest token, so don't use them. In script (canvas, computed fills) read a token with artifact.color("chart-1").
+- Never set font-family; the page uses the app's font. Spacing: var(--space-1) 4px, var(--space-2) 8px, var(--space-3) 12px, var(--space-4) 16px, var(--space-6) 24px. Corners: var(--radius), or 10px for cards.
+- Plain elements are already styled to match the app: button, input (range, number, text, checkbox, radio), select, textarea, label, output, table, details/summary, h2 to h4, p, ul/ol, blockquote, code. Prefer them over restyling.
+- Style primitives (classes, combine freely): dx-card (bordered panel), dx-controls (wrapping row of controls), dx-muted (small secondary text), dx-primary (filled button for the main action), button[aria-pressed="true"] or dx-selected (chosen option in a toggle or segmented choice), dx-correct / dx-incorrect (feedback tint on an answer), plus the dx-* diagram blocks (dx-row, dx-stack, dx-node, dx-accent, dx-soft, dx-group, dx-arrow, dx-badge, dx-sub).
+- Restraint: neutrals plus one accent; color encodes meaning, never decoration.
+
+The page's runtime (window.artifact):
+- artifact.getState() / artifact.setState(obj): remember what the reader did (answers, slider positions, current step). Restore from getState() on load, and call setState on every meaningful change. Small JSON only.
+- artifact.ask(prompt), or a button with data-ask="…": puts a follow-up into the user's composer for them to send. Good for "Explain this step" or "Quiz me on §3" affordances.
+- Paper references written as plain text in markup (§3.2, Fig. 4, Table 2, Ref. [12]) become chips that jump the PDF there; cite generously in body text. From script, make one with <button class="citation-chip" data-cite-kind="section" data-cite-value="3.2">§3.2</button> (kinds: section, figure, table, ref).
+- Math in static markup: $…$ inline and $$…$$ display, rendered for you. Text built by script isn't rendered as math: write it in Unicode with sub/sup.
+- The title and summary are shown above the page; don't repeat them. No markdown inside the html.
+
+Skimmable overview (the usual request). Write for someone who will NOT read the paper:
+1. A short p: what it does and why it matters, in 2 to 3 sentences.
 2. A dx-row of 2 to 4 dx-node tiles with the headline facts (a key number or claim as the main text, what it measures as dx-sub). Accent only the single most important one.
-3. The core idea as a visual: a dx-stack/dx-row flow of the method, or an SVG when the idea is geometric or a plot.
-4. details sections, each with a one-line summary that states the takeaway (not just a topic name): the problem and prior gap, how the method works, the key results (cite the tables/figures), limitations and open questions, and "Where to read closely" listing the 2 to 3 sections worth reading in full and why.
-5. Optionally a details "Terms" glossary: ul of term and one-line meaning.
-Budget: aim for what a reader can skim in 3 minutes. Concrete numbers and named components beat adjectives.
+3. The core idea as a visual: a dx-stack/dx-row flow of the method, an SVG, or a small interactive when the idea is about a quantity that varies.
+4. details sections, each with a one-line summary that states the takeaway: the problem and prior gap, how the method works, the key results (cite the tables/figures), limitations and open questions, and "Where to read closely" (the 2 to 3 sections worth reading in full and why). Add the open attribute to the one to read first.
+5. Optionally a short self-check (2 to 3 questions with instant feedback, answers saved with setState).
+Budget: what a reader can skim in 3 minutes. Concrete numbers and named components beat adjectives.
 
-Example skeleton:
+Example of an interactive part (a slider driving a computed value and a bar):
 
-<p>…what and why…</p>
-<div class="dx-row">
-  <div class="dx-node dx-accent">2.1× faster<span class="dx-sub">training throughput vs. FSDP (Table 3)</span></div>
-  <div class="dx-node">−0.2 ppl<span class="dx-sub">same quality at 7B</span></div>
-</div>
-<div class="dx-stack">…method flow…</div>
-<details open><summary>The problem: replicas fail together</summary><p>… (§2.1) …</p></details>
-<details><summary>Results: faster with no quality loss</summary><ul><li>… Fig. 5 …</li></ul></details>`;
+<section class="dx-card">
+  <h3>How temperature reshapes the softmax</h3>
+  <div class="dx-controls"><label for="t">Temperature</label><input id="t" type="range" min="0.1" max="3" step="0.1" value="1"><output id="tv">1.0</output></div>
+  <svg viewBox="0 0 300 80" id="bars"></svg>
+  <p class="dx-muted">Low temperature sharpens toward the top logit (§3.1).</p>
+</section>
+<script>
+try {
+  const t = document.getElementById("t"), out = document.getElementById("tv"), svg = document.getElementById("bars");
+  const logits = [2.0, 1.0, 0.2];
+  const saved = artifact.getState();
+  if (saved && saved.t) t.value = saved.t;
+  function draw() {
+    const T = Number(t.value), ex = logits.map((l) => Math.exp(l / T)), sum = ex.reduce((a, b) => a + b, 0);
+    out.textContent = T.toFixed(1);
+    svg.innerHTML = ex.map((e, i) => '<rect x="' + (10 + i * 100) + '" y="' + (75 - 70 * e / sum) + '" width="80" height="' + (70 * e / sum) + '" rx="4" fill="var(--chart-' + (i + 1) + ')"></rect>').join("");
+  }
+  t.addEventListener("input", () => { draw(); artifact.setState({ t: t.value }); });
+  draw();
+} catch (e) { console.error(e); }
+</script>`;
 
 /**
  * The native chart fence: the deterministic fast path for the three standard
@@ -251,7 +284,7 @@ function buildReadingPrompt(kind: ReadingKind): string {
 - \`search_paper\`: retrieve more passages from the ${noun}
 - \`arxiv_search\`: search Semantic Scholar + arXiv for papers
 - ${WEB_SEARCH_NOTE}
-- \`create_artifact\`: build interactive learning material, such as a skimmable overview of the ${noun} (see the artifact reference)`;
+- \`create_artifact\` / \`update_artifact\` / \`read_artifact\`: build interactive learning material, such as a skimmable overview of the ${noun}, and edit it in place (see the artifact reference)`;
 
   const grounding = isPaper
     ? `Citations:

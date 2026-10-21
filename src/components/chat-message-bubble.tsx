@@ -81,6 +81,7 @@ export function InterleavedBlocks({ blocks }: { blocks: ChatAssistantBlock[] }) 
           return (
             <ToolCallStep
               key={block.id}
+              id={block.id}
               name={block.name}
               input={block.input}
               output={block.output}

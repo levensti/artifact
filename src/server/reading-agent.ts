@@ -14,7 +14,7 @@ import type { StreamEvent } from "@/lib/stream-types";
 import type { TranscriptMessage } from "@/lib/transcript";
 import type { ChunkHit } from "@/lib/documents";
 import { getAllTools } from "@/tools/registry";
-import type { ToolContext } from "@/tools/types";
+import type { ArtifactStore, ToolContext } from "@/tools/types";
 import { runFireworksAgentLoop } from "@/app/api/chat/fireworks-handler";
 import { getReadingSystemPrompt, visualFormatReminder } from "@/recipes/reading-agent";
 import { runDiscoverFunnel } from "./discover-funnel";
@@ -25,6 +25,9 @@ export { getReadingSystemPrompt };
 
 /** Registered only when the turn has a document to search (its chunk index). */
 const CHUNK_INDEX_TOOLS = new Set(["search_paper"]);
+
+/** Registered only when the turn has a review to save artifacts into. */
+const ARTIFACT_TOOLS = new Set(["create_artifact", "update_artifact", "read_artifact"]);
 
 /** Discover's structured-output tool; the reading surfaces never register it
  *  (the discover funnel picks its own tools). */
@@ -72,22 +75,30 @@ export interface ReadingAgentParams {
   mode?: "discover";
   /** Discover only: inputs for the screening funnel. */
   discover?: DiscoverOptions;
+  /** The review's artifacts, bound to the user; enables the artifact tools. */
+  artifacts?: ArtifactStore;
+  /** What the model should know about the review's artifacts this turn
+   *  (the open one's source, the others by ref), pinned after the history. */
+  artifactContext?: string;
   /** Receives every stream event the loop produces. */
   emit: (event: StreamEvent) => void;
 }
 
 /**
  * Select the tools to register for a reading turn, exactly as the chat route
- * does: drop `web_search` when the user dismissed it, and register
- * `search_paper` only when the document has a chunk index.
+ * does: drop `web_search` when the user dismissed it, register
+ * `search_paper` only when the document has a chunk index, and the artifact
+ * tools only when there's a review to save into.
  */
 export function selectReadingTools(params: {
   hasChunkIndex?: boolean;
   skipWebSearch?: boolean;
+  hasArtifacts?: boolean;
 }) {
   return getAllTools().filter((t) => {
     if (params.skipWebSearch && t.name === "web_search") return false;
     if (!params.hasChunkIndex && CHUNK_INDEX_TOOLS.has(t.name)) return false;
+    if (!params.hasArtifacts && ARTIFACT_TOOLS.has(t.name)) return false;
     if (DISCOVER_ONLY_TOOLS.has(t.name)) return false;
     return true;
   });
@@ -109,6 +120,8 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     skipWebSearch,
     mode,
     discover,
+    artifacts,
+    artifactContext,
     emit,
   } = params;
 
@@ -132,8 +145,10 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
   const tools = selectReadingTools({
     hasChunkIndex: !!searchChunks,
     skipWebSearch,
+    hasArtifacts: !!artifacts,
   });
   const toolContext: ToolContext = {
+    artifacts,
     searchChunks,
     paperTitle,
     arxivId,
@@ -154,6 +169,10 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     emit,
     // Reading surfaces draw visuals; pin the format rules with recency so
     // old in-conversation examples can't override them.
-    { trailingSystemReminder: visualFormatReminder() },
+    {
+      trailingSystemReminder: artifactContext
+        ? `${visualFormatReminder()}\n\n${artifactContext}`
+        : visualFormatReminder(),
+    },
   );
 }

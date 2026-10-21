@@ -1,27 +1,51 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import type { ArtifactContent, ReviewArtifact } from "@/lib/artifacts";
-import { ArtifactCard, ArtifactDetail } from "./artifact-view";
+import type { ReviewArtifact } from "@/lib/artifacts";
+import {
+  ArtifactCard,
+  ArtifactDetail,
+  type OpenArtifactOptions,
+} from "./artifact-view";
 
 /**
  * The Artifacts tab: interactive learning materials the assistant built for
- * this paper (create_artifact), newest first, or the one that's open.
+ * this paper, most recently changed first, or the one that's open.
  */
 export default function ArtifactsPanel({
+  reviewId,
   artifacts,
   loaded,
   openArtifact,
   onClose,
+  onSend,
+  chatBusy,
+  onViewChat,
 }: {
+  reviewId: string;
   artifacts: ReviewArtifact[];
   loaded: boolean;
   /** The artifact open in the tab, if any (opened from a card here or in chat). */
-  openArtifact: ArtifactContent | null;
+  openArtifact: ({ artifact: ReviewArtifact } & OpenArtifactOptions) | null;
   onClose: () => void;
+  /** Send a message to the assistant about the open artifact. */
+  onSend: (text: string) => void;
+  chatBusy: boolean;
+  onViewChat: () => void;
 }) {
   if (openArtifact) {
-    return <ArtifactDetail artifact={openArtifact} onBack={onClose} />;
+    return (
+      <ArtifactDetail
+        key={openArtifact.artifact.id}
+        reviewId={reviewId}
+        artifact={openArtifact.artifact}
+        highlightVersion={openArtifact.highlightVersion}
+        onBack={onClose}
+        onSend={onSend}
+        chatBusy={chatBusy}
+        onViewChat={onViewChat}
+      />
+    );
   }
 
   if (!loaded) {
@@ -82,11 +106,7 @@ export default function ArtifactsPanel({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {artifacts.map((a) => (
-          <ArtifactCard
-            key={a.id}
-            artifact={a}
-            createdAt={a.createdAt}
-          />
+          <ArtifactCard key={a.id} artifact={a} showDate />
         ))}
       </div>
     </div>

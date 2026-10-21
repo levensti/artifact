@@ -3,6 +3,9 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { HttpError } from "./api";
 import { sendSlackEvent, SlackEventType } from "./notifications";
+import { stripArtifactSourceFromMessages } from "@/lib/artifacts";
+import type { AnnotationMessage } from "@/lib/annotations";
+import type { ChatMessage } from "@/lib/review-types";
 
 /* ── Types ────────────────────────────────────────────────────── */
 
@@ -330,8 +333,14 @@ async function importReviewShare(
       },
     });
 
+    // Artifacts are never shared (they run model-written script), and older
+    // chat turns carried page source inline in their tool calls: strip it
+    // from the copied chat and passage threads. The recipient's cards then
+    // say the artifact wasn't shared.
     if (messagesRow && Array.isArray(messagesRow.messages)) {
-      const messages = messagesRow.messages as unknown[];
+      const messages = stripArtifactSourceFromMessages(
+        messagesRow.messages as unknown as ChatMessage[],
+      );
       if (messages.length > 0) {
         await tx.reviewMessages.create({
           data: { reviewId: finalReviewId, messages: asJson(messages) },
@@ -341,7 +350,17 @@ async function importReviewShare(
 
     if (annotationsRow && Array.isArray(annotationsRow.annotations)) {
       const annotations = (annotationsRow.annotations as Array<Record<string, unknown>>).map(
-        (a) => ({ ...a, reviewId: finalReviewId }),
+        (a) => ({
+          ...a,
+          reviewId: finalReviewId,
+          ...(Array.isArray(a.thread)
+            ? {
+                thread: stripArtifactSourceFromMessages(
+                  a.thread as AnnotationMessage[],
+                ),
+              }
+            : {}),
+        }),
       );
       if (annotations.length > 0) {
         await tx.reviewAnnotations.create({

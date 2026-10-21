@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Info,
   Loader2,
+  LayoutPanelTop,
   MessageSquareQuote,
   Mic,
   MicOff,
@@ -72,6 +73,14 @@ interface ChatPanelProps {
   onExternalPromptConsumed?: () => void;
   modelReady?: boolean;
   sourceUrl?: string | null;
+  /** The artifact open in the Artifacts tab: the model sees its source, so
+   *  requests about it edit it in place. Shown as a chip by the composer. */
+  openArtifact?: { id: string; title: string } | null;
+  onCloseArtifact?: () => void;
+  /** A message to send right away (from the open artifact's composer). */
+  externalSend?: { text: string; key: number } | null;
+  onExternalSendConsumed?: () => void;
+  onStreamingChange?: (streaming: boolean) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -595,6 +604,11 @@ export default function ChatPanel({
   onExternalPromptConsumed,
   modelReady: externalReady,
   sourceUrl,
+  openArtifact,
+  onCloseArtifact,
+  externalSend,
+  onExternalSendConsumed,
+  onStreamingChange,
 }: ChatPanelProps) {
   const { openSettings } = useSettingsOpener();
   const { parseReady } = useCitationContext();
@@ -613,6 +627,7 @@ export default function ChatPanel({
     chatThreadAnnotationId,
     onAnnotationsPersist,
     sourceUrl,
+    openArtifactId: openArtifact?.id ?? null,
   });
 
   // Only surface the "preparing" gate when the user could otherwise send —
@@ -697,6 +712,28 @@ export default function ChatPanel({
     }
     artifactsStreamingRef.current = chat.isStreaming;
   }, [chat.isStreaming, reviewId]);
+
+  useEffect(() => {
+    onStreamingChange?.(chat.isStreaming);
+  }, [chat.isStreaming, onStreamingChange]);
+
+  // A message from the open artifact's composer: send it in the main chat
+  // (leaving a passage thread if one is showing) once nothing is streaming.
+  const sentKeyRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!externalSend || chat.isStreaming) return;
+    if (sentKeyRef.current === externalSend.key) return;
+    sentKeyRef.current = externalSend.key;
+    onExternalSendConsumed?.();
+    if (chatThreadAnnotationId) onChatThreadChange(null);
+    void chat.submitChat(externalSend.text);
+  }, [
+    externalSend,
+    chat,
+    chatThreadAnnotationId,
+    onChatThreadChange,
+    onExternalSendConsumed,
+  ]);
 
   // Called by the streaming bubble after each typewriter advance commits.
   // Stable identity so the consumer's useLayoutEffect dep list stays clean.
@@ -1089,6 +1126,23 @@ export default function ChatPanel({
           )}
         </div>
 
+        {openArtifact && !chatThreadAnnotationId && (
+          <div className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-border bg-muted/40 py-1 pl-2.5 pr-1 text-[11.5px] text-muted-foreground">
+            <LayoutPanelTop className="size-3 shrink-0" strokeWidth={2} aria-hidden />
+            <span className="min-w-0 flex-1 truncate">
+              Open: <span className="font-medium text-foreground">{openArtifact.title}</span>
+            </span>
+            <button
+              type="button"
+              onClick={onCloseArtifact}
+              className="shrink-0 rounded p-0.5 hover:bg-foreground/10 hover:text-foreground"
+              aria-label="Close artifact"
+              title="Close the artifact so new requests don't edit it"
+            >
+              <X className="size-3" strokeWidth={2.25} />
+            </button>
+          </div>
+        )}
         {pendingQuote && (
           <div
             className="mx-3 mb-2 rounded-lg border px-3 py-2.5"

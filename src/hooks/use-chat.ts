@@ -16,6 +16,7 @@ import {
   type ChatMessage,
 } from "@/lib/reviews";
 import type { AnnotationMessage } from "@/lib/annotations";
+import { stripArtifactSource } from "@/lib/artifacts";
 import { getAnnotation, updateAnnotation } from "@/lib/annotations";
 import type { StreamEvent } from "@/lib/stream-types";
 import { hashPaperText } from "@/lib/client/documents";
@@ -136,6 +137,9 @@ interface UseChatOptions {
   chatThreadAnnotationId: string | null;
   onAnnotationsPersist: () => void;
   sourceUrl?: string | null;
+  /** The artifact open in the Artifacts tab; the server puts its source in
+   *  the model's context so requests about it edit it in place. */
+  openArtifactId?: string | null;
 }
 
 export interface UseChatReturn {
@@ -185,6 +189,7 @@ export function useChat({
   chatThreadAnnotationId,
   onAnnotationsPersist,
   sourceUrl,
+  openArtifactId,
 }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -380,6 +385,7 @@ export function useChat({
             arxivId,
             ...(sourceUrl ? { sourceUrl } : {}),
             ...(exaKey ? { exaApiKey: exaKey } : {}),
+            ...(openArtifactId ? { openArtifactId } : {}),
             ...(opts?.skipWebSearch ? { skipWebSearch: true } : {}),
           }),
           signal: inactivity.signal,
@@ -428,7 +434,8 @@ export function useChat({
           }
         });
 
-        const blocks = stepsToBlocks(steps);
+        // Same shape the server persists: page source stays in the artifact.
+        const blocks = stripArtifactSource(stepsToBlocks(steps));
         const content = stepsToContent(steps);
 
         setMessages((prev) =>
@@ -477,6 +484,7 @@ export function useChat({
       arxivId,
       reviewId,
       sourceUrl,
+      openArtifactId,
     ],
   );
 
@@ -604,6 +612,7 @@ export function useChat({
             reviewId,
             ...(sourceUrl ? { sourceUrl } : {}),
             ...(exaKey ? { exaApiKey: exaKey } : {}),
+            ...(openArtifactId ? { openArtifactId } : {}),
           }),
           signal: inactivity.signal,
         });
@@ -636,7 +645,8 @@ export function useChat({
           }
         });
 
-        const blocks = stepsToBlocks(steps);
+        // Same shape the server persists: page source stays in the artifact.
+        const blocks = stripArtifactSource(stepsToBlocks(steps));
         const content = stepsToContent(steps);
 
         thread = thread.map((m) =>
@@ -682,6 +692,7 @@ export function useChat({
       buildPaperPayload,
       onAnnotationsPersist,
       sourceUrl,
+      openArtifactId,
     ],
   );
 

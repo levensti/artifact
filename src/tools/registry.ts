@@ -12,6 +12,8 @@ import { searchPaperTool } from "./search-paper";
 import { paperDetailsTool } from "./paper-details";
 import { submitPicksTool } from "./submit-picks";
 import { createArtifactTool } from "./create-artifact";
+import { updateArtifactTool } from "./update-artifact";
+import { readArtifactTool } from "./read-artifact";
 
 /* ------------------------------------------------------------------ */
 /*  Register tools here                                                */
@@ -31,9 +33,12 @@ const ALL_TOOLS: ToolDefinition[] = [
   // Discovery structured-output tool — gated to discover mode in the
   // chat route so it isn't visible to the paper-reading agent.
   submitPicksTool,
-  // Reading structured-output tool: interactive learning material, saved
-  // to the review's Artifacts tab by the chat route.
+  // Artifact tools: interactive learning material saved to the review's
+  // Artifacts tab, edited in place as versions. Registered only when the
+  // chat route supplies an artifact store (a review to save into).
   createArtifactTool,
+  updateArtifactTool,
+  readArtifactTool,
 ];
 
 /* ------------------------------------------------------------------ */
