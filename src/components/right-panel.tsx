@@ -13,8 +13,7 @@ import { cn } from "@/lib/utils";
 import ChatPanel from "./chat-panel";
 import AnnotationList from "./annotation-list";
 import ArtifactsPanel from "./artifacts-panel";
-import { ArtifactOpenerContext } from "./artifact-view";
-import type { ArtifactContent } from "@/lib/artifacts";
+import { ArtifactsContext, type OpenArtifactOptions } from "./artifact-view";
 import { useArtifacts } from "@/hooks/use-artifacts";
 
 export type RightPanelTab = "chat" | "notes" | "artifacts";
@@ -76,14 +75,31 @@ export default function RightPanel({
   const artifacts = useArtifacts(reviewId);
   const artifactCount = artifacts.artifacts.length;
   // The artifact open in the Artifacts tab. Cards in chat open it here too,
-  // so a citation chip can scroll the PDF while it stays beside it.
-  const [openArtifact, setOpenArtifact] = useState<ArtifactContent | null>(
-    null,
-  );
-  const openArtifactInTab = (artifact: ArtifactContent) => {
-    setOpenArtifact(artifact);
+  // so a citation chip can scroll the PDF while it stays beside it. Held by
+  // id so edits that land while it's open show up in place.
+  const [openState, setOpenState] = useState<
+    ({ id: string } & OpenArtifactOptions) | null
+  >(null);
+  const openInTab = (id: string, options?: OpenArtifactOptions) => {
+    setOpenState({ id, ...options });
     onTabChange("artifacts");
   };
+  const openArtifact = openState
+    ? artifacts.artifacts.find((a) => a.id === openState.id)
+    : undefined;
+  const artifactsContext = {
+    reviewId,
+    artifacts: artifacts.artifacts,
+    loaded: artifacts.loaded,
+    open: openInTab,
+  };
+
+  // Messages sent from the open artifact's composer go to the main chat;
+  // the reader stays on the artifact and watches the edit land.
+  const [pendingSend, setPendingSend] = useState<{ text: string; key: number } | null>(
+    null,
+  );
+  const [chatBusy, setChatBusy] = useState(false);
 
   // Dot on the Artifacts tab when one arrives while the user is looking
   // elsewhere (another tab, or the panel collapsed); cleared on opening it.
@@ -174,7 +190,7 @@ export default function RightPanel({
   }
 
   return (
-    <ArtifactOpenerContext.Provider value={openArtifactInTab}>
+    <ArtifactsContext.Provider value={artifactsContext}>
       <div className="flex h-full min-h-0 flex-col bg-background">
         <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-background pl-3 pr-3">
           <div
@@ -241,6 +257,15 @@ export default function RightPanel({
               hideHeader
               modelReady={modelReady}
               sourceUrl={sourceUrl}
+              openArtifact={
+                openArtifact
+                  ? { id: openArtifact.id, title: openArtifact.title }
+                  : null
+              }
+              onCloseArtifact={() => setOpenState(null)}
+              externalSend={pendingSend}
+              onExternalSendConsumed={() => setPendingSend(null)}
+              onStreamingChange={setChatBusy}
             />
           </div>
           <div
@@ -268,15 +293,23 @@ export default function RightPanel({
             )}
           >
             <ArtifactsPanel
+              reviewId={reviewId}
               artifacts={artifacts.artifacts}
               loaded={artifacts.loaded}
-              openArtifact={openArtifact}
-              onClose={() => setOpenArtifact(null)}
+              openArtifact={
+                openArtifact
+                  ? { artifact: openArtifact, highlightVersion: openState?.highlightVersion }
+                  : null
+              }
+              onClose={() => setOpenState(null)}
+              onSend={(text) => setPendingSend({ text, key: Date.now() })}
+              chatBusy={chatBusy}
+              onViewChat={() => onTabChange("chat")}
             />
           </div>
         </div>
       </div>
-    </ArtifactOpenerContext.Provider>
+    </ArtifactsContext.Provider>
   );
 }
 

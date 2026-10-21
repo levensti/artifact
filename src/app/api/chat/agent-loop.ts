@@ -117,7 +117,9 @@ async function executeToolCalls(
             ok: false,
           };
         }
-        return normalizeToolResult(await tool.execute(tc.input, toolContext));
+        return normalizeToolResult(
+          await tool.execute(tc.input, toolContext, { id: tc.id }),
+        );
       } catch (err) {
         return {
           content: `Tool error: ${err instanceof Error ? err.message : "unknown error"}`,

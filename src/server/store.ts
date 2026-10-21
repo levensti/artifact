@@ -294,18 +294,10 @@ export async function setMessages(
 /*  Artifacts                                                          */
 /* ------------------------------------------------------------------ */
 
-function toArtifact(row: {
-  id: string;
-  reviewId: string;
-  title: string;
-  summary: string;
-  html: string;
-  createdAt: Date;
-}): ReviewArtifact {
-  return { ...row, createdAt: row.createdAt.toISOString() };
-}
+const VERSION_META = { number: true, changeSummary: true, createdAt: true } as const;
 
-/** A review's artifacts, newest first. */
+/** A review's artifacts, most recently changed first, each with its current
+ *  source and its version history. */
 export async function listArtifacts(
   userId: string,
   reviewId: string,
@@ -313,23 +305,255 @@ export async function listArtifacts(
   await assertReviewOwned(userId, reviewId);
   const rows = await prisma.reviewArtifact.findMany({
     where: { reviewId },
-    orderBy: { createdAt: "desc" },
+    orderBy: { updatedAt: "desc" },
+    include: { versions: { select: VERSION_META, orderBy: { number: "desc" } } },
   });
-  return rows.map(toArtifact);
+  if (rows.length === 0) return [];
+  // Only the current version's source; older ones load on demand.
+  const latest = await prisma.artifactVersion.findMany({
+    where: { artifactId: { in: rows.map((r) => r.id) } },
+    orderBy: [{ artifactId: "asc" }, { number: "desc" }],
+    distinct: ["artifactId"],
+    select: { artifactId: true, html: true },
+  });
+  const htmlById = new Map(latest.map((v) => [v.artifactId, v.html]));
+  return rows.map((row) => ({
+    id: row.id,
+    reviewId: row.reviewId,
+    title: row.title,
+    summary: row.summary,
+    html: htmlById.get(row.id) ?? "",
+    sourceCallId: row.sourceCallId,
+    version: row.versions[0]?.number ?? 1,
+    versions: row.versions.map((v) => ({
+      ...v,
+      createdAt: v.createdAt.toISOString(),
+    })),
+    state: row.state ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }));
 }
 
-/** Save artifacts produced in a chat turn. `sourceCallId` dedupes a retried
- *  persist of the same turn. */
-export async function saveArtifacts(
+async function assertArtifactOwned(
   userId: string,
   reviewId: string,
-  artifacts: Array<ArtifactContent & { sourceCallId: string }>,
-): Promise<void> {
-  if (artifacts.length === 0) return;
+  artifactId: string,
+) {
   await assertReviewOwned(userId, reviewId);
-  await prisma.reviewArtifact.createMany({
-    data: artifacts.map((a) => ({ ...a, reviewId })),
-    skipDuplicates: true,
+  const row = await prisma.reviewArtifact.findFirst({
+    where: { id: artifactId, reviewId },
+  });
+  if (!row) throw new HttpError(404, "Artifact not found");
+  return row;
+}
+
+async function latestVersion(artifactId: string) {
+  const v = await prisma.artifactVersion.findFirst({
+    where: { artifactId },
+    orderBy: { number: "desc" },
+  });
+  if (!v) throw new HttpError(404, "Artifact has no versions");
+  return v;
+}
+
+/** One version's source. */
+export async function getArtifactVersion(
+  userId: string,
+  reviewId: string,
+  artifactId: string,
+  number: number,
+): Promise<{ number: number; html: string; changeSummary: string }> {
+  await assertArtifactOwned(userId, reviewId, artifactId);
+  const v = await prisma.artifactVersion.findUnique({
+    where: { artifactId_number: { artifactId, number } },
+  });
+  if (!v) throw new HttpError(404, "Version not found");
+  return { number: v.number, html: v.html, changeSummary: v.changeSummary };
+}
+
+/** An artifact's current title, summary, source, and reader state, for the
+ *  model (the open artifact is put in its context each turn). */
+export async function getArtifactCurrent(
+  userId: string,
+  reviewId: string,
+  artifactId: string,
+): Promise<ArtifactContent & { id: string; version: number; state: unknown }> {
+  const row = await assertArtifactOwned(userId, reviewId, artifactId);
+  const v = await latestVersion(artifactId);
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    html: v.html,
+    version: v.number,
+    state: row.state ?? null,
+  };
+}
+
+/** Save a new artifact as version 1. `sourceCallId` dedupes a retried call:
+ *  the existing artifact comes back instead of a second copy. */
+export async function createArtifact(
+  userId: string,
+  reviewId: string,
+  content: ArtifactContent,
+  sourceCallId: string | null,
+): Promise<{ id: string; version: number }> {
+  await assertReviewOwned(userId, reviewId);
+  if (sourceCallId) {
+    const existing = await prisma.reviewArtifact.findUnique({
+      where: { reviewId_sourceCallId: { reviewId, sourceCallId } },
+    });
+    if (existing) return { id: existing.id, version: 1 };
+  }
+  const row = await prisma.reviewArtifact.create({
+    data: {
+      reviewId,
+      title: content.title,
+      summary: content.summary,
+      sourceCallId,
+      versions: {
+        create: {
+          number: 1,
+          html: content.html,
+          changeSummary: "Created",
+          sourceCallId,
+        },
+      },
+    },
+  });
+  return { id: row.id, version: 1 };
+}
+
+/**
+ * Append a version. `html` is the new source (already edited and linted by
+ * the caller, from the current version it read). Title and summary change
+ * only when given. A retried tool call (same `sourceCallId`) returns the
+ * version it already wrote.
+ */
+export async function appendArtifactVersion(
+  userId: string,
+  reviewId: string,
+  artifactId: string,
+  change: {
+    html: string;
+    changeSummary: string;
+    sourceCallId?: string | null;
+    title?: string;
+    summary?: string;
+  },
+): Promise<{ version: number }> {
+  await assertArtifactOwned(userId, reviewId, artifactId);
+  if (change.sourceCallId) {
+    const dup = await prisma.artifactVersion.findFirst({
+      where: { artifactId, sourceCallId: change.sourceCallId },
+    });
+    if (dup) return { version: dup.number };
+  }
+  // Two writers racing for the same number lose on the unique index; retry
+  // once on the fresh latest.
+  for (let attempt = 0; ; attempt++) {
+    const latest = await latestVersion(artifactId);
+    try {
+      await prisma.$transaction([
+        prisma.artifactVersion.create({
+          data: {
+            artifactId,
+            number: latest.number + 1,
+            html: change.html,
+            changeSummary: change.changeSummary.slice(0, 200),
+            sourceCallId: change.sourceCallId ?? null,
+          },
+        }),
+        prisma.reviewArtifact.update({
+          where: { id: artifactId },
+          data: {
+            updatedAt: new Date(),
+            ...(change.title ? { title: change.title.slice(0, 120) } : {}),
+            ...(change.summary ? { summary: change.summary.slice(0, 400) } : {}),
+          },
+        }),
+      ]);
+      return { version: latest.number + 1 };
+    } catch (e) {
+      const conflict =
+        e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+      if (!conflict || attempt > 0) throw e;
+    }
+  }
+}
+
+/** Restore an older version by appending a copy of it (nothing is lost). */
+export async function restoreArtifactVersion(
+  userId: string,
+  reviewId: string,
+  artifactId: string,
+  number: number,
+  changeSummary = `Restored v${number}`,
+): Promise<{ version: number }> {
+  const old = await getArtifactVersion(userId, reviewId, artifactId, number);
+  return appendArtifactVersion(userId, reviewId, artifactId, {
+    html: old.html,
+    changeSummary,
+  });
+}
+
+/**
+ * "Keep it as a separate artifact": move version `number` (the current one,
+ * an edit the model made in place) into a new artifact, and put the original
+ * back to the version before it.
+ */
+export async function splitArtifactVersion(
+  userId: string,
+  reviewId: string,
+  artifactId: string,
+  number: number,
+): Promise<{ id: string }> {
+  const row = await assertArtifactOwned(userId, reviewId, artifactId);
+  const latest = await latestVersion(artifactId);
+  if (latest.number !== number || number < 2) {
+    throw new HttpError(409, "Only the latest edit can be moved out");
+  }
+  const created = await createArtifact(
+    userId,
+    reviewId,
+    { title: row.title, summary: row.summary, html: latest.html },
+    null,
+  );
+  await restoreArtifactVersion(
+    userId,
+    reviewId,
+    artifactId,
+    number - 1,
+    `Moved v${number} to a separate artifact`,
+  );
+  return created;
+}
+
+/** Largest reader state the bridge may save, serialized. */
+const MAX_ARTIFACT_STATE_BYTES = 32_000;
+
+/** Save what the reader did inside the page (quiz answers, slider values). */
+export async function setArtifactState(
+  userId: string,
+  reviewId: string,
+  artifactId: string,
+  state: unknown,
+): Promise<void> {
+  const size = JSON.stringify(state ?? null).length;
+  if (size > MAX_ARTIFACT_STATE_BYTES) {
+    throw new HttpError(413, "Artifact state is too large");
+  }
+  await assertArtifactOwned(userId, reviewId, artifactId);
+  await prisma.reviewArtifact.update({
+    where: { id: artifactId },
+    // Not an edit: keep the list order (updatedAt) where it was.
+    data: {
+      state:
+        state === null
+          ? Prisma.DbNull
+          : (state as unknown as Prisma.InputJsonValue),
+    },
   });
 }
 

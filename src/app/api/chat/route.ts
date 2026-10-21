@@ -41,7 +41,13 @@ import {
   EMBEDDING_TOKEN_WEIGHT,
 } from "@/server/rate-limit";
 import * as store from "@/server/store";
-import { artifactFromToolInput, CREATE_ARTIFACT_TOOL } from "@/lib/artifacts";
+import {
+  CREATE_ARTIFACT_TOOL,
+  stripArtifactSource,
+  stripArtifactSourceFromMessages,
+  UPDATE_ARTIFACT_TOOL,
+} from "@/lib/artifacts";
+import { artifactStoreFor, buildArtifactContext } from "@/server/artifact-context";
 import * as docs from "@/server/documents";
 import { retrieveContext } from "@/server/retrieval";
 import { embedTexts } from "@/server/embeddings";
@@ -128,6 +134,11 @@ interface ChatRequest {
    * attempt it again.
    */
   skipWebSearch?: boolean;
+  /**
+   * The artifact open in the Artifacts tab, if any. Its source goes in the
+   * model's context so "make this simpler" edits it in place.
+   */
+  openArtifactId?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -298,6 +309,7 @@ export async function POST(req: NextRequest) {
     skipWebSearch,
     mode,
     discover,
+    openArtifactId,
   } = body;
 
   // Server-owned path: the main review chat sends a single `userMessage` + a
@@ -414,6 +426,25 @@ export async function POST(req: NextRequest) {
     paper = {};
   }
 
+  // Artifacts: the tools save into this review as the signed-in user, and
+  // the model sees what exists (and the open one's source) this turn.
+  const hasReview =
+    mode !== "discover" && typeof reviewId === "string" && reviewId.length > 0;
+  const artifacts = hasReview ? artifactStoreFor(userId, reviewId!) : undefined;
+  let artifactContext: string | undefined;
+  if (hasReview) {
+    try {
+      artifactContext = await buildArtifactContext(
+        userId,
+        reviewId!,
+        typeof openArtifactId === "string" ? openArtifactId : undefined,
+      );
+    } catch (err) {
+      if (err instanceof HttpError) return errorResponse(err);
+      console.error("Artifact context failed:", err);
+    }
+  }
+
   // Fixed (uncompactable) overhead, split out for the usage breakdown: the
   // paper block's footprint in context, plus the system prompt. Conversation
   // tokens are the measured total minus this.
@@ -471,7 +502,9 @@ export async function POST(req: NextRequest) {
   // more reliably than it follows the prompt's ```diagram instruction.
   // Relabel them in the model-facing transcript only — storage keeps the
   // original, and the data stays in context so "redraw it" still works.
-  conversation = conversation.map((m) =>
+  // Turns from before artifacts were versioned carry page source inline;
+  // drop it (the current source comes in with the artifact context).
+  conversation = stripArtifactSourceFromMessages(conversation).map((m) =>
     m.role === "assistant"
       ? {
           ...m,
@@ -498,13 +531,6 @@ export async function POST(req: NextRequest) {
       // Largest measured context size this turn (the last round is fullest),
       // persisted so the client meter is accurate after a refresh.
       let lastContextTokens = persist?.priorMeta?.lastContextTokens ?? 0;
-      // `create_artifact` calls this turn, saved to the review once each one
-      // returns. Tracked apart from `steps` so selection threads (stateless,
-      // no `persist`) save their artifacts too.
-      const artifactCalls = new Map<
-        string,
-        { input: Record<string, unknown>; done: boolean }
-      >();
       const emit = (event: StreamEvent) => {
         try {
           controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
@@ -512,12 +538,6 @@ export async function POST(req: NextRequest) {
           /* controller may be closed */
         }
         if (persist) steps = processStreamEvent(steps, event);
-        if (event.type === "tool_call" && event.name === CREATE_ARTIFACT_TOOL) {
-          artifactCalls.set(event.id, { input: event.input, done: false });
-        } else if (event.type === "tool_result") {
-          const call = artifactCalls.get(event.id);
-          if (call) call.done = true;
-        }
         if (event.type === "cache_stats") {
           // Cost-weighted: cache reads count at 10% (see meteredTokens).
           // cacheCreationTokens is omitted because it's always 0 for the
@@ -560,6 +580,8 @@ export async function POST(req: NextRequest) {
           skipWebSearch,
           mode,
           discover: mode === "discover" ? sanitizeDiscover(discover) : undefined,
+          artifacts,
+          artifactContext,
           emit,
         });
       } catch (err) {
@@ -591,11 +613,14 @@ export async function POST(req: NextRequest) {
       // resume re-runs cleanly.
       if (persist) {
         const content = stepsToContent(steps);
-        let finalMessages = persist.base;
-        const blocks = stepsToBlocks(steps);
-        // A turn that only built an artifact still keeps its preview card.
+        let finalMessages = stripArtifactSourceFromMessages(persist.base);
+        // Page source lives in the artifact's own table, never in history.
+        const blocks = stripArtifactSource(stepsToBlocks(steps));
+        // A turn that only built or edited an artifact still keeps its card.
         const madeArtifact = blocks.some(
-          (b) => b.type === "tool_call" && b.name === CREATE_ARTIFACT_TOOL,
+          (b) =>
+            b.type === "tool_call" &&
+            (b.name === CREATE_ARTIFACT_TOOL || b.name === UPDATE_ARTIFACT_TOOL),
         );
         if (content.trim() || madeArtifact) {
           const assistantMsg: ChatMessage = {
@@ -605,7 +630,7 @@ export async function POST(req: NextRequest) {
             timestamp: new Date().toISOString(),
             ...(blocks.length > 0 ? { blocks } : {}),
           };
-          finalMessages = [...persist.base, assistantMsg];
+          finalMessages = [...finalMessages, assistantMsg];
         }
         // Preserve any existing compaction record; refresh the measured
         // context size + window so the meter survives a reload.
@@ -627,24 +652,6 @@ export async function POST(req: NextRequest) {
           // Non-fatal: the client already has the turn on screen. Worst case
           // it's missing on next load; better than failing the request.
           console.error("Failed to persist chat turn:", e);
-        }
-      }
-
-      // Save artifacts to the review's Artifacts tab (best-effort, like the
-      // turn itself). Skips calls that never returned or had no content.
-      const artifacts = [...artifactCalls]
-        .filter(([, call]) => call.done)
-        .flatMap(([id, call]) => {
-          const content = artifactFromToolInput(call.input);
-          return content ? [{ ...content, sourceCallId: id }] : [];
-        });
-      if (artifacts.length > 0 && reviewId && mode !== "discover") {
-        try {
-          const ownerId =
-            persist?.userId ?? meterUserId ?? (await requireUserId());
-          await store.saveArtifacts(ownerId, reviewId, artifacts);
-        } catch (e) {
-          console.error("Failed to save artifacts:", e);
         }
       }
 

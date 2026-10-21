@@ -6,7 +6,12 @@
  */
 
 import type { StreamEvent, ToolProgress } from "@/lib/stream-types";
-import { artifactProgress, CREATE_ARTIFACT_TOOL } from "@/lib/artifacts";
+import {
+  artifactProgress,
+  artifactUpdateProgress,
+  CREATE_ARTIFACT_TOOL,
+  UPDATE_ARTIFACT_TOOL,
+} from "@/lib/artifacts";
 import { parseApiErrorMessage } from "@/lib/api-utils";
 import { readSSEStream } from "@/lib/sse";
 import {
@@ -235,6 +240,7 @@ const PROGRESS_INTERVAL_MS = 400;
 /** Tools whose partial arguments are worth reporting while they stream. */
 const PROGRESS_REPORTERS: Record<string, (partialArgs: string) => ToolProgress> = {
   [CREATE_ARTIFACT_TOOL]: artifactProgress,
+  [UPDATE_ARTIFACT_TOOL]: artifactUpdateProgress,
 };
 
 async function parseOpenAISSE(

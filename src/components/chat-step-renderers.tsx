@@ -15,9 +15,13 @@ import { cn } from "@/lib/utils";
 import ShimmerStatus from "./shimmer-status";
 import ExaKeyPromptCard from "./exa-key-prompt-card";
 import { EXA_KEY_REQUIRED_SENTINEL } from "@/tools/web-search";
-import { artifactFromToolInput, CREATE_ARTIFACT_TOOL } from "@/lib/artifacts";
+import {
+  artifactRefFromOutput,
+  CREATE_ARTIFACT_TOOL,
+  UPDATE_ARTIFACT_TOOL,
+} from "@/lib/artifacts";
 import type { ToolProgress } from "@/lib/stream-types";
-import { ArtifactCard } from "./artifact-view";
+import { ArtifactChatCard } from "./artifact-view";
 import { TextWithPicks, buildPoolFromSteps } from "./picks-shared";
 import type { AgentStep } from "@/hooks/use-chat";
 
@@ -30,6 +34,8 @@ const TOOL_LABELS: Record<string, [string, string]> = {
   web_search: ["Searching the web", "Searched the web"],
   search_paper: ["Searching the paper", "Searched the paper"],
   create_artifact: ["Building the artifact", "Built the artifact"],
+  update_artifact: ["Editing the artifact", "Edited the artifact"],
+  read_artifact: ["Reading the artifact", "Read the artifact"],
 };
 
 function toolLabel(name: string, done: boolean): string {
@@ -94,12 +100,25 @@ function useTurnElapsed(): number {
  * streaming): the title once it's written, then each section as it lands, so
  * a long generation reads as visible progress rather than "Thinking".
  */
-function ArtifactBuildingCard({ progress }: { progress?: ToolProgress }) {
+function ArtifactBuildingCard({
+  progress,
+  editing,
+}: {
+  progress?: ToolProgress;
+  /** An update_artifact call: its progress title is the one-line change. */
+  editing?: boolean;
+}) {
   const elapsed = useTurnElapsed();
   const title = progress?.title;
   const steps = progress?.steps ?? [];
 
-  const label = title ? `Building "${title}"` : "Building an artifact";
+  const label = editing
+    ? title
+      ? `Editing the artifact: ${title}`
+      : "Editing the artifact"
+    : title
+      ? `Building "${title}"`
+      : "Building an artifact";
   return (
     <div className="my-2 rounded-lg border border-border bg-card px-3.5 py-3">
       <div className="flex items-center gap-2">
@@ -151,11 +170,19 @@ function formatElapsed(seconds: number): string {
   return `${m}m ${s.toString().padStart(2, "0")}s`;
 }
 
+/** Did this create/update call save an artifact? Its output carries a ref,
+ *  or (turns saved before refs) says the artifact was created. */
+function savedArtifactCall(name: string, output: string): boolean {
+  if (artifactRefFromOutput(output)) return true;
+  return name === CREATE_ARTIFACT_TOOL && /^Artifact ".*" created/.test(output);
+}
+
 /* ------------------------------------------------------------------ */
 /*  ToolCallStep                                                       */
 /* ------------------------------------------------------------------ */
 
 export function ToolCallStep({
+  id,
   name,
   input,
   output,
@@ -163,6 +190,8 @@ export function ToolCallStep({
   building,
   progress,
 }: {
+  /** The tool call's id (finds artifacts saved before refs existed). */
+  id: string;
   name: string;
   input: Record<string, unknown>;
   output?: string;
@@ -189,12 +218,22 @@ export function ToolCallStep({
     return <ExaKeyPromptCard />;
   }
 
-  // create_artifact: the call's input is the artifact itself, so show its
-  // preview card (it's also saved to the Artifacts tab when the turn ends).
-  if (name === CREATE_ARTIFACT_TOOL) {
-    if (building) return <ArtifactBuildingCard progress={progress} />;
-    const artifact = artifactFromToolInput(input);
-    if (artifact) return <ArtifactCard artifact={artifact} className="my-2" />;
+  // create/update_artifact: progress while the page is written, then a card
+  // for the saved artifact (or the plain row when the call failed).
+  if (name === CREATE_ARTIFACT_TOOL || name === UPDATE_ARTIFACT_TOOL) {
+    if (building) {
+      return (
+        <ArtifactBuildingCard
+          progress={progress}
+          editing={name === UPDATE_ARTIFACT_TOOL}
+        />
+      );
+    }
+    if (output && !failed && savedArtifactCall(name, output)) {
+      return (
+        <ArtifactChatCard callId={id} name={name} input={input} output={output} />
+      );
+    }
   }
 
   return (
@@ -281,6 +320,7 @@ export function AgentSteps({ steps }: { steps: AgentStep[] }) {
             return (
               <ToolCallStep
                 key={step.id}
+                id={step.id}
                 name={step.name}
                 input={step.input}
                 output={step.output}

@@ -60,6 +60,35 @@ export interface ToolContext {
     query: string,
     k: number,
   ) => Promise<import("@/lib/documents").ChunkHit[]>;
+  /**
+   * The review's artifacts, bound to the signed-in user by the chat route;
+   * the artifact tools are registered only when it's present.
+   */
+  artifacts?: ArtifactStore;
+}
+
+/** What the artifact tools can do to the review's artifacts. */
+export interface ArtifactStore {
+  create(
+    content: import("@/lib/artifacts").ArtifactContent,
+    sourceCallId: string,
+  ): Promise<import("@/lib/artifacts").ArtifactRef>;
+  /** Current version, or null when the id isn't one of this review's. */
+  current(
+    id: string,
+  ): Promise<
+    (import("@/lib/artifacts").ArtifactContent & { version: number }) | null
+  >;
+  append(
+    id: string,
+    change: {
+      html: string;
+      changeSummary: string;
+      sourceCallId: string;
+      title?: string;
+      summary?: string;
+    },
+  ): Promise<import("@/lib/artifacts").ArtifactRef>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -130,5 +159,7 @@ export interface ToolDefinition {
   execute: (
     input: Record<string, unknown>,
     context: ToolContext,
+    /** The model's tool call, for tools that key writes on its id. */
+    call?: { id: string },
   ) => Promise<string | ToolResult>;
 }

@@ -140,23 +140,50 @@ model ReviewAnnotations {
 
 /// Interactive learning material the assistant generated for a review via the
 /// `create_artifact` tool (e.g. a skimmable overview of the paper). Saved
-/// separately from the chat so it survives "New chat". `html` is GenUI markup,
-/// sanitized again on every render (see sanitizeDiagramHtml).
+/// separately from the chat so it survives "New chat", and never copied into
+/// a share (artifacts run model-written script in a sandbox). Its content
+/// lives in `ArtifactVersion`; the highest `number` is current.
 model ReviewArtifact {
   id           String   @id @default(uuid())
   reviewId     String
   title        String
   summary      String
-  html         String
   /// The chat tool-call id that produced it; unique per review so a retried
   /// persist can't save the same artifact twice.
   sourceCallId String?
+  /// What the reader did inside the artifact (quiz answers, slider
+  /// positions), saved by the page through the sandbox bridge.
+  state        Json?
   createdAt    DateTime @default(now())
+  /// Bumped by new versions only (not by reader state), so the list sorts
+  /// by the last edit.
+  updatedAt    DateTime @default(now())
 
-  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  review   Review            @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  versions ArtifactVersion[]
 
   @@unique([reviewId, sourceCallId])
   @@index([reviewId, createdAt])
+}
+
+/// One saved state of an artifact's page. Every edit, restore, or undo
+/// appends a version; nothing is overwritten.
+model ArtifactVersion {
+  id            String   @id @default(uuid())
+  artifactId    String
+  /// 1 for the original, counting up.
+  number        Int
+  /// The page source: HTML with inline style and script, run sandboxed.
+  html          String
+  /// One line on what changed ("Simplified the method section").
+  changeSummary String
+  /// The tool call that wrote it, if any (restores have none).
+  sourceCallId  String?
+  createdAt     DateTime @default(now())
+
+  artifact ReviewArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactId, number])
 }
 
 /// API key for an external service (LLM provider or tool). The `value`

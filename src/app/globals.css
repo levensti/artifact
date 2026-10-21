@@ -604,7 +604,7 @@
   color: var(--muted-foreground);
 }
 
-/* --- Artifact mode (create_artifact; ArtifactView) ------------------- */
+/* --- Artifacts (copied into the sandbox frame; see artifact-frame.ts) - */
 /* Document elements on top of the dx-* blocks: reading-scale prose,
    sections, and native disclosure for the interactive parts. */
 .dx-diagram.dx-artifact {
@@ -703,8 +703,8 @@
 @media (prefers-reduced-motion: reduce) {
   .dx-artifact details > summary::before { transition: none; }
 }
-/* Paper references, built by the sanitizer as buttons; styled like the
-   chat's citation chips. */
+/* Paper references, built as buttons by prepareArtifactBody; styled like
+   the chat's citation chips. */
 .dx-artifact button.citation-chip {
   display: inline-block;
   font: inherit;
