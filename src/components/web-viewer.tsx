@@ -216,9 +216,27 @@ export default function WebViewer({
   useEffect(() => {
     if (!frameDoc || extractedDocRef.current === frameDoc) return;
     extractedDocRef.current = frameDoc;
+    const body = frameDoc.body;
+    if (!body) {
+      onTextExtracted("");
+      return;
+    }
     // innerText is layout-aware: hidden elements are skipped and block
     // boundaries become line breaks, which reads far better than textContent.
-    const text = frameDoc.body?.innerText ?? frameDoc.body?.textContent ?? "";
+    // But it also skips subtrees under `content-visibility: auto` that the
+    // browser hasn't rendered yet (paged documents such as SEC filings wrap
+    // every page in it), which can leave it empty. Force everything
+    // renderable for the read, then put the page back.
+    const override = frameDoc.createElement("style");
+    override.textContent = "*{content-visibility:visible!important}";
+    frameDoc.head?.appendChild(override);
+    let text = "";
+    try {
+      text = body.innerText ?? "";
+    } finally {
+      override.remove();
+    }
+    if (!text.trim()) text = body.textContent ?? "";
     onTextExtracted(text);
   }, [frameDoc, onTextExtracted]);
 

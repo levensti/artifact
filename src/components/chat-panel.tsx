@@ -196,7 +196,7 @@ function ChatInput({
   const inputLocked = isPreparingPaper;
   const preparingLabel =
     preparingPhase === "extracting"
-      ? "Extracting text from the PDF…"
+      ? `Extracting text from the ${noun}…`
       : preparingPhase === "registering"
         ? "Preparing document for chat…"
         : preparingPhase === "registration_failed"
