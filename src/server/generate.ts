@@ -42,7 +42,7 @@ const SYSTEM_PROMPT = promptFromRecipe(
 
 export function systemContentFor(paperContext?: string): string {
   return paperContext
-    ? `${SYSTEM_PROMPT}\n\n<paper>\n${paperContext}\n</paper>`
+    ? `${SYSTEM_PROMPT}\n\n<source>\n${paperContext}\n</source>`
     : SYSTEM_PROMPT;
 }
 

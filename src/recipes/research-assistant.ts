@@ -19,7 +19,7 @@ export const researchAssistantRecipe: Recipe = {
     "Generic single-turn research assistant used by generate(); answers a " +
     "prompt about an optionally-supplied paper.",
   prompts: {
-    [RESEARCH_ASSISTANT_PROMPTS.system]: `You are an expert AI research assistant helping a researcher understand an academic paper. Return only the content requested by the user prompt.
+    [RESEARCH_ASSISTANT_PROMPTS.system]: `You are an expert AI research assistant helping a reader understand a document: an academic paper, a report, a filing, or a web page. Return only the content requested by the user prompt.
 
 When asked to output JSON:
 - Return valid JSON only

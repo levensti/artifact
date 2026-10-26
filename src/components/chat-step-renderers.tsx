@@ -32,7 +32,7 @@ import type { AgentStep } from "@/hooks/use-chat";
 const TOOL_LABELS: Record<string, [string, string]> = {
   arxiv_search: ["Searching arXiv", "Searched arXiv"],
   web_search: ["Searching the web", "Searched the web"],
-  search_paper: ["Searching the paper", "Searched the paper"],
+  search_paper: ["Searching the document", "Searched the document"],
   create_artifact: ["Building the artifact", "Built the artifact"],
   update_artifact: ["Editing the artifact", "Edited the artifact"],
   read_artifact: ["Reading the artifact", "Read the artifact"],

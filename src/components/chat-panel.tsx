@@ -44,6 +44,7 @@ import { useCitationContext } from "./citation-context";
 import { useSpeechInput } from "@/hooks/use-speech-input";
 import { ExaKeyResumeProvider } from "./exa-key-resume-context";
 import ChatEmptyState from "./chat-empty-state";
+import { sourceKindOf, sourceNoun } from "@/lib/source-kind";
 import { ChatMessageBubble } from "./chat-message-bubble";
 import { MonoLabel } from "@/components/folio";
 import { useChat } from "@/hooks/use-chat";
@@ -166,6 +167,7 @@ function ChatInput({
   isStreaming,
   modelReady,
   isPreparingPaper,
+  sourceNoun: noun,
   chatThreadAnnotationId,
   focusToken,
   footer,
@@ -177,6 +179,8 @@ function ChatInput({
   modelReady: boolean;
   /** Paper parse hasn't finished yet — disable input with a preparing state. */
   isPreparingPaper: boolean;
+  /** "paper", "document" or "page", for copy. */
+  sourceNoun: string;
   chatThreadAnnotationId: string | null;
   /** Increment to imperatively focus the composer (e.g. after a quote insert). */
   focusToken: number;
@@ -199,7 +203,7 @@ function ChatInput({
           ? `Couldn't prepare the document: ${registrationError ?? "unknown error"}`
           : preparingPhase === "index_failed"
             ? `Couldn't index the document for chat${documentStatus?.indexError ? `: ${documentStatus.indexError}` : ""}. Reload the page to try again.`
-            : `Indexing paper for chat · ${documentStatus?.indexProgress ?? 0}%`;
+            : `Indexing ${noun} for chat · ${documentStatus?.indexProgress ?? 0}%`;
   const preparingFailed =
     preparingPhase === "registration_failed" ||
     preparingPhase === "index_failed";
@@ -273,12 +277,12 @@ function ChatInput({
           disabled={inputLocked}
           placeholder={
             isPreparingPaper
-              ? "Indexing paper for chat…"
+              ? `Indexing ${noun} for chat…`
               : listening
                 ? "Listening…"
                 : chatThreadAnnotationId
                   ? "Reply in this selection thread…"
-                  : "Ask about the paper…"
+                  : `Ask about the ${noun}…`
           }
           rows={1}
           className={cn(
@@ -491,7 +495,7 @@ function ContextBreakdownTooltip({
                 label="Instructions"
                 value={breakdown.instructions}
               />
-              <BreakdownRow label="Paper" value={breakdown.paper} />
+              <BreakdownRow label="Source" value={breakdown.paper} />
               <BreakdownRow
                 label="Conversation"
                 value={breakdown.conversation}
@@ -610,6 +614,8 @@ export default function ChatPanel({
   onExternalSendConsumed,
   onStreamingChange,
 }: ChatPanelProps) {
+  const sourceKind = sourceKindOf({ arxivId, sourceUrl });
+  const noun = sourceNoun(sourceKind);
   const { openSettings } = useSettingsOpener();
   const { parseReady } = useCitationContext();
 
@@ -1038,14 +1044,14 @@ export default function ChatPanel({
                         size="xs"
                         className="-ml-2 self-start gap-1.5 text-muted-foreground hover:text-foreground"
                         onClick={() => onChatThreadChange(null)}
-                        aria-label="Back to whole-paper assistant chat"
+                        aria-label="Back to the main assistant chat"
                       >
                         <ArrowLeft className="size-3" strokeWidth={2.5} />
                         Main thread
                       </Button>
 
                       <div className="flex flex-col gap-1.5">
-                        <MonoLabel>From the paper</MonoLabel>
+                        <MonoLabel>From the {noun}</MonoLabel>
                         <blockquote
                           className="line-clamp-4 border-l-2 pl-3 text-[13px] italic leading-relaxed"
                           style={{
@@ -1084,6 +1090,7 @@ export default function ChatPanel({
                   <>
                     {chat.messages.length === 0 && (
                       <ChatEmptyState
+                        kind={sourceKind}
                         canFill={!isPreparingPaper}
                         canSend={
                           modelReady && !chat.isStreaming && !isPreparingPaper
@@ -1182,6 +1189,7 @@ export default function ChatPanel({
           </div>
         )}
         <ChatInput
+          sourceNoun={noun}
           input={chat.input}
           setInput={chat.setInput}
           sendMessage={sendWithQuote}
@@ -1198,7 +1206,7 @@ export default function ChatPanel({
                 <p className="px-1 text-[11px] leading-snug text-muted-foreground/70">
                   Your assistant can help you dive deeper, generate interactive
                   learning materials (artifacts), draw diagrams, find related
-                  papers, work through the math, and more.
+                  sources, work through the math, and more.
                 </p>
               )}
               <div className="flex items-center justify-between gap-2">
@@ -1241,8 +1249,8 @@ export default function ChatPanel({
             <DialogHeader>
               <DialogTitle>Start a new chat?</DialogTitle>
               <DialogDescription>
-                This clears the current conversation. Highlighted threads on the
-                paper are kept.
+                This clears the current conversation. Highlighted threads on the{" "}
+                {noun} are kept.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

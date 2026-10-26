@@ -1,4 +1,5 @@
 import type { Recipe } from "./types";
+import { sourceKindOf } from "@/lib/source-kind";
 import { promptFromRecipe } from "./types";
 
 /**
@@ -158,13 +159,13 @@ const ARTIFACT_GUIDE = `Artifact reference. Artifacts are interactive learning p
 
 New or edit (decide yourself, never ask):
 - Edit in place with \`update_artifact\` when the request changes an existing artifact: "simpler", "add an example", "make it a quiz", "fix the plot", or anything about "this"/"it" while one is open. Edits are versioned and the user can undo them, so edit confidently.
-- Create with \`create_artifact\` for a different topic or part of the paper, or when the user wants to keep the original ("a separate version for…", "another one").
+- Create with \`create_artifact\` for a different topic or part of the document, or when the user wants to keep the original ("a separate version for…", "another one").
 - After either, reply in one or two sentences that say which you did ("I updated the overview: …" / "I made a separate cheat sheet, since …"). Never repeat the artifact's contents.
 - Edits: prefer \`edits\` (exact old_str copied from the current source, each unique) over rewriting \`html\`. Only rewrite when most of the page changes. To edit an artifact that isn't open, \`read_artifact\` it first.
 - If a reader-state note says what they did (e.g. missed quiz questions), use it to tailor the edit.
 
 The page. \`html\` is the body of a real web page: any HTML, an inline <style>, and inline <script>. It runs in a sandboxed frame inside a side panel 360px wide that the user can widen to about 980px.
-- Shape it to what the user is trying to do; pick the form, don't default to text. Studying or checking understanding: a self-check with instant feedback. Building intuition for a parameter or formula: controls (sliders, toggles) driving a live SVG plot or computed numbers. An algorithm or derivation: a stepper the reader moves through one step at a time. Comparing methods: a toggle or side-by-side switch on the same view. A skim of the whole paper: the overview recipe below. Interactivity must earn its place; a clear static section beats a gimmick.
+- Shape it to what the user is trying to do; pick the form, don't default to text. Studying or checking understanding: a self-check with instant feedback. Building intuition for a parameter or formula: controls (sliders, toggles) driving a live SVG plot or computed numbers. An algorithm or derivation: a stepper the reader moves through one step at a time. Comparing methods: a toggle or side-by-side switch on the same view. A skim of the whole document: the overview recipe below. Interactivity must earn its place; a clear static section beats a gimmick.
 - Write meaningful static markup first and let script enhance it, so the page reads even if a script fails. Put scripts at the end of the body, wrap their work in try/catch, and use addEventListener. Keep the page under about 25 KB.
 - The layout must reflow from 360px to 980px: flex-wrap and grid with auto-fit, svg with a viewBox and no fixed width, no fixed pixel widths over 320px, nothing that needs hover.
 - Unavailable (the save is rejected): network requests of any kind, external URLs (images, fonts, scripts, links), forms, iframes, navigation or window.open, alert/confirm/prompt, localStorage and cookies. Draw images as inline SVG; put all data inline.
@@ -179,15 +180,15 @@ Style system. The app injects its theme into the page; use it so every artifact 
 The page's runtime (window.artifact):
 - artifact.getState() / artifact.setState(obj): remember what the reader did (answers, slider positions, current step). Restore from getState() on load, and call setState on every meaningful change. Small JSON only.
 - artifact.ask(prompt), or a button with data-ask="…": puts a follow-up into the user's composer for them to send. Good for "Explain this step" or "Quiz me on §3" affordances.
-- Paper references written as plain text in markup (§3.2, Fig. 4, Table 2, Ref. [12]) become chips that jump the PDF there; cite generously in body text. From script, make one with <button class="citation-chip" data-cite-kind="section" data-cite-value="3.2">§3.2</button> (kinds: section, figure, table, ref).
+- References to the document written as plain text in markup (§3.2, Fig. 4, Table 2, Ref. [12]) become chips that jump the reader there; cite generously in body text. From script, make one with <button class="citation-chip" data-cite-kind="section" data-cite-value="3.2">§3.2</button> (kinds: section, figure, table, ref).
 - Math in static markup: $…$ inline and $$…$$ display, rendered for you. Text built by script isn't rendered as math: write it in Unicode with sub/sup.
 - The title and summary are shown above the page; don't repeat them. No markdown inside the html.
 
-Skimmable overview (the usual request). Write for someone who will NOT read the paper:
+Skimmable overview (the usual request). Write for someone who will NOT read the document:
 1. A short p: what it does and why it matters, in 2 to 3 sentences.
 2. A dx-row of 2 to 4 dx-node tiles with the headline facts (a key number or claim as the main text, what it measures as dx-sub). Accent only the single most important one.
 3. The core idea as a visual: a dx-stack/dx-row flow of the method, an SVG, or a small interactive when the idea is about a quantity that varies.
-4. details sections, each with a one-line summary that states the takeaway: the problem and prior gap, how the method works, the key results (cite the tables/figures), limitations and open questions, and "Where to read closely" (the 2 to 3 sections worth reading in full and why). Add the open attribute to the one to read first.
+4. details sections, each with a one-line summary that states the takeaway: the problem or purpose and prior gap, how it works or what it argues, the key results or claims (cite the tables/figures), limitations and open questions, and "Where to read closely" (the 2 to 3 sections worth reading in full and why). Add the open attribute to the one to read first.
 5. Optionally a short self-check (2 to 3 questions with instant feedback, answers saved with setState).
 Budget: what a reader can skim in 3 minutes. Concrete numbers and named components beat adjectives.
 
@@ -256,7 +257,7 @@ Examples (each is valid as-is):
  */
 const VISUAL_FORMAT_REMINDER = `Format reminder for this reply (overrides anything earlier turns did): a bar, line, or pie chart is ALWAYS a \`\`\`chart fence containing only the JSON spec, never hand-drawn SVG arcs or bars, no matter how earlier turns drew charts. Any other visual is a \`\`\`diagram fence (HTML/SVG, every axis and data point labeled, colors only from var(--…) theme tokens). Never emit \`\`\`mermaid. Otherwise follow the system prompt.`;
 
-type ReadingKind = "paper" | "web";
+type ReadingKind = "paper" | "document" | "web";
 
 /**
  * Build the system prompt for a reading surface (paper or web page). The two
@@ -266,12 +267,15 @@ type ReadingKind = "paper" | "web";
  * grounding discipline papers do.
  */
 function buildReadingPrompt(kind: ReadingKind): string {
-  const isPaper = kind === "paper";
-  const noun = isPaper ? "paper" : "page";
+  const isWeb = kind === "web";
+  const noun = kind === "paper" ? "paper" : isWeb ? "page" : "document";
 
-  const role = isPaper
-    ? "You are a research assistant working alongside someone reading an academic paper. Your job: help them understand the paper deeply and the ideas around it: explain, search, discover, connect."
-    : "You are a research assistant working alongside someone reading a web page (an article, blog post, or documentation). Your job: help them understand it deeply and the ideas around it: explain, search, discover, connect.";
+  const role =
+    kind === "paper"
+      ? "You are a research assistant working alongside someone reading an academic paper. Your job: help them understand the paper deeply and the ideas around it: explain, search, discover, connect."
+      : kind === "document"
+        ? "You are a research assistant working alongside someone reading a document: a report, a regulatory filing, a book chapter, a thesis, a technical manual, or any other PDF. It may or may not be an academic paper, so don't assume it has a method, experiments, or results; take its structure and purpose from the document itself. Your job: help them understand it deeply and the ideas around it: explain, search, discover, connect."
+        : "You are a research assistant working alongside someone reading a web page (an article, blog post, documentation, a filing, or any other page). Your job: help them understand it deeply and the ideas around it: explain, search, discover, connect.";
 
   // Both surfaces read through retrieval: passages retrieved for the current
   // message plus the ToC, with `search_paper` registered for more.
@@ -286,14 +290,14 @@ function buildReadingPrompt(kind: ReadingKind): string {
 - ${WEB_SEARCH_NOTE}
 - \`create_artifact\` / \`update_artifact\` / \`read_artifact\`: build interactive learning material, such as a skimmable overview of the ${noun}, and edit it in place (see the artifact reference)`;
 
-  const grounding = isPaper
+  const grounding = !isWeb
     ? `Citations:
-- Cite the paper inline for every distinct statement you make about it. Each one gets its own locator. Don't bundle multiple statements behind a single trailing reference.
+- Cite the ${noun} inline for every distinct statement you make about it. Each one gets its own locator. Don't bundle multiple statements behind a single trailing reference.
 - Sections: write "(§N)", "(§N.M)", or "(§N.M.K)". Always cite at the deepest subsection level that actually grounds the claim. Prefer "(§4.2.1)" over "(§4.2)" when the statement comes from that subsection specifically.
 - Figures: write "(Fig. N)", e.g. "(Fig. 3)" or "(Fig. 3.2)". For multi-panel figures, cite the parent number and describe the panel in prose ("the right panel of (Fig. 3) shows..."), not "(Fig. 3a)".
 - Tables: write "(Table N)", e.g. "(Table 1)". Tables are dense, so always pair the citation with the specific row, column, or comparison you want the reader to focus on ("the 'GLUE avg.' column of (Table 2)").
 - Equations: write "(Eq. N)". A cited work in the reference list: write "(Ref. [key])".
-- These all auto-render as clickable nav chips.
+- These all auto-render as clickable nav chips. Use only the kinds the ${noun} actually has; a document without numbered sections is cited by page ("(p. 12)").
 - ${THREAD_GROUNDING}`
     : `Grounding:
 - Anchor every claim about the page in the page itself: quote the key phrase or name the heading/section it comes from rather than paraphrasing vaguely.
@@ -324,6 +328,7 @@ function buildReadingPrompt(kind: ReadingKind): string {
 }
 
 const PAPER_SYSTEM_PROMPT = buildReadingPrompt("paper");
+const DOCUMENT_SYSTEM_PROMPT = buildReadingPrompt("document");
 const WEB_SYSTEM_PROMPT = buildReadingPrompt("web");
 
 /**
@@ -370,6 +375,7 @@ Tone: dense, librarian-level. Technical user. ${NO_EM_DASHES}`;
 /** Prompt slots in the reading-agent recipe. */
 export const READING_AGENT_PROMPTS = {
   paper: "paper",
+  document: "document",
   web: "web",
   discoveryPlan: "discovery_plan",
   discoveryFinal: "discovery_final",
@@ -384,6 +390,7 @@ export const readingAgentRecipe: Recipe = {
     "source in context.",
   prompts: {
     [READING_AGENT_PROMPTS.paper]: PAPER_SYSTEM_PROMPT,
+    [READING_AGENT_PROMPTS.document]: DOCUMENT_SYSTEM_PROMPT,
     [READING_AGENT_PROMPTS.web]: WEB_SYSTEM_PROMPT,
     [READING_AGENT_PROMPTS.discoveryPlan]: DISCOVERY_PLAN_PROMPT,
     [READING_AGENT_PROMPTS.discoveryFinal]: DISCOVERY_FINAL_PROMPT,
@@ -393,18 +400,23 @@ export const readingAgentRecipe: Recipe = {
 
 /**
  * Pick the system prompt for a surface: discover mode → the discover funnel's
- * final-pass prompt (the one model loop it runs); a web source → the page
- * prompt; otherwise the paper prompt.
+ * final-pass prompt (the one model loop it runs); otherwise the reading
+ * prompt for the source kind (arXiv paper, other PDF document, or web page).
  */
 export function getReadingSystemPrompt(
-  sourceUrl: string | undefined,
+  source: { sourceUrl?: string | null; arxivId?: string | null },
   mode?: "discover",
 ): string {
   if (mode === "discover")
     return promptFromRecipe(readingAgentRecipe, READING_AGENT_PROMPTS.discoveryFinal);
+  const kind = sourceKindOf(source);
   return promptFromRecipe(
     readingAgentRecipe,
-    sourceUrl ? READING_AGENT_PROMPTS.web : READING_AGENT_PROMPTS.paper,
+    kind === "web"
+      ? READING_AGENT_PROMPTS.web
+      : kind === "paper"
+        ? READING_AGENT_PROMPTS.paper
+        : READING_AGENT_PROMPTS.document,
   );
 }
 

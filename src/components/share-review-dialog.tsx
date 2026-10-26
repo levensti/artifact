@@ -119,6 +119,11 @@ export default function ShareReviewDialog({
   const sourceLabel = review?.arxivId
     ? `arXiv:${review.arxivId}`
     : (review?.sourceUrl ?? "Unknown source");
+  const kindLabel = review?.sourceUrl
+    ? "Web review"
+    : review?.arxivId
+      ? "Paper review"
+      : "Document review";
 
   const isWorking = linkState.kind === "creating" || revoking;
 
@@ -152,7 +157,11 @@ export default function ShareReviewDialog({
 
         {/* Subject — what's being shared, rendered as a folio specimen */}
         {review ? (
-          <SubjectCard title={review.title} sourceLabel={sourceLabel} />
+          <SubjectCard
+            title={review.title}
+            sourceLabel={sourceLabel}
+            kindLabel={kindLabel}
+          />
         ) : null}
 
         {/* The link */}
@@ -174,9 +183,11 @@ export default function ShareReviewDialog({
 function SubjectCard({
   title,
   sourceLabel,
+  kindLabel,
 }: {
   title: string;
   sourceLabel: string;
+  kindLabel: string;
 }) {
   return (
     <section
@@ -213,7 +224,7 @@ function SubjectCard({
             <path d="M9.5 2.5V6H13" />
           </svg>
         </span>
-        <MonoLabel>Paper review</MonoLabel>
+        <MonoLabel>{kindLabel}</MonoLabel>
       </header>
       <div className="px-4 py-3">
         <p
