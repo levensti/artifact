@@ -2,47 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import { auth } from "@/server/auth";
+import { fetchPage } from "@/server/web/fetch-page";
 
 export const runtime = "nodejs";
-
-const BROWSER_USER_AGENT =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
-const BASE_HEADERS = {
-  Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-  "Accept-Language": "en-US,en;q=0.9",
-  "Accept-Encoding": "gzip, deflate, br",
-  "Upgrade-Insecure-Requests": "1",
-  "Sec-Fetch-Dest": "document",
-  "Sec-Fetch-Mode": "navigate",
-  "Sec-Fetch-Site": "none",
-  "Sec-Fetch-User": "?1",
-} as const;
-
-/**
- * Fetch a page, trying a browser-style User-Agent first (what most sites
- * accept), then retrying once with a self-identifying UA if the site answers
- * 403. Some hosts, notably SEC EDGAR, reject undeclared automated traffic and
- * require a User-Agent of the form "Company Name contact@example.com"; we
- * declare the signed-in user's email as the contact.
- */
-async function fetchPage(url: string, contactEmail: string | null) {
-  const attempt = (userAgent: string) =>
-    fetch(url, {
-      headers: { ...BASE_HEADERS, "User-Agent": userAgent },
-      redirect: "follow",
-      signal: AbortSignal.timeout(25_000),
-    });
-
-  const first = await attempt(BROWSER_USER_AGENT);
-  if (first.status !== 403) return first;
-
-  const declared = contactEmail
-    ? `Artifact ${contactEmail}`
-    : "Artifact withartifact.com";
-  return attempt(declared);
-}
 
 /**
  * GET /api/web-content?url=...

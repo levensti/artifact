@@ -609,6 +609,7 @@ export default function ReviewPage() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--reader-mat)">
             {review.sourceUrl ? (
               <WebViewer
+                reviewId={review.id}
                 sourceUrl={review.sourceUrl}
                 onTextExtracted={handleTextExtracted}
                 onTextSelected={handleTextSelected}

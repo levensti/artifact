@@ -82,3 +82,60 @@ export async function deletePdf(path: string): Promise<void> {
   const { error } = await client().storage.from(bucket()).remove([path]);
   if (error) throw new Error(`pdf delete failed: ${error.message}`);
 }
+
+// ─── Generic objects (web page snapshots) ───────────────────────────
+
+export function webSnapshotPath(userId: string, reviewId: string): string {
+  return `${userId}/web/${reviewId}.html.gz`;
+}
+
+export async function objectExists(path: string): Promise<boolean> {
+  const { data, error } = await client().storage.from(bucket()).exists(path);
+  return !error && Boolean(data);
+}
+
+/** Short-lived URL the browser can GET an object from directly, so large
+ *  files never stream through a function. */
+export async function createSignedReadUrl(
+  path: string,
+  expiresInSeconds = 3600,
+): Promise<string> {
+  const { data, error } = await client()
+    .storage.from(bucket())
+    .createSignedUrl(path, expiresInSeconds);
+  if (error) throw new Error(`signed url failed (${path}): ${error.message}`);
+  return data.signedUrl;
+}
+
+export async function uploadObject(
+  path: string,
+  body: Blob | ArrayBuffer | Buffer | Uint8Array | string,
+  contentType: string,
+): Promise<string> {
+  const { error } = await client()
+    .storage.from(bucket())
+    .upload(path, body, { contentType, upsert: true });
+  if (error) {
+    throw new Error(`upload failed (${path}): ${error.message}`);
+  }
+  return path;
+}
+
+/** Download an object, or null when it does not exist. */
+export async function downloadObjectIfExists(path: string): Promise<Blob | null> {
+  const { data, error } = await client().storage.from(bucket()).download(path);
+  if (error) {
+    const status = (error as { status?: number; statusCode?: string | number }).status
+      ?? (error as { statusCode?: string | number }).statusCode;
+    if (status === 404 || status === "404" || /not found/i.test(error.message)) {
+      return null;
+    }
+    throw new Error(`download failed (${path}): ${error.message}`);
+  }
+  return data;
+}
+
+export async function deleteObject(path: string): Promise<void> {
+  const { error } = await client().storage.from(bucket()).remove([path]);
+  if (error) throw new Error(`delete failed (${path}): ${error.message}`);
+}

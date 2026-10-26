@@ -355,7 +355,7 @@ export async function POST(req: NextRequest) {
   // The system prompt is resolved up front only to budget the conversation to
   // the context window below. Tool selection and the ToolContext are built
   // inside runReadingAgent.
-  const systemPrompt = getReadingSystemPrompt(sourceUrl, mode);
+  const systemPrompt = getReadingSystemPrompt({ sourceUrl, arxivId }, mode);
 
   // Resolve the conversation to send the model. Server-owned path: load it
   // from the DB, append the new user turn, then budget it to the model's

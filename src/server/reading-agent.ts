@@ -155,7 +155,7 @@ export async function runReadingAgent(params: ReadingAgentParams): Promise<void>
     reviewId,
     exaApiKey: exaApiKey || undefined,
   };
-  const systemPrompt = getReadingSystemPrompt(sourceUrl);
+  const systemPrompt = getReadingSystemPrompt({ sourceUrl, arxivId });
 
   await runFireworksAgentLoop(
     conversation,

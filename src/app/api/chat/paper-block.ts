@@ -1,5 +1,5 @@
 /**
- * The `<paper>` block injected into the reading agent's system prompt: the
+ * The `<source>` block injected into the reading agent's system prompt: the
  * document's table of contents plus the passages retrieved for this turn.
  * Chat reads every document through retrieval; the agent asks for more with
  * `search_paper`.
@@ -31,5 +31,5 @@ export function buildPaperBlock(input: PaperBlockInput | undefined): string | nu
   parts.push(
     "<note>You see this document only through retrieval. The passages above were retrieved for the current message and are ordered as they appear in the document, grouped under their section heading, each with its page range. Cite sections ONLY by the § number shown in those headings; if a heading has no number, cite the page instead (\"(p. 12)\") and name the section in prose. Never invent a section number. Use `search_paper` to retrieve more passages for a different angle or for parts of the document not shown, and do so before answering whenever the passages don't cover what the user asked.</note>",
   );
-  return `<paper>\n${parts.join("\n")}\n</paper>`;
+  return `<source>\n${parts.join("\n")}\n</source>`;
 }

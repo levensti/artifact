@@ -9,21 +9,24 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MonoLabel } from "@/components/folio";
+import { sourceNoun, type SourceKind } from "@/lib/source-kind";
 
 /* ------------------------------------------------------------------ */
 /*  Conversation starters                                              */
 /* ------------------------------------------------------------------ */
 
-const STARTERS: Array<{
+type Starter = {
   label: string;
   desc: string;
   prompt: string;
   icon: LucideIcon;
   /** Send right away instead of filling the composer for editing. */
   autoSend?: boolean;
-}> = [
+};
+
+const PAPER_STARTERS: Starter[] = [
   {
-    label: "Skim the paper",
+    label: "Get the gist",
     icon: LayoutPanelTop,
     desc: "An interactive overview, saved to Artifacts",
     prompt:
@@ -53,17 +56,52 @@ const STARTERS: Array<{
   },
 ];
 
+/** Starters for a document or page that may not be an academic paper: no
+ *  assumptions about a method, results, or a research field. */
+function generalStarters(noun: "document" | "page"): Starter[] {
+  return [
+    {
+      label: "Get the gist",
+      icon: LayoutPanelTop,
+      desc: "An interactive overview, saved to Artifacts",
+      prompt: `Build an interactive overview of this ${noun} that I can skim instead of reading it in full: what it is about, the key points, the main claims or findings and the evidence behind them, and what to take away.`,
+      autoSend: true,
+    },
+    {
+      label: "Background",
+      icon: GraduationCap,
+      desc: "Concepts and context to understand first",
+      prompt: `What concepts, terms, and context should I understand before reading this ${noun}?`,
+    },
+    {
+      label: "Related reading",
+      icon: Network,
+      desc: `Sources that connect to this ${noun}`,
+      prompt: `Find the most useful related sources for this ${noun} and explain how each connects to it.`,
+    },
+    {
+      label: "Key takeaways",
+      icon: Sparkles,
+      desc: "Main claims and what supports them",
+      prompt: `What are the key takeaways of this ${noun}? For each, what is the evidence or reasoning behind it?`,
+    },
+  ];
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
 export default function ChatEmptyState({
+  kind,
   canFill,
   canSend,
   onFill,
   onSend,
 }: {
-  /** False while the paper is still being prepared (the composer is locked). */
+  /** What is being read; picks the starters and the copy. */
+  kind: SourceKind;
+  /** False while the source is still being prepared (the composer is locked). */
   canFill: boolean;
   /** False until a message could actually be sent now. */
   canSend: boolean;
@@ -72,6 +110,11 @@ export default function ChatEmptyState({
   /** Sends an auto-send starter's prompt immediately. */
   onSend: (prompt: string) => void;
 }) {
+  const noun = sourceNoun(kind);
+  const starters =
+    kind === "paper"
+      ? PAPER_STARTERS
+      : generalStarters(noun === "page" ? "page" : "document");
   return (
     <div className="flex flex-col pb-4 pt-0 font-sans antialiased">
       <div className="mb-5 px-2">
@@ -82,13 +125,13 @@ export default function ChatEmptyState({
         </p>
         <p className="mt-1.5 text-[12.5px] leading-[1.55] text-muted-foreground">
           Your assistant searches arXiv and the web automatically when needed.
-          Highlight any passage in the paper to start a thread tied to it.
+          Highlight any passage in the {noun} to start a thread tied to it.
         </p>
       </div>
 
       {/* Hairline spec-sheet grid, same anatomy as the landing's facts row. */}
       <div className="landing-grid grid grid-cols-2 overflow-hidden rounded-lg bg-card">
-        {STARTERS.map((s) => {
+        {starters.map((s) => {
           const enabled = s.autoSend ? canSend : canFill;
           return (
             <button

@@ -792,7 +792,7 @@ export default function PdfViewer({
                 closeSearch();
               }
             }}
-            placeholder="Search in paper"
+            placeholder="Search in document"
             className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-foreground/40"
           />
           <span className="min-w-[44px] text-right text-[11px] tabular-nums text-foreground/60">
