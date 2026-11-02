@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -13,7 +13,10 @@ import {
   SearchX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { setRecommendationDismissed } from "@/lib/client-data";
+import {
+  fetchDiscoverTrajectory,
+  setRecommendationDismissed,
+} from "@/lib/client-data";
 import type { DiscoverQuery, Recommendation } from "@/lib/discover-types";
 import type { AgentStep } from "@/hooks/use-chat";
 import MarkdownMessage from "./markdown-message";
@@ -128,15 +131,71 @@ function parseLog(log: string): LogEntry[] {
   return entries;
 }
 
-/** The finished brief's research, on the same step rail as the live run:
- *  what was searched, graded, read closely, and picked. Searches and close
- *  reads open on request. */
-function ResearchLog({
+const RESEARCH_HEADING = (
+  <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+    How it was researched
+  </h2>
+);
+
+/**
+ * The finished brief's research: the prompt and the agent's full trajectory
+ * (searches and their results, grading, the shortlist, close reads, picks),
+ * replayed on the live run's step rail. Briefs saved before trajectories
+ * were stored fall back to the summary parsed from their notes.
+ */
+function ResearchTrajectory({
+  query,
   log,
   recs,
 }: {
+  query: DiscoverQuery;
+  log: string | null;
+  recs: Recommendation[];
+}) {
+  const [loaded, setLoaded] = useState<{
+    id: string;
+    steps: AgentStep[] | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchDiscoverTrajectory(query.id)
+      .then((steps) => {
+        if (!cancelled) setLoaded({ id: query.id, steps });
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded({ id: query.id, steps: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query.id]);
+
+  // Nothing until the request settles, so an older brief doesn't flash
+  // one log and then the other.
+  if (!loaded || loaded.id !== query.id) return null;
+  if (loaded.steps) {
+    return (
+      <section>
+        {RESEARCH_HEADING}
+        <div className="mt-4">
+          <DiscoverLiveProgress steps={loaded.steps} finished prompt={query.query} />
+        </div>
+      </section>
+    );
+  }
+  return log ? <ResearchLog log={log} recs={recs} prompt={query.query} /> : null;
+}
+
+/** An older brief's research, parsed from its saved "What I did" summary:
+ *  what was searched, graded, read closely, and picked. */
+function ResearchLog({
+  log,
+  recs,
+  prompt,
+}: {
   log: string;
   recs: Recommendation[];
+  prompt: string;
 }) {
   const entries = parseLog(log);
   const reads = entries.filter((e) => e.kind === "read");
@@ -154,10 +213,16 @@ function ResearchLog({
 
   return (
     <section>
-      <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">
-        How it was researched
-      </h2>
+      {RESEARCH_HEADING}
       <ol className="mt-4">
+        <LogStep state="done" title="Asked" stayOpen>
+          <p
+            className="max-w-[64ch] whitespace-pre-wrap border-l-2 border-primary/30 pl-3 text-[15px] leading-[1.65] text-foreground/85"
+            style={{ fontFamily: "var(--font-reading)" }}
+          >
+            {prompt}
+          </p>
+        </LogStep>
         {searches.length > 0 ? (
           <LogStep
             state="done"
@@ -465,7 +530,7 @@ function RunBody({
         ) : null}
       </BriefSection>
 
-      {log ? <ResearchLog log={log} recs={recommendations} /> : null}
+      <ResearchTrajectory query={query} log={log} recs={recommendations} />
     </div>
   );
 }

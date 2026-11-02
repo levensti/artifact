@@ -26,6 +26,8 @@ import {
 } from "@/lib/storage-events";
 import { apiFetch } from "@/lib/client/api";
 import type { JudgeDetail } from "@/lib/judge-rubric";
+import type { AgentStep } from "@/lib/agent-steps";
+import { parseTrajectory } from "@/lib/discover-trajectory";
 
 interface SettingsCache {
   /** User's optional Fireworks key override (server falls back to env). */
@@ -464,6 +466,8 @@ export async function createDiscoverQuery(
 
 export interface FinalizePayload {
   status: "complete" | "errored";
+  /** Compacted agent steps (see lib/discover-trajectory). */
+  trajectory?: AgentStep[];
   /** Structured picks from the `submit_picks` tool call. */
   picks?: Array<{
     url: string;
@@ -499,8 +503,34 @@ export async function finalizeDiscoverQuery(
     q.id === result.query.id ? result.query : q,
   );
   recommendationsCache = [...result.recommendations, ...recommendationsCache];
+  // The run's steps are already here; the finished brief shows them
+  // without a round trip.
+  if (payload.trajectory) {
+    trajectoryCache.set(queryId, Promise.resolve(payload.trajectory));
+  }
   dispatch(DISCOVER_UPDATED_EVENT);
   return result;
+}
+
+/** Stored research steps per brief, loaded once when a brief is opened. */
+const trajectoryCache = new Map<string, Promise<AgentStep[] | null>>();
+
+export function fetchDiscoverTrajectory(
+  queryId: string,
+): Promise<AgentStep[] | null> {
+  const cached = trajectoryCache.get(queryId);
+  if (cached) return cached;
+  const pending = apiFetch<{ trajectory: unknown }>(
+    `/api/discover-queries/${encodeURIComponent(queryId)}`,
+  )
+    .then((r) => parseTrajectory(r.trajectory))
+    .catch((err) => {
+      // Let a later open retry.
+      trajectoryCache.delete(queryId);
+      throw err;
+    });
+  trajectoryCache.set(queryId, pending);
+  return pending;
 }
 
 export async function setRecommendationDismissed(

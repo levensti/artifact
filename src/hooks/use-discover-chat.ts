@@ -20,6 +20,7 @@ import {
   canonicalUrl,
 } from "@/lib/discover-paper-metadata";
 import { arxivIdFromUrl } from "@/lib/picks-parser";
+import { compactTrajectory } from "@/lib/discover-trajectory";
 
 /* ------------------------------------------------------------------ */
 /*  NDJSON parser (mirrors use-chat.ts)                                */
@@ -504,8 +505,10 @@ export function useDiscoverChat({
               ? `${finalText.trim()}\n\n${activity}`.trim()
               : finalText.trim();
 
+            const trajectory = compactTrajectory(steps);
             await finalizeDiscoverQuery(queryId, {
               status: streamSucceeded ? "complete" : "errored",
+              ...(trajectory.length > 0 ? { trajectory } : {}),
               ...(enrichedStructured && enrichedStructured.length > 0
                 ? { picks: enrichedStructured, notes: enrichedText || null }
                 : { text: enrichedText }),

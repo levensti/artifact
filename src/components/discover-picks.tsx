@@ -591,10 +591,23 @@ function SearchList({ searches }: { searches: ToolStep[] }) {
  * planning; each step's line fills in with what it did, and the current
  * step opens its details. The overview and reading list replace this once
  * the run is saved.
+ *
+ * With `finished`, the same rail replays a saved run's trajectory under its
+ * brief: every step done, led by the prompt it started from, with the
+ * agent's working notes kept under the plan.
  */
-export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
+export function DiscoverLiveProgress({
+  steps,
+  finished = false,
+  prompt,
+}: {
+  steps: AgentStep[];
+  finished?: boolean;
+  /** The user's question, shown as the first step of a finished run. */
+  prompt?: string;
+}) {
   const pool = useMemo(() => buildPoolFromSteps(steps), [steps]);
-  const exaMissing = steps.some(
+  const exaMissing = !finished && steps.some(
     (s) =>
       s.kind === "tool_call" &&
       s.name === "web_search" &&
@@ -613,8 +626,9 @@ export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
   const latestNote = notes[notes.length - 1];
 
   // The furthest step reached; earlier steps are done.
-  const reached =
-    picks !== null ? 4 : screenStep?.output ? 3 : screenStep ? 2 : searches.length > 0 ? 1 : 0;
+  const reached = finished
+    ? 5
+    : picks !== null ? 4 : screenStep?.output ? 3 : screenStep ? 2 : searches.length > 0 ? 1 : 0;
   const state = (i: number): StepState =>
     i < reached ? "done" : i === reached ? "active" : "pending";
 
@@ -651,10 +665,34 @@ export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
     <div className="space-y-6">
       {exaMissing ? <ExaKeyPromptCard /> : null}
       <ol aria-label="Research steps">
+        {prompt ? (
+          <LogStep state="done" title="Asked" stayOpen>
+            <p
+              className="max-w-[64ch] whitespace-pre-wrap border-l-2 border-primary/30 pl-3 text-[15px] leading-[1.65] text-foreground/85"
+              style={{ fontFamily: "var(--font-reading)" }}
+            >
+              {prompt}
+            </p>
+          </LogStep>
+        ) : null}
         <LogStep
           state={state(0)}
           title={state(0) === "active" ? "Planning the searches" : `Planned ${plural(searches.length, "search", "searches")}`}
-        />
+        >
+          {finished && notes.length > 0 ? (
+            <div className="space-y-3">
+              {notes.map((n, i) => (
+                <p
+                  key={i}
+                  className="max-w-[64ch] whitespace-pre-wrap border-l-2 border-primary/30 pl-3 text-[14px] leading-[1.65] text-foreground/75"
+                  style={{ fontFamily: "var(--font-reading)" }}
+                >
+                  {n}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </LogStep>
         <LogStep state={state(1)} title={searchTitle}>
           {state(1) === "active" ? note : null}
           {searches.length > 0 ? <SearchList searches={searches} /> : null}
@@ -675,7 +713,13 @@ export function DiscoverLiveProgress({ steps }: { steps: AgentStep[] }) {
         </LogStep>
         <LogStep
           state={state(4)}
-          title={state(4) === "active" ? "Writing the overview" : "Write the overview"}
+          title={
+            state(4) === "active"
+              ? "Writing the overview"
+              : state(4) === "done"
+                ? "Wrote the overview"
+                : "Write the overview"
+          }
           last
         />
       </ol>
