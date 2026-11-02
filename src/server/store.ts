@@ -772,7 +772,9 @@ function rowToRecommendation(r: RecommendationRow): Recommendation {
     url: r.url,
     title: r.title,
     rationale: r.rationale,
-    arxivId: r.arxivId,
+    // Picks saved before arXiv PDF/HTML links were recognized carry no id;
+    // derive it so they still show and open as arXiv papers.
+    arxivId: r.arxivId || arxivIdFromUrl(r.url),
     authors: r.authors,
     publishedDate: r.publishedDate,
     publishedYear: r.publishedYear,
@@ -890,7 +892,7 @@ export async function finalizeDiscoverQuery(
           rationale: pick.rationale,
           // Prefer the agent-provided arxiv id (from submit_picks); fall
           // back to URL extraction for the markdown-parser path.
-          arxivId: pick.arxivId ?? arxivIdFromUrl(pick.url),
+          arxivId: pick.arxivId || arxivIdFromUrl(pick.url),
           authors: pick.authors ?? null,
           publishedDate: pick.publishedDate ?? null,
           publishedYear: pick.publishedYear ?? null,

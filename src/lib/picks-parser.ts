@@ -7,6 +7,8 @@
  * No React, no DOM — safe to import from server code.
  */
 
+import { extractArxivId } from "@/lib/utils";
+
 // Lenient match: a heading line whose visible content (stripped of `#`,
 // `*`, `_`, whitespace, and an optional "top/my/final/recommended"
 // qualifier) is "Picks". Matches `**Picks**`, `## Picks`, `**Top Picks**`.
@@ -51,8 +53,10 @@ function stripBoldStars(s: string): string {
   return s.replace(/^\*+|\*+$/g, "").trim();
 }
 
+/** Same recognition as starting a review from a pasted link, so an arXiv
+ *  pick (abs, PDF, or HTML link) opens as an arXiv paper, not a web page. */
 export function arxivIdFromUrl(url: string): string | null {
-  return url.match(/arxiv\.org\/abs\/([^/?#\s]+)/i)?.[1] ?? null;
+  return extractArxivId(url);
 }
 
 export function parsePicks(text: string): ParsedPicksText | null {

@@ -10,8 +10,10 @@ export const BREAKPOINTS = {
   COMPACT: "(max-width: 1279px)",
 } as const;
 
+/** The arXiv id in an arXiv abstract, PDF, or HTML link (version
+ *  dropped), or null for any other URL. */
 export function extractArxivId(url: string): string | null {
-  const match = url.match(/arxiv\.org\/(?:abs|pdf)\/(\d+\.\d+)(?:v\d+)?/);
+  const match = url.match(/arxiv\.org\/(?:abs|pdf|html)\/(\d+\.\d+)(?:v\d+)?/i);
   return match ? match[1] : null;
 }
 
