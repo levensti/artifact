@@ -387,6 +387,12 @@ model DiscoverQuery {
   /// client finalizes with the parsed picks, "errored" if the stream
   /// failed before producing recommendations.
   status    String   @default("running")
+  /// The agent's research steps (searches with their results, grading,
+  /// close reads, working notes, the submitted picks), so a finished brief
+  /// can show how it got to its reading list. Null on older rows and on
+  /// runs that never finalized. Not sent with the brief list; loaded on
+  /// demand when a brief is opened.
+  trajectory Json?
   createdAt DateTime
   /// Project this research belongs to. Every brief is started inside a
   /// project (asking on Home creates one); null only on legacy rows. Reviews

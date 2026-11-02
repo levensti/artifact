@@ -43,6 +43,9 @@ const finalizeSchema = z.object({
   /** Final assistant text. Used as the parser fallback when the agent
    *  didn't call `submit_picks`. */
   text: z.string().optional(),
+  /** The run's compacted agent steps, kept so the finished brief can show
+   *  how it was researched. */
+  trajectory: z.array(z.unknown()).max(500).optional(),
 });
 
 export const POST = authedRoute(
@@ -87,8 +90,17 @@ export const POST = authedRoute(
       notes,
       picks,
       status: body.status,
+      trajectory: body.trajectory ?? null,
     });
     return NextResponse.json(result);
+  },
+);
+
+export const GET = authedRoute(
+  async (userId, _req: Request, { params }: Ctx) => {
+    const { id } = await params;
+    const trajectory = await store.getDiscoverTrajectory(userId, id);
+    return NextResponse.json({ trajectory });
   },
 );
 

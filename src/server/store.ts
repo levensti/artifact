@@ -772,7 +772,9 @@ function rowToRecommendation(r: RecommendationRow): Recommendation {
     url: r.url,
     title: r.title,
     rationale: r.rationale,
-    arxivId: r.arxivId,
+    // Picks saved before arXiv PDF/HTML links were recognized carry no id;
+    // derive it so they still show and open as arXiv papers.
+    arxivId: r.arxivId || arxivIdFromUrl(r.url),
     authors: r.authors,
     publishedDate: r.publishedDate,
     publishedYear: r.publishedYear,
@@ -858,6 +860,8 @@ export async function finalizeDiscoverQuery(
     notes: string | null;
     picks: ParsedPick[];
     status: Exclude<DiscoverQueryStatus, "running">;
+    /** Compacted agent steps (see lib/discover-trajectory). */
+    trajectory?: unknown[] | null;
   },
 ): Promise<{ query: DiscoverQuery; recommendations: Recommendation[] }> {
   await assertDiscoverQueryOwned(userId, queryId);
@@ -866,7 +870,13 @@ export async function finalizeDiscoverQuery(
   const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.discoverQuery.update({
       where: { id: queryId },
-      data: { notes: payload.notes, status: payload.status },
+      data: {
+        notes: payload.notes,
+        status: payload.status,
+        ...(payload.trajectory
+          ? { trajectory: payload.trajectory as Prisma.InputJsonValue }
+          : {}),
+      },
     });
     const created: RecommendationRow[] = [];
     for (let i = 0; i < payload.picks.length; i++) {
@@ -882,7 +892,7 @@ export async function finalizeDiscoverQuery(
           rationale: pick.rationale,
           // Prefer the agent-provided arxiv id (from submit_picks); fall
           // back to URL extraction for the markdown-parser path.
-          arxivId: pick.arxivId ?? arxivIdFromUrl(pick.url),
+          arxivId: pick.arxivId || arxivIdFromUrl(pick.url),
           authors: pick.authors ?? null,
           publishedDate: pick.publishedDate ?? null,
           publishedYear: pick.publishedYear ?? null,
@@ -1025,8 +1035,23 @@ export async function listDiscoverQueries(
   const rows = await prisma.discoverQuery.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
+    // Trajectories are large; a brief loads its own when it's opened.
+    omit: { trajectory: true },
   });
   return rows.map(rowToDiscoverQuery);
+}
+
+/** A brief's stored research steps, or null for older briefs without one. */
+export async function getDiscoverTrajectory(
+  userId: string,
+  queryId: string,
+): Promise<unknown[] | null> {
+  const row = await prisma.discoverQuery.findFirst({
+    where: { id: queryId, userId },
+    select: { trajectory: true },
+  });
+  if (!row) throw new HttpError(404, `Discover query not found: ${queryId}`);
+  return Array.isArray(row.trajectory) ? (row.trajectory as unknown[]) : null;
 }
 
 export async function listRecommendations(

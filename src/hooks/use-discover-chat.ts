@@ -20,6 +20,7 @@ import {
   canonicalUrl,
 } from "@/lib/discover-paper-metadata";
 import { arxivIdFromUrl } from "@/lib/picks-parser";
+import { compactTrajectory } from "@/lib/discover-trajectory";
 
 /* ------------------------------------------------------------------ */
 /*  NDJSON parser (mirrors use-chat.ts)                                */
@@ -276,7 +277,11 @@ function extractStructuredPicks(steps: AgentStep[]): StructuredPick[] | null {
         url,
         title,
         rationale,
-        arxivId: typeof p.arxivId === "string" ? p.arxivId.trim() : undefined,
+        // An empty id would hide the one in the URL.
+        arxivId:
+          (typeof p.arxivId === "string" ? p.arxivId.trim() : "") ||
+          arxivIdFromUrl(url) ||
+          undefined,
         authors: typeof p.authors === "string" ? p.authors.trim() : null,
         publishedDate:
           typeof p.publishedDate === "string" ? p.publishedDate.trim() : null,
@@ -324,7 +329,7 @@ function enrichStructuredPicks(
     if (!meta) return pick;
     return {
       ...pick,
-      arxivId: pick.arxivId ?? meta.arxivId ?? undefined,
+      arxivId: pick.arxivId || meta.arxivId || undefined,
       authors: pick.authors ?? (meta.authors || null),
       publishedDate: pick.publishedDate ?? meta.publishedDate,
       publishedYear: pick.publishedYear ?? parseYear(meta.year),
@@ -504,8 +509,10 @@ export function useDiscoverChat({
               ? `${finalText.trim()}\n\n${activity}`.trim()
               : finalText.trim();
 
+            const trajectory = compactTrajectory(steps);
             await finalizeDiscoverQuery(queryId, {
               status: streamSucceeded ? "complete" : "errored",
+              ...(trajectory.length > 0 ? { trajectory } : {}),
               ...(enrichedStructured && enrichedStructured.length > 0
                 ? { picks: enrichedStructured, notes: enrichedText || null }
                 : { text: enrichedText }),
